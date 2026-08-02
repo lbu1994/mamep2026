@@ -36,9 +36,9 @@ export default function RegisterTable({
               <th className="px-2 py-1.5 border border-gray-200 font-medium text-left">Name</th>
               <th className="w-28 px-2 py-1.5 border border-gray-200 font-medium">Register[HEX]</th>
               <th className="w-10 px-1 py-1.5 border border-gray-200 font-medium">WP</th>
-              <th className="w-16 px-1 py-1.5 border border-gray-200 font-medium">Read</th>
+              <th className="w-[72px] px-1 py-1.5 border border-gray-200 font-medium">Read</th>
               <th className="px-2 py-1.5 border border-gray-200 font-medium">Data</th>
-              <th className="w-16 px-1 py-1.5 border border-gray-200 font-medium">Write</th>
+              <th className="w-[72px] px-1 py-1.5 border border-gray-200 font-medium">Write</th>
               <th className="w-32 px-2 py-1.5 border border-gray-200 font-medium">Type</th>
               <th className="px-2 py-1.5 border border-gray-200 font-medium text-left">Comment</th>
             </tr>
@@ -105,7 +105,7 @@ export default function RegisterTable({
                     disabled={uploading || !row.registerHex.trim()}
                     className="px-2 py-0.5 text-xs font-medium bg-brand-600 text-white rounded hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
-                    →
+                    READ
                   </button>
                 </td>
 
@@ -125,7 +125,7 @@ export default function RegisterTable({
                     disabled={uploading || !row.registerHex.trim()}
                     className="px-2 py-0.5 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
-                    →
+                    WRITE
                   </button>
                 </td>
 
