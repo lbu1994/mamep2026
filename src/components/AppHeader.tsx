@@ -21,6 +21,7 @@ export default function AppHeader({ status, portInfo, onOpenConfig }: AppHeaderP
     <header className="bg-slate-900 text-white px-4 py-2 flex items-center justify-between select-none">
       <div className="flex items-center gap-3">
         <span className="text-lg font-bold tracking-wide">Mamep2026 Demo</span>
+        <span className="text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">v0.0.1</span>
         <span className="text-xs text-slate-400 hidden sm:inline">Modbus RTU 调试工具</span>
       </div>
 

@@ -49,15 +49,21 @@ npm run preview
 ## Demo 功能范围
 
 - ✅ Modbus RTU 串口通信（03H 读保持寄存器 / 10H 写多个寄存器）
-- ✅ 不连续寄存器单表格批量监控
+- ✅ 不连续寄存器单表格批量监控（15 行 × 10 列）
 - ✅ Upload 逐行轮询读取
-- ✅ 单行即时读写
+- ✅ 单行 READ / WRITE 即时操作
 - ✅ 写入插队（Upload 过程中可插入写入操作）
 - ✅ 数据格式切换（HEX / Unsigned Dec. / Signed Dec.）
 - ✅ 可折叠侧边栏（Register Mode / Address Mode）
 - ✅ Comment 注释列
+- ✅ 连接成功弹窗自动关闭
+- ✅ Edge 浏览器兼容
 
 后续计划：Modbus TCP、插件系统、更多功能码支持。
+
+## 版本历史
+
+详见 [RELEASENOTE.md](RELEASENOTE.md)
 
 ## 设计规则
 

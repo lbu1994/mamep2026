@@ -56,18 +56,23 @@ export async function connect(
 ): Promise<SerialConnection> {
   await port.open(toSerialOptions(config));
 
-  // 清空缓冲区
+  // 清空缓冲区 (带超时，Edge 下 reader.read() 可能永久阻塞)
   if (port.readable) {
     const reader = port.readable.getReader();
+    const cancelTimeout = setTimeout(() => {
+      reader.cancel().catch(() => {});
+    }, 100);
     try {
       while (true) {
         const { done } = await reader.read();
         if (done) break;
       }
     } catch {
-      // 忽略清理错误
+      // cancel() 或 read() 异常忽略
     } finally {
-      reader.releaseLock();
+      clearTimeout(cancelTimeout);
+      // cancel() 可能已释放锁，releaseLock 包 try
+      try { reader.releaseLock(); } catch { /* ignore */ }
     }
   }
 
@@ -114,30 +119,31 @@ async function _sendAndReceive(
   }
 
   // 等待设备处理 + Rx Delay
-  await delay(rxDelay + 50); // 至少等 50ms 让设备回复
+  await delay(rxDelay + 50);
 
-  // 读取响应
+  // 读取响应 (带总超时，防止 Edge 下 reader.read() 永久阻塞)
   const reader = port.readable.getReader();
+  const totalTimeout = 500;
+  const cancelTimeout = setTimeout(() => {
+    reader.cancel().catch(() => {});
+  }, totalTimeout);
   try {
     const chunks: Uint8Array[] = [];
     let totalLen = 0;
-    const deadline = Date.now() + 500; // 总超时 500ms
 
-    while (Date.now() < deadline) {
+    while (true) {
       try {
         const { value, done } = await reader.read();
         if (done) break;
         if (value && value.length > 0) {
           chunks.push(value);
           totalLen += value.length;
-          // RTU 响应通常 5-7 字节 (03H) 或 8 字节 (10H)
+          // 正常 03H 响应: 5字节 (地址+03+字节数+2数据+2CRC)
+          // 正常 10H 响应: 8字节 (地址+10+2地址+2数量+2CRC)
+          // 读到足够字节后退出
           if (totalLen >= 5) {
-            // 检查是否是异常响应 (3字节 + 2 CRC)
-            // 正常 03H: 5字节 (地址+03+字节数+2数据+2CRC)
-            // 正常 10H: 8字节 (地址+10+2地址+2数量+2CRC)
-            // 读足够的字节后尝试判断是否完整
             if (totalLen >= 8) break;
-            // 再等一个小延迟看看还有没有数据
+            // 可能还有后续数据，短暂等待
             await delay(30);
             break;
           }
@@ -159,7 +165,8 @@ async function _sendAndReceive(
     }
     return result;
   } finally {
-    reader.releaseLock();
+    clearTimeout(cancelTimeout);
+    try { reader.releaseLock(); } catch { /* ignore */ }
   }
 }
 

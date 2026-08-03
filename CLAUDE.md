@@ -29,16 +29,17 @@ npm run preview    # Preview production build
 
 ```
 App.tsx (global state: rows, uploading, config modal open/close)
-  ├── AppHeader          — nav bar: app name + serial config button (enabled) + plugin button (disabled)
-  ├── Sidebar            — vertical Project Bar buttons (all disabled, placeholder)
+  ├── AppHeader          — nav bar: app name + version + serial config button (enabled) + plugin button (disabled)
+  ├── Sidebar            — collapsible panel, Project Bar (Register Mode) active, (Address Mode) disabled
   ├── [Tab placeholder]  — MAC(R)Default label (disabled)
   ├── TabToolbar         — Upload (enabled), Enter(ROM/RAM) + Slave Address (disabled)
-  ├── RegisterTable      — Core: 15 fixed rows × 9 columns, TM/Name/Reg[HEX]/Read/Data/Write/Type
+  ├── RegisterTable      — Core: 15 fixed rows × 10 columns, TM/Name/Reg[HEX]/WP/Read/Data/Write/Type/Comment
   └── MessageBar         — Bottom panel with 4 tabs, static mock content
 
 SerialConfigModal (Modal overlay, opened from AppHeader)
   — 7 enabled fields (Port/Speed/DataLen/StopBit/Parity/SlaveAddr/RxDelay)
   — 7 disabled fields (FlowControl/ByteAccType/Endian/ReadVerify/RetryCounter/CheckCode/AddrAdjust)
+  — Auto-closes on successful connection
 ```
 
 ### Data Flow for Modbus Communication
@@ -52,7 +53,7 @@ SerialConfigModal (Modal overlay, opened from AppHeader)
 ### Key lib modules
 
 - [modbus.ts](src/lib/modbus.ts): Pure functions — CRC16 lookup table, `buildRead03()`, `parseRead03()`, `buildWrite10()`, `parseWrite10()`
-- [serial.ts](src/lib/serial.ts): Web Serial API wrapper — `requestPort()`, `connect()`, `sendAndReceive()`, `disconnect()`
+- [serial.ts](src/lib/serial.ts): Web Serial API wrapper — `requestPort()`, `connect()`, `sendAndReceive()`, `disconnect()`; uses `reader.cancel()` with timeouts to prevent blocking on Edge
 - [types.ts](src/lib/types.ts): `SerialConfig`, `RegisterRow`, `ConnectionStatus`, factory functions
 - [useSerial.ts](src/hooks/useSerial.ts): Hook — manages SerialPort lifecycle, exposes `status/portInfo/doConnect/doDisconnect/sendAndReceive`
 

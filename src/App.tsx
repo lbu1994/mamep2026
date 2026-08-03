@@ -187,6 +187,9 @@ export default function App() {
     async (config: SerialConfig): Promise<boolean> => {
       serialConfigRef.current = config;
       const ok = await doConnect(config);
+      if (ok) {
+        setConfigOpen(false);
+      }
       return ok;
     },
     [doConnect],
