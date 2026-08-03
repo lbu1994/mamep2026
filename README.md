@@ -12,22 +12,25 @@
 ## 快速开始
 
 ```bash
-# 安装依赖
-npm install
+npm install          # 安装依赖
 
-# 启动开发服务器
-npm run dev
+npm run dev          # 启动开发服务器 (http://localhost:5173)
+npm run build        # 类型检查 + 生产构建
+npm run preview      # 预览构建产物
+```
 
-# 构建生产版本
-npm run build
+## 测试
 
-# 预览构建产物
-npm run preview
+```bash
+npm test             # 单元测试 + 组件测试 (Vitest)
+npm run test:watch   # Watch 模式
+npm run test:e2e     # E2E 集成测试 (Playwright + Edge)
 ```
 
 ## 浏览器要求
 
 仅支持 **Chromium 系浏览器**（Chrome / Edge / Opera 等），需要 Web Serial API 支持。
+E2E 测试使用系统自带 **Microsoft Edge**。
 
 ## 界面布局
 
@@ -61,14 +64,14 @@ npm run preview
 
 后续计划：Modbus TCP、插件系统、更多功能码支持。
 
-## 版本历史
-
-详见 [RELEASENOTE.md](RELEASENOTE.md)
-
 ## 设计规则
 
 - **布局结构**：可模仿参考软件的控件位置和交互逻辑
 - **配色风格**：禁止老式 Windows 灰色系，使用现代 indigo / emerald 配色
+
+## 版本历史
+
+详见 [RELEASENOTE.md](RELEASENOTE.md)
 
 ## 项目结构
 
@@ -89,4 +92,7 @@ src/
 │   └── types.ts             # 类型定义
 └── hooks/
     └── useSerial.ts         # 串口连接状态 Hook
+tests/
+  ├── serial-e2e.spec.ts     # Playwright E2E 测试
+  └── serial-mock.js         # Web Serial API Mock
 ```

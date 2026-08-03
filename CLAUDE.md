@@ -13,6 +13,8 @@ npm install        # Install dependencies (uses npmmirror.com registry)
 npm run dev        # Start Vite dev server (default http://localhost:5173)
 npm run build      # TypeScript check + Vite production build → dist/
 npm run preview    # Preview production build
+npm test           # Run unit + component tests (Vitest)
+npm run test:e2e   # Run E2E tests (Playwright + Edge)
 ```
 
 `npx tsc --noEmit` for TypeScript type-checking only.
@@ -56,6 +58,21 @@ SerialConfigModal (Modal overlay, opened from AppHeader)
 - [serial.ts](src/lib/serial.ts): Web Serial API wrapper — `requestPort()`, `connect()`, `sendAndReceive()`, `disconnect()`; uses `reader.cancel()` with timeouts to prevent blocking on Edge
 - [types.ts](src/lib/types.ts): `SerialConfig`, `RegisterRow`, `ConnectionStatus`, factory functions
 - [useSerial.ts](src/hooks/useSerial.ts): Hook — manages SerialPort lifecycle, exposes `status/portInfo/doConnect/doDisconnect/sendAndReceive`
+
+### Test Architecture
+
+```
+unit tests (Vitest):
+  src/lib/__tests__/modbus.test.ts      — CRC16 + RTU frame encode/decode (28 cases)
+  src/lib/__tests__/types.test.ts        — Factory functions + default config (10 cases)
+  src/lib/__tests__/serial.test.ts       — Web Serial API wrapper with mock port (9 cases)
+  src/hooks/__tests__/useSerial.test.ts  — Hook state machine with mock serial module (7 cases)
+  src/components/__tests__/*.test.tsx    — 6 components, DOM rendering + interactions (36 cases)
+
+E2E tests (Playwright + Edge):
+  tests/serial-e2e.spec.ts               — Full UI integration with injected serial mock (7 cases)
+  tests/serial-mock.js                   — navigator.serial replacement injected via addInitScript()
+```
 
 ### UI State Conventions
 

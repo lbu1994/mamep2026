@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.1.0 (2026-08-03)
+## v0.0.1 (2026-08-04)
 
 ### 新增
 
@@ -16,7 +16,13 @@
 - 底部消息面板（Message List 等 4 个标签页，Mock 数据）
 - 串口配置弹窗（14 项参数，Demo 启用 7 项）
 - 连接成功弹窗自动关闭
-- Edge 浏览器串口连接超时兼容
+- 串口读写超时保护（Edge 浏览器兼容）
+
+### 测试
+
+- Vitest 单元测试 + 组件测试（90 用例）
+- Playwright + Edge E2E 集成测试（7 用例）
+- Web Serial API Mock（ReadableStream + 自动响应注入）
 
 ### 技术栈
 
