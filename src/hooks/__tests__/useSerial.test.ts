@@ -106,7 +106,7 @@ describe('useSerial', () => {
     const { result } = renderHook(() => useSerial());
     await expect(
       result.current.sendAndReceive(new Uint8Array([1, 2, 3]), 5),
-    ).rejects.toThrow('未连接');
+    ).rejects.toThrow('Not connected');
   });
 
   it('sendAndReceive calls underlying connection when connected', async () => {

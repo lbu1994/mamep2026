@@ -28,7 +28,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <button
           onClick={onToggle}
           className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors text-xs"
-          title={collapsed ? '展开侧边栏' : '折叠侧边栏'}
+          title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
           {collapsed ? '▶' : '◀'}
         </button>

@@ -54,7 +54,7 @@ export function useSerial() {
   /** 发送帧并接收响应 */
   const sendAndReceive = useCallback(
     async (frame: Uint8Array, rxDelay: number): Promise<Uint8Array> => {
-      if (!connRef.current) throw new Error('未连接');
+      if (!connRef.current) throw new Error('Not connected');
       return connRef.current.sendAndReceive(frame, rxDelay);
     },
     [],

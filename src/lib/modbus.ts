@@ -38,7 +38,7 @@ export function verifyCRC(data: Uint8Array): boolean {
 
 /**
  * 构建 03H (Read Holding Registers) 请求帧
- * @param slaveAddr 从站地址 1-247
+ * @param slaveAddr Slave address 0-255
  * @param registerAddr 寄存器起始地址 (0-based)
  * @param quantity 读取数量 (默认 1)
  */

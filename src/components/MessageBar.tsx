@@ -16,10 +16,10 @@ const TABS: TabDef[] = [
 ];
 
 const TAB_CONTENT: Record<TabId, string[]> = {
-  msg: ['[0001] Wellcome. M@MEp2006 Advance! world'],
-  commlog: ['（通信报文日志 — 敬请期待）'],
-  commprop: ['（通信属性 — 敬请期待）'],
-  omake: ['（自定义备注 — 敬请期待）'],
+  msg: ['[0001] Welcome. M@MEp2006 Advance! world'],
+  commlog: ['(Comm. Log — Coming Soon)'],
+  commprop: ['(Comm. Properties — Coming Soon)'],
+  omake: ['(Custom Notes — Coming Soon)'],
 };
 
 export default function MessageBar() {

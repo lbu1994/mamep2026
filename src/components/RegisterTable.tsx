@@ -73,7 +73,7 @@ export default function RegisterTable({
                     type="text"
                     value={row.name}
                     onChange={(e) => onNameChange(row.id, e.target.value)}
-                    placeholder="备注"
+                    placeholder="Note"
                     className="w-full px-1 py-0.5 text-sm border border-transparent focus:border-brand-500 focus:outline-none rounded bg-transparent"
                   />
                 </td>
@@ -95,7 +95,7 @@ export default function RegisterTable({
                     checked={false}
                     readOnly
                     className="w-3.5 h-3.5 cursor-not-allowed opacity-30"
-                    title="敬请期待"
+                    title="Coming Soon"
                   />
                 </td>
 
@@ -148,7 +148,7 @@ export default function RegisterTable({
                     type="text"
                     value={row.comment}
                     onChange={(e) => onCommentChange(row.id, e.target.value)}
-                    placeholder="注释"
+                    placeholder="Comment"
                     className="w-full px-1 py-0.5 text-sm border border-transparent focus:border-brand-500 focus:outline-none rounded bg-transparent"
                   />
                 </td>
@@ -162,14 +162,14 @@ export default function RegisterTable({
         <button
           disabled
           className="px-3 py-1 text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded cursor-not-allowed"
-          title="敬请期待"
+          title="Coming Soon"
         >
           + Add Row
         </button>
         <button
           disabled
           className="px-3 py-1 text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded cursor-not-allowed"
-          title="敬请期待"
+          title="Coming Soon"
         >
           - Delete Row
         </button>

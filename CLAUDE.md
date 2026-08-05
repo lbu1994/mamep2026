@@ -77,26 +77,27 @@ E2E tests (Playwright + Edge):
 ### UI State Conventions
 
 - **enabled** elements: functional in Demo (Upload button, Read/Write buttons, serial config fields)
-- **disabled** elements: visible but greyed out with `cursor-not-allowed` and `title="敬请期待"` — reserved for future features
+- **disabled** elements: visible but greyed out with `cursor-not-allowed` and `title="Coming Soon"` — reserved for future features
 - Row error state: `RegisterRow.error === true` → red-50 background + red left border, cleared on next successful read
 - Normal row background: alternating emerald-50/white for even/odd rows
 - Sidebar: collapsible panel with `Project Bar (Register Mode)` active and `Project Bar (Address Mode)` disabled
 
 ## Design Rules
 
-- **布局结构**：可以模仿参考软件（如 Mamep2006）的控件位置和交互逻辑
-- **配色风格**：禁止使用老式 Windows 灰色系（如 slate-200/300 大面积背景），必须使用现代配色
-  - 背景层次：white → slate-50 → gray-100，最深不超过 gray-200
-  - 主色调：indigo 系（brand-600 = `#4f46e5`）
-  - 表格交替行：emerald-50 / white
-  - 错误状态：red-50 + 红色左边框
-  - 主按钮：brand-600 (indigo)，写按钮：emerald-600
-  - Sidebar 激活项：brand-50 背景 + brand-700 文字
+- **Layout**: Mimic the control positions and interaction logic of the reference software (e.g., Mamep2006)
+- **Color scheme**: No old-style Windows gray (e.g., slate-200/300 heavy backgrounds). Must use modern colors
+  - Background hierarchy: white → slate-50 → gray-100, darkest no more than gray-200
+  - Primary: indigo (brand-600 = `#4f46e5`)
+  - Table alternating rows: emerald-50 / white
+  - Error state: red-50 + red left border
+  - Primary button: brand-600 (indigo), Write button: emerald-600
+  - Sidebar active item: brand-50 background + brand-700 text
 
 ## Modbus Protocol (Demo Scope)
 
 - **03H** (Read Holding Registers): Read single 16-bit register
 - **10H** (Write Multiple Registers): Write single register (quantity=1)
+- Slave Address range: 0–255 (configurable in Serial Config modal)
 - Address sent as-is (no Address Adjust offset in Demo)
 - CRC-16 only (RTU standard)
 - Response parsing validates CRC and checks for exception codes (0x83 / 0x90)

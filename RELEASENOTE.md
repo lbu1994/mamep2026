@@ -1,30 +1,45 @@
 # Release Notes
 
+## v0.0.2 (2026-08-04)
+
+### Changed
+
+- **Slave Address range expanded**: 1–247 → 0–255 (matches full Modbus address space)
+- **UI fully in English**: all labels, buttons, placeholders, tooltips, and error messages translated
+
+### Tests
+
+- Vitest unit + component tests: 92 cases (added 2 for Slave Address range)
+- Updated all test assertions to match English UI text
+- Updated E2E test selectors for English UI
+
+---
+
 ## v0.0.1 (2026-08-04)
 
-### 新增
+### Added
 
-- Modbus RTU 串口通信支持（Web Serial API）
-- 03H 读保持寄存器 / 10H 写多个寄存器
-- 不连续寄存器单表格监控（固定 15 行 × 10 列）
-- Upload 逐行轮询读取 TM 勾选行
-- 单行 READ / WRITE 即时操作
-- 写入插队机制（Upload 过程中可插入写入）
-- 数据格式切换：HEX / Unsigned Dec. / Signed Dec.
-- 可折叠侧边栏（Project Bar Register Mode / Address Mode）
-- Comment 注释列
-- 底部消息面板（Message List 等 4 个标签页，Mock 数据）
-- 串口配置弹窗（14 项参数，Demo 启用 7 项）
-- 连接成功弹窗自动关闭
-- 串口读写超时保护（Edge 浏览器兼容）
+- Modbus RTU serial communication (Web Serial API)
+- 03H Read Holding Registers / 10H Write Multiple Registers
+- Non-contiguous register monitoring in single table (15 rows × 10 columns)
+- Upload row-by-row polling of TM-checked rows
+- Single-row READ / WRITE instant operations
+- Write preemption during Upload
+- Data format switching: HEX / Unsigned Dec. / Signed Dec.
+- Collapsible sidebar (Project Bar Register Mode / Address Mode)
+- Comment column
+- Bottom message panel (Message List + 4 tabs, mock data)
+- Serial config modal (14 parameters, 7 enabled in Demo)
+- Auto-close modal on successful connection
+- Serial read/write timeout protection (Edge compatibility)
 
-### 测试
+### Tests
 
-- Vitest 单元测试 + 组件测试（90 用例）
-- Playwright + Edge E2E 集成测试（7 用例）
-- Web Serial API Mock（ReadableStream + 自动响应注入）
+- Vitest unit + component tests: 90 cases
+- Playwright + Edge E2E integration tests: 7 cases
+- Web Serial API Mock (ReadableStream + auto-response injection)
 
-### 技术栈
+### Tech Stack
 
 - React 18 + TypeScript + Vite 5 + Tailwind CSS
-- Web Serial API（仅 Chromium 系浏览器）
+- Web Serial API (Chromium-based browsers only)

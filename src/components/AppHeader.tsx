@@ -14,15 +14,15 @@ export default function AppHeader({ status, portInfo, onOpenConfig }: AppHeaderP
 
   const statusText =
     status === 'connected' ? portInfo :
-    status === 'connecting' ? '正在连接...' :
-    '未连接';
+    status === 'connecting' ? 'Connecting...' :
+    'Disconnected';
 
   return (
     <header className="bg-slate-900 text-white px-4 py-2 flex items-center justify-between select-none">
       <div className="flex items-center gap-3">
         <span className="text-lg font-bold tracking-wide">Mamep2026 Demo</span>
-        <span className="text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">v0.0.1</span>
-        <span className="text-xs text-slate-400 hidden sm:inline">Modbus RTU 调试工具</span>
+        <span className="text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">v0.0.2</span>
+        <span className="text-xs text-slate-400 hidden sm:inline">Modbus RTU Debug Tool</span>
       </div>
 
       <div className="flex items-center gap-3">
@@ -35,15 +35,15 @@ export default function AppHeader({ status, portInfo, onOpenConfig }: AppHeaderP
           onClick={onOpenConfig}
           className="px-3 py-1.5 text-sm bg-brand-600 hover:bg-brand-700 border border-brand-700 rounded transition-colors"
         >
-          ⚙ 串口设置
+          ⚙ Serial Config
         </button>
 
         <button
           disabled
           className="px-3 py-1.5 text-sm bg-slate-700 text-slate-500 border border-slate-600 rounded cursor-not-allowed"
-          title="敬请期待"
+          title="Coming Soon"
         >
-          🔌 插件
+          🔌 Plugin
         </button>
       </div>
     </header>

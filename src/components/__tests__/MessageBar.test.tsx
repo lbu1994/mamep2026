@@ -13,12 +13,12 @@ describe('MessageBar', () => {
 
   it('shows Message List content by default', () => {
     render(<MessageBar />);
-    expect(screen.getByText(/Wellcome/)).toBeInTheDocument();
+    expect(screen.getByText(/Welcome/)).toBeInTheDocument();
   });
 
   it('switches content when clicking another tab', () => {
     render(<MessageBar />);
     fireEvent.click(screen.getByText('Comm. Log List'));
-    expect(screen.getByText(/通信报文日志/)).toBeInTheDocument();
+    expect(screen.getByText(/Comm\. Log — Coming Soon/)).toBeInTheDocument();
   });
 });

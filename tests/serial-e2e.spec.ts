@@ -22,19 +22,19 @@ test.describe('E2E tests (Edge + Web Serial Mock)', () => {
   });
 
   test('serial config modal opens and has correct fields', async ({ page }) => {
-    await page.getByRole('button', { name: /串口设置/ }).click();
-    await expect(page.getByRole('heading', { name: '串口设置' })).toBeVisible();
+    await page.getByRole('button', { name: /Serial Config/ }).click();
+    await expect(page.getByRole('heading', { name: 'Serial Config' })).toBeVisible();
     await expect(page.getByText('Speed')).toBeVisible();
     await expect(page.getByText('Parity Bit')).toBeVisible();
     await expect(page.getByRole('spinbutton').first()).toBeVisible(); // Slave Address
-    await expect(page.getByText('以下参数暂不支持')).toBeVisible();
+    await expect(page.getByText('The following parameters are not supported')).toBeVisible();
   });
 
   test('serial config modal closes on cancel', async ({ page }) => {
-    await page.getByRole('button', { name: /串口设置/ }).click();
-    await expect(page.getByRole('heading', { name: '串口设置' })).toBeVisible();
-    await page.getByRole('button', { name: '取消' }).click();
-    await expect(page.getByRole('heading', { name: '串口设置' })).not.toBeVisible();
+    await page.getByRole('button', { name: /Serial Config/ }).click();
+    await expect(page.getByRole('heading', { name: 'Serial Config' })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('heading', { name: 'Serial Config' })).not.toBeVisible();
   });
 
   test('sidebar collapses and expands', async ({ page }) => {
@@ -45,13 +45,13 @@ test.describe('E2E tests (Edge + Web Serial Mock)', () => {
   });
 
   test('MessageBar tab switching works', async ({ page }) => {
-    await expect(page.getByText(/Wellcome/)).toBeVisible();
+    await expect(page.getByText(/Welcome/)).toBeVisible();
     await page.click('text=Comm. Log List');
-    await expect(page.getByText('通信报文日志')).toBeVisible();
+    await expect(page.getByText(/Comm\. Log/)).toBeVisible();
     await page.click('text=Comm. properties');
-    await expect(page.getByText('通信属性')).toBeVisible();
+    await expect(page.getByText(/Comm\. Properties/)).toBeVisible();
     await page.click('text=OMAKE Note');
-    await expect(page.getByText('自定义备注')).toBeVisible();
+    await expect(page.getByText(/Custom Notes/)).toBeVisible();
   });
 
   test('register table renders 15 rows with all columns', async ({ page }) => {
@@ -69,6 +69,6 @@ test.describe('E2E tests (Edge + Web Serial Mock)', () => {
     await expect(page.getByText('Enter(RAM)')).toBeDisabled();
     await expect(page.getByText('+ Add Row')).toBeDisabled();
     await expect(page.getByText('- Delete Row')).toBeDisabled();
-    await expect(page.getByText('插件')).toBeDisabled();
+    await expect(page.getByText(/Plugin$/)).toBeDisabled();
   });
 });

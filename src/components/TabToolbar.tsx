@@ -21,7 +21,7 @@ export default function TabToolbar({ uploading, onUpload }: TabToolbarProps) {
       <button
         disabled
         className="px-4 py-1 text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded cursor-not-allowed"
-        title="敬请期待"
+        title="Coming Soon"
       >
         Enter(ROM)
       </button>
@@ -29,7 +29,7 @@ export default function TabToolbar({ uploading, onUpload }: TabToolbarProps) {
       <button
         disabled
         className="px-4 py-1 text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded cursor-not-allowed"
-        title="敬请期待"
+        title="Coming Soon"
       >
         Enter(RAM)
       </button>

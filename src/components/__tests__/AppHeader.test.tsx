@@ -15,7 +15,7 @@ describe('AppHeader', () => {
 
   it('shows disconnected status', () => {
     render(<AppHeader status="disconnected" portInfo="" onOpenConfig={vi.fn()} />);
-    expect(screen.getByText('未连接')).toBeInTheDocument();
+    expect(screen.getByText('Disconnected')).toBeInTheDocument();
   });
 
   it('shows port info when connected', () => {
@@ -26,13 +26,13 @@ describe('AppHeader', () => {
   it('calls onOpenConfig when serial config button clicked', () => {
     const fn = vi.fn();
     render(<AppHeader status="disconnected" portInfo="" onOpenConfig={fn} />);
-    fireEvent.click(screen.getByText(/串口设置/));
+    fireEvent.click(screen.getByText(/Serial Config/));
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it('plugin button is disabled', () => {
     render(<AppHeader status="disconnected" portInfo="" onOpenConfig={vi.fn()} />);
-    const btn = screen.getByText(/插件/);
+    const btn = screen.getByText(/Plugin/);
     expect(btn).toBeDisabled();
   });
 });

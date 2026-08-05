@@ -40,7 +40,7 @@ export default function SerialConfigModal({
       }
       setConnecting(false);
     } catch {
-      setError('连接失败，请检查串口设备和参数');
+      setError('Connection failed, please check serial port and parameters');
       setConnecting(false);
     }
   };
@@ -53,7 +53,7 @@ export default function SerialConfigModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
         <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-800">串口设置</h2>
+          <h2 className="text-base font-semibold text-gray-800">Serial Config</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-lg leading-none"
@@ -65,8 +65,8 @@ export default function SerialConfigModal({
         <div className="px-5 py-4 space-y-3">
           {/* ===== Enabled ===== */}
           <FieldRow label="Port">
-            <select disabled className="input-base w-full" title="请通过浏览器串口选择器选取">
-              <option>点击连接后选择串口...</option>
+            <select disabled className="input-base w-full" title="Select port via browser serial picker">
+              <option>Select port after clicking connect...</option>
             </select>
           </FieldRow>
 
@@ -89,10 +89,10 @@ export default function SerialConfigModal({
           <FieldRow label="Slave Address">
             <input
               type="number"
-              min={1}
-              max={247}
+              min={0}
+              max={255}
               value={config.slaveAddress}
-              onChange={(e) => update('slaveAddress', Math.max(1, Math.min(247, Number(e.target.value) || 1)))}
+              onChange={(e) => update('slaveAddress', Math.max(0, Math.min(255, Number(e.target.value) || 0)))}
               className="input-base w-24"
             />
           </FieldRow>
@@ -103,7 +103,7 @@ export default function SerialConfigModal({
 
           {/* ===== Disabled ===== */}
           <div className="border-t border-gray-200 pt-3 mt-3">
-            <p className="text-xs text-gray-400 mb-2">以下参数暂不支持（Demo）</p>
+            <p className="text-xs text-gray-400 mb-2">The following parameters are not supported (Demo)</p>
           </div>
 
           {disabledFields.map((field) => (
@@ -136,7 +136,7 @@ export default function SerialConfigModal({
               onClick={onDisconnect}
               className="px-4 py-1.5 text-sm font-medium bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
             >
-              断开
+              Disconnect
             </button>
           ) : (
             <button
@@ -148,14 +148,14 @@ export default function SerialConfigModal({
                   : 'bg-brand-600 text-white hover:bg-brand-700'
               }`}
             >
-              {connecting ? '连接中...' : '连接'}
+              {connecting ? 'Connecting...' : 'Connect'}
             </button>
           )}
           <button
             onClick={onClose}
             className="px-4 py-1.5 text-sm text-gray-600 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 transition-colors"
           >
-            取消
+            Cancel
           </button>
         </div>
       </div>
