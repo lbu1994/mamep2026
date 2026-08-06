@@ -1,0 +1,4827 @@
+# Mamep2026 技术设计文档（TECH_DESIGN.md）
+
+- 文档版本：V1.0
+- 产品名称：Mamep2026
+- 文档类型：技术设计文档
+- 目标平台：浏览器、Electron 桌面客户端、VSCode 插件
+- 核心语言：TypeScript
+- 架构风格：Monorepo、分层架构、Ports and Adapters、共享核心与平台适配
+- 开发模式：测试驱动开发与验收测试驱动开发
+- 文档状态：初始技术设计
+- 上游输入：《Mamep2026 产品需求文档（PRD）》
+- 下游输入：工程初始化、模块实现、测试设计和 AGENTS.md 编写
+
+---
+
+# 1. 文档定位
+
+本文档定义 Mamep2026 的技术实现方案，包括：
+
+1. 技术栈选择；
+2. 系统总体架构；
+3. Monorepo 项目结构；
+4. 核心模块和模块依赖；
+5. 浏览器、Electron 和 VSCode 三端实现方式；
+6. Modbus RTU 和 Modbus TCP 的协议及传输架构；
+7. 通信请求队列和轮询调度；
+8. 寄存器数据转换；
+9. 工作区数据模型和持久化；
+10. 日志和错误模型；
+11. 插件架构；
+12. Electron、VSCode 和浏览器安全边界；
+13. 测试架构；
+14. 构建、发布和持续集成方案；
+15. 关键技术风险和应对方案。
+
+本文档不重新定义产品范围、功能优先级、用户价值和产品验收目标。相关内容以 PRD 为准。
+
+本文档也不规定 AI 代理的逐步操作方法、每次任务必须执行的命令、提交格式、代码检查清单和失败处理流程。相关内容应在 AGENTS.md 中定义。
+
+---
+
+# 2. 设计目标
+
+## 2.1 核心技术目标
+
+1. 三端共享相同的 Modbus 协议、数据转换、寄存器表、任务调度和错误处理逻辑；
+2. 平台差异仅通过明确的平台端口和适配器实现；
+3. UI 组件不得直接访问串口、TCP、文件系统或 VSCode API；
+4. 核心业务模块不得依赖 React、Electron、VSCode 或浏览器全局对象；
+5. 同一连接上的所有请求必须经过统一调度器串行执行；
+6. 所有请求应支持超时、取消、重试和结构化日志；
+7. 工作区数据必须包含版本号并支持迁移；
+8. 插件不得通过修改核心模块实现私有功能；
+9. 通信协议和数据转换行为必须可在无真实设备的环境中测试；
+10. 三端使用统一的领域模型、消息协议和验收测试数据。
+
+## 2.2 非目标
+
+本技术设计不试图实现：
+
+1. 通用工业控制平台；
+2. 云端账户和云同步服务；
+3. 分布式后端服务；
+4. 多用户协作数据库；
+5. 工业级权限、审计和安全联锁；
+6. 浏览器直接访问任意 TCP Socket；
+7. MVP 阶段的多连接并行；
+8. MVP 阶段的插件市场；
+9. MVP 阶段的任意 JavaScript 第三方插件执行；
+10. 以三套相互独立的代码实现三个客户端。
+
+---
+
+# 3. 核心架构决策摘要
+
+| 决策项 | 技术决策 |
+|---|---|
+| 编程语言 | TypeScript，启用严格类型检查 |
+| 仓库结构 | pnpm workspace 管理的 Monorepo |
+| 构建编排 | Turborepo |
+| Web UI | React |
+| Web 构建工具 | Vite |
+| 桌面端 | Electron |
+| VSCode 端 | VSCode Extension API 与 React Webview |
+| UI 状态 | Zustand |
+| 异步服务状态 | 领域服务事件与受控 Store，不引入远程请求型缓存框架作为核心状态源 |
+| 表格 | TanStack Table 与 TanStack Virtual 组合，自行实现可编辑单元格 |
+| 表单和配置校验 | React Hook Form 与 Zod |
+| 样式 | CSS Modules、CSS Custom Properties 和共享设计令牌 |
+| 图标 | Lucide React |
+| 浏览器 RTU | Web Serial API 适配器 |
+| Electron RTU | Node.js 串口适配器 |
+| VSCode RTU | 扩展宿主中的 Node.js 串口适配器 |
+| Electron、VSCode TCP | Node.js net 模块适配器 |
+| Modbus 核心 | 项目内实现所需的最小协议核心，不把业务行为绑定到第三方 Modbus 客户端 |
+| 浏览器持久化 | IndexedDB |
+| Electron 持久化 | 本地版本化 JSON 工作区文件与原子写入 |
+| VSCode 持久化 | workspaceState 或 globalState 存储元数据，工作区文件存储可共享配置 |
+| 单元测试 | Vitest |
+| React 组件测试 | React Testing Library |
+| 浏览器端到端测试 | Playwright |
+| Electron 端到端测试 | Playwright Electron 支持 |
+| VSCode 集成测试 | VSCode Extension Test 工具与专用测试工作区 |
+| 模拟设备 | TypeScript 实现的虚拟 Modbus TCP Server 和可注入的 RTU Fake Transport |
+| 数据库 | MVP 不引入服务端数据库 |
+| 后端服务 | MVP 不建设远程后端，Electron 主进程和 VSCode 扩展宿主承担本地后端职责 |
+
+---
+
+# 4. 技术栈设计
+
+## 4.1 TypeScript
+
+所有业务代码、平台适配代码、UI 代码、测试代码和构建脚本优先采用 TypeScript。
+
+要求：
+
+1. 启用 strict；
+2. 启用 noUncheckedIndexedAccess；
+3. 启用 exactOptionalPropertyTypes；
+4. 启用 useUnknownInCatchVariables；
+5. 禁止在核心模块使用隐式 any；
+6. 外部输入进入领域层前必须完成运行时校验；
+7. 对跨进程和跨 Webview 消息使用可辨识联合类型；
+8. 对 ID、地址和原始寄存器值使用明确的领域类型或受控工厂函数创建；
+9. 不使用 TypeScript enum 作为序列化数据格式，优先使用字符串联合类型；
+10. 所有持久化数据均通过 Schema 校验后加载。
+
+## 4.2 Monorepo 工具
+
+采用：
+
+- pnpm workspace；
+- Turborepo；
+- 共享根级 TypeScript 配置；
+- 共享 ESLint、Prettier 和测试配置；
+- 每个应用与包拥有独立 package.json；
+- 包之间通过 workspace 依赖建立明确关系。
+
+选择原因：
+
+1. 三端共享包数量较多；
+2. 需要统一执行类型检查、测试和构建；
+3. pnpm 对 Monorepo 支持成熟；
+4. Turborepo 能提供任务依赖、缓存和并行执行；
+5. 两者均使用主流 Node.js 工具链；
+6. 能避免把三端代码混合在单一大型应用目录中。
+
+## 4.3 React 与 Vite
+
+三端复杂界面统一使用 React。
+
+浏览器端和共享 Webview UI 使用 Vite 构建。
+
+设计要求：
+
+1. UI 只通过应用服务和接口访问业务能力；
+2. React 组件不解析 Modbus 报文；
+3. React 组件不维护通信请求队列；
+4. React 组件不直接引用 Node.js API；
+5. 共享 UI 通过能力对象决定功能是否可用；
+6. 平台差异不通过散落的 userAgent 判断实现；
+7. 复杂业务状态由领域服务和 Store 管理，组件只订阅需要的数据。
+
+## 4.4 状态管理
+
+采用 Zustand 管理 UI 和应用层状态。
+
+状态分为四类：
+
+1. 领域持久状态；
+2. 运行时连接状态；
+3. 通信任务状态；
+4. 纯界面状态。
+
+### 4.4.1 领域持久状态
+
+包括：
+
+- 工作区；
+- 标签页；
+- 寄存器行；
+- 通信配置；
+- 轮询配置；
+- 备注；
+- 主题和布局设置；
+- 插件启用配置。
+
+这些状态通过工作区仓储保存。
+
+### 4.4.2 运行时连接状态
+
+包括：
+
+- 当前连接状态；
+- 当前连接 ID；
+- 当前活动协议；
+- 串口授权状态；
+- 最近连接错误；
+- 当前连接能力。
+
+运行时连接状态不直接写入工作区。工作区仅保存允许恢复的配置。
+
+### 4.4.3 通信任务状态
+
+包括：
+
+- 队列长度；
+- 当前任务；
+- 批量读取进度；
+- 轮询运行状态；
+- 取消状态；
+- 当前重试次数；
+- 实际轮询周期统计。
+
+通信任务状态由通信服务提供，UI Store 只保存显示所需的投影。
+
+### 4.4.4 纯界面状态
+
+包括：
+
+- 当前活动标签页；
+- 侧边栏展开状态；
+- 底部面板高度；
+- 当前表格选择；
+- 对话框状态；
+- 筛选条件；
+- 日志自动滚动状态。
+
+纯界面状态不得反向驱动协议层的隐含行为。
+
+## 4.5 表格技术
+
+采用 TanStack Table 与 TanStack Virtual 构建寄存器表。
+
+选择原因：
+
+1. 无头组件模式便于适配浏览器、Electron 和 VSCode 主题；
+2. 支持自定义编辑器；
+3. 支持多行选择和键盘交互；
+4. 支持虚拟滚动；
+5. 不强制绑定特定视觉风格；
+6. 便于实现 1000 行以上的可编辑表格；
+7. 许可证适合开源项目。
+
+需要自行实现：
+
+- 单元格编辑会话；
+- 地址自动格式化；
+- 类型化数据输入；
+- 复制、剪切和粘贴；
+- 多行操作；
+- 键盘导航；
+- 行拖动或移动；
+- 焦点恢复；
+- 错误提示；
+- 轮询状态显示；
+- 读取值与待写值分离；
+- 右键菜单；
+- 撤销和重做。
+
+在正式采用前应通过表格原型验证：
+
+1. 1000 行渲染与滚动；
+2. 编辑中的单元格不因虚拟化丢失输入；
+3. 多单元格粘贴；
+4. 跨行键盘导航；
+5. VSCode Webview 中的焦点行为；
+6. 浏览器缩放和响应式表现；
+7. 深色主题可读性。
+
+如原型验证失败，应保留替换表格实现的能力，不允许领域模型依赖 TanStack Table 的内部数据结构。
+
+## 4.6 表单和 Schema 校验
+
+采用：
+
+- React Hook Form 处理连接配置表单；
+- Zod 定义运行时 Schema；
+- 领域层使用显式校验函数处理高频寄存器数据转换。
+
+Zod 主要用于：
+
+1. 平台消息校验；
+2. 插件清单校验；
+3. 工作区文件校验；
+4. 配置导入校验；
+5. 本地存储恢复校验；
+6. Electron IPC 输入校验；
+7. VSCode Webview 消息校验。
+
+高频通信路径不应反复对已验证的内部对象执行完整 Schema 解析。
+
+## 4.7 样式和主题
+
+采用：
+
+- CSS Modules；
+- CSS Custom Properties；
+- 共享设计令牌；
+- 平台主题适配器；
+- Lucide React 图标。
+
+不在核心 UI 中绑定重量级组件库，以避免：
+
+1. Electron、浏览器和 VSCode 视觉难以统一；
+2. 表格密度受组件库限制；
+3. VSCode 主题适配困难；
+4. 组件库升级扩大维护成本；
+5. 生成大量难以覆盖的样式覆盖代码。
+
+共享设计令牌至少包括：
+
+- 字体；
+- 字号；
+- 行高；
+- 间距；
+- 圆角；
+- 边框；
+- 背景层级；
+- 文本颜色；
+- 品牌强调色；
+- 在线、警告、错误和离线语义色；
+- 表格行高；
+- 单元格边距；
+- 焦点轮廓。
+
+VSCode 端通过主题适配层将 VSCode Theme Color 映射到共享令牌。
+
+## 4.8 后端与数据库结论
+
+MVP 不建设远程后端服务，也不引入服务端数据库。
+
+各端的本地后端职责如下：
+
+- 浏览器端：Web API、Web Serial 和 IndexedDB；
+- Electron 端：Electron 主进程负责串口、TCP、插件和文件持久化；
+- VSCode 端：扩展宿主负责串口、TCP、插件和工作区持久化。
+
+不采用 SQLite 作为 MVP 默认存储，原因：
+
+1. 当前工作区数据规模较小；
+2. 数据以完整工作区文档为主要边界；
+3. 三端无法直接共享相同 SQLite 运行方式；
+4. 浏览器需要 IndexedDB；
+5. 引入 SQLite 会增加原生模块和打包复杂度；
+6. 版本化 JSON 更适合跨端导入导出和人工诊断。
+
+如果后续出现大量历史采样、Trace 数据或超大日志检索需求，可单独评估 SQLite 或专用时序数据存储，但不得改变当前工作区领域模型。
+
+---
+
+# 5. 系统总体架构
+
+## 5.1 分层结构
+
+系统分为以下层次：
+
+1. Domain 层；
+2. Application 层；
+3. Ports 层；
+4. Adapters 层；
+5. Presentation 层；
+6. Host 层。
+
+依赖方向只能从外层指向内层。
+
+### 5.1.1 Domain 层
+
+包含纯业务模型和纯函数：
+
+- Modbus 数据模型；
+- 寄存器地址；
+- 16 位原始值；
+- 数据类型转换；
+- 寄存器行；
+- 标签页；
+- 工作区；
+- 结构化错误；
+- 插件贡献描述；
+- 能力描述。
+
+Domain 层不得依赖：
+
+- React；
+- Electron；
+- VSCode；
+- Web Serial；
+- Node.js net；
+- Node.js 串口库；
+- IndexedDB；
+- 文件系统；
+- Zustand；
+- 浏览器 DOM。
+
+### 5.1.2 Application 层
+
+包含用例和业务编排：
+
+- 连接；
+- 断开；
+- 单行读取；
+- 单行写入；
+- 写后回读；
+- 全表读取；
+- 开始和停止轮询；
+- 工作区加载与保存；
+- 标签页管理；
+- 插件启用与禁用；
+- 日志查询；
+- 状态恢复；
+- 数据迁移。
+
+Application 层通过 Ports 使用外部能力。
+
+### 5.1.3 Ports 层
+
+定义外部能力接口：
+
+- SerialPortPort；
+- TcpSocketPort；
+- TransportPort；
+- WorkspaceRepositoryPort；
+- LogRepositoryPort；
+- PluginRuntimePort；
+- ClockPort；
+- IdGeneratorPort；
+- PlatformCapabilityPort；
+- FileDialogPort；
+- NotificationPort。
+
+Ports 只定义核心需要什么，不暴露具体平台实现细节。
+
+### 5.1.4 Adapters 层
+
+分别实现：
+
+- Web Serial Adapter；
+- Node Serial Adapter；
+- Node TCP Adapter；
+- IndexedDB Workspace Adapter；
+- Electron File Workspace Adapter；
+- VSCode Workspace Storage Adapter；
+- Electron IPC Adapter；
+- VSCode Webview RPC Adapter；
+- Browser Plugin Adapter；
+- Electron Plugin Adapter；
+- VSCode Plugin Adapter。
+
+### 5.1.5 Presentation 层
+
+包含：
+
+- React 页面；
+- 表格；
+- 连接配置；
+- 日志面板；
+- 状态指示；
+- 插件管理界面；
+- 设置界面；
+- 对话框；
+- Store；
+- UI ViewModel。
+
+### 5.1.6 Host 层
+
+Host 是每个平台真正的运行入口：
+
+- Browser Host；
+- Electron Main Host；
+- Electron Renderer Host；
+- VSCode Extension Host；
+- VSCode Webview Host。
+
+Host 负责装配具体适配器，不实现领域规则。
+
+## 5.2 核心依赖原则
+
+1. protocol-core 不依赖 transport；
+2. transport 不依赖 UI；
+3. communication-session 依赖 TransportPort，而非具体串口库；
+4. register-table 依赖 application service，而非具体协议字节流；
+5. workspace 只保存领域状态，不保存运行时 Promise、Timer 或连接句柄；
+6. plugin-api 只暴露稳定的能力接口和数据契约；
+7. Electron Renderer 不直接导入 Node.js 串口或 net；
+8. VSCode Webview 不直接调用 VSCode Extension API；
+9. 浏览器端不得包含 Electron 或 VSCode 条件分支；
+10. 平台能力由 Capability Matrix 明确声明。
+
+---
+
+# 6. 项目结构
+
+建议项目结构如下：
+
+    mamep2026/
+    ├─ apps/
+    │  ├─ web/
+    │  │  ├─ src/
+    │  │  ├─ public/
+    │  │  └─ package.json
+    │  ├─ electron/
+    │  │  ├─ src/
+    │  │  │  ├─ main/
+    │  │  │  ├─ preload/
+    │  │  │  └─ renderer/
+    │  │  ├─ resources/
+    │  │  └─ package.json
+    │  └─ vscode-extension/
+    │     ├─ src/
+    │     │  ├─ extension/
+    │     │  └─ webview/
+    │     ├─ media/
+    │     └─ package.json
+    ├─ packages/
+    │  ├─ domain/
+    │  ├─ protocol-modbus/
+    │  ├─ data-conversion/
+    │  ├─ communication/
+    │  ├─ register-table/
+    │  ├─ workspace/
+    │  ├─ logging/
+    │  ├─ plugin-api/
+    │  ├─ platform-api/
+    │  ├─ platform-web/
+    │  ├─ platform-node/
+    │  ├─ platform-electron/
+    │  ├─ platform-vscode/
+    │  ├─ ui/
+    │  ├─ ui-theme/
+    │  ├─ schemas/
+    │  ├─ test-kit/
+    │  └─ shared-utils/
+    ├─ plugins/
+    │  └─ example-yaskawa/
+    ├─ tests/
+    │  ├─ acceptance/
+    │  ├─ integration/
+    │  ├─ e2e-web/
+    │  ├─ e2e-electron/
+    │  └─ e2e-vscode/
+    ├─ tooling/
+    │  ├─ eslint-config/
+    │  ├─ typescript-config/
+    │  ├─ vitest-config/
+    │  └─ scripts/
+    ├─ docs/
+    │  ├─ adr/
+    │  ├─ architecture/
+    │  └─ testing/
+    ├─ package.json
+    ├─ pnpm-workspace.yaml
+    ├─ turbo.json
+    ├─ tsconfig.json
+    ├─ TECH_DESIGN.md
+    └─ AGENTS.md
+
+## 6.1 apps/web
+
+职责：
+
+- 装配浏览器平台能力；
+- 渲染共享 React UI；
+- 使用 Web Serial；
+- 使用 IndexedDB；
+- 执行浏览器能力检测；
+- 注册浏览器生命周期事件；
+- 构建静态网站。
+
+不得包含：
+
+- Node.js 串口实现；
+- Node.js TCP；
+- Electron IPC；
+- VSCode API；
+- 厂商私有协议实现。
+
+## 6.2 apps/electron
+
+### main
+
+职责：
+
+- 创建和管理窗口；
+- 串口枚举和连接；
+- TCP 连接；
+- 工作区文件读写；
+- 插件发现与加载；
+- 系统菜单和快捷键适配；
+- 应用生命周期；
+- 安全 IPC 处理；
+- 自动更新的后续接入边界。
+
+### preload
+
+职责：
+
+- 暴露最小化、类型化的 IPC API；
+- 隔离 Renderer 与 Node.js 能力；
+- 对外暴露稳定的 Mamep Host API；
+- 不暴露通用 ipcRenderer；
+- 不暴露文件系统、net 或串口库对象。
+
+### renderer
+
+职责：
+
+- 装配共享 UI；
+- 通过 preload API 调用主进程能力；
+- 维护 UI 状态；
+- 不直接访问 Node.js。
+
+## 6.3 apps/vscode-extension
+
+### extension
+
+职责：
+
+- 注册 VSCode 命令；
+- 创建 Webview；
+- 串口和 TCP 通信；
+- 工作区存储；
+- 插件装配；
+- 监听工作区信任和扩展生命周期；
+- 转发结构化事件；
+- 在停用时释放连接。
+
+### webview
+
+职责：
+
+- 渲染共享 React UI；
+- 使用类型化 RPC 与扩展宿主通信；
+- 适配 VSCode 主题；
+- 不直接访问 Node.js；
+- 不承担通信队列。
+
+## 6.4 packages/domain
+
+包含：
+
+- 标识符；
+- 通用 Result 类型；
+- 结构化错误；
+- 工作区聚合根；
+- 标签页实体；
+- 寄存器行实体；
+- 连接配置值对象；
+- 平台能力类型；
+- 插件贡献类型。
+
+不得包含平台实现。
+
+## 6.5 packages/protocol-modbus
+
+包含：
+
+- Modbus RTU ADU 编解码；
+- Modbus TCP ADU 编解码；
+- PDU 编解码；
+- 功能码 03 请求和响应；
+- 功能码 0x10 请求和响应；
+- CRC-16；
+- Modbus TCP MBAP Header；
+- 异常响应解析；
+- 响应一致性校验；
+- 报文长度校验；
+- 事务 ID 校验；
+- Unit ID 和 Slave Address 校验。
+
+## 6.6 packages/data-conversion
+
+包含：
+
+- 16 位 HEX；
+- 16 位 Binary；
+- Unsigned；
+- Signed；
+- 十进制定点缩放；
+- 输入解析；
+- 输出格式化；
+- 精度和范围校验；
+- 原始值与展示值转换；
+- 地址格式化。
+
+该包必须保持为纯函数包。
+
+## 6.7 packages/communication
+
+包含：
+
+- CommunicationSession；
+- RequestScheduler；
+- RetryPolicy；
+- TimeoutController；
+- PollingCoordinator；
+- BatchReadCoordinator；
+- WriteVerifyCoordinator；
+- TransportPort；
+- 请求生命周期事件；
+- 连接状态机；
+- 取消机制；
+- 延迟响应隔离。
+
+## 6.8 packages/register-table
+
+包含：
+
+- 表格应用服务；
+- 行增删移动；
+- 复制和粘贴模型；
+- 地址提交；
+- 数据编辑会话；
+- 读取结果应用；
+- 待写值管理；
+- 状态和错误投影；
+- 撤销与重做命令；
+- 对通信服务的用例封装。
+
+## 6.9 packages/workspace
+
+包含：
+
+- 工作区 Schema；
+- Repository Port；
+- 自动保存协调器；
+- 数据迁移；
+- 损坏数据恢复；
+- 默认工作区；
+- 导入和导出边界；
+- 保存节流和原子提交逻辑。
+
+## 6.10 packages/logging
+
+包含：
+
+- 结构化消息日志；
+- 通信日志；
+- 日志过滤；
+- 日志保留上限；
+- 日志导出模型；
+- 敏感字段标记；
+- 日志事件订阅。
+
+## 6.11 packages/plugin-api
+
+包含：
+
+- 插件 Manifest Schema；
+- 插件生命周期接口；
+- 插件贡献点；
+- 插件权限声明；
+- 平台能力要求；
+- 版本兼容规则；
+- 插件 Host 接口；
+- 插件错误边界。
+
+## 6.12 packages/platform-api
+
+定义 UI 和 Application 层可访问的平台统一接口，包括：
+
+- 串口；
+- TCP；
+- 持久化；
+- 文件选择；
+- 剪贴板；
+- 通知；
+- 插件；
+- 平台信息；
+- 能力矩阵；
+- 生命周期。
+
+## 6.13 packages/ui
+
+包含三端共享的：
+
+- 页面布局；
+- 顶部应用栏；
+- 侧边栏；
+- 标签页；
+- 寄存器表；
+- 连接配置；
+- 日志面板；
+- 插件页面；
+- 设置页面；
+- 通用组件；
+- 可访问性工具；
+- UI Store。
+
+## 6.14 packages/test-kit
+
+包含：
+
+- Fake Serial Transport；
+- Fake TCP Transport；
+- Scripted Modbus Device；
+- Virtual Clock；
+- Deterministic ID Generator；
+- In-memory Workspace Repository；
+- 请求记录器；
+- 延迟和超时控制；
+- 错误注入；
+- 工作区测试工厂；
+- 插件测试 Host。
+
+---
+
+# 7. 平台能力矩阵
+
+平台不支持的能力应由能力矩阵明确表示。
+
+建议定义以下能力：
+
+| 能力 | Browser | Electron | VSCode |
+|---|---:|---:|---:|
+| Modbus RTU | 支持 | 支持 | 支持 |
+| Modbus TCP | 不支持 | 支持 | 支持 |
+| 串口枚举 | 受浏览器授权模型限制 | 支持 | 支持 |
+| COM10 及以上 | 由浏览器设备选择机制处理 | 支持 | 支持 |
+| 本地文件系统 | 受限 | 支持 | 支持 |
+| 工作区文件 | 可通过导入导出实现 | 支持 | 支持 |
+| IndexedDB | 支持 | 非默认 | 非默认 |
+| Node.js 插件 | 不支持 | 受控支持 | 受控支持 |
+| Web 插件 | 支持受限插件 | 可支持 | 可支持 |
+| VSCode 命令 | 不支持 | 不支持 | 支持 |
+| 系统通知 | 浏览器能力 | 支持 | VSCode 通知 |
+| 自动更新 | 不适用 | 后续支持 | 由 VSCode 管理 |
+
+能力矩阵通过 PlatformCapabilities 对象注入 UI。
+
+UI 根据能力执行：
+
+1. 隐藏完全不适用的功能；
+2. 禁用临时不可用的功能；
+3. 展示禁用原因；
+4. 不尝试调用不存在的平台 API；
+5. 不通过捕获运行时异常来判断平台能力。
+
+---
+
+# 8. Modbus 协议设计
+
+## 8.1 实现范围
+
+MVP 协议核心只实现：
+
+1. Modbus RTU；
+2. Modbus TCP；
+3. 功能码 03；
+4. 功能码 0x10；
+5. 单个 16 位保持寄存器读取；
+6. 单个 16 位保持寄存器写入；
+7. Modbus 异常响应；
+8. RTU CRC-16；
+9. TCP MBAP Header；
+10. 请求和响应一致性校验。
+
+不得在核心协议包中加入：
+
+- Address Adjust；
+- BCC；
+- CHECK-SUM；
+- 厂商私有功能码；
+- Enter RAM；
+- Enter ROM；
+- 厂商寄存器语义；
+- 自动地址偏移；
+- 私有报文封装。
+
+## 8.2 协议层次
+
+协议处理分为：
+
+1. 领域请求；
+2. PDU；
+3. ADU；
+4. Transport 字节流；
+5. 响应帧；
+6. 领域结果。
+
+读取请求转换流程：
+
+    ReadHoldingRegisterCommand
+    -> Function 03 PDU
+    -> RTU ADU 或 TCP ADU
+    -> Transport
+    -> RTU ADU 或 TCP ADU
+    -> Function 03 Response PDU
+    -> RawRegisterValue
+
+写入请求转换流程：
+
+    WriteHoldingRegisterCommand
+    -> Function 0x10 PDU
+    -> RTU ADU 或 TCP ADU
+    -> Transport
+    -> RTU ADU 或 TCP ADU
+    -> Function 0x10 Response PDU
+    -> WriteAcknowledgement
+
+## 8.3 请求模型
+
+每个通信请求至少包含：
+
+- requestId；
+- connectionId；
+- protocol；
+- source；
+- operation；
+- target；
+- timeoutMs；
+- retryCount；
+- createdAt；
+- cancellationToken；
+- metadata。
+
+source 用于区分：
+
+- manual-read；
+- manual-write；
+- batch-read；
+- polling；
+- write-verify；
+- plugin。
+
+operation 用于区分：
+
+- read-holding-register；
+- write-holding-register。
+
+target 至少包含：
+
+- slaveAddress 或 unitId；
+- registerAddress；
+- registerCount。
+
+MVP 的 registerCount 固定为 1，但协议层不应依赖 UI 假设。
+
+## 8.4 响应校验
+
+RTU 响应必须校验：
+
+1. 最小帧长度；
+2. CRC；
+3. Slave Address；
+4. 功能码；
+5. 异常功能码；
+6. 字节数；
+7. 数据长度；
+8. 写入响应中的起始地址；
+9. 写入响应中的数量；
+10. 是否存在多余或缺失字节。
+
+TCP 响应必须校验：
+
+1. Transaction ID；
+2. Protocol ID；
+3. Length；
+4. Unit ID；
+5. 功能码；
+6. 异常功能码；
+7. 字节数；
+8. 数据长度；
+9. 写入地址；
+10. 写入数量。
+
+## 8.5 RTU 帧读取
+
+串口字节流可能分多次到达，不能假设一次 data 事件包含完整响应。
+
+RTU Transport Adapter 应提供字节缓冲，通信会话根据当前请求推导预期响应长度。
+
+需要处理：
+
+1. 响应被拆分为多个数据片段；
+2. 一次收到完整响应；
+3. 收到多余字节；
+4. 收到上一个请求的迟到响应；
+5. 收到噪声或非法前缀；
+6. CRC 错误；
+7. 超时前只收到部分帧；
+8. 设备断开。
+
+对于当前 MVP 的功能码 03 和 0x10，可以根据响应头确定完整帧长度：
+
+- 功能码 03：根据 byte count 推导；
+- 功能码 0x10：响应长度固定；
+- 异常响应：长度固定。
+
+不得仅依赖固定延迟判断帧结束。
+
+## 8.6 TCP 帧读取
+
+TCP 是字节流协议，必须处理：
+
+1. 半包；
+2. 粘包；
+3. 多个响应连续到达；
+4. 连接中断；
+5. MBAP Length 非法；
+6. Transaction ID 不匹配；
+7. 超时后的迟到响应。
+
+TCP Adapter 应维护接收缓冲，根据 MBAP Header 中的 Length 分帧。
+
+## 8.7 Transaction ID
+
+Modbus TCP Transaction ID 由 CommunicationSession 维护。
+
+要求：
+
+1. 在 16 位范围内递增并回绕；
+2. 单连接内唯一关联当前未完成请求；
+3. 响应必须与当前请求 Transaction ID 匹配；
+4. 超时后的迟到响应不得被后续请求误接收；
+5. 连接重建后重置或重新初始化；
+6. Transaction ID 不进入持久化工作区。
+
+---
+
+# 9. 传输层设计
+
+## 9.1 TransportPort
+
+统一传输接口表达：
+
+- open；
+- close；
+- write；
+- subscribeData；
+- subscribeError；
+- subscribeClose；
+- isOpen；
+- capabilities。
+
+TransportPort 只处理字节和连接事件，不理解寄存器行、Data Type 或工作区。
+
+RTU 和 TCP 可以使用不同的 Transport 配置，但应向 CommunicationSession 提供统一的字节传输能力。
+
+## 9.2 Web Serial Adapter
+
+职责：
+
+1. 用户授权串口；
+2. 打开和关闭端口；
+3. 读取数据流；
+4. 写入数据流；
+5. 将浏览器错误映射为结构化错误；
+6. 响应页面卸载和连接丢失；
+7. 释放 Reader 和 Writer 锁；
+8. 支持能力检测；
+9. 处理当前浏览器不支持的串口参数。
+
+浏览器端不能依赖传统 COM 端口字符串作为设备唯一标识。
+
+浏览器持久化时只保存：
+
+- 非设备标识类通信参数；
+- 可选的最近设备显示信息；
+- 不保存可用于自动重连的授权假设。
+
+## 9.3 Node Serial Adapter
+
+Electron 和 VSCode 共用 Node Serial Adapter。
+
+职责：
+
+1. 枚举系统串口；
+2. 完整保留系统返回的串口路径；
+3. 支持 COM10 及以上；
+4. 打开和关闭串口；
+5. 串口错误映射；
+6. 设备拔出检测；
+7. 写入和 drain；
+8. 数据事件转为 Uint8Array；
+9. 防止重复打开；
+10. 保证关闭操作幂等。
+
+COM10 以上不得通过手工拼接不完整路径实现。应直接使用成熟串口库枚举和打开时提供的原始 path。
+
+Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在领域层解析其命名格式。
+
+## 9.4 Node TCP Adapter
+
+Electron 和 VSCode 共用 Node TCP Adapter。
+
+职责：
+
+1. DNS 或 IP 连接；
+2. 连接超时；
+3. Socket 错误；
+4. 远端关闭；
+5. 本地主动关闭；
+6. 半包和粘包数据传递；
+7. 阻止断开后继续写入；
+8. 可取消连接；
+9. 支持自动重连协调器使用；
+10. 映射结构化错误。
+
+是否自动重连不由 Adapter 决定，而由 Application 层的连接策略决定。
+
+---
+
+# 10. 连接状态机
+
+## 10.1 状态定义
+
+连接状态建议定义为：
+
+- disconnected；
+- selecting-device；
+- connecting；
+- connected；
+- disconnecting；
+- reconnect-waiting；
+- reconnecting；
+- interrupted；
+- failed。
+
+状态机必须防止非法转换。
+
+示例合法转换：
+
+    disconnected -> selecting-device
+    disconnected -> connecting
+    selecting-device -> connecting
+    selecting-device -> disconnected
+    connecting -> connected
+    connecting -> failed
+    connecting -> disconnected
+    connected -> disconnecting
+    connected -> interrupted
+    disconnecting -> disconnected
+    interrupted -> reconnect-waiting
+    interrupted -> disconnected
+    reconnect-waiting -> reconnecting
+    reconnecting -> connected
+    reconnecting -> failed
+    failed -> connecting
+    failed -> disconnected
+
+## 10.2 状态机职责
+
+1. 防止重复连接；
+2. 防止重复断开；
+3. 断开时取消未执行任务；
+4. 连接丢失时通知轮询器停止；
+5. 用户主动断开后禁止自动重连；
+6. 区分连接失败和连接中断；
+7. 释放底层资源；
+8. 发布结构化状态事件；
+9. 为 UI 提供可预测状态；
+10. 不将连接句柄写入持久化状态。
+
+## 10.3 连接配置快照
+
+建立连接时创建不可变配置快照。
+
+正在执行的请求使用连接建立时和请求提交时确定的配置，不读取之后被 UI 修改的可变对象。
+
+配置修改规则：
+
+- 串口核心参数变更后需要重新连接；
+- TCP 主机和端口变更后需要重新连接；
+- 从站地址或 Unit ID 对后续请求生效；
+- 超时和重试可对后续请求生效；
+- 已入队请求保留创建时的请求配置快照。
+
+---
+
+# 11. 请求调度与并发控制
+
+## 11.1 单连接单队列
+
+每个活动连接拥有一个 RequestScheduler。
+
+MVP 只有一个活动连接，因此运行时只有一个主要请求队列。
+
+所有来源的请求必须进入同一队列：
+
+- 单行读取；
+- 单行写入；
+- 全表读取；
+- 周期轮询；
+- 写后回读；
+- 插件请求。
+
+不得绕过队列直接调用 Transport。
+
+## 11.2 调度目标
+
+1. 同一时刻只执行一个设备请求；
+2. 用户手动操作不被大批轮询任务长期阻塞；
+3. 轮询任务不能无限积压；
+4. 全表读取可以取消；
+5. 断开时取消队列；
+6. 写后回读保持操作关联；
+7. 插件请求不能垄断通信链路；
+8. 请求执行顺序可测试；
+9. 超时后能够继续处理后续请求；
+10. 迟到响应不会关联到错误请求。
+
+## 11.3 请求优先级
+
+建议定义以下优先级：
+
+1. connection-control；
+2. manual-write；
+3. manual-read；
+4. write-verify；
+5. batch-read；
+6. polling；
+7. plugin-background。
+
+优先级只能影响尚未开始的任务，不中断已经发送到设备的请求。
+
+为避免低优先级任务饥饿，应采用带公平性的优先级队列，例如：
+
+- 高优先级请求优先；
+- 连续执行一定数量高优先级请求后允许较低优先级请求执行；
+- 同优先级按创建顺序执行；
+- 插件不得指定超出其权限的优先级。
+
+具体公平参数作为内部实现配置，不进入 PRD。
+
+## 11.4 不允许重复积压的轮询任务
+
+每一个轮询行在队列中最多存在一个待执行任务和一个可能正在执行的任务。
+
+如果下一次轮询触发时，上一次任务仍在等待或执行：
+
+- 不追加新的同类任务；
+- 记录一次 skipped tick 或 lag 指标；
+- 保留下一轮重新调度机会；
+- UI 可展示实际刷新速度低于配置速度。
+
+这可以避免链路变慢时队列无限增长。
+
+## 11.5 手动快速点击
+
+对同一行连续快速点击读取时：
+
+- 如果已有同一行的手动读取尚未开始，可以合并为一次；
+- 如果已有读取正在执行，可以禁用按钮或将后续请求合并；
+- 不应无上限创建相同请求。
+
+对写入操作不自动合并，因为每次写入可能代表用户的独立意图。
+
+UI 在写入请求未完成时默认禁用该行的再次写入按钮，除非后续明确设计写入队列功能。
+
+## 11.6 请求取消
+
+每个任务持有 CancellationToken。
+
+取消分为：
+
+- 尚未开始：直接从队列移除；
+- 已在附加延迟阶段：终止等待；
+- 已发送请求：停止等待结果并标记取消；
+- 底层 Transport 不支持撤回已经发送的字节，因此取消不等于设备未执行；
+- 取消后到达的响应必须被识别为迟到响应并丢弃或记录。
+
+用户断开连接时：
+
+1. 阻止新任务入队；
+2. 取消所有未开始任务；
+3. 取消当前等待；
+4. 关闭 Transport；
+5. 清理接收缓冲；
+6. 发布取消和断开事件。
+
+---
+
+# 12. 超时、重试和接收延迟
+
+## 12.1 超时
+
+每次协议请求拥有独立超时。
+
+超时从实际发送完整请求后开始计算，不从进入队列时开始计算。
+
+需要分别记录：
+
+- queueWaitMs；
+- writeDurationMs；
+- responseDurationMs；
+- totalDurationMs。
+
+连接超时和请求超时是不同配置，不得共用同一个错误类型。
+
+## 12.2 重试
+
+重试规则：
+
+1. retryCount 表示首次请求失败后允许的额外尝试次数；
+2. 每次尝试使用新的 attempt 编号；
+3. TCP 请求重试使用新的 Transaction ID；
+4. RTU 请求重试清理当前请求的接收缓冲状态；
+5. 每次尝试单独记录日志；
+6. 最终结果记录累计耗时；
+7. 用户取消后不再重试；
+8. 用户主动断开后不再重试；
+9. 参数校验错误不重试；
+10. 明确的 Modbus 异常响应默认不重试；
+11. 超时、临时连接错误和可配置的传输错误可以重试；
+12. CRC 错误是否重试由 RetryPolicy 明确决定。
+
+## 12.3 接收延迟
+
+接收延迟定义为请求发送前的附加调度延迟或相邻请求间隔，需要在实现前固定为单一语义。
+
+本设计采用：
+
+- Rx Delay 作为相邻请求之间的最小附加间隔；
+- 计时从上一请求结束后开始；
+- 不用于判断帧结束；
+- 不替代请求超时；
+- 不影响已收到响应的解析；
+- 日志记录实际应用的延迟。
+
+命名在 UI 中建议调整为“请求间隔”或提供明确说明，内部字段使用 interRequestDelayMs，避免延续含糊的 Rx Delay 语义。
+
+---
+
+# 13. 周期轮询设计
+
+## 13.1 轮询模型
+
+MVP 使用：
+
+- 全局轮询间隔；
+- 每行独立启用状态；
+- 单连接；
+- 每行单独功能码 03 请求；
+- 不合并连续地址。
+
+PollingCoordinator 管理需要轮询的行，但不直接访问 UI 表格。
+
+每个轮询目标至少包含：
+
+- workspaceId；
+- sheetId；
+- rowId；
+- address；
+- slaveAddress 或 unitId；
+- enabled；
+- generation；
+- nextDueAt。
+
+## 13.2 Generation 机制
+
+当发生以下操作时增加行的 generation：
+
+- 修改地址；
+- 修改所属标签页；
+- 删除行；
+- 停止轮询；
+- 切换连接；
+- 修改影响请求目标的配置。
+
+轮询结果返回时，只有 generation 与当前行一致才允许更新行状态。
+
+该机制防止：
+
+- 修改地址后旧响应覆盖新地址；
+- 删除行后迟到响应重新创建状态；
+- 关闭标签页后旧任务更新已销毁页面；
+- 断开并重连后旧请求污染新连接。
+
+## 13.3 轮询间隔语义
+
+技术层将轮询间隔定义为“每个启用行计划重新加入轮询的目标间隔”。
+
+由于所有请求串行执行，实际刷新周期可能大于配置值。
+
+调度器不保证严格实时性。
+
+每行记录：
+
+- configuredIntervalMs；
+- lastScheduledAt；
+- lastStartedAt；
+- lastCompletedAt；
+- actualIntervalMs；
+- skippedTicks；
+- lastSuccessAt。
+
+## 13.4 标签页切换
+
+切换标签页不自动停止其他标签页的轮询，因为轮询状态属于工作区行为而非可见性行为。
+
+关闭标签页时：
+
+1. 停止该标签页所有轮询；
+2. 取消尚未执行任务；
+3. 已发送任务的返回结果不得更新已删除标签页；
+4. 保存新的工作区状态。
+
+如果后续产品决定只有当前标签页轮询，可通过策略替换，不改变底层队列。
+
+## 13.5 全部轮询控制
+
+开始全部轮询：
+
+- 只启用当前标签页内被标记为轮询的有效行；
+- 无效地址不进入队列；
+- 汇总无效行信息；
+- 不自动修改无效行内容。
+
+停止全部轮询：
+
+- 停止当前标签页的轮询调度；
+- 取消该标签页尚未执行的轮询任务；
+- 不取消用户手动读取和写入；
+- 不断开连接。
+
+---
+
+# 14. 全表读取设计
+
+BatchReadCoordinator 负责全表读取。
+
+处理流程：
+
+1. 获取当前标签页不可变行快照；
+2. 对每行执行地址校验；
+3. 创建有效行任务；
+4. 统计空行和无效行；
+5. 按表格顺序提交读取；
+6. 每行独立执行；
+7. 单行失败后继续；
+8. 发布进度；
+9. 支持取消尚未执行的任务；
+10. 输出批次摘要。
+
+批次摘要至少包含：
+
+- batchId；
+- totalRows；
+- eligibleRows；
+- successCount；
+- failureCount；
+- skippedCount；
+- cancelledCount；
+- startedAt；
+- completedAt；
+- durationMs。
+
+全表读取和轮询同时存在时：
+
+- 全表读取优先级高于普通轮询；
+- 不清空轮询配置；
+- 轮询任务不得重复积压；
+- 批量完成后轮询继续；
+- 对同一行的临近重复读取允许由调度器去重。
+
+---
+
+# 15. 写入与写后回读设计
+
+## 15.1 待读值与读取值分离
+
+为避免轮询覆盖用户输入，领域模型中将 Data 拆分为：
+
+- rawReadValue；
+- formattedReadValue；
+- draftWriteText；
+- parsedWriteValue；
+- displayMode；
+- operationState；
+- freshnessState。
+
+UI 可以在同一视觉单元格中呈现这两种状态，但内部不得使用同一字段。
+
+用户开始编辑时：
+
+1. 创建 draftWriteText；
+2. 保留 rawReadValue；
+3. 该行进入 editing 状态；
+4. 轮询结果仍可记录到 rawReadValue；
+5. 轮询结果不得覆盖 draftWriteText；
+6. UI 明确区分当前显示是实时值还是待写值。
+
+## 15.2 写入流程
+
+1. 创建行快照；
+2. 校验连接；
+3. 校验地址；
+4. 根据 Type 解析 draftWriteText；
+5. 转换为 16 位原始值；
+6. 创建 0x10 写入请求；
+7. 进入统一队列；
+8. 记录请求和响应；
+9. 根据 Read Verify 规则决定是否回读；
+10. 更新写入状态；
+11. 不清除失败输入。
+
+## 15.3 写后回读
+
+WriteVerifyCoordinator 将写入和回读视为相关但独立的两个阶段：
+
+- write；
+- optional-delay；
+- verify-read；
+- compare。
+
+结果类型必须区分：
+
+- write-failed；
+- write-succeeded-no-verify；
+- write-succeeded-verify-matched；
+- write-succeeded-verify-mismatched；
+- write-succeeded-verify-failed；
+- cancelled-before-verify。
+
+回读失败不能修改写入阶段的成功结论。
+
+等待 100、200 或 500 ms 时使用可取消时钟，不直接使用散落的 setTimeout。
+
+## 15.4 写入和轮询冲突
+
+开始编辑时不强制停止该行轮询，但 UI 必须保留草稿。
+
+写入任务提交后：
+
+- 同一行的普通轮询任务暂缓；
+- 写入及其回读完成后恢复；
+- 其他行轮询可以继续；
+- 如果用户停止轮询，则写入完成后不得自动重新启用；
+- 如果行地址在写入过程中被修改，返回结果只能关联原请求快照，不能覆盖新地址状态。
+
+---
+
+# 16. 数据类型转换设计
+
+## 16.1 原始值
+
+内部统一使用 0 至 65535 的 16 位无符号整数表示寄存器原始值。
+
+创建 RawRegisterValue 时必须验证：
+
+- 是整数；
+- 大于等于 0；
+- 小于等于 65535。
+
+通信层只处理 RawRegisterValue，不处理格式化字符串。
+
+## 16.2 有符号转换
+
+Signed 16 位解释规则：
+
+- 原始值小于 0x8000 时，值不变；
+- 原始值大于等于 0x8000 时，解释为 rawValue - 65536。
+
+允许范围：
+
+-32768 至 32767。
+
+## 16.3 缩放类型
+
+缩放类型使用十进制定点数，不使用二进制浮点直接判断输入精度。
+
+缩放因子：
+
+- 0.1：10；
+- 0.01：100；
+- 0.001：1000；
+- 0.0001：10000。
+
+写入转换：
+
+    rawNumeric = decimalInput × scaleFactor
+
+要求：
+
+1. 输入小数位不得超过类型允许精度；
+2. 转换结果必须为整数；
+3. Signed 和 Unsigned 分别校验范围；
+4. 不进行无提示四舍五入；
+5. 不进行无提示截断；
+6. 科学计数法默认不接受，除非后续明确支持；
+7. 本地化逗号和小数点必须先由 UI 规范化，不得直接进入协议转换。
+
+可以采用成熟十进制运算库，或通过字符串解析实现确定性的十进制转换。不得依赖浮点误差容忍来判断是否合法。
+
+## 16.4 HEX
+
+显示规则：
+
+- 固定 4 位；
+- 大写；
+- 不包含 0x 前缀。
+
+输入规则：
+
+- 可接受可选的 0x 前缀；
+- 可接受大小写；
+- 去除首尾空格；
+- 最多 4 位有效十六进制字符；
+- 超出范围时返回结构化错误；
+- 不无提示截断。
+
+## 16.5 Binary
+
+显示规则：
+
+- 固定 16 位；
+- 只包含 0 和 1。
+
+输入规则：
+
+- 可接受首尾空格；
+- 不接受中间空格；
+- 不接受 0b 前缀，除非后续明确支持；
+- 最多 16 位；
+- 超出范围时返回结构化错误；
+- 不足 16 位可以在提交后补零显示。
+
+## 16.6 Type 切换
+
+Type 切换时：
+
+- rawReadValue 不变；
+- formattedReadValue 重新计算；
+- draftWriteText 如果存在，不自动进行有损转换；
+- 可以提示用户选择转换草稿或放弃草稿；
+- 不允许因为 Type 切换而写入设备；
+- 不修改通信报文；
+- 不修改地址。
+
+---
+
+# 17. 寄存器地址设计
+
+## 17.1 内部表示
+
+内部地址使用 0 至 65535 的整数。
+
+UI 使用 4 位大写十六进制字符串显示。
+
+例如：
+
+- 用户输入 1；
+- 提交后显示 0001；
+- 内部值为十进制 1。
+
+## 17.2 编辑状态和提交状态
+
+地址字段分为：
+
+- addressDraft；
+- addressValue；
+- addressValidation。
+
+编辑中允许暂时存在不完整内容。
+
+在以下时机提交：
+
+- Enter；
+- 单元格失焦；
+- 用户执行读取或写入；
+- 全表读取快照创建。
+
+提交结果：
+
+- 合法：更新 addressValue 并规范化显示；
+- 空白：addressValue 为空；
+- 非法：保留 addressDraft 并显示错误；
+- 超范围：保留 addressDraft 并显示错误。
+
+不得在校验失败时清空用户输入。
+
+## 17.3 地址插件扩展
+
+核心地址值表示实际准备发送的协议地址。
+
+Address Adjust 等厂商规则通过插件提供地址转换 Hook。
+
+转换需要记录：
+
+- 用户输入地址；
+- 插件转换后的发送地址；
+- 使用的插件和规则；
+- 日志中的两种地址。
+
+核心协议层只接收最终已验证的实际发送地址，不了解 Address Adjust。
+
+---
+
+# 18. 工作区数据模型
+
+## 18.1 Workspace
+
+工作区为主要持久化聚合根。
+
+建议字段：
+
+    Workspace
+      schemaVersion
+      workspaceId
+      name
+      createdAt
+      updatedAt
+      activeSheetId
+      sheets
+      connectionProfiles
+      activeConnectionProfileId
+      pollingSettings
+      readVerifySettings
+      panelLayout
+      preferences
+      notes
+      pluginStates
+      migrationHistory
+
+## 18.2 RegisterSheet
+
+    RegisterSheet
+      sheetId
+      name
+      type
+      order
+      rows
+      createdAt
+      updatedAt
+      uiState
+
+MVP 的 type 固定为 holding-register。
+
+type 仍应保留，以支持未来增加其他表类型。
+
+## 18.3 RegisterRow
+
+    RegisterRow
+      rowId
+      order
+      name
+      addressDraft
+      addressValue
+      dataType
+      pollingEnabled
+      traceEnabled
+      draftWriteText
+      lastKnownRawValue
+      lastSuccessfulReadAt
+      createdAt
+      updatedAt
+
+是否持久化 lastKnownRawValue 应采用明确策略。
+
+建议：
+
+- 持久化最近成功值仅用于恢复显示；
+- 恢复后必须标记为 stale；
+- 不得把恢复值显示为当前设备实时值；
+- 不持久化正在进行的请求状态；
+- 不持久化运行时错误对象；
+- 不自动恢复正在运行的轮询任务。
+
+PRD 要求恢复轮询配置状态，但应用启动保持离线。因此恢复的是 pollingEnabled 配置，不是自动启动实际请求。
+
+## 18.4 ConnectionProfile
+
+RTU 配置：
+
+    RtuConnectionProfile
+      id
+      name
+      protocol
+      baudRate
+      dataBits
+      stopBits
+      parity
+      flowControl
+      slaveAddress
+      requestTimeoutMs
+      retryCount
+      interRequestDelayMs
+      recentPortHint
+
+TCP 配置：
+
+    TcpConnectionProfile
+      id
+      name
+      protocol
+      host
+      port
+      unitId
+      connectTimeoutMs
+      requestTimeoutMs
+      retryCount
+      autoReconnect
+
+串口路径不作为必须恢复项。
+
+recentPortHint 只能用于显示最近使用信息，不得触发自动连接。
+
+## 18.5 ReadVerifySettings
+
+    ReadVerifySettings
+      mode
+      delayMs
+
+mode：
+
+- off；
+- immediate；
+- delayed。
+
+当 mode 为 delayed 时，delayMs 只能为允许的配置值。
+
+## 18.6 PollingSettings
+
+    PollingSettings
+      intervalMs
+      enabledBehavior
+      maxPendingPollingTasks
+
+MVP 中 maxPendingPollingTasks 由系统内部控制，不提供给普通用户配置。
+
+## 18.7 PanelLayout
+
+包含：
+
+- 侧边栏展开状态；
+- 侧边栏宽度；
+- 底部面板展开状态；
+- 底部面板高度；
+- 当前底部标签页；
+- 可选表格列宽；
+- 可选表格列显示状态。
+
+布局数据损坏时使用默认布局，不影响核心工作区恢复。
+
+## 18.8 PluginState
+
+    PluginState
+      pluginId
+      enabled
+      settings
+      lastKnownVersion
+      permissions
+      platformState
+
+插件不存在时保留其配置，但不加载。
+
+插件重新安装后，必须重新执行兼容性和权限检查。
+
+---
+
+# 19. 持久化设计
+
+## 19.1 Repository 接口
+
+WorkspaceRepositoryPort 至少提供：
+
+- load；
+- save；
+- reset；
+- export；
+- import；
+- createBackup；
+- getRecoveryInfo。
+
+UI 不直接调用 IndexedDB 或文件系统。
+
+## 19.2 自动保存
+
+AutoSaveCoordinator 监听可持久状态变更。
+
+策略：
+
+1. 对连续编辑采用 debounce；
+2. 关键结构操作可立即触发保存；
+3. 应用关闭前尝试 flush；
+4. 每次保存生成完整一致的工作区快照；
+5. 不在保存过程中读取正在变化的可变对象；
+6. 保存失败发布结构化错误；
+7. 保存失败不得清除内存状态；
+8. UI 展示保存中、已保存和失败状态；
+9. 保存操作串行执行；
+10. 新保存请求到来时合并中间状态，只保存最新快照。
+
+## 19.3 浏览器 IndexedDB
+
+浏览器使用 IndexedDB 保存：
+
+- 当前工作区；
+- 备份；
+- 插件元数据；
+- 有上限的消息和日志；
+- Schema 版本。
+
+建议使用成熟的轻量 IndexedDB 封装库，避免直接维护大量事件式 API。
+
+浏览器存储异常处理：
+
+- 隐私模式或存储不可用；
+- 配额不足；
+- 数据库升级失败；
+- 事务中断；
+- 数据验证失败；
+- 用户清理站点数据。
+
+## 19.4 Electron 文件持久化
+
+Electron 使用应用数据目录下的版本化 JSON 文件。
+
+原子保存流程：
+
+1. 序列化到临时文件；
+2. 完成写入；
+3. 尽可能执行同步刷新；
+4. 将当前文件改为备份；
+5. 将临时文件原子替换为正式文件；
+6. 更新保存状态；
+7. 定期清理旧备份。
+
+不得由 Renderer 直接写入文件。
+
+文件权限和路径由 Main Process 控制。
+
+## 19.5 VSCode 持久化
+
+VSCode 使用两层存储：
+
+1. workspaceState 或 globalState；
+2. 可选工作区配置文件。
+
+workspaceState/globalState 保存：
+
+- 当前应用状态；
+- UI 布局；
+- 最近使用信息；
+- 不适合共享的本地状态。
+
+工作区配置文件保存：
+
+- 可跨机器或团队共享的寄存器表；
+- 标签页；
+- 备注；
+- 非敏感配置。
+
+是否默认创建工作区文件由后续产品决策决定。技术上需要支持两种 Repository 实现。
+
+## 19.6 数据版本和迁移
+
+每个工作区包含 schemaVersion。
+
+加载流程：
+
+1. 解析 JSON；
+2. 检查基础结构；
+3. 读取 schemaVersion；
+4. 顺序执行迁移；
+5. 使用当前 Schema 校验；
+6. 创建迁移后备份；
+7. 返回领域对象。
+
+迁移必须：
+
+- 单向；
+- 可重复测试；
+- 不直接修改原始文件；
+- 保留未知插件配置；
+- 记录迁移历史；
+- 遇到无法迁移数据时尽可能部分恢复。
+
+## 19.7 损坏恢复
+
+如果主工作区损坏：
+
+1. 尝试读取备份；
+2. 若备份有效，进入恢复模式；
+3. 保留损坏原文件；
+4. 提示恢复来源和时间；
+5. 允许导出损坏文件；
+6. 允许创建新工作区；
+7. 不因单个插件配置损坏而放弃全部工作区；
+8. 对无法恢复的字段采用明确默认值并记录告警。
+
+---
+
+# 20. 日志设计
+
+## 20.1 日志类型
+
+分为：
+
+1. ApplicationMessage；
+2. CommunicationLogEntry；
+3. DiagnosticLog。
+
+ApplicationMessage 面向用户。
+
+CommunicationLogEntry 面向通信调试。
+
+DiagnosticLog 面向开发和故障定位，不默认展示全部内部细节。
+
+## 20.2 通信日志模型
+
+每条通信日志建议包含：
+
+    CommunicationLogEntry
+      id
+      timestamp
+      connectionId
+      protocol
+      source
+      direction
+      slaveAddressOrUnitId
+      transactionId
+      functionCode
+      registerAddress
+      registerCount
+      rawBytes
+      attempt
+      queueWaitMs
+      durationMs
+      status
+      modbusExceptionCode
+      errorCode
+      errorMessage
+      metadata
+
+原始数据在内存中使用 Uint8Array，在展示和导出时转换为大写十六进制字节串。
+
+## 20.3 请求和响应关联
+
+每次尝试拥有独立 attemptId。
+
+写入和回读通过 operationGroupId 关联。
+
+全表读取通过 batchId 关联。
+
+轮询通过 pollingCycleId 或 rowId 关联。
+
+日志界面可以按这些字段筛选。
+
+## 20.4 日志保留策略
+
+为避免长时间运行导致内存无限增长：
+
+- 通信日志采用环形缓冲；
+- 消息日志采用独立上限；
+- 上限可在设置中配置；
+- 达到上限后删除最旧条目；
+- 导出时只导出当前缓冲区内容；
+- 后续版本可增加流式文件日志；
+- Trace 数据不与普通通信日志共用无限缓冲。
+
+## 20.5 原始报文展示
+
+展示格式：
+
+- 大写十六进制；
+- 字节间使用空格；
+- 不进行本地化；
+- 对请求和响应使用不同方向标识；
+- 同时展示解析后的功能码和地址；
+- 插件转换地址时同时展示用户地址和实际发送地址。
+
+## 20.6 日志隐私
+
+导出前提示日志可能包含：
+
+- IP 地址；
+- 串口信息；
+- 设备地址；
+- 寄存器地址；
+- 寄存器数据；
+- 插件元数据。
+
+默认不记录：
+
+- 操作系统用户名；
+- 完整个人目录；
+- 与调试无关的环境变量；
+- 插件私有凭据；
+- 未经用户允许的任意文件内容。
+
+---
+
+# 21. 错误模型
+
+## 21.1 结构化错误
+
+所有应用可识别错误使用 MamepError。
+
+建议字段：
+
+    MamepError
+      code
+      category
+      severity
+      retryable
+      userMessageKey
+      technicalMessage
+      cause
+      context
+
+category：
+
+- validation；
+- capability；
+- permission；
+- connection；
+- transport；
+- timeout；
+- protocol；
+- modbus-exception；
+- cancellation；
+- persistence；
+- plugin；
+- internal。
+
+UI 不通过字符串匹配判断错误类型。
+
+## 21.2 错误代码示例
+
+连接和传输：
+
+- SERIAL_NOT_FOUND；
+- SERIAL_PERMISSION_DENIED；
+- SERIAL_PORT_BUSY；
+- SERIAL_OPEN_FAILED；
+- SERIAL_DEVICE_REMOVED；
+- TCP_INVALID_HOST；
+- TCP_CONNECTION_REFUSED；
+- TCP_CONNECT_TIMEOUT；
+- TCP_CONNECTION_RESET；
+- CONNECTION_NOT_ACTIVE。
+
+协议：
+
+- RTU_CRC_MISMATCH；
+- RESPONSE_TOO_SHORT；
+- RESPONSE_LENGTH_MISMATCH；
+- SLAVE_ADDRESS_MISMATCH；
+- UNIT_ID_MISMATCH；
+- FUNCTION_CODE_MISMATCH；
+- TRANSACTION_ID_MISMATCH；
+- MODBUS_EXCEPTION_RESPONSE；
+- PARTIAL_RESPONSE_TIMEOUT。
+
+数据：
+
+- INVALID_REGISTER_ADDRESS；
+- INVALID_HEX_VALUE；
+- INVALID_BINARY_VALUE；
+- VALUE_OUT_OF_RANGE；
+- VALUE_PRECISION_EXCEEDED；
+- UNSIGNED_NEGATIVE_VALUE。
+
+持久化：
+
+- WORKSPACE_PARSE_FAILED；
+- WORKSPACE_SCHEMA_UNSUPPORTED；
+- WORKSPACE_SAVE_FAILED；
+- WORKSPACE_STORAGE_FULL；
+- WORKSPACE_MIGRATION_FAILED。
+
+插件：
+
+- PLUGIN_MANIFEST_INVALID；
+- PLUGIN_VERSION_INCOMPATIBLE；
+- PLUGIN_PLATFORM_UNSUPPORTED；
+- PLUGIN_PERMISSION_DENIED；
+- PLUGIN_LOAD_FAILED；
+- PLUGIN_HOOK_FAILED。
+
+## 21.3 用户信息与技术信息分离
+
+用户界面显示：
+
+- 简短原因；
+- 可执行建议；
+- 相关字段；
+- 是否可以重试。
+
+诊断日志保存：
+
+- 底层错误；
+- 堆栈；
+- 平台错误码；
+- 请求上下文。
+
+不得直接把未知异常堆栈作为主要用户提示。
+
+---
+
+# 22. 平台通信桥设计
+
+## 22.1 统一 Host API
+
+共享 UI 通过 MamepHostApi 与平台通信。
+
+主要能力：
+
+- getCapabilities；
+- listSerialPorts；
+- requestSerialPort；
+- connect；
+- disconnect；
+- executeCommand；
+- loadWorkspace；
+- saveWorkspace；
+- listPlugins；
+- enablePlugin；
+- disablePlugin；
+- subscribeEvents；
+- exportData；
+- importData。
+
+Browser Host 可以在同一线程直接实现该接口。
+
+Electron 和 VSCode 使用消息桥实现。
+
+## 22.2 消息协议
+
+所有跨边界消息使用版本化 Envelope：
+
+    HostMessage
+      protocolVersion
+      messageId
+      kind
+      payload
+
+消息类型分为：
+
+- request；
+- response；
+- event；
+- error。
+
+要求：
+
+1. 每条请求有唯一 messageId；
+2. 响应引用原 messageId；
+3. payload 使用 Zod 校验；
+4. 未知 kind 被拒绝；
+5. 不允许任意方法名调用；
+6. 支持取消长任务；
+7. 支持连接、日志和进度事件；
+8. 消息协议版本可演进；
+9. 错误通过结构化对象传递；
+10. Uint8Array 采用明确可序列化格式传输。
+
+## 22.3 Electron IPC
+
+安全要求：
+
+- contextIsolation 开启；
+- nodeIntegration 关闭；
+- sandbox 在可行范围内开启；
+- Renderer 无通用 IPC 访问权；
+- preload 仅暴露白名单 API；
+- Main Process 校验所有输入；
+- 不允许 Renderer 指定任意文件路径执行读写；
+- 不允许 Renderer 执行任意命令；
+- 不允许 Renderer 加载任意 Node.js 模块；
+- 外部链接通过受控方式打开；
+- Content Security Policy 明确配置。
+
+## 22.4 VSCode Webview RPC
+
+要求：
+
+- Webview 使用严格 CSP；
+- 资源使用 Webview 安全 URI；
+- 使用 nonce；
+- 不启用不需要的权限；
+- 所有消息由 Extension Host 校验；
+- 工作区未受信任时限制高风险能力；
+- Webview 销毁时取消订阅；
+- Extension 停用时释放连接；
+- 不把任意文件系统能力暴露给 Webview；
+- 插件能力由 Extension Host 控制。
+
+---
+
+# 23. 插件架构
+
+## 23.1 设计原则
+
+1. 插件不直接修改核心源代码；
+2. 插件只通过稳定贡献点扩展；
+3. 插件必须声明平台支持；
+4. 插件必须声明权限；
+5. 单个插件失败不能导致核心应用失败；
+6. 插件不能绕过统一通信队列；
+7. 插件不能直接取得底层串口句柄；
+8. 插件通信请求必须生成日志；
+9. 插件配置必须拥有独立命名空间；
+10. 插件 API 采用版本化设计。
+
+## 23.2 插件类型
+
+定义两类插件：
+
+### UI-safe 插件
+
+可在三端运行，能力受限。
+
+适合：
+
+- 数据显示类型；
+- 工具面板；
+- 文档和寄存器手册；
+- 地址显示；
+- 纯计算工具；
+- 受控命令按钮。
+
+不得执行任意 Node.js 代码。
+
+### Host 插件
+
+仅在 Electron 或 VSCode Host 中运行。
+
+适合：
+
+- 厂商私有协议；
+- 特殊通信封装；
+- 本地文件处理；
+- 受控设备操作。
+
+Host 插件需要更严格的安装、权限和兼容性控制。
+
+浏览器端不加载 Host 插件。
+
+## 23.3 MVP 插件装载范围
+
+为降低任意代码执行风险，MVP 优先支持：
+
+1. 随应用构建的内置插件；
+2. 开发模式下的受信任本地插件；
+3. Manifest 驱动的启用和禁用；
+4. 插件加载错误隔离；
+5. 平台能力检查；
+6. 插件贡献点注册。
+
+不在 MVP 默认开放从互联网下载并执行任意第三方插件。
+
+完整本地安装和插件市场在 API、签名、权限及隔离机制成熟后再开放。
+
+## 23.4 Manifest
+
+插件 Manifest 至少包含：
+
+    PluginManifest
+      id
+      name
+      version
+      apiVersion
+      author
+      description
+      license
+      entry
+      supportedPlatforms
+      requiredCapabilities
+      permissions
+      contributes
+
+permissions 可能包括：
+
+- communication；
+- workspace-read；
+- workspace-write；
+- file-read；
+- file-write；
+- network；
+- ui-contribution。
+
+MVP 不一定开放所有权限，但 Schema 应预留明确扩展方式。
+
+## 23.5 贡献点
+
+建议支持：
+
+- command；
+- toolbarAction；
+- sidebarView；
+- bottomPanel；
+- contextMenu；
+- dataType；
+- addressTransform；
+- protocolExtension；
+- documentation；
+- settings。
+
+插件按钮执行后调用受控 command，不直接访问 UI 内部 Store。
+
+## 23.6 通信能力
+
+插件发起通信时必须通过 PluginCommunicationApi。
+
+该 API：
+
+- 校验插件权限；
+- 校验当前平台；
+- 创建 source 为 plugin 的请求；
+- 进入统一 RequestScheduler；
+- 记录 pluginId；
+- 应用超时和取消；
+- 不暴露 Transport；
+- 不允许插件自行并发写串口。
+
+## 23.7 插件错误隔离
+
+插件 Hook 执行时：
+
+1. 设置独立错误边界；
+2. 捕获同步和异步异常；
+3. 记录 pluginId；
+4. 禁用故障贡献点；
+5. 保持核心工作区可用；
+6. 向用户展示可理解的加载失败原因；
+7. 不因单个插件失败阻止其他插件加载。
+
+## 23.8 插件版本兼容
+
+插件声明 apiVersion。
+
+Host 根据兼容范围决定：
+
+- 可加载；
+- 可加载但警告；
+- 禁止加载。
+
+插件 API 的破坏性修改必须提升主版本，并通过适配层保留必要的过渡期。
+
+---
+
+# 24. UI 技术设计
+
+## 24.1 UI 组成
+
+共享 UI 包含：
+
+1. AppShell；
+2. TopBar；
+3. Sidebar；
+4. SheetTabs；
+5. RegisterToolbar；
+6. RegisterGrid；
+7. BottomPanel；
+8. ConnectionDialog；
+9. PluginManager；
+10. SettingsView；
+11. StatusIndicator；
+12. NotificationCenter。
+
+## 24.2 ViewModel
+
+UI 不直接消费复杂领域对象，而使用 ViewModel。
+
+例如 RegisterRowViewModel 包含：
+
+- rowId；
+- displayIndex；
+- name；
+- addressText；
+- addressError；
+- pollingState；
+- readButtonState；
+- readValueText；
+- writeDraftText；
+- writeValidation；
+- dataType；
+- freshness；
+- operationState；
+- lastSuccessText；
+- statusText。
+
+ViewModel 由 Selector 或 Presenter 生成，避免组件中重复业务判断。
+
+## 24.3 表格编辑事务
+
+一个单元格编辑流程包含：
+
+1. beginEdit；
+2. updateDraft；
+3. validateDraft；
+4. commitEdit；
+5. cancelEdit。
+
+commitEdit 生成可撤销命令。
+
+读取响应更新不应终止用户正在进行的编辑。
+
+## 24.4 撤销和重做
+
+撤销栈只处理工作区编辑操作：
+
+- 新增行；
+- 删除行；
+- 修改名称；
+- 修改地址；
+- 修改 Type；
+- 修改轮询设置；
+- 粘贴；
+- 移动行；
+- 标签页操作。
+
+不撤销：
+
+- 设备读取结果；
+- 已经发送的写入；
+- 连接和断开；
+- 通信日志；
+- 设备产生的外部状态。
+
+写入设备后不能使用普通 UI 撤销恢复设备值。
+
+## 24.5 可访问性
+
+实现要求：
+
+- 所有图标按钮有辅助文本；
+- 表格使用适当 ARIA 语义；
+- 单元格错误与编辑器关联；
+- 焦点状态清晰；
+- 状态不只依赖颜色；
+- 动态读取不抢夺焦点；
+- 日志自动滚动可暂停；
+- 对频繁轮询结果使用非侵入式更新；
+- 键盘可以完成核心任务；
+- 对话框具有焦点圈定和关闭恢复；
+- 表格虚拟化不能破坏屏幕阅读器的基本导航。
+
+## 24.6 国际化
+
+界面文案使用集中式资源键。
+
+建议采用成熟 React 国际化库。
+
+要求：
+
+- 业务层不拼接用户文案；
+- 错误使用 message key 和参数；
+- 原始报文不翻译；
+- Type 内部值不本地化；
+- CSV 或工作区字段名不依赖界面语言；
+- 时间通过平台 Locale 格式化；
+- 数字协议转换使用固定规则，不使用本地显示格式作为协议输入。
+
+---
+
+# 25. 安全设计
+
+## 25.1 基础原则
+
+1. 最小权限；
+2. UI 与本地系统能力隔离；
+3. 所有跨边界输入校验；
+4. 插件权限可见；
+5. 不自动上传数据；
+6. 不自动执行未知插件；
+7. 不自动连接设备；
+8. 不把设备通信能力暴露给不受控脚本；
+9. 日志导出由用户主动触发；
+10. 开源示例不得包含私有资料。
+
+## 25.2 写入安全边界
+
+Mamep2026 不理解所有寄存器的业务风险，但技术上仍需要确保：
+
+- 只有用户明确操作或已授权插件命令可以写入；
+- 轮询任务不得产生写请求；
+- 工作区恢复不得自动执行写入；
+- 插件启用不得自动执行设备写入；
+- 写入地址和实际发送地址进入日志；
+- 地址插件转换必须可见；
+- 禁止因重试策略对非幂等私有写入进行未经声明的重复执行；
+- 标准 0x10 写入重试行为由明确策略控制。
+
+## 25.3 内容安全策略
+
+Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
+
+默认要求：
+
+- 不执行 inline script；
+- 不使用 eval；
+- 不从不受信任远程地址加载脚本；
+- 图标和字体优先随应用打包；
+- Webview 资源限制在授权 URI；
+- 插件 UI 不允许注入共享页面 DOM；
+- 外部链接经过 Host 确认后打开。
+
+---
+
+# 26. 测试架构
+
+## 26.1 测试层级
+
+测试分为：
+
+1. 领域单元测试；
+2. 协议编解码测试；
+3. 通信调度测试；
+4. 持久化测试；
+5. React 组件测试；
+6. 平台适配集成测试；
+7. 跨端契约测试；
+8. 端到端测试；
+9. 真实设备验收测试。
+
+## 26.2 单元测试
+
+重点测试：
+
+- CRC-16；
+- 功能码 03 编解码；
+- 功能码 0x10 编解码；
+- TCP MBAP；
+- 地址校验；
+- HEX 和 Binary；
+- Signed 和 Unsigned；
+- 十进制缩放；
+- 精度错误；
+- 工作区迁移；
+- 错误映射；
+- 插件 Manifest；
+- 状态机转换。
+
+纯函数测试不得依赖真实时间或真实设备。
+
+## 26.3 协议测试向量
+
+协议测试应使用固定请求和响应向量。
+
+每组向量至少包含：
+
+- 输入领域请求；
+- 预期字节；
+- 输入响应字节；
+- 预期领域结果；
+- 错误变体。
+
+错误变体包括：
+
+- CRC 错误；
+- 响应地址错误；
+- 功能码错误；
+- 数据长度错误；
+- 异常响应；
+- TCP Transaction ID 错误；
+- Unit ID 错误；
+- 部分帧；
+- 粘包。
+
+## 26.4 通信调度测试
+
+使用 Virtual Clock 和 Fake Transport 测试：
+
+- 同一时刻只有一个请求；
+- 手动操作优先于轮询；
+- 轮询不积压；
+- 请求超时；
+- 重试次数；
+- 取消；
+- 断开；
+- 迟到响应；
+- 写后回读；
+- 全表读取继续执行；
+- 插件请求进入同一队列；
+- 修改地址后旧结果被丢弃；
+- 删除行后不再发送请求。
+
+不得使用真实等待时间编写调度单元测试。
+
+## 26.5 持久化测试
+
+覆盖：
+
+- 正常保存和加载；
+- Schema 版本迁移；
+- 损坏 JSON；
+- 缺失字段；
+- 插件字段未知；
+- 保存中断；
+- 主文件损坏后从备份恢复；
+- 保存失败后内存状态保留；
+- 串口号恢复规则；
+- 恢复后保持离线；
+- 轮询配置恢复但不自动发送请求。
+
+## 26.6 组件测试
+
+覆盖：
+
+- 地址提交和错误展示；
+- Data 草稿与读取值分离；
+- Type 切换；
+- 轮询状态；
+- 连接状态；
+- 全表读取进度；
+- 日志筛选；
+- 对话框焦点；
+- 多行复制粘贴；
+- 键盘导航；
+- 保存状态；
+- 插件加载错误。
+
+组件测试使用 Application Service Fake，不连接真实串口。
+
+## 26.7 浏览器端到端测试
+
+使用 Playwright。
+
+由于浏览器自动化对 Web Serial 支持有限，应采用两种方式：
+
+1. Host API 模拟模式完成主要 UI 验收；
+2. 在受控 Chromium 和测试设备环境中进行少量真实 Web Serial 验收。
+
+自动化覆盖：
+
+- 首次工作区；
+- 新建标签页；
+- 编辑地址；
+- 读取；
+- 写入；
+- 轮询；
+- 日志；
+- 保存和恢复；
+- 浏览器不支持时的能力提示；
+- 浏览器端不出现 TCP 入口。
+
+## 26.8 Electron 端到端测试
+
+覆盖：
+
+- 启动；
+- Main 和 Renderer IPC；
+- 串口列表；
+- COM10 以上模拟或真实测试；
+- TCP 连接；
+- 文件持久化；
+- 窗口重启恢复；
+- 断开释放；
+- 插件加载失败隔离；
+- Renderer 无直接 Node.js 权限。
+
+## 26.9 VSCode 集成测试
+
+覆盖：
+
+- 扩展激活；
+- 命令注册；
+- Webview 打开；
+- Extension 与 Webview RPC；
+- 工作区存储；
+- TCP；
+- RTU Adapter；
+- 主题切换；
+- 工作区信任限制；
+- 扩展停用时释放连接；
+- VSCode 重载后保持离线并恢复工作区。
+
+## 26.10 虚拟 Modbus 设备
+
+测试工具应提供 Scripted Modbus Device。
+
+支持配置：
+
+- 正常响应；
+- 响应延迟；
+- 不响应；
+- CRC 错误；
+- 异常码；
+- 地址不匹配；
+- 功能码不匹配；
+- 响应长度错误；
+- 分片响应；
+- 多响应粘连；
+- 连接中断；
+- 写入后值一致；
+- 写入后值不一致；
+- 写入成功但回读失败。
+
+虚拟设备必须能够记录收到的原始请求，以验证实际发送地址和功能码。
+
+## 26.11 真实设备测试
+
+自动化模拟不能完全替代真实设备验收。
+
+发布前至少验证：
+
+- Windows COM1 至 COM9；
+- Windows COM10 及以上；
+- USB 转串口设备插拔；
+- 串口占用；
+- 实际 RTU 03；
+- 实际 RTU 0x10；
+- Electron TCP；
+- VSCode TCP；
+- 浏览器授权和断开；
+- 不同波特率；
+- 超时与重试；
+- 长时间轮询资源释放。
+
+真实设备测试结果应记录环境信息，但具体执行清单放入测试文档或发布流程，不写入 AGENTS.md 以外的代理执行细节。
+
+---
+
+# 27. 构建和发布设计
+
+## 27.1 构建产物
+
+Browser：
+
+- 静态 HTML、CSS 和 JavaScript；
+- 可部署到静态站点；
+- 不包含 Node.js 依赖；
+- 不包含 TCP 功能代码入口。
+
+Electron：
+
+- Windows 安装包；
+- macOS 安装包；
+- Linux 安装包；
+- 对原生串口依赖执行目标平台构建；
+- Renderer 与 Main 分离打包。
+
+VSCode：
+
+- VSIX；
+- Extension Host Bundle；
+- Webview 静态资源；
+- 平台相关原生依赖按发布策略处理。
+
+## 27.2 原生串口依赖
+
+串口库可能包含原生模块，需要处理：
+
+- Electron ABI；
+- Node.js ABI；
+- VSCode 内置 Node.js 版本；
+- Windows、macOS 和 Linux 构建；
+- x64 与 arm64；
+- 发布包体积；
+- 原生模块签名。
+
+为降低风险：
+
+1. Node Serial Adapter 与具体库隔离；
+2. 建立启动时原生模块自检；
+3. CI 在目标平台构建；
+4. Electron 和 VSCode 不直接共享已编译的二进制产物；
+5. 按目标 Host 分别打包；
+6. 原生依赖升级必须执行真实连接回归。
+
+## 27.3 CI 流程
+
+持续集成阶段包括：
+
+1. 依赖安装；
+2. 格式检查；
+3. ESLint；
+4. TypeScript 类型检查；
+5. 单元测试；
+6. 协议测试；
+7. 组件测试；
+8. 包依赖边界检查；
+9. Browser 构建；
+10. Electron 构建；
+11. VSCode 构建；
+12. 端到端测试；
+13. 安全和许可证检查；
+14. 发布产物生成。
+
+CI 应在 Windows、macOS 和 Linux 上执行必要的平台构建验证。
+
+## 27.4 包依赖边界检查
+
+使用静态依赖检查阻止：
+
+- domain 引用 React；
+- protocol-modbus 引用平台包；
+- web 引用 Node.js Adapter；
+- UI 引用 Electron；
+- UI 引用 VSCode；
+- Renderer 引用串口库；
+- 插件直接引用核心内部未公开模块；
+- 平台包形成循环依赖。
+
+## 27.5 版本策略
+
+建议：
+
+- 应用采用语义化版本；
+- 插件 API 拥有独立 apiVersion；
+- 工作区拥有独立 schemaVersion；
+- Host Message 拥有独立 protocolVersion；
+- 三者不得共用同一个版本号表达不同兼容关系。
+
+---
+
+# 28. 性能设计
+
+## 28.1 表格性能
+
+措施：
+
+- 行虚拟化；
+- 细粒度 Store Selector；
+- 稳定 rowId；
+- 避免整个表格因单行读取结果全部重渲染；
+- 编辑草稿局部更新；
+- 日志与表格状态分离；
+- 低频保存使用 debounce；
+- 批量粘贴使用单一事务；
+- 计算型格式化函数缓存或按需执行。
+
+性能测试至少覆盖：
+
+- 1000 行；
+- 1000 行中多行周期更新；
+- 大量日志；
+- 多标签页切换；
+- 深色主题；
+- 缩放；
+- VSCode Webview。
+
+## 28.2 日志性能
+
+措施：
+
+- 环形缓冲；
+- 日志列表虚拟化；
+- 批量事件更新；
+- 暂停自动滚动；
+- 原始字节延迟格式化；
+- 导出在 Host 或 Worker 中执行；
+- 避免每个字节创建独立 React 节点。
+
+## 28.3 通信性能
+
+措施：
+
+- 通信在 Electron Main 或 VSCode Extension Host 中执行；
+- Browser 中避免阻塞 UI；
+- CRC 和帧解析使用 Uint8Array；
+- 不在通信热路径中进行大型 JSON 序列化；
+- 日志事件可以批量推送到 UI；
+- 不为轮询创建无限 Timer；
+- 使用单一调度器或最小化定时器数量。
+
+## 28.4 Worker 使用
+
+MVP 不强制引入 Web Worker。
+
+以下任务达到性能瓶颈后可迁移：
+
+- 大型日志导出；
+- 大型工作区导入校验；
+- Trace 数据处理；
+- 大量数据格式转换；
+- 曲线降采样。
+
+串口和 TCP 通信仍由对应 Host 能力负责，不因 Worker 引入新的平台分叉。
+
+---
+
+# 29. 可观测性与诊断
+
+## 29.1 内部诊断事件
+
+系统内部发布：
+
+- connection-state-changed；
+- request-enqueued；
+- request-started；
+- request-retried；
+- request-completed；
+- request-failed；
+- request-cancelled；
+- polling-lagged；
+- workspace-save-started；
+- workspace-save-completed；
+- workspace-save-failed；
+- plugin-load-failed。
+
+这些事件用于日志和测试，不直接成为 UI 状态源。
+
+## 29.2 诊断信息导出
+
+后续可以提供诊断包导出，包含：
+
+- 应用版本；
+- 平台；
+- 工作区 Schema 版本；
+- 插件列表；
+- 脱敏后的错误日志；
+- 最近通信错误；
+- 能力矩阵。
+
+默认不包含：
+
+- 完整寄存器数据；
+- 完整工作区；
+- 原始报文；
+- 设备 IP；
+- 用户文件路径。
+
+如用户主动选择包含原始通信数据，应明确提示。
+
+## 29.3 遥测
+
+MVP 不接入默认云端遥测。
+
+如果未来增加遥测，应通过独立技术设计明确：
+
+- 采集字段；
+- 用户同意方式；
+- 脱敏；
+- 关闭方式；
+- 数据保留；
+- 开源部署差异。
+
+---
+
+# 30. 关键技术难点
+
+## 30.1 三端串口实现差异
+
+难点：
+
+- 浏览器使用授权式 Web Serial；
+- Electron 和 VSCode 使用 Node.js 串口；
+- 串口参数支持程度不同；
+- 设备标识方式不同。
+
+方案：
+
+- 统一 SerialPortPort；
+- 使用 Capability Matrix；
+- 不把端口路径作为领域规则；
+- 不要求浏览器恢复端口；
+- 建立三端共享的串口契约测试。
+
+## 30.2 Electron 与 VSCode 原生模块兼容
+
+难点：
+
+- ABI 不同；
+- 打包环境不同；
+- 平台二进制不同。
+
+方案：
+
+- 隔离 Node Serial Adapter；
+- 分平台构建；
+- 启动自检；
+- CI 覆盖目标系统；
+- 不把已编译模块跨 Host 复用。
+
+## 30.3 RTU 字节流分帧
+
+难点：
+
+- 数据分片；
+- 噪声；
+- 部分响应；
+- 迟到响应；
+- 无事务 ID。
+
+方案：
+
+- 单连接单请求；
+- 根据当前请求推导响应长度；
+- 使用 CRC 和响应字段校验；
+- 超时后清理当前解析状态；
+- 记录并忽略迟到数据；
+- 真实设备验证。
+
+## 30.4 轮询和手动操作冲突
+
+难点：
+
+- 多来源共享连接；
+- 轮询可能积压；
+- 手动写入需要及时执行；
+- 读取结果可能覆盖输入。
+
+方案：
+
+- 统一 RequestScheduler；
+- 公平优先级；
+- 轮询去重；
+- 草稿和读取值分离；
+- generation 防止旧结果污染。
+
+## 30.5 虚拟化表格编辑
+
+难点：
+
+- 行离开视口后组件卸载；
+- 编辑草稿丢失；
+- 焦点跳转；
+- 多行粘贴；
+- 可访问性。
+
+方案：
+
+- 编辑状态存放在 Store，而非单元格局部状态；
+- 使用稳定 rowId；
+- commit 与 UI 生命周期分离；
+- 原型先行；
+- 建立键盘和焦点自动化测试。
+
+## 30.6 工作区跨版本恢复
+
+难点：
+
+- 后续字段增加；
+- 插件字段未知；
+- 异常退出；
+- 三端存储后端不同。
+
+方案：
+
+- 统一领域 Schema；
+- Repository Adapter 分离；
+- 版本化迁移；
+- 原子保存；
+- 备份恢复；
+- 持久化契约测试。
+
+## 30.7 插件安全
+
+难点：
+
+- 私有协议需要扩展；
+- 任意插件代码具有设备风险；
+- 三端能力不同。
+
+方案：
+
+- 区分 UI-safe 和 Host 插件；
+- MVP 优先内置和受信任插件；
+- 权限声明；
+- 统一通信 API；
+- 平台能力检查；
+- 错误隔离；
+- 后续再开放公共安装。
+
+## 30.8 浏览器后台限速
+
+难点：
+
+- 后台标签页 Timer 可能被限制；
+- 轮询周期不精确。
+
+方案：
+
+- 不承诺精确实时轮询；
+- 使用单调时钟计算实际间隔；
+- 不用累计 Timer 假设；
+- 页面隐藏时展示状态；
+- 可以选择暂停或降低轮询；
+- 记录实际刷新周期。
+
+---
+
+# 31. 关键架构约束
+
+以下约束属于技术架构，应通过代码结构和自动化检查维护：
+
+1. UI 不得直接操作 Transport；
+2. 所有通信必须进入 RequestScheduler；
+3. protocol-modbus 不得依赖平台 API；
+4. Data Type 转换不得散落在 React 组件；
+5. 工作区持久化不得保存连接句柄和 Timer；
+6. Electron Renderer 不得直接访问 Node.js；
+7. VSCode Webview 不得直接访问文件系统或串口；
+8. 浏览器包不得依赖 Node.js 内置模块；
+9. 插件不得访问私有核心模块；
+10. 插件请求不得绕过权限和日志；
+11. 所有跨进程消息必须经过 Schema 校验；
+12. 所有工作区数据必须包含 schemaVersion；
+13. 轮询任务必须可取消；
+14. 断开连接后不得发送新请求；
+15. 读取失败不得销毁最近成功值；
+16. 写入失败不得清空用户草稿；
+17. Type 切换不得修改原始寄存器值；
+18. 地址转换必须在日志中可追踪；
+19. 三端共享相同协议测试向量；
+20. 平台差异必须通过 Adapter 或 Capability 表达。
+
+具体的代理检查命令和每次修改后的执行步骤不在本文档中定义，应写入 AGENTS.md。
+
+---
+
+# 32. 技术决策记录
+
+重要技术变更通过 Architecture Decision Record 记录。
+
+建议首批 ADR：
+
+1. ADR-001：采用 TypeScript Monorepo；
+2. ADR-002：采用 React 共享 UI；
+3. ADR-003：采用 Ports and Adapters；
+4. ADR-004：不建设远程后端；
+5. ADR-005：工作区使用版本化文档存储；
+6. ADR-006：统一串行请求调度；
+7. ADR-007：核心 Modbus 协议采用内部最小实现；
+8. ADR-008：寄存器表采用 TanStack Table 与 Virtual；
+9. ADR-009：读取值与待写值分离；
+10. ADR-010：MVP 插件限制为内置和受信任来源；
+11. ADR-011：Electron Renderer 使用严格进程隔离；
+12. ADR-012：插件通信必须经过统一调度器。
+
+每个 ADR 应包含：
+
+- 背景；
+- 决策；
+- 备选方案；
+- 选择理由；
+- 正面影响；
+- 负面影响；
+- 后续复审条件。
+
+---
+
+# 33. 分阶段实现建议
+
+## 33.1 阶段一：核心协议与数据模型
+
+实现：
+
+- Monorepo；
+- domain；
+- protocol-modbus；
+- data-conversion；
+- test-kit；
+- 固定协议向量；
+- 工作区基础 Schema。
+
+完成条件：
+
+- 03 和 0x10 编解码测试通过；
+- CRC 测试通过；
+- 数据类型转换测试通过；
+- 不依赖任何 UI 和真实设备。
+
+## 33.2 阶段二：通信会话与调度器
+
+实现：
+
+- TransportPort；
+- CommunicationSession；
+- RequestScheduler；
+- Timeout；
+- Retry；
+- PollingCoordinator；
+- BatchReadCoordinator；
+- Fake Transport。
+
+完成条件：
+
+- 串行行为可测试；
+- 超时、重试和取消可测试；
+- 轮询不积压；
+- 断开后无新请求；
+- 迟到响应不污染后续请求。
+
+## 33.3 阶段三：浏览器原型
+
+实现：
+
+- React AppShell；
+- 寄存器表原型；
+- Web Serial Adapter；
+- IndexedDB；
+- 单行读写；
+- 全表读取；
+- 轮询；
+- 日志；
+- 状态恢复。
+
+目标：
+
+- 最早验证共享 UI；
+- 验证表格编辑；
+- 验证 Web Serial 能力限制；
+- 验证工作区模型。
+
+## 33.4 阶段四：Electron
+
+实现：
+
+- Main、Preload 和 Renderer；
+- Node Serial；
+- Node TCP；
+- 文件持久化；
+- IPC；
+- COM10 验证；
+- 安全配置；
+- 桌面打包。
+
+Electron 成为完整参考客户端。
+
+## 33.5 阶段五：VSCode
+
+实现：
+
+- Extension Host；
+- Webview；
+- RPC；
+- Node Serial；
+- Node TCP；
+- VSCode 存储；
+- 主题适配；
+- Extension 测试。
+
+目标：
+
+- 最大化复用核心和 UI；
+- 只在 Host 和布局层处理 VSCode 差异。
+
+## 33.6 阶段六：插件基础
+
+实现：
+
+- plugin-api；
+- Manifest；
+- 生命周期；
+- 权限；
+- 贡献点；
+- 错误隔离；
+- 示例插件。
+
+示例插件不能反向污染核心协议包。
+
+---
+
+# 34. 技术原型验证项
+
+正式大规模开发前，应完成以下 Spike。
+
+## 34.1 表格原型
+
+验证：
+
+- 1000 行；
+- 虚拟滚动；
+- 单元格编辑；
+- 多行粘贴；
+- 键盘导航；
+- 实时值更新；
+- 编辑状态不丢失；
+- VSCode Webview；
+- 深色主题。
+
+## 34.2 Web Serial 原型
+
+验证：
+
+- 串口授权；
+- 打开和关闭；
+- 参数支持；
+- 读取分片；
+- 页面刷新；
+- 设备拔出；
+- 浏览器不支持提示；
+- 后台标签页行为。
+
+## 34.3 Node 串口原型
+
+目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、COM10 以上端口、原生模块兼容、资源释放及异常处理能力。
+
+### 34.3.1 串口库验证
+
+对候选 Node.js 串口库验证以下内容：
+
+- 项目仍处于维护状态；
+- 提供完整 TypeScript 类型；
+- 支持 Windows、macOS 和 Linux；
+- 支持 Electron 主进程；
+- 支持 VSCode Extension Host；
+- 支持当前目标 Node.js 版本；
+- 支持目标 Electron ABI；
+- 能够在 Windows x64 和 arm64 环境构建或安装；
+- 能够在 macOS x64 和 arm64 环境构建或安装；
+- 能够在主流 Linux x64 和 arm64 环境构建或安装；
+- 许可证符合项目开源和二进制分发要求；
+- 串口枚举、打开、读取、写入和关闭 API 稳定；
+- 能够检测串口打开失败、设备拔出和读写异常；
+- 不要求 UI 层直接依赖串口库。
+
+候选库必须由 platform-node 中的适配器封装，不允许其类型或对象进入 Domain、Application、UI、工作区数据或插件公开 API。
+
+### 34.3.2 串口枚举
+
+验证系统串口枚举结果是否能够完整提供：
+
+- 系统原始端口路径；
+- 友好的显示名称；
+- 厂商标识；
+- 产品标识；
+- USB Vendor ID；
+- USB Product ID；
+- 序列号；
+- 即插即用标识；
+- 所在路径或其他平台可用信息。
+
+除端口路径外，其他字段均视为可选信息，不得假设所有操作系统或驱动都会提供。
+
+枚举逻辑必须满足：
+
+1. 空列表可以正常返回；
+2. 单个端口可以正常显示；
+3. 多个端口可以稳定排序；
+4. 刷新后新增端口能够出现；
+5. 刷新后已拔出的端口能够消失；
+6. 枚举失败返回结构化错误；
+7. 单个端口元数据缺失不影响整个列表；
+8. 不通过猜测端口名称判断设备类型；
+9. 不使用数组索引作为端口标识；
+10. 不缓存已经失效的端口对象。
+
+推荐将系统返回的原始端口路径作为运行时连接标识，将显示名称作为独立字段提供给 UI。
+
+### 34.3.3 COM10 及以上验证
+
+Windows 平台必须专项验证：
+
+- COM1 至 COM9；
+- COM10；
+- COM11；
+- COM99 或其他较高编号端口；
+- USB 转串口设备生成的高编号 COM 端口；
+- 虚拟串口生成的高编号 COM 端口；
+- 高编号端口枚举；
+- 高编号端口打开；
+- 高编号端口读写；
+- 高编号端口关闭；
+- 高编号端口被占用；
+- 高编号端口在连接期间被移除。
+
+实现不得：
+
+- 假设端口名称长度固定；
+- 只读取 COM 后一位数字；
+- 将 COM10 错误解析为 COM1；
+- 使用只支持 COM1 至 COM9 的正则表达式；
+- 根据界面显示文本重新拼接端口路径；
+- 在领域层修改系统返回的端口标识；
+- 对高编号端口执行静默降级。
+
+Node Serial Adapter 应将系统或串口库返回的端口路径视为不透明字符串，原样传递给底层打开接口。
+
+验收结果至少证明：
+
+1. COM10 以上端口能够出现在枚举列表；
+2. 用户能够选择该端口；
+3. Adapter 使用正确的完整路径打开端口；
+4. 请求实际发送到所选端口；
+5. 响应能够被读取；
+6. 断开后端口句柄得到释放；
+7. 重新连接同一端口可以成功；
+8. 失败信息不会错误显示为端口不存在。
+
+### 34.3.4 跨平台端口路径
+
+验证不同平台的端口路径，包括但不限于：
+
+- Windows：COM1、COM10 等；
+- macOS：/dev/cu.* 和 /dev/tty.*；
+- Linux：/dev/ttyUSB*、/dev/ttyACM* 和其他系统实际提供的路径。
+
+设计要求：
+
+1. 端口路径只由平台适配层处理；
+2. Domain 层不解析路径格式；
+3. UI 不根据路径前缀决定操作系统；
+4. 工作区不依赖端口路径实现自动连接；
+5. 路径比较遵循平台实际规则；
+6. 不将 Windows 的 COM 规则应用于 macOS 或 Linux；
+7. 不将 /dev 路径规则应用于 Windows；
+8. 端口显示名称与用于打开的真实路径分离。
+
+### 34.3.5 串口参数支持
+
+验证以下基础参数：
+
+- 波特率：1200；
+- 波特率：2400；
+- 波特率：4800；
+- 波特率：9600；
+- 波特率：19200；
+- 波特率：38400；
+- 波特率：57600；
+- 波特率：115200；
+- 数据位：7；
+- 数据位：8；
+- 停止位：1；
+- 停止位：2；
+- 校验位：None；
+- 校验位：Even；
+- 校验位：Odd；
+- 流控：OFF；
+- 流控：XON/XOFF；
+- 流控：RTS/CTS。
+
+另外验证：
+
+- 1.5 位停止位是否被候选库和目标系统支持；
+- 不支持的参数是否能在连接前被识别；
+- 底层库是否会静默忽略不支持的参数；
+- 实际打开参数是否与用户配置一致；
+- Electron 和 VSCode 是否对相同配置产生一致行为；
+- 参数变更后是否要求重新打开串口；
+- 串口打开后修改配置对象是否会影响当前连接。
+
+平台或驱动不支持的参数必须通过能力检测或连接错误反馈给上层，不得自动替换为其他值。
+
+### 34.3.6 串口打开
+
+验证以下打开场景：
+
+- 使用有效配置正常打开；
+- 使用不存在的端口打开；
+- 端口已被其他程序占用；
+- 当前用户没有访问权限；
+- 配置参数不受支持；
+- 打开过程中设备被拔出；
+- 用户在打开过程中取消；
+- 连续快速点击连接；
+- 已连接时再次请求连接；
+- 上一次关闭尚未完成时重新连接；
+- 同一端口在 Electron 和其他程序之间产生竞争。
+
+打开流程必须：
+
+1. 先进入 connecting 状态；
+2. 使用不可变的连接配置快照；
+3. 防止重复打开；
+4. 支持取消；
+5. 将底层错误映射为结构化错误；
+6. 失败后释放部分创建的资源；
+7. 失败后返回 failed 或 disconnected 状态；
+8. 保留用户配置；
+9. 不启动通信请求队列；
+10. 不创建遗留的 Reader、Writer、监听器或 Timer。
+
+### 34.3.7 串口读取
+
+验证底层串口数据事件能够被稳定转换为 Uint8Array。
+
+必须覆盖：
+
+- 一个事件收到完整响应；
+- 一个响应拆分为多个事件；
+- 多个响应数据连续到达；
+- 单字节分片；
+- 空数据；
+- 大块数据；
+- 接收噪声；
+- 收到不完整帧后超时；
+- 关闭过程中仍收到数据；
+- 断开后出现迟到数据；
+- 多次连接后监听器没有重复注册。
+
+Node Serial Adapter 只负责传递字节数据，不负责：
+
+- 解析功能码；
+- 校验 CRC；
+- 判断寄存器地址；
+- 格式化 Data；
+- 更新表格行；
+- 执行重试。
+
+这些职责分别属于协议层和通信会话层。
+
+### 34.3.8 串口写入
+
+验证以下写入场景：
+
+- 写入完整 RTU 请求；
+- 连续执行多次串行写入；
+- 写入期间端口关闭；
+- 写入期间设备拔出；
+- 底层写入返回错误；
+- drain 失败；
+- 写入空字节数组；
+- 未连接时写入；
+- 断开后写入；
+- 大量快速请求进入队列；
+- 请求取消时写入已经开始；
+- 重试时再次写入完整请求。
+
+写入接口必须明确区分：
+
+- 数据已提交给串口库；
+- 数据已写入操作系统缓冲；
+- drain 已完成；
+- 设备已经响应。
+
+不得把“本地写入调用成功”误认为“设备操作成功”。
+
+传输层写入成功后，协议请求仍需等待并校验设备响应。
+
+### 34.3.9 端口占用
+
+验证端口已被其他程序占用时：
+
+1. 连接失败；
+2. 不进入已连接状态；
+3. 返回可识别的 SERIAL_PORT_BUSY 或等价结构化错误；
+4. UI 可以展示端口被占用的解决建议；
+5. 用户关闭占用程序后可以直接重试；
+6. 不需要重启 Mamep2026；
+7. 失败后不保留无效句柄；
+8. 失败后不启动轮询；
+9. 失败后不清空寄存器表；
+10. 失败后不丢失连接配置。
+
+由于不同操作系统和驱动返回的原始错误不同，错误映射层应保留底层技术信息，同时向上层返回统一错误类别。
+
+### 34.3.10 权限不足
+
+验证：
+
+- Linux 用户无串口访问权限；
+- macOS 系统权限或设备权限限制；
+- Windows 驱动或系统权限异常；
+- VSCode 工作区信任限制；
+- 沙箱或安全软件阻止访问。
+
+错误处理应：
+
+- 返回 SERIAL_PERMISSION_DENIED 或对应结构化错误；
+- 提供平台适用的解决方向；
+- 不把权限错误误报为端口不存在；
+- 不自动提升权限；
+- 不执行未经用户允许的系统配置修改；
+- 保留底层错误码用于诊断。
+
+### 34.3.11 设备拔出
+
+连接成功后拔出设备，验证：
+
+- 底层错误或关闭事件能够被捕获；
+- 连接状态及时变为 interrupted 或 disconnected；
+- 当前等待请求结束为失败；
+- 尚未执行的请求被取消；
+- 周期轮询停止；
+- 不再发送新请求；
+- 监听器被释放；
+- 串口句柄被清理；
+- UI 保持可操作；
+- 寄存器表不被清空；
+- 最近成功读取值保留并标记为过期；
+- 重新插入设备后可以刷新端口列表；
+- 用户可以重新连接；
+- 不在用户未启用自动重连的情况下自动连接。
+
+如果操作系统没有及时提供拔出事件，应通过读写错误和连接健康状态识别中断。
+
+### 34.3.12 正常关闭
+
+验证以下关闭场景：
+
+- 用户主动断开；
+- 应用窗口关闭；
+- Electron 应用退出；
+- VSCode 扩展停用；
+- VSCode 重载窗口；
+- 连接失败后的清理；
+- 设备拔出后的清理；
+- 读取等待期间关闭；
+- 写入期间关闭；
+- 重试等待期间关闭；
+- 写后回读延迟期间关闭；
+- 多次调用 close。
+
+关闭操作必须幂等，并完成：
+
+1. 禁止新请求进入；
+2. 取消未执行请求；
+3. 停止轮询；
+4. 取消超时、重试和延迟；
+5. 停止接收新的数据事件；
+6. 移除监听器；
+7. 等待或终止进行中的底层操作；
+8. 关闭串口句柄；
+9. 清理接收缓冲；
+10. 将连接状态更新为 disconnected。
+
+关闭失败时仍应尽可能清理本地引用，记录诊断错误，并避免 UI 永久停留在 disconnecting 状态。
+
+### 34.3.13 重复连接与监听器泄漏
+
+执行多轮连接和断开测试，例如连续执行 100 次：
+
+- 枚举；
+- 打开；
+- 发送请求；
+- 接收响应；
+- 关闭；
+- 再次打开。
+
+验证：
+
+- 数据监听器数量不持续增加；
+- 错误监听器数量不持续增加；
+- 每个响应只处理一次；
+- 内存占用没有明显持续增长；
+- 串口句柄能够重复释放和打开；
+- 不出现重复日志；
+- 不出现旧连接的数据更新新连接状态；
+- 不出现 Node.js EventEmitter 监听器过多警告；
+- 不遗留未取消的 Timer；
+- 不遗留未完成 Promise。
+
+每次连接创建新的 connectionId。旧连接产生的迟到事件不得影响新连接。
+
+### 34.3.14 Electron 原型
+
+在 Electron 中验证：
+
+- 串口逻辑只运行于 Main Process 或受控后台进程；
+- Renderer 不直接导入串口库；
+- Preload 只暴露白名单 API；
+- IPC 请求和响应经过 Schema 校验；
+- 端口枚举结果能够传递到 Renderer；
+- 连接状态事件能够传递到 Renderer；
+- 原始字节日志能够安全传递；
+- Renderer 刷新时不会遗留失控连接；
+- 窗口关闭时能释放串口；
+- 应用退出时能释放串口；
+- 打包后原生模块能够加载；
+- 开发环境和生产包行为一致；
+- Windows 安装包能够使用 COM10 以上端口；
+- macOS 签名或权限设置不会阻止串口使用；
+- Linux 打包后能够访问系统串口。
+
+Electron 原型还应验证：
+
+- nodeIntegration 关闭；
+- contextIsolation 开启；
+- Renderer 无法访问任意 Node.js API；
+- Renderer 无法传入任意模块名或任意系统命令；
+- 串口错误经过 Main Process 映射后再发送到 UI。
+
+### 34.3.15 VSCode 原型
+
+在 VSCode Extension Host 中验证：
+
+- 扩展能够成功加载串口原生模块；
+- 端口枚举可以执行；
+- 串口可以打开；
+- RTU 请求可以发送和接收；
+- Webview 只通过类型化 RPC 请求串口操作；
+- Webview 无法取得底层串口对象；
+- VSCode 重载窗口时串口被释放；
+- 扩展停用时串口被释放；
+- Webview 关闭后连接策略符合设计；
+- 工作区未受信任时能力限制符合设计；
+- 扩展打包为 VSIX 后原生模块仍能加载；
+- Windows、macOS 和 Linux 对应扩展包能够正确安装；
+- VSCode 使用的 Node.js ABI 与原生模块兼容；
+- COM10 以上端口可以正常使用；
+- 串口异常不会阻塞 Extension Host；
+- 长时间轮询不会影响 VSCode 编辑器响应。
+
+### 34.3.16 Electron 与 VSCode 共享边界
+
+验证 Electron 和 VSCode 可以共享：
+
+- SerialPortPort 接口；
+- Node Serial Adapter 的业务无关部分；
+- 串口配置模型；
+- 错误映射；
+- 字节事件模型；
+- 资源释放逻辑；
+- 测试用例；
+- COM10 以上测试数据；
+- Fake Serial Transport；
+- 能力描述。
+
+不得强行共享：
+
+- Electron IPC；
+- VSCode Webview RPC；
+- 应用生命周期代码；
+- 打包配置；
+- 原生模块二进制产物；
+- Electron Main Process 初始化；
+- VSCode Extension 激活代码。
+
+共享源代码不等于共享已编译原生模块。Electron 和 VSCode 应针对各自运行环境分别安装、构建和打包原生依赖。
+
+### 34.3.17 串口错误映射
+
+原型需要建立底层错误到统一错误模型的映射，至少覆盖：
+
+- 端口不存在；
+- 端口已占用；
+- 权限不足；
+- 参数不支持；
+- 打开失败；
+- 读取失败；
+- 写入失败；
+- drain 失败；
+- 设备拔出；
+- 连接已关闭；
+- 操作取消；
+- 未知串口错误。
+
+错误映射不得只依赖完整错误字符串。
+
+应综合使用：
+
+- 错误类型；
+- 错误码；
+- 操作系统错误码；
+- 底层库提供的属性；
+- 必要时的受控字符串匹配。
+
+无法识别的错误映射为通用串口错误，同时保留原始技术信息用于诊断。
+
+### 34.3.18 能力检测
+
+Node Serial Adapter 应提供串口能力描述，包括：
+
+- 是否支持端口枚举；
+- 支持的数据位；
+- 支持的停止位；
+- 支持的校验位；
+- 支持的流控；
+- 是否支持设备拔出事件；
+- 是否提供 USB 元数据；
+- 是否支持自定义波特率；
+- 当前平台；
+- 当前 Host；
+- 当前串口库版本。
+
+能力信息用于 UI 展示和配置校验，不得用于绕过真实打开结果。即使声明支持某参数，具体设备或驱动仍可能拒绝，连接流程必须处理实际失败。
+
+### 34.3.19 性能与稳定性
+
+验证：
+
+- 枚举 100 个虚拟端口时界面仍可操作；
+- 1000 次短报文读写不出现内存持续增长；
+- 长时间周期轮询不阻塞 Electron Main Process；
+- 长时间周期轮询不阻塞 VSCode Extension Host；
+- 原始数据事件处理不会生成过多临时对象；
+- 通信日志达到上限后内存保持稳定；
+- 大量错误不会导致未处理 Promise；
+- 连续超时和重试后仍可正常断开；
+- 串口关闭后进程能够正常退出；
+- 串口通信不在 Renderer 或 Webview UI 线程执行。
+
+### 34.3.20 测试方式
+
+Node 串口原型采用三层测试。
+
+#### 第一层：Fake Adapter 测试
+
+使用 Fake Serial Transport 验证：
+
+- 打开；
+- 关闭；
+- 读取；
+- 写入；
+- 超时；
+- 取消；
+- 设备拔出；
+- 错误注入；
+- 分片响应；
+- 迟到响应；
+- 重复连接。
+
+#### 第二层：虚拟串口测试
+
+使用操作系统支持的虚拟串口对验证：
+
+- 实际端口枚举；
+- 实际字节传输；
+- 分片；
+- 端口占用；
+- 关闭；
+- 重连；
+- 高编号 COM 端口；
+- Electron 和 VSCode 原生模块加载。
+
+虚拟串口仅用于验证操作系统和串口库集成，不能完全替代真实 USB 串口设备。
+
+#### 第三层：真实设备测试
+
+使用至少一种真实 USB 转串口设备和一个可控 Modbus RTU 设备验证：
+
+- 03 功能码读取；
+- 0x10 功能码写入；
+- 不同波特率；
+- 不同校验位；
+- 超时；
+- 重试；
+- CRC 错误；
+- 设备拔出；
+- 串口占用；
+- COM10 以上；
+- 长时间轮询；
+- Electron 和 VSCode。
+
+### 34.3.21 原型输出物
+
+原型完成后应产出：
+
+- 串口库选型 ADR；
+- Node Serial Adapter 接口；
+- Electron 串口最小原型；
+- VSCode 串口最小原型；
+- COM10 以上测试记录；
+- 各平台支持参数矩阵；
+- 原生模块构建矩阵；
+- 串口错误映射表；
+- 资源释放测试记录；
+- 连接与断开压力测试记录；
+- 已知限制清单；
+- 是否可以进入正式实现的结论。
+
+原型代码如果不满足正式架构边界，不应直接复制进入生产代码。
+
+### 34.3.22 通过标准
+
+Node 串口原型满足以下条件后，才可进入正式实现：
+
+1. Electron 和 VSCode 均能枚举、打开、读写和关闭串口；
+2. Windows COM10 及以上端口能够正常使用；
+3. macOS 和 Linux 的目标端口路径能够正常处理；
+4. 端口占用和权限不足能够被区分；
+5. 设备拔出后应用保持可操作；
+6. 断开后不再发送请求；
+7. 重复连接不会造成监听器或句柄泄漏；
+8. Renderer 和 Webview 无法直接访问串口库；
+9. 串口库能够在目标 Electron 和 VSCode 环境打包；
+10. 不支持的串口参数不会被静默接受；
+11. 底层数据能够稳定转换为 Uint8Array；
+12. 分片响应可以由上层通信会话正确组帧；
+13. 串口错误能够映射为统一错误模型；
+14. Node Serial Adapter 不包含 Modbus 业务逻辑；
+15. Electron 和 VSCode 能够复用相同的端口抽象和主要测试；
+16. 真实 Modbus RTU 设备可以完成 03 读取和 0x10 写入；
+17. 长时间轮询不存在阻断性稳定问题；
+18. 原型结论和已知限制已记录到 ADR 或技术文档。
+
+## 34.4 Modbus TCP 原型
+
+验证：
+
+- Electron 和 VSCode 中建立 TCP 连接；
+- 主机名和 IP 地址解析；
+- 连接超时；
+- 对端拒绝连接；
+- 半包和粘包；
+- Transaction ID 匹配；
+- Unit ID 匹配；
+- 请求过程中断线；
+- 主动断开；
+- 自动重连期间主动取消；
+- Electron 和 VSCode 是否能够复用同一 Node TCP Adapter。
+
+## 34.5 工作区持久化原型
+
+验证：
+
+- 浏览器 IndexedDB 保存和恢复；
+- Electron 原子文件写入；
+- VSCode workspaceState 和工作区文件；
+- 数据损坏恢复；
+- Schema 迁移；
+- 1000 行、多标签页工作区保存性能；
+- 异常退出后的恢复能力；
+- 插件配置不存在时的兼容行为；
+- 三端导入同一工作区数据的可行性。
+
+## 34.6 插件原型
+
+验证：
+
+- Manifest 解析；
+- 插件启用和禁用；
+- 平台能力声明；
+- 工具栏贡献；
+- 侧边栏贡献；
+- 地址转换；
+- 插件通信请求进入统一调度器；
+- 插件异常隔离；
+- Electron 和 VSCode Host 插件加载；
+- 浏览器端拒绝不兼容插件；
+- 插件 API 版本不兼容提示。
+
+---
+
+# 35. 待确认技术事项
+
+以下事项需要在原型验证或产品决策完成后确定，不应在实现中自行假设。
+
+## 35.1 串口库最终选型
+
+需要验证候选 Node.js 串口库的：
+
+- Electron 支持；
+- VSCode Extension Host 支持；
+- Windows COM10 以上支持；
+- macOS 和 Linux 支持；
+- 原生模块构建稳定性；
+- TypeScript 类型完整性；
+- 维护状态；
+- 许可证；
+- 设备拔出事件；
+- 流控参数支持；
+- 1.5 位停止位支持；
+- XON/XOFF 支持；
+- RTS/CTS 支持。
+
+最终选择应通过 ADR 记录。
+
+## 35.2 浏览器停止位和流控能力
+
+需要根据 Web Serial API 和目标浏览器实测确认：
+
+- 1.5 位停止位是否可配置；
+- XON/XOFF 是否可用；
+- RTS/CTS 是否可用；
+- 不支持时是隐藏选项还是显示禁用状态；
+- 浏览器端通信配置如何与另外两端保持语义一致。
+
+平台不支持的参数不得被静默忽略。
+
+## 35.3 从站地址与 Unit ID 范围
+
+需要确定：
+
+- RTU Slave Address 的允许范围；
+- 地址 0 是否允许；
+- 是否完全禁止广播写入；
+- TCP Unit ID 的允许范围；
+- 是否允许 255；
+- UI 是否根据协议显示不同字段名称；
+- 插件是否可以提供厂商专用范围校验。
+
+在规则确认前，领域模型应允许通过策略注入范围校验，但不得默认执行广播操作。
+
+## 35.4 全局轮询间隔
+
+需要通过链路性能和交互原型确定：
+
+- 最小配置值；
+- 默认值；
+- 最大配置值；
+- UI 单位；
+- 是否允许用户输入任意整数；
+- 是否提供固定档位；
+- 页面进入后台后的行为；
+- 实际刷新速度低于配置速度时的提示方式。
+
+内部统一使用毫秒，但 UI 可以根据数值显示 ms 或 s。
+
+## 35.5 Data 单元格交互
+
+需要通过原型确认：
+
+- 读取值和待写值在视觉上是否共用一个输入区域；
+- 是否提供独立编辑模式；
+- 用户开始编辑后是否暂停该行轮询；
+- 未启用回读时如何展示已发送值；
+- 写入成功后是否自动退出编辑状态；
+- 写后回读不一致时如何同时显示写入值和设备值；
+- Type 切换时如何处理未提交草稿；
+- 键盘 Enter 的行为。
+
+无论最终 UI 形式如何，内部数据模型都必须保持读取值和待写草稿分离。
+
+## 35.6 工作区文件格式
+
+需要确定：
+
+- 是否在 MVP 提供工作区导出；
+- 文件扩展名；
+- 是否使用纯 JSON；
+- 是否需要压缩；
+- 是否包含最近读取值；
+- 是否包含通信日志；
+- 是否包含连接主机信息；
+- 是否包含插件配置；
+- 是否作为长期兼容的公开格式；
+- 是否允许三端相互导入。
+
+在正式发布文件格式前，应避免承诺永久兼容所有内部字段。
+
+## 35.7 插件运行隔离
+
+需要进一步评估：
+
+- Electron Host 插件是否运行在独立 Utility Process；
+- VSCode 插件是否允许运行第三方代码；
+- 插件进程崩溃后的恢复方式；
+- 插件超时；
+- 插件资源限制；
+- 插件签名；
+- 本地开发插件的加载方式；
+- 公共插件安装是否延后到 V1.0。
+
+MVP 可以只开放受信任的内置插件，避免过早形成不安全的任意代码执行机制。
+
+## 35.8 表格组件最终决策
+
+TanStack Table 与 TanStack Virtual 为当前推荐方案，但必须在原型完成后确认。
+
+如果出现以下问题，应重新评估：
+
+- 编辑状态与虚拟化难以兼容；
+- 多单元格粘贴实现成本过高；
+- 键盘导航无法满足要求；
+- 屏幕阅读器支持不足；
+- VSCode Webview 性能不稳定；
+- 大量实时更新引起明显重渲染；
+- 列宽拖动和固定列实现复杂度过高。
+
+替换表格组件不得影响领域层和工作区数据结构。
+
+## 35.9 TM Trace 技术边界
+
+PRD 中 TM Trace 的版本优先级存在需要澄清的地方。一方面寄存器表定义和状态恢复包含 TM，另一方面版本规划将 Register Trace 放在后续版本。
+
+技术实现前需要确认：
+
+- MVP 是否只保留 traceEnabled 数据字段和禁用入口；
+- MVP 是否提供基础数据列表追踪；
+- 完整曲线、缓冲和导出是否后续实现；
+- Trace 是否属于核心或插件；
+- Trace 采样是否复用普通轮询；
+- 多个 Trace 是否允许同时运行；
+- Continue 模式的内存上限；
+- 平均值按原始值还是格式化值计算。
+
+在确认前，不应实现无限缓存的 Trace 功能。
+
+---
+
+# 36. 推荐默认技术参数
+
+以下参数是技术实现的初始默认值，不替代产品决策，可在原型后调整。
+
+## 36.1 通信参数
+
+- RTU 波特率：9600；
+- 数据位：8；
+- 停止位：1；
+- 校验位：None；
+- 流控：OFF；
+- 请求超时：1000 ms；
+- 重试次数：1；
+- 请求间隔：0 ms；
+- TCP 端口：502；
+- TCP 连接超时：5000 ms；
+- 启动状态：离线；
+- 自动重连：关闭。
+
+## 36.2 轮询参数
+
+- 默认全局轮询间隔：1000 ms；
+- 每行最多一个等待中的轮询任务；
+- 同一连接并发请求数：1；
+- 轮询任务优先级低于用户手动读写；
+- 页面或 Host 停止时取消所有后续轮询；
+- 恢复工作区后不自动启动实际轮询。
+
+## 36.3 日志参数
+
+- 内存中的通信日志默认上限：10000 条；
+- 应用消息默认上限：2000 条；
+- 达到上限后删除最旧记录；
+- 默认开启自动滚动；
+- 用户手动滚动离开底部后暂停自动滚动；
+- 导出默认使用 UTF-8；
+- 原始报文使用大写十六进制字节串。
+
+## 36.4 自动保存参数
+
+- 普通编辑保存 debounce：500 ms；
+- 标签页关闭或结构变更后立即安排保存；
+- 同一时刻最多执行一个保存任务；
+- 保存过程中发生新变更时，在当前保存完成后保存最新快照；
+- Electron 至少保留一个最近有效备份；
+- 保存失败后不丢弃内存中的未保存状态。
+
+这些参数应集中定义，不得散落在 UI 和平台代码中。
+
+---
+
+# 37. 数据契约示例
+
+本节仅用于明确数据边界，不代表完整实现代码。
+
+## 37.1 读取命令
+
+    type ReadHoldingRegisterCommand = {
+      requestId: string;
+      connectionId: string;
+      source: RequestSource;
+      slaveAddressOrUnitId: number;
+      registerAddress: number;
+      timeoutMs: number;
+      retryCount: number;
+      cancellationId: string;
+    };
+
+## 37.2 写入命令
+
+    type WriteHoldingRegisterCommand = {
+      requestId: string;
+      connectionId: string;
+      source: RequestSource;
+      slaveAddressOrUnitId: number;
+      registerAddress: number;
+      rawValue: number;
+      timeoutMs: number;
+      retryCount: number;
+      verify: ReadVerifyPolicy;
+      cancellationId: string;
+    };
+
+## 37.3 平台能力
+
+    type PlatformCapabilities = {
+      platform: "browser" | "electron" | "vscode";
+      supportsRtu: boolean;
+      supportsTcp: boolean;
+      supportsSerialEnumeration: boolean;
+      supportsFileSystem: boolean;
+      supportsHostPlugins: boolean;
+      supportsWorkspaceFiles: boolean;
+      supportedSerialOptions: {
+        dataBits: number[];
+        stopBits: number[];
+        parity: string[];
+        flowControl: string[];
+      };
+    };
+
+## 37.4 请求结果
+
+    type RequestResult<T> =
+      | {
+          ok: true;
+          value: T;
+          timing: RequestTiming;
+          attemptCount: number;
+        }
+      | {
+          ok: false;
+          error: MamepError;
+          timing: RequestTiming;
+          attemptCount: number;
+        };
+
+## 37.5 写后回读结果
+
+    type WriteOperationResult =
+      | {
+          kind: "write-failed";
+          error: MamepError;
+        }
+      | {
+          kind: "write-succeeded-no-verify";
+          writtenValue: number;
+        }
+      | {
+          kind: "write-succeeded-verify-matched";
+          writtenValue: number;
+          readValue: number;
+        }
+      | {
+          kind: "write-succeeded-verify-mismatched";
+          writtenValue: number;
+          readValue: number;
+        }
+      | {
+          kind: "write-succeeded-verify-failed";
+          writtenValue: number;
+          verifyError: MamepError;
+        }
+      | {
+          kind: "cancelled-before-verify";
+          writtenValue: number;
+        };
+
+---
+
+# 38. 模块依赖规则
+
+推荐依赖方向：
+
+    apps
+      -> ui
+      -> register-table
+      -> communication
+      -> protocol-modbus
+      -> domain
+
+平台相关依赖：
+
+    apps/web
+      -> platform-web
+      -> platform-api
+
+    apps/electron/main
+      -> platform-electron
+      -> platform-node
+      -> platform-api
+
+    apps/vscode-extension
+      -> platform-vscode
+      -> platform-node
+      -> platform-api
+
+持久化依赖：
+
+    platform adapters
+      -> workspace
+      -> domain
+
+插件依赖：
+
+    plugins
+      -> plugin-api
+      -> platform-api
+      -> domain
+
+禁止的反向依赖包括：
+
+- domain 依赖 protocol-modbus；
+- protocol-modbus 依赖 communication；
+- communication 依赖 register-table；
+- shared UI 依赖任一具体平台适配器；
+- plugin-api 依赖具体插件；
+- platform-node 依赖 Electron 或 VSCode；
+- Browser 应用依赖 platform-node；
+- Electron Renderer 依赖 Electron Main 内部模块。
+
+如果两个包产生双向依赖，应重新划分数据契约或将共享契约下沉到更内层包，而不是通过循环引用解决。
+
+---
+
+# 39. 依赖库管理
+
+## 39.1 依赖选择原则
+
+关键依赖必须满足：
+
+1. 社区主流；
+2. 文档完整；
+3. TypeScript 支持良好；
+4. 许可证允许开源和分发；
+5. 最近仍有维护；
+6. 安全问题可追踪；
+7. 支持目标 Node.js 和浏览器版本；
+8. 不依赖不可控的云服务；
+9. 不引入特殊 DSL；
+10. 能够被自动化测试替代或封装。
+
+## 39.2 依赖封装
+
+以下关键依赖必须经过项目适配层：
+
+- 串口库；
+- IndexedDB 库；
+- Electron IPC；
+- VSCode API；
+- 表格库；
+- 国际化库；
+- 插件加载器；
+- 文件保存实现。
+
+不得让第三方库对象成为领域模型或持久化格式。
+
+## 39.3 版本策略
+
+- 使用明确版本范围；
+- 锁定文件进入仓库；
+- 关键依赖升级单独评审；
+- 串口、Electron、VSCode 和表格依赖升级必须执行专项回归；
+- 不自动接受关键依赖的主版本升级；
+- 删除不再使用的依赖；
+- 定期检查许可证和已知漏洞。
+
+具体升级命令和代理执行步骤属于 AGENTS.md。
+
+---
+
+# 40. 兼容性设计
+
+## 40.1 Node.js 运行环境
+
+Electron 和 VSCode 可能使用不同 Node.js 版本。
+
+共享 Node 平台包应：
+
+- 避免依赖单一 Host 特有的全局变量；
+- 声明最低 Node.js 版本；
+- 通过构建目标分别输出；
+- 对原生模块分别打包；
+- 不假设 Electron 与 VSCode ABI 相同；
+- 在启动时检查必要能力。
+
+## 40.2 浏览器环境
+
+Web 应用构建时：
+
+- 不打包 Node.js polyfill；
+- 不模拟 TCP；
+- 不引用文件系统；
+- Web Serial 不存在时仍允许打开只读工作区界面；
+- 能力检测早于连接操作；
+- 不支持的功能不创建无效入口；
+- 页面刷新后保持离线。
+
+## 40.3 工作区向后兼容
+
+兼容策略：
+
+- 新版本必须能够读取受支持范围内的旧 Schema；
+- 旧版本不保证读取新 Schema；
+- 导入较新 Schema 时显示明确错误；
+- 迁移前保留原始数据；
+- 插件未知字段尽可能保留；
+- 删除字段需经过迁移；
+- 字段语义变化不得只复用旧字段名。
+
+## 40.4 插件兼容
+
+插件兼容性由以下条件共同决定：
+
+- apiVersion；
+- 应用版本；
+- 平台；
+- 必需能力；
+- 权限；
+- 插件自身数据 Schema。
+
+任何一个条件不满足时，不应尝试带病加载。
+
+---
+
+# 41. 资源释放设计
+
+## 41.1 连接释放
+
+断开连接时必须：
+
+1. 停止接受新请求；
+2. 取消队列；
+3. 停止轮询；
+4. 停止自动重连；
+5. 取消超时和延迟 Timer；
+6. 释放串口 Reader 和 Writer；
+7. 关闭串口或 Socket；
+8. 删除数据和错误监听器；
+9. 清空帧缓冲；
+10. 更新连接状态。
+
+close 操作必须幂等。
+
+## 41.2 页面和窗口释放
+
+Browser 页面关闭或隐藏时：
+
+- 页面关闭前尝试保存；
+- 释放串口；
+- 页面隐藏不默认断开，但应检测后台限速；
+- 页面恢复后重新计算调度时间；
+- 不补发后台积压的全部轮询任务。
+
+Electron 窗口关闭时：
+
+- Renderer 请求保存；
+- Main Process 停止通信；
+- 等待有限时间释放资源；
+- 超时后记录诊断并继续退出；
+- 不允许后台残留无界请求。
+
+VSCode Webview 关闭时：
+
+- UI 订阅释放；
+- 是否保持连接由产品策略决定；
+- MVP 建议 Webview 关闭时仍由 Extension Host 管理连接；
+- Extension 停用或 VSCode 关闭时必须断开；
+- 重新打开 Webview 时从 Host 获取当前状态快照。
+
+## 41.3 插件释放
+
+停用插件时：
+
+- 禁止创建新命令；
+- 取消插件待执行任务；
+- 注销 UI 贡献；
+- 注销事件监听；
+- 清理插件 Timer；
+- 调用 dispose；
+- 插件 dispose 异常不得阻止其他资源释放。
+
+---
+
+# 42. 时间与时钟设计
+
+所有领域时间通过 ClockPort 获取。
+
+禁止在需要测试的调度逻辑中直接散落调用：
+
+- Date.now；
+- performance.now；
+- setTimeout；
+- setInterval。
+
+ClockPort 提供：
+
+- wallNow；
+- monotonicNow；
+- delay；
+- schedule；
+- cancel。
+
+用途：
+
+- 日志时间使用 wall clock；
+- 超时和耗时使用 monotonic clock；
+- 测试使用 Virtual Clock；
+- 写后回读延迟可取消；
+- 轮询不依赖不可控的真实等待。
+
+系统时间被用户修改时，不应影响请求超时判断。
+
+---
+
+# 43. ID 设计
+
+所有持久实体和运行时操作使用稳定 ID。
+
+持久 ID：
+
+- workspaceId；
+- sheetId；
+- rowId；
+- connectionProfileId；
+- pluginId。
+
+运行时 ID：
+
+- connectionId；
+- requestId；
+- attemptId；
+- batchId；
+- operationGroupId；
+- cancellationId。
+
+持久 ID 在保存和恢复后保持。
+
+运行时 ID 不进入工作区，除非作为历史日志字段。
+
+ID 通过 IdGeneratorPort 创建，测试中使用可预测 ID。
+
+---
+
+# 44. 配置设计
+
+配置分为：
+
+1. 产品内置默认配置；
+2. 用户偏好；
+3. 工作区配置；
+4. 平台配置；
+5. 插件配置；
+6. 构建配置。
+
+优先级建议：
+
+    产品默认值
+      < 平台默认值
+      < 用户偏好
+      < 工作区配置
+      < 当前运行时临时设置
+
+敏感配置不得写入普通工作区。
+
+插件配置使用独立命名空间：
+
+    plugins.<pluginId>.<settingKey>
+
+插件不得读取其他插件配置，除非通过明确共享 API。
+
+---
+
+# 45. Trace 扩展预留
+
+虽然完整 Trace 不属于确定的 MVP 核心范围，架构应避免阻碍后续实现。
+
+建议预留：
+
+- SampleEvent；
+- TraceSession；
+- TraceBuffer；
+- TraceExporter；
+- SampleSource；
+- SamplingPolicy。
+
+Trace 不应直接监听 React State，而应订阅通信成功事件。
+
+采样数据至少包含：
+
+- sequence；
+- timestamp；
+- rowId；
+- rawValue；
+- formattedValue；
+- dataType；
+- requestId。
+
+Continue 缓冲必须设置系统上限或流式写入文件，禁止真正无限保存在内存中。
+
+Average 计算应基于可明确定义的数值：
+
+- 默认基于 Type 解释后的数值；
+- HEX 和 Binary 转换为原始数值后参与计算；
+- 无有效样本时不显示平均值；
+- 缓冲截断时明确统计范围。
+
+---
+
+# 46. 导入导出扩展预留
+
+工作区导入导出通过 WorkspaceSerializerPort 实现。
+
+需要区分：
+
+- 内部持久化格式；
+- 公开工作区交换格式；
+- CSV 寄存器表格式；
+- 通信日志导出格式；
+- Trace 导出格式。
+
+内部持久化格式可以包含 UI 状态。
+
+公开交换格式应避免包含：
+
+- 本机绝对路径；
+- 临时连接 ID；
+- 串口授权对象；
+- 未声明的插件内部状态；
+- 运行时错误；
+- Timer 和任务状态。
+
+CSV 导入导出不应直接成为领域数据源，必须先解析、校验并形成导入预览。
+
+---
+
+# 47. 架构验收标准
+
+技术架构达到可进入全面实现阶段，应满足：
+
+1. Monorepo 能够独立构建三个应用；
+2. 核心包不依赖具体平台；
+3. 功能码 03 和 0x10 的协议测试通过；
+4. RTU CRC 和 TCP MBAP 测试通过；
+5. 数据类型转换具备边界测试；
+6. Fake Transport 能完成读、写、超时、重试和错误注入；
+7. RequestScheduler 能保证单连接串行；
+8. 轮询不会无限积压；
+9. 断开后不再发送请求；
+10. 迟到响应不会污染后续请求；
+11. 工作区可以版本化保存和恢复；
+12. 三端使用相同的工作区域模型；
+13. Electron Renderer 与 Node.js 隔离；
+14. VSCode Webview 通过受控 RPC 访问 Host；
+15. 浏览器构建不包含 TCP 和 Node.js 依赖；
+16. 插件请求不能绕过统一调度器；
+17. 表格原型满足 1000 行基础性能目标；
+18. COM10 以上场景完成验证；
+19. 三端共同验收场景可以复用同一测试描述；
+20. 关键架构决策已有 ADR。
+
+---
+
+# 48. 实现完成定义
+
+一个技术模块被认为完成，需要满足：
+
+1. 接口和职责明确；
+2. 不违反模块依赖规则；
+3. 外部输入经过校验；
+4. 错误使用结构化模型；
+5. 资源能够释放；
+6. 关键分支具有自动化测试；
+7. 平台差异通过 Adapter 表达；
+8. 不把运行时状态错误地持久化；
+9. 不绕过通信调度器；
+10. 对应 PRD 验收行为可以追踪到实现模块和测试；
+11. 类型检查通过；
+12. 构建通过；
+13. 没有未说明的跨端行为差异；
+14. 没有把厂商私有规则写入通用核心；
+15. 已记录必要的技术限制和后续事项。
+
+具体的开发步骤、命令顺序、提交粒度和代理自检流程由 AGENTS.md 定义。
+
+---
+
+# 49. PRD 与技术模块追踪关系
+
+| PRD 能力 | 主要技术模块 |
+|---|---|
+| Modbus RTU | protocol-modbus、communication、platform-web、platform-node |
+| Modbus TCP | protocol-modbus、communication、platform-node |
+| COM10 以上 | platform-node、Electron 和 VSCode 集成测试 |
+| 单行读取 | register-table、communication、protocol-modbus |
+| 单行写入 | register-table、communication、data-conversion |
+| 写后回读 | WriteVerifyCoordinator、RequestScheduler |
+| 全表读取 | BatchReadCoordinator |
+| 周期轮询 | PollingCoordinator、RequestScheduler |
+| 不连续寄存器 | RegisterSheet、RegisterRow |
+| 数据类型 | data-conversion |
+| 多标签页 | register-table、workspace、ui |
+| 状态恢复 | workspace、各平台 Repository Adapter |
+| 通信日志 | logging、communication |
+| 通信属性 | connection session、UI ViewModel |
+| 三端适配 | platform-api、各平台 Adapter 和 Host |
+| 插件基础 | plugin-api、Plugin Host、Plugin Manager UI |
+| 现代界面 | ui、ui-theme |
+| 1000 行表格 | TanStack Table、TanStack Virtual、性能测试 |
+| 浏览器不支持 TCP | Capability Matrix、Browser Host |
+| Electron 安全 | Main、Preload、Renderer 隔离 |
+| VSCode 主题适配 | VSCode Theme Adapter |
+| 国际化 | UI 文案资源和错误消息键 |
+| 测试驱动 | test-kit、Vitest、Playwright、平台集成测试 |
+
+该追踪表用于确认 PRD 能力具有明确技术归属，不替代详细测试追踪矩阵。
+
+---
+
+# 50. 与 AGENTS.md 的边界
+
+以下内容不写入本技术设计，应由 AGENTS.md 定义：
+
+1. AI 代理开始任务前必须阅读哪些文件；
+2. 安装依赖的具体命令；
+3. 开发服务器命令；
+4. 类型检查命令；
+5. 单元测试命令；
+6. 端到端测试命令；
+7. 格式化命令；
+8. Lint 命令；
+9. 单次任务允许修改的文件范围；
+10. 测试先行的实际操作顺序；
+11. 修改协议代码后的强制检查清单；
+12. 修改跨端 UI 后的强制检查清单；
+13. 依赖升级流程；
+14. 提交信息格式；
+15. Pull Request 模板；
+16. 失败后的回滚方法；
+17. AI 不得修改的文件；
+18. 生成代码后的自检步骤；
+19. 任务完成时需要报告的内容；
+20. 临时文件和调试代码清理规则。
+
+TECH_DESIGN.md 说明系统如何设计。
+
+AGENTS.md 说明 AI 代理如何在该工程中安全执行开发任务。
+
+两者不得互相替代。
+
+---
+
+# 51. 文档维护
+
+本技术设计在以下情况发生时需要更新：
+
+1. 技术栈发生变化；
+2. 核心模块边界变化；
+3. 平台能力变化；
+4. 工作区 Schema 发生结构性变化；
+5. 插件 API 发生变化；
+6. 请求调度策略发生变化；
+7. Electron 或 VSCode 安全边界变化；
+8. 新增 Modbus 功能码；
+9. 引入新的表类型；
+10. 引入远程后端或数据库；
+11. 关键原型结论否定当前设计；
+12. ADR 形成新的架构决策。
+
+普通编码细节、局部重构和命名调整不需要全部同步到本文档，除非其改变了公开契约、模块职责或跨端行为。
+
+---
+
+# 52. 技术设计完成定义
+
+当以下条件满足时，本技术设计可作为工程实现基线：
+
+1. PRD 中影响架构的待确认事项已得到处理，或已被明确标记为可替换策略；
+2. Monorepo、模块和依赖方向已确认；
+3. 三端 Host 和 Adapter 边界已确认；
+4. 串口库完成原型验证；
+5. COM10 以上完成技术验证；
+6. Web Serial 能力边界完成验证；
+7. 表格方案完成 1000 行原型验证；
+8. RTU 和 TCP 分帧方案完成测试；
+9. RequestScheduler 行为已确认；
+10. 轮询间隔语义已确认；
+11. Data 读取值和待写值分离方案已确认；
+12. 工作区持久化和迁移方案已确认；
+13. 插件 MVP 装载范围已确认；
+14. Electron IPC 安全边界已确认；
+15. VSCode Webview RPC 边界已确认；
+16. 自动化测试层级和模拟设备方案已确认；
+17. 关键技术风险均有应对方案；
+18. ADR 清单已经建立；
+19. TECH_DESIGN.md 与 PRD、AGENTS.md 的边界清晰；
+20. 可以依据本文档创建工程骨架并开始分阶段实现。
+
+完成上述事项后，可基于本文档编写 AGENTS.md，并进入 Mamep2026 的工程初始化、测试骨架建设和功能实现阶段。
