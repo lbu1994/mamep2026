@@ -61,11 +61,9 @@ describe('RegisterTable', () => {
     const rows = createDefaultRows();
     rows[0].registerHex = '0001';
     renderTable({ rows });
-    const readBtns = screen.getAllByText('READ');
-    // Only check first row which has an address
-    const enabledBtns = screen.getAllByText('READ').filter((b) => !b.closest('button')?.disabled);
-    // Actually, let's just check that the first button is enabled since row 0 has address
     const buttons = screen.getAllByRole('button', { name: 'READ' });
+    // First row has address → button should be enabled
+    expect(buttons[0]).not.toBeDisabled();
   });
 
   it('WRITE button is rendered for each row', () => {

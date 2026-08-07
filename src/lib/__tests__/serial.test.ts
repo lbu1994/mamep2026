@@ -162,6 +162,7 @@ describe('connect', () => {
     const { connect } = await getSerial();
     const port = await navigator.serial.requestPort();
     const conn = await connect(port as SerialPort, TEST_CONFIG);
+    expect(conn).toBeDefined();
     expect((port as unknown as { open: ReturnType<typeof vi.fn> }).open).toHaveBeenCalledWith({
       baudRate: 9600,
       dataBits: 8,
