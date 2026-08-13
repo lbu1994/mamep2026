@@ -1,0 +1,24 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+.connection-settings-group {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.45));
+  border-bottom: 1px solid var(--ant-color-split, rgba(5, 5, 5, 0.06));
+  padding-bottom: 6px;
+  margin-bottom: 12px;
+}

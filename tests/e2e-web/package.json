@@ -1,0 +1,16 @@
+{
+  "name": "@mamep2026/e2e-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "@playwright/test": "catalog:",
+    "typescript": "catalog:"
+  }
+}

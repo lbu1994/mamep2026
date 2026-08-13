@@ -1,27 +1,27 @@
-import * as vscode from 'vscode'
+import * as vscode from "vscode";
 
 /**
  * 开发模式页面地址：与浏览器、Electron 共享同一个 Vite dev server。
  * 可通过环境变量 MAMEP_DEV_URL 覆盖（如本地端口冲突时）。
  */
-const DEV_URL = process.env.MAMEP_DEV_URL ?? 'http://localhost:5173'
+const DEV_URL = process.env.MAMEP_DEV_URL ?? "http://localhost:5173";
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('mamep2026.openMainPanel', () => {
+    vscode.commands.registerCommand("mamep2026.openMainPanel", () => {
       const panel = vscode.window.createWebviewPanel(
-        'mamep2026.mainPanel',
-        'Mamep2026',
+        "mamep2026.mainPanel",
+        "Mamep2026",
         vscode.ViewColumn.One,
         {
           enableScripts: true,
           retainContextWhenHidden: true,
         },
-      )
+      );
 
-      panel.webview.html = getHtml()
+      panel.webview.html = getHtml();
     }),
-  )
+  );
 }
 
 export function deactivate(): void {
@@ -40,7 +40,7 @@ function getHtml(): string {
     "default-src 'none'",
     "style-src 'unsafe-inline'",
     `frame-src ${DEV_URL} http://localhost:*`,
-  ].join('; ')
+  ].join("; ");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -68,5 +68,5 @@ function getHtml(): string {
 <body>
   <iframe src="${DEV_URL}"></iframe>
 </body>
-</html>`
+</html>`;
 }

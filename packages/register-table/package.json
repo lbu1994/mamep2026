@@ -1,0 +1,26 @@
+{
+  "name": "@mamep2026/register-table",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mamep2026/domain": "workspace:*",
+    "@mamep2026/communication": "workspace:*",
+    "@mamep2026/data-conversion": "workspace:*",
+    "@mamep2026/logging": "workspace:*"
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "@mamep2026/test-kit": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -3,15 +3,22 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@11.20.0",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "vite",
-    "dev:electron": "vite --mode electron",
-    "build": "tsc -b && vite build",
-    "build:electron": "tsc -b && vite build --mode electron",
+    "dev": "pnpm --filter @mamep2026/web dev",
+    "dev:electron": "pnpm --filter @mamep2026/web dev:electron",
+    "build": "pnpm --filter @mamep2026/web build",
+    "build:electron": "pnpm --filter @mamep2026/web build:electron",
     "build:vscode": "tsc -p vscode-extension",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:acceptance": "pnpm --filter @mamep2026/acceptance test",
+    "test:e2e:web": "pnpm --filter @mamep2026/e2e-web test",
+    "preview": "pnpm --filter @mamep2026/web preview",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",

@@ -1,0 +1,27 @@
+{
+  "name": "@mamep2026/platform-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mamep2026/domain": "workspace:*",
+    "@mamep2026/communication": "workspace:*",
+    "@mamep2026/platform-api": "workspace:*",
+    "@mamep2026/protocol-modbus": "workspace:*",
+    "@mamep2026/workspace": "workspace:*",
+    "idb": "catalog:"
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

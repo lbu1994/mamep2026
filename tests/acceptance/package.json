@@ -1,0 +1,23 @@
+{
+  "name": "@mamep2026/acceptance",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mamep2026/communication": "workspace:*",
+    "@mamep2026/domain": "workspace:*",
+    "@mamep2026/register-table": "workspace:*",
+    "@mamep2026/test-kit": "workspace:*",
+    "@mamep2026/workspace": "workspace:*"
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

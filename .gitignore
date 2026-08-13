@@ -10,7 +10,15 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-electron
 *.local
+
+# Test artifacts
+.turbo
+coverage
+playwright-report
+test-results
+apps/web/dist
 
 # Editor directories and files
 .vscode/*

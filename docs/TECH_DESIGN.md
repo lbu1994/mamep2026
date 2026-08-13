@@ -838,15 +838,15 @@ MVP 协议核心只实现：
 
 不得在核心协议包中加入：
 
-- Address Adjust；
 - BCC；
 - CHECK-SUM；
 - 厂商私有功能码；
 - Enter RAM；
 - Enter ROM；
 - 厂商寄存器语义；
-- 自动地址偏移；
 - 私有报文封装。
+
+Address Adjust（ON 时发送地址 = 用户地址 − 1，默认 OFF）由 register-table 应用层实现，协议包只接收最终已验证的实际发送地址。
 
 ## 8.2 协议层次
 
@@ -1309,8 +1309,9 @@ UI 在写入请求未完成时默认禁用该行的再次写入按钮，除非�
 
 MVP 使用：
 
-- 全局轮询间隔；
-- 每行独立启用状态；
+- 每行独立启用状态（WP 开关）；
+- 轮询间隔使用 Connection Settings 中的 Rx Delay（interRequestDelayMs，默认 50 ms）；
+- 不设独立的全局轮询间隔配置，不提供全部行持续轮询（ALL Polling）；
 - 单连接；
 - 每行单独功能码 03 请求；
 - 不合并连续地址。
@@ -1350,7 +1351,7 @@ PollingCoordinator 管理需要轮询的行，但不直接访问 UI 表格。
 
 ## 13.3 轮询间隔语义
 
-技术层将轮询间隔定义为“每个启用行计划重新加入轮询的目标间隔”。
+技术层将轮询间隔定义为“Connection Settings 中 Rx Delay（interRequestDelayMs，默认 50 ms）”，即相邻请求之间的最小附加间隔，同时作为每个启用行计划重新加入轮询的目标间隔。
 
 由于所有请求串行执行，实际刷新周期可能大于配置值。
 
@@ -1358,7 +1359,7 @@ PollingCoordinator 管理需要轮询的行，但不直接访问 UI 表格。
 
 每行记录：
 
-- configuredIntervalMs；
+- configuredIntervalMs（= 当前连接配置快照的 interRequestDelayMs）；
 - lastScheduledAt；
 - lastStartedAt；
 - lastCompletedAt；
@@ -1379,19 +1380,16 @@ PollingCoordinator 管理需要轮询的行，但不直接访问 UI 表格。
 
 如果后续产品决定只有当前标签页轮询，可通过策略替换，不改变底层队列。
 
-## 13.5 全部轮询控制
+## 13.5 全部轮询控制（不提供）
 
-开始全部轮询：
+不提供全部行持续轮询（ALL Polling）功能。
 
-- 只启用当前标签页内被标记为轮询的有效行；
-- 无效地址不进入队列；
-- 汇总无效行信息；
-- 不自动修改无效行内容。
+轮询仅由每行 WP 开关控制。一次性全表读取（Read All）由 BatchReadCoordinator 实现，是一次性批量操作，不进入轮询调度。
 
-停止全部轮询：
+停止轮询：
 
-- 停止当前标签页的轮询调度；
-- 取消该标签页尚未执行的轮询任务；
+- 通过关闭各行的 WP 开关停止该行轮询调度；
+- 关闭标签页时取消该标签页尚未执行的轮询任务；
 - 不取消用户手动读取和写入；
 - 不断开连接。
 
@@ -1643,17 +1641,19 @@ UI 使用 4 位大写十六进制字符串显示。
 
 不得在校验失败时清空用户输入。
 
-## 17.3 地址插件扩展
+## 17.3 地址调整（Address Adjust）
 
 核心地址值表示实际准备发送的协议地址。
 
-Address Adjust 等厂商规则通过插件提供地址转换 Hook。
+Address Adjust 为核心功能，位于 Connection Settings：
+
+- OFF（默认）：发送地址 = 用户输入的寄存器地址；
+- ON：发送地址 = 用户输入的寄存器地址 − 1。
 
 转换需要记录：
 
 - 用户输入地址；
-- 插件转换后的发送地址；
-- 使用的插件和规则；
+- 最终发送地址；
 - 日志中的两种地址。
 
 核心协议层只接收最终已验证的实际发送地址，不了解 Address Adjust。
@@ -1708,6 +1708,7 @@ type 仍应保留，以支持未来增加其他表类型。
       rowId
       order
       name
+      comment
       addressDraft
       addressValue
       dataType
@@ -1743,10 +1744,11 @@ RTU 配置：
       stopBits
       parity
       flowControl
-      slaveAddress
+      slaveAddress       // 0~255，默认 1；0 不触发广播写入
       requestTimeoutMs
       retryCount
-      interRequestDelayMs
+      interRequestDelayMs // Rx Delay，默认 50 ms，兼作 WP 轮询间隔
+      addressAdjust      // OFF（默认）| ON（发送地址 = 用户地址 - 1）
       recentPortHint
 
 TCP 配置：
@@ -1784,9 +1786,10 @@ mode：
 ## 18.6 PollingSettings
 
     PollingSettings
-      intervalMs
       enabledBehavior
       maxPendingPollingTasks
+
+MVP 不设独立的全局轮询间隔配置（intervalMs）。轮询间隔使用连接配置中的 Rx Delay（interRequestDelayMs，默认 50 ms），随连接配置快照生效。
 
 MVP 中 maxPendingPollingTasks 由系统内部控制，不提供给普通用户配置。
 
@@ -4001,28 +4004,22 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 
 ## 35.3 从站地址与 Unit ID 范围
 
-需要确定：
+RTU Slave Address 已确认（ADR-013）：允许范围 0~255，默认 1；地址 0 允许配置（广播语义，按标准无应答）；MVP 不实现广播写入。
 
-- RTU Slave Address 的允许范围；
-- 地址 0 是否允许；
-- 是否完全禁止广播写入；
+仍待确认：
+
 - TCP Unit ID 的允许范围；
 - 是否允许 255；
 - UI 是否根据协议显示不同字段名称；
 - 插件是否可以提供厂商专用范围校验。
 
-在规则确认前，领域模型应允许通过策略注入范围校验，但不得默认执行广播操作。
+## 35.4 轮询间隔（已确认，2026-08）
 
-## 35.4 全局轮询间隔
+已确认（ADR-013）：不设独立的全局轮询间隔配置，WP 轮询间隔使用 Connection Settings 中的 Rx Delay（interRequestDelayMs，默认 50 ms）。
 
-需要通过链路性能和交互原型确定：
+仍待验证：
 
-- 最小配置值；
-- 默认值；
-- 最大配置值；
-- UI 单位；
-- 是否允许用户输入任意整数；
-- 是否提供固定档位；
+- Rx Delay 的 UI 输入形式（数值输入或固定档位）；
 - 页面进入后台后的行为；
 - 实际刷新速度低于配置速度时的提示方式。
 
@@ -4123,7 +4120,7 @@ PRD 中 TM Trace 的版本优先级存在需要澄清的地方。一方面寄存
 - 流控：OFF；
 - 请求超时：1000 ms；
 - 重试次数：1；
-- 请求间隔：0 ms；
+- 请求间隔（Rx Delay）：50 ms（兼作 WP 轮询间隔）；
 - TCP 端口：502；
 - TCP 连接超时：5000 ms；
 - 启动状态：离线；
@@ -4131,7 +4128,7 @@ PRD 中 TM Trace 的版本优先级存在需要澄清的地方。一方面寄存
 
 ## 36.2 轮询参数
 
-- 默认全局轮询间隔：1000 ms；
+- 轮询间隔：Connection Settings 的 Rx Delay（interRequestDelayMs），默认 50 ms；
 - 每行最多一个等待中的轮询任务；
 - 同一连接并发请求数：1；
 - 轮询任务优先级低于用户手动读写；
@@ -4442,7 +4439,7 @@ Browser 页面关闭或隐藏时：
 - 释放串口；
 - 页面隐藏不默认断开，但应检测后台限速；
 - 页面恢复后重新计算调度时间；
-- 不补发后台积压的全部轮询任务。
+- 不补发后台积压的轮询任务。
 
 Electron 窗口关闭时：
 
@@ -4565,7 +4562,7 @@ ID 通过 IdGeneratorPort 创建，测试中使用可预测 ID。
 
 # 45. Trace 扩展预留
 
-虽然完整 Trace 不属于确定的 MVP 核心范围，架构应避免阻碍后续实现。
+完整 Trace（TM 的 Memory Trace 追踪窗口）已确认属于浏览器端 MVP 核心范围（ADR-013，PRD §6.5.4），核心实现为数据列表采样；本节的预留边界用于后续 Register Trace 等扩展形态。
 
 建议预留：
 

@@ -11,3 +11,22 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   keytar: false
+
+catalog:
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  antd: ^6.6.0
+  "@ant-design/icons": ^6.3.2
+  zustand: ^5.0.14
+  i18next: ^26.3.6
+  react-i18next: ^17.0.11
+  idb: ^8.0.3
+  zod: ^4.4.3
+  react-hook-form: ^7.85.0
+  "@hookform/resolvers": ^5.7.1
+  typescript: ~6.0.2
+  vitest: ^4.1.10
+  "@playwright/test": ^1.62.1
+  vite: ^8.2.0
+  "@vitejs/plugin-react": ^6.0.4
+  vite-plugin-electron: ^1.1.1

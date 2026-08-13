@@ -1,0 +1,237 @@
+/**
+ * 16 位数据类型转换（docs/TECH_DESIGN.md §16）。
+ * 缩放类型使用确定性的十进制字符串整数运算，禁止浮点误差容差、无提示舍入或截断。
+ * Type 只改变解释、输入与显示，不改变寄存器原始值。
+ */
+import {
+  createMamepError,
+  type DataType,
+  type Result,
+} from "@mamep2026/domain";
+import { fail, ok } from "@mamep2026/domain";
+
+const SCALE_DIGITS: Partial<Record<DataType, number>> = {
+  "unsigned-0.1": 1,
+  "unsigned-0.01": 2,
+  "unsigned-0.001": 3,
+  "unsigned-0.0001": 4,
+  "signed-0.1": 1,
+  "signed-0.01": 2,
+  "signed-0.001": 3,
+  "signed-0.0001": 4,
+};
+
+function dataError(code: string, technicalMessage: string) {
+  return createMamepError({
+    code,
+    category: "validation",
+    userMessageKey: `errors.${code.toLowerCase().replaceAll("_", "")}`,
+    technicalMessage,
+  });
+}
+
+function isScaled(type: DataType): boolean {
+  return SCALE_DIGITS[type] !== undefined;
+}
+
+function isSigned(type: DataType): boolean {
+  return type === "signed" || type.startsWith("signed-");
+}
+
+/** 把原始值按类型格式化为单元格显示文本。 */
+export function formatRawValue(raw: number, type: DataType): string {
+  switch (type) {
+    case "hex":
+      return raw.toString(16).toUpperCase().padStart(4, "0");
+    case "binary":
+      return raw.toString(2).padStart(16, "0");
+    case "unsigned":
+      return String(raw);
+    case "signed": {
+      const signed = raw >= 0x8000 ? raw - 0x10000 : raw;
+      return String(signed);
+    }
+    default: {
+      if (!isScaled(type)) {
+        throw new Error(`unsupported data type: ${String(type)}`);
+      }
+      return formatScaled(raw, type);
+    }
+  }
+}
+
+function formatScaled(raw: number, type: DataType): string {
+  const digits = SCALE_DIGITS[type] ?? 0;
+  const scale = 10 ** digits;
+  const signedValue = isSigned(type) && raw >= 0x8000 ? raw - 0x10000 : raw;
+  const sign = signedValue < 0 ? "-" : "";
+  const abs = Math.abs(signedValue);
+  const intPart = Math.trunc(abs / scale);
+  const fracPart = String(abs % scale).padStart(digits, "0");
+  return `${sign}${intPart}.${fracPart}`;
+}
+
+/** 把单元格文本按类型解析为原始值（0..65535）。失败返回结构化错误，不清空输入。 */
+export function parseCellText(text: string, type: DataType): Result<number> {
+  const trimmed = text.trim();
+  if (trimmed === "") {
+    return fail(dataError("DATA_EMPTY", "cell text is empty"));
+  }
+
+  switch (type) {
+    case "hex":
+      return parseHex(trimmed);
+    case "binary":
+      return parseBinary(trimmed);
+    case "unsigned":
+      return parseInteger(trimmed, false);
+    case "signed":
+      return parseInteger(trimmed, true);
+    default: {
+      if (!isScaled(type)) {
+        return fail(
+          dataError(
+            "DATA_UNSUPPORTED_TYPE",
+            `unsupported data type: ${String(type)}`,
+          ),
+        );
+      }
+      return parseScaled(trimmed, type);
+    }
+  }
+}
+
+function parseHex(text: string): Result<number> {
+  let hexPart = text;
+  if (/^0[xX]/.test(hexPart)) hexPart = hexPart.slice(2);
+  if (!/^[0-9a-fA-F]+$/.test(hexPart)) {
+    return fail(
+      dataError(
+        "DATA_HEX_INVALID",
+        `invalid hex input: ${JSON.stringify(text)}`,
+      ),
+    );
+  }
+  if (hexPart.length > 4) {
+    return fail(
+      dataError(
+        "DATA_HEX_TOO_LONG",
+        `hex input exceeds 4 digits: ${JSON.stringify(text)}`,
+      ),
+    );
+  }
+  return ok(Number.parseInt(hexPart, 16));
+}
+
+function parseBinary(text: string): Result<number> {
+  if (!/^[01]+$/.test(text)) {
+    return fail(
+      dataError(
+        "DATA_BINARY_INVALID",
+        `binary input must only contain 0 and 1 without prefix or spaces: ${JSON.stringify(text)}`,
+      ),
+    );
+  }
+  if (text.length > 16) {
+    return fail(
+      dataError(
+        "DATA_BINARY_TOO_LONG",
+        `binary input exceeds 16 bits: ${JSON.stringify(text)}`,
+      ),
+    );
+  }
+  return ok(Number.parseInt(text, 2));
+}
+
+function parseInteger(text: string, signed: boolean): Result<number> {
+  if (!/^[+-]?\d+$/.test(text)) {
+    return fail(
+      dataError(
+        "DATA_INVALID_NUMBER",
+        `invalid integer input: ${JSON.stringify(text)}`,
+      ),
+    );
+  }
+  const value = Number(text);
+  if (signed) {
+    if (value < -32768 || value > 32767) {
+      return fail(
+        dataError("DATA_OUT_OF_RANGE", `signed value out of range: ${text}`),
+      );
+    }
+    return ok(value < 0 ? value + 0x10000 : value);
+  }
+  if (value < 0 || value > 65535) {
+    return fail(
+      dataError("DATA_OUT_OF_RANGE", `unsigned value out of range: ${text}`),
+    );
+  }
+  return ok(value);
+}
+
+function parseScaled(text: string, type: DataType): Result<number> {
+  // 只接受普通十进制表示；拒绝科学计数法与本地化小数点。
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (match === null) {
+    return fail(
+      dataError(
+        "DATA_INVALID_NUMBER",
+        `invalid decimal input: ${JSON.stringify(text)}`,
+      ),
+    );
+  }
+
+  const digits = SCALE_DIGITS[type] ?? 0;
+  const scale = 10 ** digits;
+  const sign = match[1] === "-" ? -1 : 1;
+  const intPart = match[2] ?? "0";
+  const fracPart = match[3] ?? "";
+
+  if (sign === -1 && !isSigned(type)) {
+    return fail(
+      dataError(
+        "DATA_INVALID_NUMBER",
+        `negative value not allowed for ${type}: ${text}`,
+      ),
+    );
+  }
+
+  // 小数位超过类型精度：报错，不静默舍入或截断。
+  if (fracPart.length > digits) {
+    return fail(
+      dataError(
+        "DATA_TOO_MANY_DECIMALS",
+        `${text} has ${fracPart.length} decimals, ${type} allows ${digits}`,
+      ),
+    );
+  }
+
+  // 整数位过长直接越界，避免大数精度丢失后的边界误判。
+  if (intPart.length > 6) {
+    return fail(dataError("DATA_OUT_OF_RANGE", `value out of range: ${text}`));
+  }
+
+  const scaledValue =
+    sign * (Number(intPart) * scale + Number(fracPart.padEnd(digits, "0")));
+
+  if (isSigned(type)) {
+    if (scaledValue < -32768 || scaledValue > 32767) {
+      return fail(
+        dataError(
+          "DATA_OUT_OF_RANGE",
+          `signed scaled value out of range: ${text}`,
+        ),
+      );
+    }
+    return ok(scaledValue < 0 ? scaledValue + 0x10000 : scaledValue);
+  }
+  if (scaledValue < 0 || scaledValue > 65535) {
+    return fail(
+      dataError(
+        "DATA_OUT_OF_RANGE",
+        `unsigned scaled value out of range: ${text}`,
+      ),
+    );
+  }
+  return ok(scaledValue);
+}

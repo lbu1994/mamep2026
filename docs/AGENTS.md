@@ -15,7 +15,7 @@
 - 内置插件和受信任插件
 - 测试、构建、文档及工程配置
 
-> 当前工程实际为扁平结构（`src/`、`electron/`、`vscode-extension/`），§7 的目标 monorepo 尚未迁移。根目录 [AGENTS.md](../AGENTS.md) 提供入口速览、当前实际命令与环境要点；本文件是完整规范。
+> 工程已迁移为 monorepo（2026-08-13，ADR-013）：网页端在 `apps/web/`，分层共享包在 `packages/`，测试在 `tests/`。根目录 [AGENTS.md](../AGENTS.md) 提供入口速览、当前实际命令与环境要点；本文件是完整规范。
 
 ---
 
@@ -179,7 +179,6 @@ MVP 的保持寄存器表只支持：
 
 - Enter ROM
 - Enter RAM
-- Address Adjust
 - 厂商私有协议
 - 厂商专用寄存器规则
 - 特殊校验算法
@@ -188,6 +187,8 @@ MVP 的保持寄存器表只支持：
 - 厂商寄存器手册
 - 私有报文封装
 - 专用调试小工具
+
+Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置项，ON 时发送地址 = 用户地址 − 1，默认 OFF），不属于插件边界。
 
 安川公开协议可以作为示例插件，但不得与核心 Modbus 模块耦合。
 
@@ -283,7 +284,7 @@ MVP 的保持寄存器表只支持：
 
 实际目录尚未创建或与上述结构存在合理差异时，应以当前已确认的工程结构和 ADR 为准，不得为了匹配示意结构进行无关的大规模移动。
 
-当前实际结构（2026-08）：`src/`（Vite + React 网页端）、`electron/main.ts`（Electron 主进程）、`vscode-extension/`（VSCode 插件），尚无 `apps/`、`packages/` 等子项目；`pnpm-workspace.yaml` 的 packages 通配当前无匹配。
+当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`electron/main.ts` 与 `vscode-extension/` 保持不变（不在浏览器 MVP 实现与测试范围）。
 
 ### 7.1 模块责任
 
@@ -468,7 +469,7 @@ protocol-modbus 负责：
 - 寄存器表状态
 - 自动重试
 - 轮询
-- Address Adjust
+- Address Adjust（由 register-table 应用层处理，协议包只接收最终发送地址）
 - 厂商私有功能码
 - Enter RAM 或 Enter ROM
 - 厂商寄存器业务语义
@@ -736,25 +737,26 @@ retryCount 表示首次失败后允许的额外尝试次数。
 
 ### 13.3 请求间隔
 
-内部统一使用 interRequestDelayMs。
+内部统一使用 interRequestDelayMs，界面名称为 Rx Delay（Connection Settings 配置项）。
 
 其语义为：
 
 - 相邻请求之间的最小附加间隔
 - 从上一请求结束后开始计时
+- 同时作为 WP 行周期轮询的重复间隔（不设独立的全局轮询间隔）
+- 默认值为 50 ms（2026-08 确认）
 - 不用于判断帧结束
 - 不代替请求超时
 - 必须可取消
 - 必须记录实际应用的延迟
 
-不得继续使用含义不明确的内部字段名 Rx Delay。
-
 ---
 
 ## 14. 周期轮询规则
 
-- 使用全局轮询间隔
-- 每行独立决定是否加入轮询
+- 每行通过 WP 开关独立决定是否加入轮询
+- 轮询间隔使用 Connection Settings 中的 Rx Delay（interRequestDelayMs，默认 50 ms），不设独立的全局轮询间隔配置
+- 不提供全部行持续轮询（ALL Polling）功能；全表读取为一次性批量操作
 - 每行使用独立的功能码 03 请求
 - 不合并连续地址
 - 轮询优先级低于用户手动操作
@@ -890,7 +892,7 @@ Type 只改变数值解释、输入和显示，不改变寄存器原始值和通
 - 不发送请求
 - 不自动清空或替换为默认地址
 
-Address Adjust 只能由插件转换 Hook 实现。日志必须同时记录用户地址和最终发送地址。
+Address Adjust 由核心实现：Connection Settings 中配置（ON 时发送地址 = 用户地址 − 1，默认 OFF，2026-08 已确认）。日志必须同时记录用户地址和最终发送地址。
 
 ---
 
@@ -1320,7 +1322,7 @@ UI 必须：
 
 ### 25.3 连接配置
 
-连接配置使用现代模态窗口或侧边抽屉。
+连接配置使用 Modal（每次应用启动自动弹出，浏览器端仅提供 Modbus RTU 配置）。Connection Settings、Plugin Manager、Settings 的入口统一放在顶部应用栏，不放在侧边栏。
 
 连接失败时必须：
 
@@ -1336,16 +1338,18 @@ UI 必须：
 表格应支持：
 
 - 虚拟滚动
-- 单元格编辑
+- 单元格编辑（可编辑单元格的输入控件宽度铺满单元格，点击单元格任意空白区域即可进入编辑）
 - 多行选择
 - 复制、剪切和粘贴
 - 新增、插入、删除和移动
 - 键盘导航
 - 右键上下文菜单
 - 撤销和重做
-- 地址及数据错误提示
+- 地址及数据错误提示（在对应单元格内展示，不设独立 Status 列）
 - 读取结果强制覆盖单元格内容
 - 轮询和操作状态展示
+- READ / WRITE 按钮必须包含完整文字，不得只使用图标
+- 列序固定：No / TM / Name / Register[HEX] / WP / READ / Data / WRITE / Type / Comment
 
 领域模型不得依赖 Ant Design Table 的内部数据结构。
 
@@ -1755,21 +1759,15 @@ AI 代理不得：
 
 以下事项仍待最终确认，AI 不得在普通实现任务中自行拍板：
 
-- RTU Slave Address 的最终范围
-- 地址 0 是否允许配置
-- 是否彻底禁止广播写入
+- 是否彻底禁止广播写入（从站地址 0 允许配置，按标准无应答，MVP 不实现广播写入）
 - TCP Unit ID 的最终范围
 - Node.js 串口库最终选型
 - 三端对 1.5 位停止位的支持
 - XON/XOFF 和 RTS/CTS 的实际能力矩阵
-- 全局轮询间隔最终最小值和最大值
 - 工作区公开交换格式
 - 插件第三方代码隔离机制
 - 表格组件原型后的最终结论
-- Trace 的 MVP 范围
-- TM 的最终含义
-- WP 是否保留及其最终行为
-- 插件命令是否可以触发全局轮询
+- 插件命令是否可以触发轮询
 - 是否在 MVP 开放工作区导入导出
 - VSCode Webview 关闭后是否保持连接的最终产品策略
 
@@ -1782,29 +1780,25 @@ AI 代理不得：
 
 ---
 
-## 36. TM、WP 和 Trace 特别说明
+## 36. TM、WP 和 Trace 特别说明（2026-08-13 已确认）
 
-现有参考资料对 TM 的定义存在冲突：
+TM 与 WP 的最终定义已于 2026-08-13 确认：
 
-- 一处资料将 TM 定义为轨迹追踪
-- 另一处资料将 TM 定义为周期轮询
-- 技术设计将 pollingEnabled 和 traceEnabled 定义为两个独立字段
+- TM = 轨迹追踪（Trace）：勾选后弹出 Memory Trace 追踪窗口，对当前行寄存器持续采样并保留历史数据；字段为 traceEnabled
+- WP = 周期轮询开关：控制当前行是否加入周期轮询；字段为 pollingEnabled
+- pollingEnabled 与 traceEnabled 为两个独立字段，不得复用
 
-因此：
+Trace 实现要求：
 
-- 轮询与 Trace 必须保持为两个不同的领域概念
-- 不得将两个状态复用为同一个字段
-- 不得在未确认前实现 TM 完整行为
-- 完整 Trace 不属于已确定的 MVP 核心范围
-- 不得实现真正无限的 Continue 内存缓冲
+- 完整 Trace 属于浏览器端 MVP 核心范围（PRD §6.5.4）
+- Buffer Size 的 `Continue` 档不得真正无限，使用环形缓冲区硬上限（10000 条）
+- 追踪窗口标题为 `M@MEp2006 Advance [Memory Trace]`，含 Play / Stop / Save、Buffer Size、Speed、No./Data 列表与 Average
+- 追踪采样必须经过统一调度器
 
-WP 在 PRD 和技术设计中没有正式领域定义。
+WP 实现要求：
 
-在确认前：
-
-- 不得添加 WP 字段或笑脸锁定交互
-- 写入禁用应由明确的编辑、轮询和操作状态控制
-- 不得根据原工具截图推断 WP 的最终产品行为
+- WP 列使用现代开关控件，不复刻原工具的笑脸锁定交互
+- 写入禁用由明确的编辑、轮询和操作状态控制
 
 ---
 
@@ -2016,18 +2010,21 @@ AI 在声明任务完成前必须检查：
 - 停止位：1
 - 校验位：None
 - 流控：OFF
+- 从站地址允许范围：0~255（默认 1；不实现广播写入）
+- Address Adjust：默认 OFF（ON 时发送地址 = 用户地址 − 1）
 - 请求超时：1000 ms
 - 重试次数：1
-- 请求间隔：0 ms
+- 请求间隔（Rx Delay）：50 ms（兼作 WP 轮询间隔）
 - TCP 端口：502
 - TCP 连接超时：5000 ms
 - 自动重连：关闭
 - 应用启动状态：离线
-- 默认轮询间隔：1000 ms
+- 应用启动时自动弹出 Connection Settings Modal
 - 同一连接并发请求数：1
 - 通信日志默认上限：10000 条
 - 应用消息默认上限：2000 条
 - 普通编辑自动保存 debounce：500 ms
+- Trace Buffer 环形缓冲硬上限：10000 条
 
 这些值必须集中管理，不得散落在组件、Host 和 Adapter 中。
 

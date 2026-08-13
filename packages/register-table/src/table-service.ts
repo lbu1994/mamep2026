@@ -1,0 +1,99 @@
+/**
+ * 寄存器表应用服务（docs/TECH_DESIGN.md §6.8、docs/AGENTS.md §17/§18）。
+ * - 读写编排走统一调度器（session 内部）；
+ * - 读取成功后按 Type 强制覆盖单元格文本；读取失败不改变单元格内容；
+ * - 写入前按 Type 校验并转换为 16 位原始值；失败保留用户输入；
+ * - Address Adjust 在发送前应用，日志记录用户地址与发送地址。
+ */
+import {
+  createEmptyRow,
+  createMamepError,
+  RawRegisterValue,
+  type RegisterRow,
+  type Result,
+} from "@mamep2026/domain";
+import { fail, ok } from "@mamep2026/domain";
+import type {
+  CommunicationSession,
+  WriteOutcome,
+} from "@mamep2026/communication";
+import { formatRawValue, parseCellText } from "@mamep2026/data-conversion";
+import { computeSentAddress } from "./address";
+
+export interface TableServiceDeps {
+  getSession: () => CommunicationSession | null;
+  getAddressAdjustMode: () => "off" | "on";
+}
+
+function notConnectedError() {
+  return createMamepError({
+    code: "CONNECTION_NOT_CONNECTED",
+    category: "connection",
+    userMessageKey: "errors.notConnected",
+    technicalMessage: "no active connection",
+  });
+}
+
+function addressEmptyError() {
+  return createMamepError({
+    code: "REGISTER_ADDRESS_EMPTY",
+    category: "validation",
+    userMessageKey: "errors.registerAddressEmpty",
+    technicalMessage: "register address is empty",
+  });
+}
+
+export class RegisterTableService {
+  private readonly deps: TableServiceDeps;
+
+  constructor(deps: TableServiceDeps) {
+    this.deps = deps;
+  }
+
+  /** 单行读取：校验连接/地址/Address Adjust 后经统一调度器发送 FC03。 */
+  async readRow(row: RegisterRow): Promise<Result<number>> {
+    const session = this.deps.getSession();
+    if (session === null) return fail(notConnectedError());
+    const address = row.addressValue?.value;
+    if (address === undefined) return fail(addressEmptyError());
+    const sent = computeSentAddress(address, this.deps.getAddressAdjustMode());
+    if (!sent.ok) return sent;
+    return session.readRegister(sent.value, {
+      source: "manual-read",
+      userAddress: address,
+    });
+  }
+
+  /** 读取成功后应用结果：按 Type 格式化并强制覆盖单元格文本（单一当前值模型）。 */
+  applyReadResult(row: RegisterRow, raw: number): Result<RegisterRow> {
+    const rawValue = RawRegisterValue.create(raw);
+    if (!rawValue.ok) return rawValue;
+    return ok({
+      ...row,
+      cellText: formatRawValue(raw, row.dataType),
+      lastKnownRawValue: rawValue.value,
+      updatedAt: Date.now(),
+    });
+  }
+
+  /** 单行写入：校验连接/地址/输入值，转 16 位原始值后发送 FC0x10。 */
+  async writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
+    const session = this.deps.getSession();
+    if (session === null) return fail(notConnectedError());
+    const address = row.addressValue?.value;
+    if (address === undefined) return fail(addressEmptyError());
+    const sent = computeSentAddress(address, this.deps.getAddressAdjustMode());
+    if (!sent.ok) return sent;
+    const parsed = parseCellText(row.cellText, row.dataType);
+    if (!parsed.ok) return parsed;
+    return session.writeRegister(sent.value, parsed.value, {
+      source: "manual-write",
+      userAddress: address,
+    });
+  }
+
+  /** 新建空行（供 UI 便捷调用）。 */
+  static createRow(): RegisterRow {
+    return createEmptyRow();
+  }
+}

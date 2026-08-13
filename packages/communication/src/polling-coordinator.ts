@@ -1,0 +1,107 @@
+/**
+ * 周期轮询协调器（docs/TECH_DESIGN.md §13）。
+ * - 间隔使用 Connection Settings 的 Rx Delay（interRequestDelayMs），不设独立全局轮询间隔；
+ * - 每个轮询行最多一个正在执行的任务，任务未完成时跳过本轮（不积压）并记录 skipped tick；
+ * - 不提供全部行持续轮询（ALL Polling）：只有传入的 targets 会被轮询。
+ */
+import type { Result } from "@mamep2026/domain";
+import type { Clock, TimeoutHandle } from "./clock";
+import type { CommunicationSession } from "./session";
+
+export interface PollingTarget {
+  key: string;
+  address: number;
+}
+
+export interface PollingCoordinatorOptions {
+  getIntervalMs: () => number;
+}
+
+export class PollingCoordinator {
+  private targets: PollingTarget[] = [];
+  private readonly inFlight = new Set<string>();
+  private readonly skippedTicks = new Map<string, number>();
+  private timer: TimeoutHandle | null = null;
+  private runningFlag = false;
+  private readonly listeners = new Set<
+    (key: string, address: number, result: Result<number>) => void
+  >();
+  private readonly session: CommunicationSession;
+  private readonly clock: Clock;
+  private readonly options: PollingCoordinatorOptions;
+
+  constructor(
+    session: CommunicationSession,
+    clock: Clock,
+    options: PollingCoordinatorOptions,
+  ) {
+    this.session = session;
+    this.clock = clock;
+    this.options = options;
+  }
+
+  get isRunning(): boolean {
+    return this.runningFlag;
+  }
+
+  getSkippedTicks(key: string): number {
+    return this.skippedTicks.get(key) ?? 0;
+  }
+
+  onResult(
+    listener: (key: string, address: number, result: Result<number>) => void,
+  ): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  setTargets(targets: PollingTarget[]): void {
+    this.targets = [...targets];
+  }
+
+  start(): void {
+    if (this.runningFlag) return;
+    this.runningFlag = true;
+    this.scheduleNext();
+  }
+
+  stop(): void {
+    this.runningFlag = false;
+    this.timer?.cancel();
+    this.timer = null;
+  }
+
+  private scheduleNext(): void {
+    this.timer = this.clock.schedule(
+      () => this.tick(),
+      this.options.getIntervalMs(),
+    );
+  }
+
+  private tick(): void {
+    if (!this.runningFlag) return;
+    for (const target of this.targets) {
+      if (this.inFlight.has(target.key)) {
+        this.skippedTicks.set(
+          target.key,
+          (this.skippedTicks.get(target.key) ?? 0) + 1,
+        );
+        continue;
+      }
+      this.inFlight.add(target.key);
+      // 捕获请求时的地址快照：上层据此丢弃旧地址的迟到结果（generation 失效）。
+      const requestedAddress = target.address;
+      void this.session
+        .readRegister(target.address, {
+          source: "polling",
+          priority: "polling",
+        })
+        .then((result) => {
+          this.inFlight.delete(target.key);
+          for (const listener of this.listeners)
+            listener(target.key, requestedAddress, result);
+        });
+    }
+    this.scheduleNext();
+  }
+}

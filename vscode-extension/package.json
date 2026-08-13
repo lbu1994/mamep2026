@@ -8,9 +8,13 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "main": "./dist/extension.js",
-  "activationEvents": ["onCommand:mamep2026.openMainPanel"],
+  "activationEvents": [
+    "onCommand:mamep2026.openMainPanel"
+  ],
   "contributes": {
     "commands": [
       {
