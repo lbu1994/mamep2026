@@ -6,7 +6,7 @@
 - 目标平台：浏览器、Electron 桌面客户端、VSCode 插件
 - 核心语言：TypeScript
 - 架构风格：Monorepo、分层架构、Ports and Adapters、共享核心与平台适配
-- 开发模式：测试驱动开发与验收测试驱动开发
+- 开发模式：核心通信与协议采用测试驱动开发与验收测试驱动开发；界面开发不采用测试先行
 - 文档状态：初始技术设计
 - 上游输入：《Mamep2026 产品需求文档（PRD）》
 - 下游输入：工程初始化、模块实现、测试设计和 AGENTS.md 编写
@@ -73,37 +73,37 @@
 
 # 3. 核心架构决策摘要
 
-| 决策项 | 技术决策 |
-|---|---|
-| 编程语言 | TypeScript，启用严格类型检查 |
-| 仓库结构 | pnpm workspace 管理的 Monorepo |
-| 构建编排 | Turborepo |
-| Web UI | React |
-| Web 构建工具 | Vite |
-| 桌面端 | Electron |
-| VSCode 端 | VSCode Extension API 与 React Webview |
-| UI 状态 | Zustand |
-| 异步服务状态 | 领域服务事件与受控 Store，不引入远程请求型缓存框架作为核心状态源 |
-| 表格 | TanStack Table 与 TanStack Virtual 组合，自行实现可编辑单元格 |
-| 表单和配置校验 | React Hook Form 与 Zod |
-| 样式 | CSS Modules、CSS Custom Properties 和共享设计令牌 |
-| 图标 | Lucide React |
-| 浏览器 RTU | Web Serial API 适配器 |
-| Electron RTU | Node.js 串口适配器 |
-| VSCode RTU | 扩展宿主中的 Node.js 串口适配器 |
-| Electron、VSCode TCP | Node.js net 模块适配器 |
-| Modbus 核心 | 项目内实现所需的最小协议核心，不把业务行为绑定到第三方 Modbus 客户端 |
-| 浏览器持久化 | IndexedDB |
-| Electron 持久化 | 本地版本化 JSON 工作区文件与原子写入 |
-| VSCode 持久化 | workspaceState 或 globalState 存储元数据，工作区文件存储可共享配置 |
-| 单元测试 | Vitest |
-| React 组件测试 | React Testing Library |
-| 浏览器端到端测试 | Playwright |
-| Electron 端到端测试 | Playwright Electron 支持 |
-| VSCode 集成测试 | VSCode Extension Test 工具与专用测试工作区 |
-| 模拟设备 | TypeScript 实现的虚拟 Modbus TCP Server 和可注入的 RTU Fake Transport |
-| 数据库 | MVP 不引入服务端数据库 |
-| 后端服务 | MVP 不建设远程后端，Electron 主进程和 VSCode 扩展宿主承担本地后端职责 |
+| 决策项               | 技术决策                                                              |
+| -------------------- | --------------------------------------------------------------------- |
+| 编程语言             | TypeScript，启用严格类型检查                                          |
+| 仓库结构             | pnpm workspace 管理的 Monorepo                                        |
+| 构建编排             | Turborepo                                                             |
+| Web UI               | React                                                                 |
+| Web 构建工具         | Vite                                                                  |
+| 桌面端               | Electron                                                              |
+| VSCode 端            | VSCode Extension API 与 React Webview                                 |
+| UI 状态              | Zustand                                                               |
+| 异步服务状态         | 领域服务事件与受控 Store，不引入远程请求型缓存框架作为核心状态源      |
+| 表格                 | Ant Design Table                                                      |
+| 表单和配置校验       | React Hook Form 与 Zod                                                |
+| 样式                 | Ant Design ConfigProvider 主题令牌与主题适配层                        |
+| 图标                 | @ant-design/icons                                                     |
+| 浏览器 RTU           | Web Serial API 适配器                                                 |
+| Electron RTU         | Node.js 串口适配器                                                    |
+| VSCode RTU           | 扩展宿主中的 Node.js 串口适配器                                       |
+| Electron、VSCode TCP | Node.js net 模块适配器                                                |
+| Modbus 核心          | 项目内实现所需的最小协议核心，不把业务行为绑定到第三方 Modbus 客户端  |
+| 浏览器持久化         | IndexedDB                                                             |
+| Electron 持久化      | 本地版本化 JSON 工作区文件与原子写入                                  |
+| VSCode 持久化        | workspaceState 或 globalState 存储元数据，工作区文件存储可共享配置    |
+| 单元测试             | Vitest                                                                |
+| React 组件测试       | React Testing Library                                                 |
+| 浏览器端到端测试     | Playwright                                                            |
+| Electron 端到端测试  | Playwright Electron 支持                                              |
+| VSCode 集成测试      | VSCode Extension Test 工具与专用测试工作区                            |
+| 模拟设备             | TypeScript 实现的虚拟 Modbus TCP Server 和可注入的 RTU Fake Transport |
+| 数据库               | MVP 不引入服务端数据库                                                |
+| 后端服务             | MVP 不建设远程后端，Electron 主进程和 VSCode 扩展宿主承担本地后端职责 |
 
 ---
 
@@ -231,21 +231,18 @@
 
 ## 4.5 表格技术
 
-采用 TanStack Table 与 TanStack Virtual 构建寄存器表。
+采用 Ant Design Table 构建寄存器表。
 
 选择原因：
 
-1. 无头组件模式便于适配浏览器、Electron 和 VSCode 主题；
-2. 支持自定义编辑器；
-3. 支持多行选择和键盘交互；
-4. 支持虚拟滚动；
-5. 不强制绑定特定视觉风格；
-6. 便于实现 1000 行以上的可编辑表格；
-7. 许可证适合开源项目。
+1. 成熟组件，表格渲染、选择、排序等交互开箱即用；
+2. 通过 ConfigProvider 主题令牌统一适配浏览器、Electron 和 VSCode 主题；
+3. 支持虚拟滚动，满足 1000 行以上表格需求；
+4. 与整体 Ant Design 组件框架一致，减少自研成本；
+5. Data 单元格使用受控 Input 直接改值，符合 Ant Design 表格默认交互。
 
 需要自行实现：
 
-- 单元格编辑会话；
 - 地址自动格式化；
 - 类型化数据输入；
 - 复制、剪切和粘贴；
@@ -255,21 +252,20 @@
 - 焦点恢复；
 - 错误提示；
 - 轮询状态显示；
-- 读取值与待写值分离；
 - 右键菜单；
 - 撤销和重做。
 
 在正式采用前应通过表格原型验证：
 
 1. 1000 行渲染与滚动；
-2. 编辑中的单元格不因虚拟化丢失输入；
+2. 受控输入与虚拟滚动的兼容性（焦点、输入不丢失）；
 3. 多单元格粘贴；
 4. 跨行键盘导航；
 5. VSCode Webview 中的焦点行为；
 6. 浏览器缩放和响应式表现；
 7. 深色主题可读性。
 
-如原型验证失败，应保留替换表格实现的能力，不允许领域模型依赖 TanStack Table 的内部数据结构。
+领域模型不得依赖 Ant Design Table 的内部数据结构。
 
 ## 4.6 表单和 Schema 校验
 
@@ -293,39 +289,24 @@ Zod 主要用于：
 
 ## 4.7 样式和主题
 
-采用：
+UI 组件框架统一采用 Ant Design，主题通过 ConfigProvider 主题令牌管理：
 
-- CSS Modules；
-- CSS Custom Properties；
-- 共享设计令牌；
-- 平台主题适配器；
-- Lucide React 图标。
+- Ant Design ConfigProvider token 体系；
+- defaultAlgorithm 与 darkAlgorithm 切换浅色和深色主题；
+- 基于 antd token 扩展的语义令牌；
+- 平台主题适配层；
+- @ant-design/icons 图标。
 
-不在核心 UI 中绑定重量级组件库，以避免：
+基于 antd token 扩展的语义令牌至少包括：
 
-1. Electron、浏览器和 VSCode 视觉难以统一；
-2. 表格密度受组件库限制；
-3. VSCode 主题适配困难；
-4. 组件库升级扩大维护成本；
-5. 生成大量难以覆盖的样式覆盖代码。
-
-共享设计令牌至少包括：
-
-- 字体；
-- 字号；
-- 行高；
-- 间距；
-- 圆角；
-- 边框；
-- 背景层级；
-- 文本颜色；
 - 品牌强调色；
 - 在线、警告、错误和离线语义色；
 - 表格行高；
 - 单元格边距；
-- 焦点轮廓。
+- 焦点轮廓；
+- 轮询和操作状态色。
 
-VSCode 端通过主题适配层将 VSCode Theme Color 映射到共享令牌。
+VSCode 端通过主题适配层将 VSCode Theme Color 映射到 antd token，保持三端主题一致。
 
 ## 4.8 后端与数据库结论
 
@@ -710,9 +691,9 @@ Host 负责装配具体适配器，不实现领域规则。
 - 行增删移动；
 - 复制和粘贴模型；
 - 地址提交；
-- 数据编辑会话；
+- 单元格直接编辑；
 - 读取结果应用；
-- 待写值管理；
+- 写入值解析与校验；
 - 状态和错误投影；
 - 撤销与重做命令；
 - 对通信服务的用例封装。
@@ -725,9 +706,9 @@ Host 负责装配具体适配器，不实现领域规则。
 - Repository Port；
 - 自动保存协调器；
 - 数据迁移；
-- 损坏数据恢复；
-- 默认工作区；
-- 导入和导出边界；
+- 单元格直接编辑；
+- 读取结果应用；
+- 写入值解析与校验边界；
 - 保存节流和原子提交逻辑。
 
 ## 6.10 packages/logging
@@ -811,20 +792,20 @@ Host 负责装配具体适配器，不实现领域规则。
 
 建议定义以下能力：
 
-| 能力 | Browser | Electron | VSCode |
-|---|---:|---:|---:|
-| Modbus RTU | 支持 | 支持 | 支持 |
-| Modbus TCP | 不支持 | 支持 | 支持 |
-| 串口枚举 | 受浏览器授权模型限制 | 支持 | 支持 |
-| COM10 及以上 | 由浏览器设备选择机制处理 | 支持 | 支持 |
-| 本地文件系统 | 受限 | 支持 | 支持 |
-| 工作区文件 | 可通过导入导出实现 | 支持 | 支持 |
-| IndexedDB | 支持 | 非默认 | 非默认 |
-| Node.js 插件 | 不支持 | 受控支持 | 受控支持 |
-| Web 插件 | 支持受限插件 | 可支持 | 可支持 |
-| VSCode 命令 | 不支持 | 不支持 | 支持 |
-| 系统通知 | 浏览器能力 | 支持 | VSCode 通知 |
-| 自动更新 | 不适用 | 后续支持 | 由 VSCode 管理 |
+| 能力         |                  Browser | Electron |         VSCode |
+| ------------ | -----------------------: | -------: | -------------: |
+| Modbus RTU   |                     支持 |     支持 |           支持 |
+| Modbus TCP   |                   不支持 |     支持 |           支持 |
+| 串口枚举     |     受浏览器授权模型限制 |     支持 |           支持 |
+| COM10 及以上 | 由浏览器设备选择机制处理 |     支持 |           支持 |
+| 本地文件系统 |                     受限 |     支持 |           支持 |
+| 工作区文件   |       可通过导入导出实现 |     支持 |           支持 |
+| IndexedDB    |                     支持 |   非默认 |         非默认 |
+| Node.js 插件 |                   不支持 | 受控支持 |       受控支持 |
+| Web 插件     |             支持受限插件 |   可支持 |         可支持 |
+| VSCode 命令  |                   不支持 |   不支持 |           支持 |
+| 系统通知     |               浏览器能力 |     支持 |    VSCode 通知 |
+| 自动更新     |                   不适用 | 后续支持 | 由 VSCode 管理 |
 
 能力矩阵通过 PlatformCapabilities 对象注入 UI。
 
@@ -1458,42 +1439,35 @@ BatchReadCoordinator 负责全表读取。
 
 # 15. 写入与写后回读设计
 
-## 15.1 待读值与读取值分离
+## 15.1 Data 单元格单一当前值
 
-为避免轮询覆盖用户输入，领域模型中将 Data 拆分为：
+Data 单元格采用单一当前值模型，不再区分读取值与待写草稿：
 
-- rawReadValue；
-- formattedReadValue；
-- draftWriteText；
-- parsedWriteValue；
-- displayMode；
-- operationState；
-- freshnessState。
-
-UI 可以在同一视觉单元格中呈现这两种状态，但内部不得使用同一字段。
+- 单元格内容即当前值，用户编辑直接改值；
+- 读取成功后按当前 Type 格式化，强制覆盖单元格内容，包括用户正在输入时；
+- 读取失败时不改变单元格内容，不做提示；
+- 同一时刻只存在一份单元格文本，禁止在领域模型中为读取值和待写值维护两份独立文本。
 
 用户开始编辑时：
 
-1. 创建 draftWriteText；
-2. 保留 rawReadValue；
-3. 该行进入 editing 状态；
-4. 轮询结果仍可记录到 rawReadValue；
-5. 轮询结果不得覆盖 draftWriteText；
-6. UI 明确区分当前显示是实时值还是待写值。
+1. 不创建独立草稿；
+2. 该行不进入独立编辑状态；
+3. 轮询结果直接覆盖单元格内容；
+4. UI 无需区分实时值与待写值。
 
 ## 15.2 写入流程
 
 1. 创建行快照；
 2. 校验连接；
 3. 校验地址；
-4. 根据 Type 解析 draftWriteText；
+4. 根据 Type 解析 Data 单元格当前文本；
 5. 转换为 16 位原始值；
 6. 创建 0x10 写入请求；
 7. 进入统一队列；
 8. 记录请求和响应；
 9. 根据 Read Verify 规则决定是否回读；
 10. 更新写入状态；
-11. 不清除失败输入。
+11. 写入失败不清空单元格内容。
 
 ## 15.3 写后回读
 
@@ -1519,7 +1493,7 @@ WriteVerifyCoordinator 将写入和回读视为相关但独立的两个阶段：
 
 ## 15.4 写入和轮询冲突
 
-开始编辑时不强制停止该行轮询，但 UI 必须保留草稿。
+编辑不停止该行轮询，读取结果直接覆盖单元格内容。
 
 写入任务提交后：
 
@@ -1622,8 +1596,7 @@ Type 切换时：
 
 - rawReadValue 不变；
 - formattedReadValue 重新计算；
-- draftWriteText 如果存在，不自动进行有损转换；
-- 可以提示用户选择转换草稿或放弃草稿；
+- 单元格文本不自动转换；
 - 不允许因为 Type 切换而写入设备；
 - 不修改通信报文；
 - 不修改地址。
@@ -1740,9 +1713,8 @@ type 仍应保留，以支持未来增加其他表类型。
       dataType
       pollingEnabled
       traceEnabled
-      draftWriteText
+      cellText
       lastKnownRawValue
-      lastSuccessfulReadAt
       createdAt
       updatedAt
 
@@ -1751,8 +1723,7 @@ type 仍应保留，以支持未来增加其他表类型。
 建议：
 
 - 持久化最近成功值仅用于恢复显示；
-- 恢复后必须标记为 stale；
-- 不得把恢复值显示为当前设备实时值；
+- 恢复后仅作为普通单元格文本展示，不视为当前设备实时值；
 - 不持久化正在进行的请求状态；
 - 不持久化运行时错误对象；
 - 不自动恢复正在运行的轮询任务。
@@ -2464,30 +2435,22 @@ UI 不直接消费复杂领域对象，而使用 ViewModel。
 - addressError；
 - pollingState；
 - readButtonState；
-- readValueText；
-- writeDraftText；
+- cellText；
 - writeValidation；
 - dataType；
-- freshness；
 - operationState；
-- lastSuccessText；
 - statusText。
 
 ViewModel 由 Selector 或 Presenter 生成，避免组件中重复业务判断。
 
-## 24.3 表格编辑事务
+## 24.3 表格单元格编辑
 
-一个单元格编辑流程包含：
+Data 单元格使用受控 Input，编辑直接更新 Store 行数据：
 
-1. beginEdit；
-2. updateDraft；
-3. validateDraft；
-4. commitEdit；
-5. cancelEdit。
-
-commitEdit 生成可撤销命令。
-
-读取响应更新不应终止用户正在进行的编辑。
+1. 输入变化即时写入单元格当前值；
+2. 无编辑会话、草稿或提交事务；
+3. 读取成功结果无条件覆盖单元格内容，包括正在编辑时；
+4. 单元格值存放在 Store 行数据中，不随虚拟化卸载丢失。
 
 ## 24.4 撤销和重做
 
@@ -2506,6 +2469,7 @@ commitEdit 生成可撤销命令。
 不撤销：
 
 - 设备读取结果；
+- Data 单元格文本修改；
 - 已经发送的写入；
 - 连接和断开；
 - 通信日志；
@@ -2692,7 +2656,7 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 覆盖：
 
 - 地址提交和错误展示；
-- Data 草稿与读取值分离；
+- Data 单元格直接编辑、读取结果强制覆盖、读取失败不改动内容；
 - Type 切换；
 - 轮询状态；
 - 连接状态；
@@ -2908,7 +2872,7 @@ CI 应在 Windows、macOS 和 Linux 上执行必要的平台构建验证。
 - 细粒度 Store Selector；
 - 稳定 rowId；
 - 避免整个表格因单行读取结果全部重渲染；
-- 编辑草稿局部更新；
+- 单元格文本局部更新；
 - 日志与表格状态分离；
 - 低频保存使用 debounce；
 - 批量粘贴使用单一事务；
@@ -3083,14 +3047,13 @@ MVP 不接入默认云端遥测。
 - 多来源共享连接；
 - 轮询可能积压；
 - 手动写入需要及时执行；
-- 读取结果可能覆盖输入。
+- 读取结果按设计直接覆盖输入。
 
 方案：
 
 - 统一 RequestScheduler；
 - 公平优先级；
 - 轮询去重；
-- 草稿和读取值分离；
 - generation 防止旧结果污染。
 
 ## 30.5 虚拟化表格编辑
@@ -3098,16 +3061,14 @@ MVP 不接入默认云端遥测。
 难点：
 
 - 行离开视口后组件卸载；
-- 编辑草稿丢失；
 - 焦点跳转；
 - 多行粘贴；
 - 可访问性。
 
 方案：
 
-- 编辑状态存放在 Store，而非单元格局部状态；
+- 单元格值存放在 Store 行数据中，Input 受控，虚拟化卸载不丢失；
 - 使用稳定 rowId；
-- commit 与 UI 生命周期分离；
 - 原型先行；
 - 建立键盘和焦点自动化测试。
 
@@ -3183,8 +3144,8 @@ MVP 不接入默认云端遥测。
 12. 所有工作区数据必须包含 schemaVersion；
 13. 轮询任务必须可取消；
 14. 断开连接后不得发送新请求；
-15. 读取失败不得销毁最近成功值；
-16. 写入失败不得清空用户草稿；
+15. 读取失败不得修改 Data 单元格内容；
+16. 写入失败不得清空 Data 单元格内容；
 17. Type 切换不得修改原始寄存器值；
 18. 地址转换必须在日志中可追踪；
 19. 三端共享相同协议测试向量；
@@ -3207,8 +3168,8 @@ MVP 不接入默认云端遥测。
 5. ADR-005：工作区使用版本化文档存储；
 6. ADR-006：统一串行请求调度；
 7. ADR-007：核心 Modbus 协议采用内部最小实现；
-8. ADR-008：寄存器表采用 TanStack Table 与 Virtual；
-9. ADR-009：读取值与待写值分离；
+8. ADR-008：寄存器表采用 Ant Design Table；
+9. ADR-009：Data 单元格采用单一当前值模型，读取结果强制覆盖，无草稿与编辑事务；
 10. ADR-010：MVP 插件限制为内置和受信任来源；
 11. ADR-011：Electron Renderer 使用严格进程隔离；
 12. ADR-012：插件通信必须经过统一调度器。
@@ -3267,11 +3228,13 @@ MVP 不接入默认云端遥测。
 - 断开后无新请求；
 - 迟到响应不污染后续请求。
 
-## 33.3 阶段三：浏览器原型
+## 33.3 阶段三：三端基础骨架与浏览器原型
 
 实现：
 
 - React AppShell；
+- 三端运行骨架：浏览器 Vite dev server、Electron 最小 Main 窗口（Main 与 Renderer 分离打包）、VSCode Extension Host 最小 Webview；
+- 三端均加载同一套共享 UI 页面；
 - 寄存器表原型；
 - Web Serial Adapter；
 - IndexedDB；
@@ -3284,6 +3247,7 @@ MVP 不接入默认云端遥测。
 目标：
 
 - 最早验证共享 UI；
+- 验证三端基础页面加载与开发调试链路；
 - 验证表格编辑；
 - 验证 Web Serial 能力限制；
 - 验证工作区模型。
@@ -3351,7 +3315,7 @@ Electron 成为完整参考客户端。
 - 多行粘贴；
 - 键盘导航；
 - 实时值更新；
-- 编辑状态不丢失；
+- 读取结果直接覆盖正在编辑的单元格；
 - VSCode Webview；
 - 深色主题。
 
@@ -3654,7 +3618,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 - 串口句柄被清理；
 - UI 保持可操作；
 - 寄存器表不被清空；
-- 最近成功读取值保留并标记为过期；
+- Data 单元格内容保持不变；
 - 重新插入设备后可以刷新端口列表；
 - 用户可以重新连接；
 - 不在用户未启用自动重连的情况下自动连接。
@@ -4066,18 +4030,18 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 
 ## 35.5 Data 单元格交互
 
-需要通过原型确认：
+已确定采用 Ant Design 表格默认交互：
 
-- 读取值和待写值在视觉上是否共用一个输入区域；
-- 是否提供独立编辑模式；
-- 用户开始编辑后是否暂停该行轮询；
-- 未启用回读时如何展示已发送值；
-- 写入成功后是否自动退出编辑状态；
-- 写后回读不一致时如何同时显示写入值和设备值；
-- Type 切换时如何处理未提交草稿；
-- 键盘 Enter 的行为。
-
-无论最终 UI 形式如何，内部数据模型都必须保持读取值和待写草稿分离。
+- 读取值和待写值共用同一个单元格输入区域，内容即当前值；
+- 无独立编辑模式、草稿或提交事务；
+- 编辑不暂停该行轮询；
+- 读取成功结果强制覆盖单元格内容，包括编辑中；
+- 读取失败不改动单元格内容、不提示；
+- 未启用回读时，写入完成后单元格保持用户输入值；
+- 写后回读结果按读取规则覆盖单元格；
+- 写入校验失败时提示且不清空单元格内容；
+- Type 切换不改写单元格文本；
+- Enter 无特殊提交行为（与 Ant Design 默认一致）。
 
 ## 35.6 工作区文件格式
 
@@ -4111,19 +4075,19 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 
 MVP 可以只开放受信任的内置插件，避免过早形成不安全的任意代码执行机制。
 
-## 35.8 表格组件最终决策
+## 35.8 表格组件决策
 
-TanStack Table 与 TanStack Virtual 为当前推荐方案，但必须在原型完成后确认。
+已确定采用 Ant Design Table，并与 Ant Design 组件框架统一。
 
-如果出现以下问题，应重新评估：
+原型阶段重点验证：
 
-- 编辑状态与虚拟化难以兼容；
-- 多单元格粘贴实现成本过高；
-- 键盘导航无法满足要求；
-- 屏幕阅读器支持不足；
-- VSCode Webview 性能不稳定；
-- 大量实时更新引起明显重渲染；
-- 列宽拖动和固定列实现复杂度过高。
+- 受控输入与虚拟滚动的兼容性；
+- 多单元格粘贴；
+- 键盘导航；
+- 屏幕阅读器支持；
+- VSCode Webview 性能；
+- 大量实时更新下的渲染表现；
+- 列宽拖动和固定列。
 
 替换表格组件不得影响领域层和工作区数据结构。
 
@@ -4715,31 +4679,31 @@ CSV 导入导出不应直接成为领域数据源，必须先解析、校验并�
 
 # 49. PRD 与技术模块追踪关系
 
-| PRD 能力 | 主要技术模块 |
-|---|---|
-| Modbus RTU | protocol-modbus、communication、platform-web、platform-node |
-| Modbus TCP | protocol-modbus、communication、platform-node |
-| COM10 以上 | platform-node、Electron 和 VSCode 集成测试 |
-| 单行读取 | register-table、communication、protocol-modbus |
-| 单行写入 | register-table、communication、data-conversion |
-| 写后回读 | WriteVerifyCoordinator、RequestScheduler |
-| 全表读取 | BatchReadCoordinator |
-| 周期轮询 | PollingCoordinator、RequestScheduler |
-| 不连续寄存器 | RegisterSheet、RegisterRow |
-| 数据类型 | data-conversion |
-| 多标签页 | register-table、workspace、ui |
-| 状态恢复 | workspace、各平台 Repository Adapter |
-| 通信日志 | logging、communication |
-| 通信属性 | connection session、UI ViewModel |
-| 三端适配 | platform-api、各平台 Adapter 和 Host |
-| 插件基础 | plugin-api、Plugin Host、Plugin Manager UI |
-| 现代界面 | ui、ui-theme |
-| 1000 行表格 | TanStack Table、TanStack Virtual、性能测试 |
-| 浏览器不支持 TCP | Capability Matrix、Browser Host |
-| Electron 安全 | Main、Preload、Renderer 隔离 |
-| VSCode 主题适配 | VSCode Theme Adapter |
-| 国际化 | UI 文案资源和错误消息键 |
-| 测试驱动 | test-kit、Vitest、Playwright、平台集成测试 |
+| PRD 能力         | 主要技术模块                                                |
+| ---------------- | ----------------------------------------------------------- |
+| Modbus RTU       | protocol-modbus、communication、platform-web、platform-node |
+| Modbus TCP       | protocol-modbus、communication、platform-node               |
+| COM10 以上       | platform-node、Electron 和 VSCode 集成测试                  |
+| 单行读取         | register-table、communication、protocol-modbus              |
+| 单行写入         | register-table、communication、data-conversion              |
+| 写后回读         | WriteVerifyCoordinator、RequestScheduler                    |
+| 全表读取         | BatchReadCoordinator                                        |
+| 周期轮询         | PollingCoordinator、RequestScheduler                        |
+| 不连续寄存器     | RegisterSheet、RegisterRow                                  |
+| 数据类型         | data-conversion                                             |
+| 多标签页         | register-table、workspace、ui                               |
+| 状态恢复         | workspace、各平台 Repository Adapter                        |
+| 通信日志         | logging、communication                                      |
+| 通信属性         | connection session、UI ViewModel                            |
+| 三端适配         | platform-api、各平台 Adapter 和 Host                        |
+| 插件基础         | plugin-api、Plugin Host、Plugin Manager UI                  |
+| 现代界面         | ui、ui-theme                                                |
+| 1000 行表格      | Ant Design Table、性能测试                                  |
+| 浏览器不支持 TCP | Capability Matrix、Browser Host                             |
+| Electron 安全    | Main、Preload、Renderer 隔离                                |
+| VSCode 主题适配  | VSCode Theme Adapter                                        |
+| 国际化           | UI 文案资源和错误消息键                                     |
+| 测试驱动         | test-kit、Vitest、Playwright、平台集成测试                  |
 
 该追踪表用于确认 PRD 能力具有明确技术归属，不替代详细测试追踪矩阵。
 
@@ -4813,7 +4777,7 @@ AGENTS.md 说明 AI 代理如何在该工程中安全执行开发任务。
 8. RTU 和 TCP 分帧方案完成测试；
 9. RequestScheduler 行为已确认；
 10. 轮询间隔语义已确认；
-11. Data 读取值和待写值分离方案已确认；
+11. Data 单元格单一值模型与读取结果强制覆盖方案已确认；
 12. 工作区持久化和迁移方案已确认；
 13. 插件 MVP 装载范围已确认；
 14. Electron IPC 安全边界已确认；

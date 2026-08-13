@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "plugins/*"
+  - "tooling/*"
+  - "tests/*"
+
+allowBuilds:
+  "@serialport/bindings-cpp": true
+  "@vscode/vsce-sign": true
+  electron: true
+  electron-winstaller: true
+  keytar: false
