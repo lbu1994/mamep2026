@@ -17,4 +17,9 @@ export class InMemoryWorkspaceRepository implements WorkspaceRepositoryPort {
     this.saveCount += 1;
     return ok(undefined);
   }
+
+  async clear(): Promise<Result<void>> {
+    this.stored = null;
+    return ok(undefined);
+  }
 }

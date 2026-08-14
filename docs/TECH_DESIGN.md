@@ -688,15 +688,18 @@ Host 负责装配具体适配器，不实现领域规则。
 包含：
 
 - 表格应用服务；
-- 行增删移动；
-- 复制和粘贴模型；
+- 行增删移动（含插入、批量移动、批量删除，`row-operations.ts`）；
+- 复制和粘贴模型（含系统剪贴板 CSV 编解码与应用内剪贴板，`row-clipboard.ts`）；
+- 多行选择状态（会话态 `selectedRowIds`，由 UI 层 Ant Design `rowSelection` 驱动）；
 - 地址提交；
 - 单元格直接编辑；
 - 读取结果应用；
 - 写入值解析与校验；
 - 状态和错误投影；
-- 撤销与重做命令；
+- 撤销与重做命令（P1 未来项，当前未实现）；
 - 对通信服务的用例封装。
+
+> **行编辑实现说明（2026-08-15，产品决策见 [ADR-015](adr/ADR-015-行编辑交互与剪贴板决策.md)）**：插入 / 剪切 / 粘贴 / 多行选择 / 键盘快捷键 / 行级右键菜单已在浏览器 MVP 完整实现。多选采用 Ant Design Table `rowSelection` 原生能力（复选框列、表头全选、Shift 范围选择、Ctrl 多选），领域层只持有 `selectedRowIds: RowId[]`（不依赖 AntD 内部结构，AGENTS §25.4）；行级右键菜单用 `Dropdown trigger={['contextMenu']}`；系统剪贴板经 `AppHost` 端口（`copyTextToClipboard` / `readTextFromClipboard`，浏览器端 `navigator.clipboard`）。
 
 ## 6.9 packages/workspace
 
@@ -759,7 +762,7 @@ Host 负责装配具体适配器，不实现领域规则。
 - 顶部应用栏；
 - 侧边栏；
 - 标签页；
-- 寄存器表；
+- 寄存器表（含多行选择、行级右键菜单、行级键盘快捷键，见 [ADR-015](adr/ADR-015-行编辑交互与剪贴板决策.md)）；
 - 连接配置；
 - 日志面板；
 - 插件页面；
@@ -796,7 +799,7 @@ Host 负责装配具体适配器，不实现领域规则。
 | ------------ | -----------------------: | -------: | -------------: |
 | Modbus RTU   |                     支持 |     支持 |           支持 |
 | Modbus TCP   |                   不支持 |     支持 |           支持 |
-| 串口枚举     |     受浏览器授权模型限制 |     支持 |           支持 |
+| 串口枚举     |   授权 picker 承担，无全量枚举 |     支持 |           支持 |
 | COM10 及以上 | 由浏览器设备选择机制处理 |     支持 |           支持 |
 | 本地文件系统 |                     受限 |     支持 |           支持 |
 | 工作区文件   |       可通过导入导出实现 |     支持 |           支持 |
@@ -1033,6 +1036,12 @@ RTU 和 TCP 可以使用不同的 Transport 配置，但应向 CommunicationSess
 9. 处理当前浏览器不支持的串口参数。
 
 浏览器端不能依赖传统 COM 端口字符串作为设备唯一标识。
+
+浏览器端（BrowserPlatformHost）不实现自定义串口枚举列表，以授权 picker 替代：
+
+- `requestPort()` 打开系统原生设备选择器，每次打开即实时枚举系统可用设备（等同「自动枚举 + 刷新」），用户取消返回 null；
+- `getPorts()` 只返回已授权端口，无法枚举未授权设备（Web Serial 隐私模型）；当前实现已声明该类型但从未调用；
+- 因此浏览器端无串口列表/刷新按钮/`listSerialPorts` 能力，能力矩阵声明为 `serialPorts: "browser-picker"`。
 
 浏览器持久化时只保存：
 
@@ -1852,7 +1861,7 @@ AutoSaveCoordinator 监听可持久状态变更。
 5. 不在保存过程中读取正在变化的可变对象；
 6. 保存失败发布结构化错误；
 7. 保存失败不得清除内存状态；
-8. UI 展示保存中、已保存和失败状态；
+8. 自动保存不对外展示保存状态，仅手动保存场景展示保存中、已保存和失败状态；
 9. 保存操作串行执行；
 10. 新保存请求到来时合并中间状态，只保存最新快照。
 
@@ -2173,7 +2182,7 @@ UI 不通过字符串匹配判断错误类型。
 主要能力：
 
 - getCapabilities；
-- listSerialPorts；
+- listSerialPorts（仅 Electron/VSCode 枚举实现；Browser Host 不实现，由授权 picker 承担）；
 - requestSerialPort；
 - connect；
 - disconnect；
@@ -2668,7 +2677,7 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 - 对话框焦点；
 - 多行复制粘贴；
 - 键盘导航；
-- 保存状态；
+- 自动保存静默（不对外展示保存状态）；
 - 插件加载错误。
 
 组件测试使用 Application Service Fake，不连接真实串口。

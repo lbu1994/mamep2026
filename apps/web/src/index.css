@@ -1,3 +1,9 @@
+/* =========================================================
+   Mamep2026 — 应用级样式
+   取色统一使用 antd CSS 变量（--ant-*，由 ConfigProvider cssVar 输出），
+   保证浅/深主题自动适配；只在极少数地方提供 fallback。
+   ========================================================= */
+
 html,
 body,
 #root {
@@ -7,9 +13,16 @@ body,
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+  font-family: var(
+    --ant-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif
+  );
 }
 
 .connection-settings-group {
@@ -21,4 +34,454 @@ body {
   border-bottom: 1px solid var(--ant-color-split, rgba(5, 5, 5, 0.06));
   padding-bottom: 6px;
   margin-bottom: 12px;
+}
+
+/* ---------------- 布局骨架 ---------------- */
+
+.mamep-main {
+  display: flex;
+  min-width: 0;
+  height: 100vh;
+}
+
+.mamep-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---------------- 顶部工具栏 ---------------- */
+
+.mamep-header.ant-layout-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  line-height: 44px;
+  padding: 0 12px;
+  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--ant-color-split);
+}
+
+.mamep-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.mamep-header__brand-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--ant-color-text);
+}
+
+.mamep-header__protocol {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ant-color-primary-text);
+  background: var(--ant-color-primary-bg);
+  border: 1px solid var(--ant-color-primary-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.mamep-header__group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mamep-header__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--ant-color-split);
+  margin: 0 2px;
+  flex: none;
+}
+
+.mamep-header__spacer {
+  flex: 1;
+}
+
+/* 连接控制区：Connection Settings + CONNECT + 状态，作为完整逻辑单元 */
+.connection-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 4px;
+  border: 1px solid var(--ant-color-split);
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+/* 连接状态：圆点 + 文字，颜色之外仍有形状/文字表达 */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* ---------------- Sheet 侧边栏 ---------------- */
+
+.sheet-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: var(--ant-color-bg-container);
+}
+
+.sheet-sidebar:not(.ant-layout-sider-collapsed) {
+  border-right: 1px solid var(--ant-color-split);
+}
+
+.sheet-sidebar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 2px;
+}
+
+.sheet-sidebar__title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ant-color-text-tertiary);
+}
+
+.sheet-sidebar__collapse {
+  color: var(--ant-color-text-tertiary);
+}
+
+.sheet-sidebar__list {
+  list-style: none;
+  margin: 4px 6px;
+  padding: 0;
+}
+
+.sheet-item {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ant-color-text);
+  user-select: none;
+}
+
+.sheet-item:hover {
+  background: var(--ant-color-fill-secondary);
+}
+
+.sheet-item--active {
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary-text);
+  font-weight: 600;
+}
+
+.sheet-item__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-item__input {
+  width: 100%;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--ant-color-primary);
+  border-radius: 4px;
+  font: inherit;
+}
+
+.sheet-sidebar__section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 2px;
+}
+
+.sheet-sidebar__section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ant-color-text-tertiary);
+}
+
+.sheet-sidebar__section-action {
+  color: var(--ant-color-text-tertiary);
+}
+
+.sheet-sidebar__footer {
+  margin-top: auto;
+  padding: 8px 12px 10px;
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+  white-space: nowrap;
+}
+
+/* 表项 More 按钮：平时淡出，悬停/聚焦时显现，降低视觉噪声 */
+.sheet-item__more {
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.sheet-item:hover .sheet-item__more,
+.sheet-item:focus-within .sheet-item__more {
+  opacity: 1;
+}
+
+/* ---------------- 寄存器表格 ---------------- */
+
+.register-table-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-split);
+  border-radius: 4px;
+}
+
+.sheet-sidebar.ant-layout-sider-light {
+  background: var(--ant-color-bg-container);
+}
+
+/* 寄存器表标签页：每个 Sheet 一个页签（antd Tabs editable-card） */
+.register-table-tabs.ant-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.register-table-tabs .ant-tabs-nav {
+  flex: none;
+  margin-bottom: 0;
+  padding: 6px 8px 0;
+}
+
+.register-table-tabs .ant-tabs-body-holder,
+.register-table-tabs .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.register-table-tabs .ant-tabs-content {
+  height: 100%;
+}
+
+.sheet-tab__input {
+  width: 110px;
+  padding: 1px 6px;
+  font-size: 12px;
+  border: 1px solid var(--ant-color-primary);
+  border-radius: 4px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+  outline: none;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 6px;
+}
+
+.table-toolbar__spacer {
+  flex: 1;
+}
+
+.table-toolbar__info {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+}
+
+.table-toolbar__radix {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.table-toolbar__radix-label {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  white-space: nowrap;
+}
+
+/* 行操作：平时淡出，悬停行 / 行内键盘聚焦时显现，降低视觉噪声 */
+.row-actions {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.ant-table-row:hover .row-actions,
+.row-actions:focus-within {
+  opacity: 1;
+}
+
+/* 行右键菜单由 antd Dropdown 提供；表格包装层保持原布局（display:contents 不产生盒子） */
+.register-table__context {
+  display: contents;
+}
+
+/* ---------------- 底部面板 ---------------- */
+
+.bottom-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--ant-color-bg-container);
+  border-top: 1px solid var(--ant-color-split);
+}
+
+.bottom-panel__resize {
+  flex: none;
+  height: 6px;
+  cursor: row-resize;
+  touch-action: none;
+  border-top: 1px solid transparent;
+}
+
+.bottom-panel__resize:hover,
+.bottom-panel__resize--active {
+  background: var(--ant-color-primary-bg);
+}
+
+.bottom-panel .ant-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bottom-panel .ant-tabs-nav {
+  padding: 0 8px;
+}
+
+.bottom-panel .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 8px 8px;
+}
+
+/* antd v6.6 将内容容器渲染为 .ant-tabs-body-holder */
+.bottom-panel .ant-tabs-body-holder {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 8px 8px;
+}
+
+.bottom-panel .ant-tabs-content {
+  height: 100%;
+}
+
+.bottom-panel--collapsed {
+  height: auto;
+}
+
+.bottom-panel--collapsed .ant-tabs-content-holder,
+.bottom-panel--collapsed .ant-tabs-body-holder {
+  display: none;
+}
+
+.bottom-panel--collapsed .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+/* 折叠时新错误到达 → Messages 标签红点 */
+.messages-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-error);
+}
+
+/* ---------------- 日志列表 ---------------- */
+
+.log-list {
+  font-family:
+    ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, Menlo, monospace;
+  font-size: 12px;
+}
+
+.log-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--ant-color-split);
+}
+
+.log-row__time {
+  flex: none;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+}
+
+.log-row__text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+  color: var(--ant-color-text);
+}
+
+.log-row__detail {
+  flex: none;
+  color: var(--ant-color-text-tertiary);
+}
+
+/* ---------------- 空状态 ---------------- */
+
+.empty-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  min-height: 180px;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.empty-guide__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.empty-guide__hint {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
 }

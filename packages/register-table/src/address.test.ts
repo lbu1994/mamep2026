@@ -2,22 +2,37 @@ import { describe, expect, it } from "vitest";
 import { RegisterAddress, createEmptyRow } from "@mamep2026/domain";
 import { commitAddress, computeSentAddress } from "./address";
 
-describe("commitAddress", () => {
-  it("commits a valid hex draft and normalizes the value", () => {
+describe("commitAddress (hex)", () => {
+  it("commits a valid hex draft and normalizes to 4-digit uppercase", () => {
     const row = createEmptyRow();
-    row.addressDraft = "  ab ";
-    const result = commitAddress(row, "  ab ");
+    const result = commitAddress(row, "  ab ", "hex");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.addressValue?.value).toBe(0xab);
-      expect(result.value.addressDraft).toBe("  ab "); // 校验失败前不修改 draft
+      expect(result.value.addressDraft).toBe("00AB");
+    }
+  });
+
+  it("normalizes lowercase short hex to padded uppercase", () => {
+    const row = createEmptyRow();
+    const result = commitAddress(row, "1f", "hex");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.addressValue?.value).toBe(0x1f);
+      expect(result.value.addressDraft).toBe("001F");
     }
   });
 
   it("keeps the draft and reports invalid input without clearing it", () => {
     const row = createEmptyRow();
-    row.addressDraft = "zzz";
-    const result = commitAddress(row, "zzz");
+    const result = commitAddress(row, "zzz", "hex");
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error.code).toBe("ADDRESS_INVALID_CHARACTERS");
+  });
+
+  it("rejects the 0x prefix in hex mode", () => {
+    const result = commitAddress(createEmptyRow(), "0x12", "hex");
     expect(result.ok).toBe(false);
     if (!result.ok)
       expect(result.error.code).toBe("ADDRESS_INVALID_CHARACTERS");
@@ -25,8 +40,48 @@ describe("commitAddress", () => {
 
   it("treats blank input as empty address (no request to send)", () => {
     const row = createEmptyRow();
-    row.addressDraft = "   ";
-    const result = commitAddress(row, "   ");
+    const result = commitAddress(row, "   ", "hex");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.addressValue).toBeNull();
+  });
+});
+
+describe("commitAddress (dec)", () => {
+  it("commits a valid decimal draft keeping trimmed original text", () => {
+    const row = createEmptyRow();
+    const result = commitAddress(row, " 31 ", "dec");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.addressValue?.value).toBe(31);
+      expect(result.value.addressDraft).toBe("31");
+    }
+  });
+
+  it("keeps leading zeros in dec mode (no padding applied)", () => {
+    const row = createEmptyRow();
+    const result = commitAddress(row, "0031", "dec");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.addressValue?.value).toBe(31);
+      expect(result.value.addressDraft).toBe("0031");
+    }
+  });
+
+  it("rejects hex letters in dec mode", () => {
+    const result = commitAddress(createEmptyRow(), "1F", "dec");
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error.code).toBe("ADDRESS_INVALID_CHARACTERS");
+  });
+
+  it("rejects values exceeding 65535 in dec mode", () => {
+    const result = commitAddress(createEmptyRow(), "70000", "dec");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("ADDRESS_OUT_OF_RANGE");
+  });
+
+  it("treats blank input as empty address (no request to send)", () => {
+    const result = commitAddress(createEmptyRow(), "   ", "dec");
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.addressValue).toBeNull();
   });

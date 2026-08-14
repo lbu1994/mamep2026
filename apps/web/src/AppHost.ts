@@ -11,6 +11,7 @@ import type {
 } from "@mamep2026/domain";
 import {
   browserCapabilities,
+  createEmptyWorkspace,
   createMamepError,
   fail,
   ok,
@@ -37,10 +38,7 @@ import {
 } from "@mamep2026/logging";
 import type { SerialDeviceHandle, PlatformHost } from "@mamep2026/platform-api";
 import { PluginRegistry } from "@mamep2026/plugin-api";
-import {
-  computeSentAddress,
-  RegisterTableService,
-} from "@mamep2026/register-table";
+import { RegisterTableService } from "@mamep2026/register-table";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { AutoSaveCoordinator } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
@@ -131,6 +129,15 @@ export class BrowserAppHost implements AppHost {
 
   async loadWorkspace(): Promise<Result<Workspace>> {
     return this.repository.load();
+  }
+
+  async resetWorkspace(): Promise<Result<Workspace>> {
+    const cleared = await this.repository.clear();
+    if (!cleared.ok) return cleared;
+    const fresh = createEmptyWorkspace();
+    // 立即持久化空工作区，避免刷新后残留旧数据。
+    this.autoSave.scheduleSave(fresh);
+    return ok(fresh);
   }
 
   scheduleSave(workspace: Workspace): void {
@@ -239,6 +246,12 @@ export class BrowserAppHost implements AppHost {
         for (const listener of this.commLogListeners) listener(event);
       },
       onStateChange: (state) => {
+        if (state === "interrupted") {
+          // 设备拔出：停止轮询与追踪，并提示用户（§16.2.5）。
+          this.stopPolling();
+          this.trace?.stopAll();
+          this.pushMessage("error", "messages.deviceDisconnected");
+        }
         for (const listener of this.connectionListeners) listener(state);
       },
     });
@@ -277,6 +290,30 @@ export class BrowserAppHost implements AppHost {
     const result = await this.session?.disconnect();
     this.session = null;
     return result ?? { ok: true, value: undefined };
+  }
+
+  async copyTextToClipboard(text: string): Promise<Result<void>> {
+    if (navigator.clipboard === undefined) {
+      return fail(clipboardUnavailableError());
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      return ok(undefined);
+    } catch {
+      return fail(clipboardUnavailableError());
+    }
+  }
+
+  async readTextFromClipboard(): Promise<Result<string | null>> {
+    if (navigator.clipboard === undefined) {
+      return fail(clipboardUnavailableError());
+    }
+    try {
+      const text = await navigator.clipboard.readText();
+      return ok(text === "" ? null : text);
+    } catch {
+      return fail(clipboardUnavailableError());
+    }
   }
 
   getConnectionState(): ConnectionState {
@@ -409,10 +446,13 @@ export class BrowserAppHost implements AppHost {
   }
 }
 
-/** 供 UI 计算轮询目标的地址调整（Address Adjust 应用于轮询发送地址）。 */
-export function computePollingAddress(
-  address: number,
-  adjust: "off" | "on",
-): Result<number> {
-  return computeSentAddress(address, adjust);
+/** 系统剪贴板不可用（无权限、非安全上下文等）时返回的结构化错误。 */
+function clipboardUnavailableError() {
+  return createMamepError({
+    code: "CLIPBOARD_UNAVAILABLE",
+    category: "capability",
+    severity: "warning",
+    userMessageKey: "errors.clipboardUnavailable",
+    technicalMessage: "system clipboard is not available in this context",
+  });
 }

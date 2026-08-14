@@ -49,6 +49,11 @@ class InMemoryRepository implements WorkspaceRepositoryPort {
     this.saved.push(workspace);
     return { ok: true, value: undefined };
   }
+
+  async clear(): Promise<Result<void>> {
+    this.saved = [];
+    return { ok: true, value: undefined };
+  }
 }
 
 describe("AutoSaveCoordinator", () => {

@@ -1,73 +1,57 @@
-# React + TypeScript + Vite
+# Mamep2026
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具。单表管理不连续保持寄存器，仅功能码 03 读 / 0x10 写，插件隔离厂商私有功能，不以复刻原 M@MEp2006 界面为目标。
 
-Currently, two official plugins are available:
+> **面向 AI 编码代理**：工作入口与速览见 [AGENTS.md](AGENTS.md)；完整 43 节开发手册见 [docs/AGENTS.md](docs/AGENTS.md)。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 技术栈
 
-## React Compiler
+- TypeScript（strict）+ pnpm 11 monorepo + Turborepo
+- React 19 + Vite + Ant Design 6（三端共享同一套 UI）
+- 状态管理 Zustand；表单与校验 React Hook Form + Zod
+- 浏览器持久化 IndexedDB（idb）；三端统一领域模型与端口适配
+- 测试：Vitest（包内单测）、Playwright（浏览器 E2E，系统 Edge）
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 仓库结构
 
-## Expanding the ESLint configuration
+- `apps/web/` — 浏览器端（Vite + React），装配平台能力与共享 UI
+- `packages/` — 分层共享包：`domain`、`protocol-modbus`、`data-conversion`、`communication`、`workspace`、`logging`、`plugin-api`、`register-table`、`platform-api`、`platform-web`、`ui`、`test-kit`
+- `tests/` — `acceptance`（ATDD 核心闭环）与 `e2e-web`（Playwright）
+- `electron/main.ts` — Electron 主进程（本轮仅保证编译不破坏）
+- `vscode-extension/` — VSCode 插件（同上）
+- `docs/` — PRD、TECH_DESIGN、RESEARCH、ADR、界面特征整理、测试指南
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 常用命令
 
-```js
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
+| 命令 | 作用 |
+| --- | --- |
+| `pnpm dev` | 网页端 Vite dev server（http://localhost:5173），不启动 Electron |
+| `pnpm dev:electron` | Electron 开发模式 |
+| `pnpm build` / `pnpm build:electron` | 构建网页端 / Electron |
+| `pnpm build:vscode` | 编译 `vscode-extension/` |
+| `pnpm lint` | ESLint（全仓） |
+| `pnpm typecheck` | turbo 全包类型检查 |
+| `pnpm test` | turbo 全包 vitest |
+| `pnpm test:acceptance` / `pnpm test:e2e:web` | 单独跑对应测试包 |
+| `pnpm format` / `pnpm format:check` | Prettier |
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## 快速开始
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+```bash
+pnpm install
+pnpm dev               # 打开 http://localhost:5173/?mockTransport=1 体验内置模拟 Modbus RTU
+pnpm test              # 全包单测
+pnpm test:e2e:web      # 浏览器 E2E（Playwright 使用系统 Edge）
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+> `?mockTransport=1` 启用 dev 内置模拟 Modbus RTU 传输（生产构建不启用），无需真实串口即可调试完整读写/轮询/Trace 闭环。
 
-```js
-// eslint.config.js
-import reactX from "eslint-plugin-react-x";
-import reactDom from "eslint-plugin-react-dom";
+## 文档地图
 
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs["recommended-typescript"],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
-```
+完整文档地图见 [AGENTS.md](AGENTS.md) 的「文档地图」一节。核心文档：
+
+- [docs/PRD.md](docs/PRD.md) — 产品范围、MVP（P0~P3）、验收
+- [docs/TECH_DESIGN.md](docs/TECH_DESIGN.md) — 技术设计、ADR、三端能力矩阵、测试策略
+- [docs/RESEARCH.md](docs/RESEARCH.md) — 调研结论
+- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~015）
+- [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md) — 浏览器 E2E 工作流与踩坑

@@ -129,7 +129,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
           ✕
         </Button>
       </Space>
-      <Space direction="vertical" style={{ width: "100%" }} size={6}>
+      <Space orientation="vertical" style={{ width: "100%" }} size={6}>
         <Space>
           <Typography.Text type="secondary">{t("trace.name")}</Typography.Text>
           <Input

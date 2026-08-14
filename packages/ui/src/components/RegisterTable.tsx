@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Button,
   Checkbox,
-  Empty,
+  Dropdown,
   Input,
+  Segmented,
   Select,
   Space,
   Switch,
@@ -19,10 +20,11 @@ import {
   PlusOutlined,
 } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { DataType, RegisterRow, SheetId } from "@mamep2026/domain";
+import type { DataType, RegisterRow, RowId, SheetId } from "@mamep2026/domain";
 import { dataTypes } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { useAppStore } from "../app-store";
+import { buildRowMenuItems, type RowMenuActions } from "./RegisterRowMenu";
 
 const TYPE_LABELS: Record<DataType, string> = {
   hex: "table.hex",
@@ -63,6 +65,26 @@ export function RegisterTable({
   const openTraceWindow = useAppStore((s) => s.openTraceWindow);
   const closeTraceWindow = useAppStore((s) => s.closeTraceWindow);
   const appendMessage = useAppStore((s) => s.appendMessage);
+  const sheets = useAppStore((s) => s.workspace.sheets);
+  const setSheetRegisterRadix = useAppStore((s) => s.setSheetRegisterRadix);
+  const [readAllRunning, setReadAllRunning] = useState(false);
+  const [menuRowId, setMenuRowId] = useState<RowId | null>(null);
+
+  const activeSheetId = useAppStore(
+    (s) => s.activeSheetId ?? s.workspace.activeSheetId,
+  );
+  const selectedRowIds = useAppStore((s) => s.selectedRowIds);
+  const setSelectedRowIds = useAppStore((s) => s.setSelectedRowIds);
+  const insertRowAfter = useAppStore((s) => s.insertRowAfter);
+  const insertRowBefore = useAppStore((s) => s.insertRowBefore);
+  const moveSelectedRows = useAppStore((s) => s.moveSelectedRows);
+  const deleteSelectedRows = useAppStore((s) => s.deleteSelectedRows);
+  const copySelectedRows = useAppStore((s) => s.copySelectedRows);
+  const cutSelectedRows = useAppStore((s) => s.cutSelectedRows);
+  const pasteRows = useAppStore((s) => s.pasteRows);
+
+  const sheet = sheets.find((sh) => sh.sheetId === sheetId);
+  const registerRadix = sheet?.registerRadix ?? "dec";
 
   const typeLabel = (type: DataType): string => {
     const label = TYPE_LABELS[type];
@@ -88,6 +110,7 @@ export function RegisterTable({
         timestamp: Date.now(),
         level: "info",
         messageKey: "messages.writeSucceeded",
+        params: { address: row.addressDraft },
         detail: null,
       });
     } else {
@@ -95,8 +118,38 @@ export function RegisterTable({
         timestamp: Date.now(),
         level: "error",
         messageKey: "messages.writeFailed",
+        params: { detail: result.error.code },
         detail: result.error.code,
       });
+    }
+  };
+
+  const handleReadAll = async (): Promise<void> => {
+    if (host === null || host === undefined) return;
+    setReadAllRunning(true);
+    try {
+      const handle = host.readAllRows(
+        rows.map((row) => ({
+          key: row.rowId,
+          address: row.addressValue?.value ?? null,
+        })),
+      );
+      const result = await handle.promise;
+      if (result.ok) {
+        appendMessage({
+          timestamp: Date.now(),
+          level: "info",
+          messageKey: "table.batchSummary",
+          params: {
+            success: result.value.successCount,
+            failure: result.value.failureCount,
+            skipped: result.value.skippedCount,
+          },
+          detail: null,
+        });
+      }
+    } finally {
+      setReadAllRunning(false);
     }
   };
 
@@ -109,13 +162,148 @@ export function RegisterTable({
     };
   };
 
+  const selectedIds = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
+
+  /** 普通点击行空白处单选该行；多选/范围选择由 antd rowSelection 复选框原生处理。 */
+  const handleRowClick = (rowId: RowId, event: React.MouseEvent): void => {
+    const target = event.target as HTMLElement;
+    if (
+      target.closest(
+        "input, textarea, select, button, a, .ant-select, .ant-switch, .ant-checkbox, .ant-table-selection-column",
+      ) !== null
+    ) {
+      return;
+    }
+    setSelectedRowIds([rowId]);
+  };
+
+  /** 行级右键：阻止默认菜单；目标行不在选中集合时先单选它，再由 Dropdown 弹出菜单。 */
+  const handleRowContextMenu = (
+    rowId: RowId,
+    event: React.MouseEvent,
+  ): void => {
+    event.preventDefault();
+    if (!selectedIds.has(rowId)) {
+      setSelectedRowIds([rowId]);
+    }
+    setMenuRowId(rowId);
+  };
+
+  const lastSelectedRowId =
+    selectedRowIds.length > 0
+      ? (selectedRowIds[selectedRowIds.length - 1] ?? null)
+      : null;
+
+  /**
+   * 行级键盘：窗口级监听，仅在焦点不在单元格输入控件时触发（避免与单元格编辑/addressDraft 冲突），
+   * 且仅作用于当前活动表（多标签页只响应一张表）。
+   */
+  const handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    if (sheetId !== activeSheetId) return;
+    const target = event.target;
+    // 仅忽略文本类编辑控件（单元格输入/备注/下拉），避免与编辑冲突；
+    // 复选框/开关/按钮等选择控件不拦截快捷键（选中后可直接 Delete/Ctrl+C 等）。
+    if (
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        target.closest(
+          "input[type='text'], input:not([type]), textarea, select, .ant-select",
+        ) !== null)
+    ) {
+      return;
+    }
+    if (event.key === "Escape") {
+      setMenuRowId(null);
+      return;
+    }
+    const mod = event.ctrlKey || event.metaKey;
+    if (event.key === "Delete") {
+      if (selectedRowIds.length > 0) {
+        event.preventDefault();
+        deleteSelectedRows(sheetId);
+      }
+      return;
+    }
+    if (event.altKey && event.key === "ArrowUp") {
+      event.preventDefault();
+      moveSelectedRows(sheetId, "up");
+      return;
+    }
+    if (event.altKey && event.key === "ArrowDown") {
+      event.preventDefault();
+      moveSelectedRows(sheetId, "down");
+      return;
+    }
+    if (mod) {
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        event.preventDefault();
+        copySelectedRows(sheetId);
+        return;
+      }
+      if (key === "x") {
+        event.preventDefault();
+        cutSelectedRows(sheetId);
+        return;
+      }
+      if (key === "v") {
+        event.preventDefault();
+        void pasteRows(sheetId, lastSelectedRowId);
+        return;
+      }
+      if (key === "i") {
+        event.preventDefault();
+        if (lastSelectedRowId !== null) {
+          insertRowAfter(sheetId, lastSelectedRowId);
+        } else {
+          addRow(sheetId);
+        }
+        return;
+      }
+    }
+  };
+
+  // 通过 ref 读取最新 handler：每次渲染后在 effect 中更新，窗口监听只绑定一次。
+  const keydownRef = useRef<(event: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    keydownRef.current = handleGlobalKeyDown;
+  });
+  useEffect(() => {
+    const listener = (event: KeyboardEvent): void => {
+      keydownRef.current(event);
+    };
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
+
+  const rowMenuActions: RowMenuActions = {
+    onInsertAbove: (rowId) => insertRowBefore(sheetId, rowId),
+    onInsertBelow: (rowId) => insertRowAfter(sheetId, rowId),
+    onMoveUp: () => moveSelectedRows(sheetId, "up"),
+    onMoveDown: () => moveSelectedRows(sheetId, "down"),
+    onCopy: () => copySelectedRows(sheetId),
+    onCut: () => cutSelectedRows(sheetId),
+    onPaste: () => void pasteRows(sheetId, menuRowId),
+    onDelete: () => deleteSelectedRows(sheetId),
+  };
+
+  const rowMenuItems =
+    menuRowId === null
+      ? []
+      : buildRowMenuItems(
+          t,
+          { rowId: menuRowId, selectionCount: selectedRowIds.length },
+          rowMenuActions,
+        );
+
   const columns = useMemo<ColumnsType<RegisterRow>>(
     () => [
-      { title: t("table.no"), dataIndex: "order", width: 48 },
+      { title: t("table.no"), dataIndex: "order", width: 40, align: "center" },
       {
         title: t("table.tm"),
         key: "tm",
-        width: 48,
+        width: 40,
+        align: "center",
         render: (_, row) => (
           <Checkbox
             checked={row.traceEnabled}
@@ -139,7 +327,7 @@ export function RegisterTable({
       {
         title: t("table.name"),
         key: "name",
-        width: 180,
+        width: 140,
         render: (_, row) => (
           <Input
             style={{ width: "100%" }}
@@ -156,9 +344,12 @@ export function RegisterTable({
         ),
       },
       {
-        title: t("table.register"),
+        title:
+          registerRadix === "hex"
+            ? t("table.registerHex")
+            : t("table.registerDec"),
         key: "address",
-        width: 130,
+        width: 112,
         render: (_, row) => (
           <Tooltip
             title={
@@ -194,26 +385,30 @@ export function RegisterTable({
       {
         title: t("table.wp"),
         key: "wp",
-        width: 48,
+        width: 40,
+        align: "center",
         render: (_, row) => (
-          <Switch
-            size="small"
-            aria-label="WP"
-            checked={row.pollingEnabled}
-            onChange={(checked) =>
-              updateRow(row.rowId, (r) => ({
-                ...r,
-                pollingEnabled: checked,
-                updatedAt: Date.now(),
-              }))
-            }
-          />
+          <Tooltip title={t("table.wpHint")}>
+            <Switch
+              size="small"
+              aria-label="WP"
+              checked={row.pollingEnabled}
+              onChange={(checked) =>
+                updateRow(row.rowId, (r) => ({
+                  ...r,
+                  pollingEnabled: checked,
+                  updatedAt: Date.now(),
+                }))
+              }
+            />
+          </Tooltip>
         ),
       },
       {
         title: t("table.read"),
         key: "read",
-        width: 90,
+        width: 60,
+        align: "center",
         render: (_, row) => (
           <Button
             size="small"
@@ -227,7 +422,7 @@ export function RegisterTable({
       {
         title: t("table.data"),
         key: "data",
-        width: 140,
+        width: 110,
         render: (_, row) => (
           <Input
             style={{ width: "100%" }}
@@ -246,7 +441,8 @@ export function RegisterTable({
       {
         title: t("table.write"),
         key: "write",
-        width: 90,
+        width: 60,
+        align: "center",
         render: (_, row) => (
           <Button
             size="small"
@@ -260,7 +456,7 @@ export function RegisterTable({
       {
         title: t("table.type"),
         key: "type",
-        width: 160,
+        width: 132,
         render: (_, row) => (
           <Select
             size="small"
@@ -278,7 +474,6 @@ export function RegisterTable({
       {
         title: t("table.comment"),
         key: "comment",
-        width: 200,
         render: (_, row) => (
           <Input
             style={{ width: "100%" }}
@@ -297,9 +492,10 @@ export function RegisterTable({
       {
         title: "",
         key: "actions",
-        width: 150,
+        width: 96,
+        align: "center",
         render: (_, row) => (
-          <Space size={2}>
+          <Space className="row-actions" size={2}>
             <Tooltip title={t("table.moveUp")}>
               <Button
                 size="small"
@@ -338,36 +534,108 @@ export function RegisterTable({
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [connected, traceWindows, t, host],
+    [connected, traceWindows, t, host, registerRadix],
   );
 
   return (
-    <div>
-      <Space style={{ marginBottom: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div className="table-toolbar">
+        {rows.length > 0 ? (
+          <Button
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={() => addRow(sheetId)}
+          >
+            {t("table.addRow")}
+          </Button>
+        ) : null}
         <Button
           size="small"
-          icon={<PlusOutlined />}
-          onClick={() => addRow(sheetId)}
+          loading={readAllRunning}
+          onClick={() => void handleReadAll()}
         >
-          {t("table.addRow")}
+          {t("topbar.readAll")}
         </Button>
-      </Space>
-      <Table<RegisterRow>
-        size="small"
-        rowKey="rowId"
-        columns={columns}
-        dataSource={rows}
-        pagination={false}
-        scroll={{ x: 1200 }}
-        locale={{
-          emptyText: (
-            <Empty
-              description={t("table.emptySheet")}
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
+        {selectedRowIds.length > 0 ? (
+          <span className="table-toolbar__info">
+            {t("table.rowsSelected", { count: selectedRowIds.length })}
+          </span>
+        ) : null}
+        <span className="table-toolbar__spacer" />
+        <Tooltip title={t("table.registerRadixHint")}>
+          <span className="table-toolbar__radix">
+            <span className="table-toolbar__radix-label">
+              {t("table.registerRadixLabel")}
+            </span>
+            <Segmented
+              size="small"
+              aria-label={t("table.addressFormat")}
+              options={[
+                { label: "DEC", value: "dec" },
+                { label: "HEX", value: "hex" },
+              ]}
+              value={registerRadix}
+              onChange={(value) => {
+                if (value === "hex" || value === "dec") {
+                  setSheetRegisterRadix(sheetId, value);
+                }
+              }}
             />
-          ),
+          </span>
+        </Tooltip>
+        <span className="table-toolbar__info">
+          {t("table.rowCount", { count: rows.length })}
+        </span>
+      </div>
+      <Dropdown
+        trigger={["contextMenu"]}
+        open={menuRowId !== null}
+        onOpenChange={(open) => {
+          if (!open) setMenuRowId(null);
         }}
-      />
+        menu={{ items: rowMenuItems }}
+      >
+        <div className="register-table__context">
+          <Table<RegisterRow>
+            size="small"
+            rowKey="rowId"
+            columns={columns}
+            dataSource={rows}
+            pagination={false}
+            scroll={{ x: 900 }}
+            rowSelection={{
+              selectedRowKeys: selectedRowIds,
+              onChange: (keys) =>
+                setSelectedRowIds(keys.map((k) => String(k)) as RowId[]),
+            }}
+            onRow={(record) => ({
+              onClick: (event) => handleRowClick(record.rowId, event),
+              onContextMenu: (event) =>
+                handleRowContextMenu(record.rowId, event),
+            })}
+            locale={{
+              emptyText: (
+                <div className="empty-guide">
+                  <div className="empty-guide__title">
+                    {t("table.emptySheet")}
+                  </div>
+                  <div className="empty-guide__hint">
+                    {t("table.emptySheetHint")}
+                  </div>
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => addRow(sheetId)}
+                  >
+                    {t("table.addRow")}
+                  </Button>
+                </div>
+              ),
+            }}
+          />
+        </div>
+      </Dropdown>
     </div>
   );
 }

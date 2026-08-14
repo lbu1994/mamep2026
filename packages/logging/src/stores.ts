@@ -11,6 +11,8 @@ export interface ApplicationMessage {
   timestamp: number;
   level: MessageLevel;
   messageKey: string;
+  /** 可选 i18n 插值参数，UI 渲染时传给 t()。 */
+  params?: Record<string, string | number>;
   detail: string | null;
 }
 

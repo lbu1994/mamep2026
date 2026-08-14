@@ -48,6 +48,8 @@ export interface AppHost {
   readonly pluginRegistry: PluginRegistry;
 
   loadWorkspace(): Promise<Result<Workspace>>;
+  /** 清除全部持久化数据并返回全新默认工作区（§16.5.5 用户重置损坏工作区）。 */
+  resetWorkspace(): Promise<Result<Workspace>>;
   scheduleSave(workspace: Workspace): void;
   getSaveStatus(): SaveStatus;
   subscribeSaveStatus(listener: (status: SaveStatus) => void): () => void;
@@ -93,4 +95,9 @@ export interface AppHost {
     messageKey: string,
     detail?: string,
   ): void;
+
+  /** 把文本写入系统剪贴板；无权限/非安全上下文时返回结构化错误。 */
+  copyTextToClipboard(text: string): Promise<Result<void>>;
+  /** 读取系统剪贴板文本；无内容返回 ok(null)。 */
+  readTextFromClipboard(): Promise<Result<string | null>>;
 }

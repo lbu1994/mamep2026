@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { List, Modal, Switch, Tag, Typography } from "antd";
+import { Modal, Switch, Tag, Typography } from "antd";
 import { useAppStore } from "../app-store";
 
 export function PluginManagerModal(): React.ReactNode {
@@ -26,33 +26,39 @@ export function PluginManagerModal(): React.ReactNode {
           {t("plugins.empty")}
         </Typography.Paragraph>
       ) : (
-        <List
-          dataSource={plugins}
-          renderItem={(plugin) => (
-            <List.Item
-              actions={[
-                <Switch
-                  key="enabled"
-                  size="small"
-                  checked={registry?.isEnabled(plugin.id) ?? false}
-                  onChange={(checked) => {
-                    registry?.setEnabled(plugin.id, checked);
-                    forceRender((v) => v + 1);
-                  }}
-                />,
-              ]}
+        <div>
+          {plugins.map((plugin) => (
+            <div
+              key={plugin.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "8px 0",
+                borderBottom: "1px solid var(--ant-color-split)",
+              }}
             >
-              <List.Item.Meta
-                title={
-                  <span>
-                    {plugin.name} <Tag>{plugin.version}</Tag>
-                  </span>
-                }
-                description={plugin.description}
+              <div style={{ minWidth: 0 }}>
+                <div>
+                  <Typography.Text strong>{plugin.name}</Typography.Text>{" "}
+                  <Tag>{plugin.version}</Tag>
+                </div>
+                <Typography.Text type="secondary">
+                  {plugin.description}
+                </Typography.Text>
+              </div>
+              <Switch
+                size="small"
+                checked={registry?.isEnabled(plugin.id) ?? false}
+                onChange={(checked) => {
+                  registry?.setEnabled(plugin.id, checked);
+                  forceRender((v) => v + 1);
+                }}
               />
-            </List.Item>
-          )}
-        />
+            </div>
+          ))}
+        </div>
       )}
       {loadErrors.length > 0 ? (
         <div>

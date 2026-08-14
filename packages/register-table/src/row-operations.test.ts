@@ -7,8 +7,11 @@ import {
 import {
   addRowAfter,
   deleteRow,
+  deleteRows,
   duplicateRow,
+  insertRowBefore,
   moveRow,
+  moveRows,
   renumberRows,
 } from "./row-operations";
 
@@ -99,5 +102,103 @@ describe("row operations", () => {
       "R1",
       "R2",
     ]);
+  });
+});
+
+describe("insertRowBefore", () => {
+  it("inserts an empty row before the target row and renumbers", () => {
+    const sheet = sheetWithRows(3);
+    const target = sheet.rows[1];
+    expect(target).toBeDefined();
+    const updated = insertRowBefore(sheet, (target as { rowId: string }).rowId);
+    expect(updated.rows.map((r) => r.name)).toEqual(["R1", "", "R2", "R3"]);
+    expect(updated.rows.map((r) => r.order)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("inserts before the first row", () => {
+    const sheet = sheetWithRows(1);
+    const target = sheet.rows[0];
+    expect(target).toBeDefined();
+    const updated = insertRowBefore(sheet, (target as { rowId: string }).rowId);
+    expect(updated.rows.map((r) => r.name)).toEqual(["", "R1"]);
+    expect(updated.rows[0]?.order).toBe(1);
+  });
+
+  it("appends at the end when the target row is missing", () => {
+    const sheet = sheetWithRows(1);
+    const updated = insertRowBefore(sheet, "missing");
+    expect(updated.rows).toHaveLength(2);
+    expect(updated.rows[1]?.name).toBe("");
+  });
+});
+
+describe("moveRows", () => {
+  it("moves a contiguous selected block up by one position", () => {
+    const sheet = sheetWithRows(4);
+    const targetIds = [sheet.rows[1], sheet.rows[2]].map(
+      (r) => r?.rowId as string,
+    );
+    const updated = moveRows(sheet, targetIds, "up");
+    expect(updated.rows.map((r) => r.name)).toEqual(["R2", "R3", "R1", "R4"]);
+  });
+
+  it("moves a contiguous selected block down by one position", () => {
+    const sheet = sheetWithRows(4);
+    const targetIds = [sheet.rows[1], sheet.rows[2]].map(
+      (r) => r?.rowId as string,
+    );
+    const updated = moveRows(sheet, targetIds, "down");
+    expect(updated.rows.map((r) => r.name)).toEqual(["R1", "R4", "R2", "R3"]);
+  });
+
+  it("moves non-contiguous selected rows up while keeping their relative order", () => {
+    const sheet = sheetWithRows(4);
+    const targetIds = [sheet.rows[1], sheet.rows[3]].map(
+      (r) => r?.rowId as string,
+    );
+    const updated = moveRows(sheet, targetIds, "up");
+    expect(updated.rows.map((r) => r.name)).toEqual(["R2", "R1", "R4", "R3"]);
+  });
+
+  it("is a no-op at boundaries and when all rows are selected", () => {
+    const sheet = sheetWithRows(3);
+    const first = sheet.rows[0];
+    expect(first).toBeDefined();
+    const upNoop = moveRows(sheet, [(first as { rowId: string }).rowId], "up");
+    expect(upNoop.rows.map((r) => r.name)).toEqual(["R1", "R2", "R3"]);
+    const allSelected = moveRows(
+      sheet,
+      sheet.rows.map((r) => r.rowId),
+      "up",
+    );
+    expect(allSelected.rows.map((r) => r.name)).toEqual(["R1", "R2", "R3"]);
+  });
+
+  it("renumbers after moving", () => {
+    const sheet = sheetWithRows(3);
+    const targetId = sheet.rows[2]?.rowId as string;
+    const updated = moveRows(sheet, [targetId], "up");
+    expect(updated.rows.map((r) => r.order)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("deleteRows", () => {
+  it("removes multiple rows and renumbers the rest", () => {
+    const sheet = sheetWithRows(4);
+    const targetIds = [sheet.rows[0], sheet.rows[2]].map(
+      (r) => r?.rowId as string,
+    );
+    const updated = deleteRows(sheet, targetIds);
+    expect(updated.rows.map((r) => r.name)).toEqual(["R2", "R4"]);
+    expect(updated.rows.map((r) => r.order)).toEqual([1, 2]);
+  });
+
+  it("removes all rows when every row is selected", () => {
+    const sheet = sheetWithRows(2);
+    const updated = deleteRows(
+      sheet,
+      sheet.rows.map((r) => r.rowId),
+    );
+    expect(updated.rows).toHaveLength(0);
   });
 });

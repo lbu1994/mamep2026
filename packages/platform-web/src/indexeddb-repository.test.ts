@@ -94,4 +94,25 @@ describe("IndexedDBWorkspaceRepository", () => {
     const result = await repo2.load();
     expect(result.ok).toBe(true);
   });
+
+  it("clear removes the stored workspace and the backup", async () => {
+    const store = memoryStore();
+    const repo = new IndexedDBWorkspaceRepository(store);
+    const workspace = createEmptyWorkspace();
+    await repo.save(workspace);
+    await repo.save(workspace); // 生成备份。
+    expect(await store.get("workspace")).not.toBeUndefined();
+    expect(await store.get("workspace-backup")).not.toBeUndefined();
+
+    const result = await repo.clear();
+    expect(result.ok).toBe(true);
+
+    const loaded = await repo.load();
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      // 重置后加载返回全新默认工作区（新 workspaceId）。
+      expect(loaded.value.workspaceId).not.toBe(workspace.workspaceId);
+      expect(loaded.value.sheets).toHaveLength(1);
+    }
+  });
 });

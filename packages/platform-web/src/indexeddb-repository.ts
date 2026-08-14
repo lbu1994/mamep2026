@@ -107,4 +107,20 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
       );
     }
   }
+
+  async clear(): Promise<Result<void>> {
+    try {
+      await this.store.delete(MAIN_KEY);
+      await this.store.delete(BACKUP_KEY);
+      return ok(undefined);
+    } catch (cause) {
+      return fail(
+        persistenceError(
+          "PERSISTENCE_CLEAR_FAILED",
+          cause instanceof Error ? cause.message : String(cause),
+          cause,
+        ),
+      );
+    }
+  }
 }

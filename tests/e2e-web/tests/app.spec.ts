@@ -9,7 +9,8 @@ async function openApp(page: Page): Promise<void> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  await page.waitForSelector(".ant-modal-container:visible", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 DISCONNECT 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
     timeout: 15000,
   });
 }
@@ -32,7 +33,7 @@ async function closeModal(page: Page): Promise<void> {
 
 async function openConnectionModal(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "Connection Settings" })
+    .getByRole("button", { name: "Connection" })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".ant-modal-container:visible", { timeout: 5000 });
 }
@@ -44,10 +45,27 @@ async function clickModalConnect(page: Page): Promise<void> {
     .evaluate((el) => (el as HTMLElement).click());
 }
 
-test("startup opens Connection Settings modal with RTU defaults", async ({
+test("mock startup skips Connection Settings and auto-connects", async ({
   page,
 }) => {
   await openApp(page);
+
+  // 启动即进主界面：不出现 Connection Settings 弹窗。
+  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+  // 自动连接 mock：MOCK 徽标、DISCONNECT 按钮、Online 状态。
+  const header = page.locator(".ant-layout-header");
+  await expect(header).toContainText("MOCK");
+  await expect(header).toContainText("DISCONNECT");
+  await expect(header).toContainText("Online");
+});
+
+test("non-mock startup opens Connection Settings modal with RTU defaults", async ({
+  page,
+}) => {
+  await page.goto("http://localhost:5173/");
+  await page.waitForSelector(".ant-modal-container:visible", {
+    timeout: 15000,
+  });
 
   const modal = page.locator(".ant-modal-container:visible");
   await expect(modal).toContainText("Connection Settings");
@@ -57,20 +75,20 @@ test("startup opens Connection Settings modal with RTU defaults", async ({
   await expect(modal).toContainText("OFF");
   // No Modbus TCP entry in the browser.
   await expect(modal).not.toContainText("Modbus TCP");
+  await closeModal(page);
 });
 
 test("register table has the fixed column set and full READ/WRITE labels", async ({
   page,
 }) => {
   await openApp(page);
-  await closeModal(page);
 
   const header = page.locator(".ant-table-thead");
   for (const label of [
     "No",
     "TM",
     "Name",
-    "Register[HEX]",
+    "Register[DEC]",
     "WP",
     "READ",
     "Data",
@@ -82,15 +100,25 @@ test("register table has the fixed column set and full READ/WRITE labels", async
   }
   // No Status column.
   await expect(header).not.toContainText("Status");
-  // Protocol badge shows Modbus RTU only.
-  await expect(page.locator(".ant-layout-header")).toContainText("Modbus RTU");
+  // Mock 模式下徽章显示 MOCK；不出现 Modbus TCP。
+  await expect(page.locator(".ant-layout-header")).toContainText("MOCK");
   await expect(page.locator(".ant-layout-header")).not.toContainText(
     "Modbus TCP",
   );
 });
 
-test("connect via mock device, read and write a register", async ({ page }) => {
+test("disconnect and reconnect via Connection Settings, then read/write", async ({
+  page,
+}) => {
   await openApp(page);
+
+  // 启动已自动连接：先断开，再走弹窗连接路径（保持 Connection Settings 流程覆盖）。
+  await page
+    .getByRole("button", { name: /DISCONNECT/ })
+    .evaluate((el) => (el as HTMLElement).click());
+  await expect(page.locator(".ant-layout-header")).not.toContainText(
+    "DISCONNECT",
+  );
 
   // Preset the mock device register.
   await page.evaluate(() =>
@@ -102,11 +130,10 @@ test("connect via mock device, read and write a register", async ({ page }) => {
   );
 
   // Add a row and enter an address.
-  await closeModal(page);
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Register").first();
+  const addressInput = page.getByLabel("Register", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("1");
   await addressInput.press("Enter");
@@ -172,24 +199,17 @@ test("read all updates eligible rows and reports a summary message", async ({
     mock.setRegister(0x0001, 0x0102);
     mock.setRegister(0x0002, 0x0304);
   });
-  await closeModal(page);
 
   for (let i = 0; i < 2; i++) {
     await page
       .getByRole("button", { name: "Add Row" })
       .evaluate((el) => (el as HTMLElement).click());
   }
-  const addressInputs = page.getByLabel("Register");
+  const addressInputs = page.getByLabel("Register", { exact: true });
   await addressInputs.nth(0).fill("0001");
   await addressInputs.nth(0).press("Enter");
   await addressInputs.nth(1).fill("0002");
   await addressInputs.nth(1).press("Enter");
-
-  await openConnectionModal(page);
-  await clickModalConnect(page);
-  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
-    timeout: 8000,
-  });
 
   await page
     .getByRole("button", { name: "Read All" })
@@ -203,20 +223,13 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
   page,
 }) => {
   await openApp(page);
-  await closeModal(page);
 
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Register").first();
+  const addressInput = page.getByLabel("Register", { exact: true }).first();
   await addressInput.fill("0003");
   await addressInput.press("Enter");
-
-  await openConnectionModal(page);
-  await clickModalConnect(page);
-  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
-    timeout: 8000,
-  });
 
   await page.evaluate(() =>
     (
@@ -253,20 +266,13 @@ test("TM opens a Memory Trace window and collects samples", async ({
   page,
 }) => {
   await openApp(page);
-  await closeModal(page);
 
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Register").first();
+  const addressInput = page.getByLabel("Register", { exact: true }).first();
   await addressInput.fill("0004");
   await addressInput.press("Enter");
-
-  await openConnectionModal(page);
-  await clickModalConnect(page);
-  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
-    timeout: 8000,
-  });
 
   await page.evaluate(() =>
     (
@@ -302,54 +308,53 @@ test("TM opens a Memory Trace window and collects samples", async ({
     .not.toBe("");
 });
 
-test("sheets can be added and the workspace survives a reload offline", async ({
+test("sheets can be added and the workspace survives a reload", async ({
   page,
 }) => {
   await openApp(page);
-  await closeModal(page);
 
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Register").first();
-  await addressInput.fill("000A");
+  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  await addressInput.fill("10");
   await addressInput.press("Enter");
   await page.getByLabel("Name").first().fill("SpeedRef");
 
   // Add a second sheet.
   await page
-    .getByRole("button", { name: "New Sheet" })
+    .getByRole("button", { name: "New Register Table" })
+    .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
 
   // Wait for autosave, then reload.
   await page.waitForTimeout(1000);
   await page.reload();
-  await page.waitForSelector(".ant-modal-container:visible", {
+  // Mock 模式 reload 后不弹窗，自动连接完成即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
     timeout: 15000,
   });
 
-  // After reload: modal opens automatically, workspace is restored, app stays offline.
-  await expect(page.locator(".ant-modal-container:visible")).toContainText(
-    "Connection Settings",
-  );
-  await closeModal(page);
+  // After reload: no modal, workspace is restored, app is online (mock auto-connect).
+  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
   // The active sheet may be Sheet 2 after reload; switch back to Sheet 1 to assert rows.
   await page
     .locator(".ant-layout-sider li")
     .filter({ hasText: "Sheet 1" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByLabel("Register").first()).toHaveValue("000A");
+  await expect(
+    page.getByLabel("Register", { exact: true }).first(),
+  ).toHaveValue("10");
   await expect(page.getByLabel("Name").first()).toHaveValue("SpeedRef");
   await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
-  await expect(page.locator(".ant-layout-header")).toContainText("Offline");
+  await expect(page.locator(".ant-layout-header")).toContainText("Online");
 });
 
 test("plugin manager lists the built-in plugin with enable toggle", async ({
   page,
 }) => {
   await openApp(page);
-  await closeModal(page);
 
   await page
     .getByRole("button", { name: "Plugin Manager" })
@@ -368,15 +373,15 @@ test("no console errors during a full interaction round", async ({ page }) => {
   });
 
   await page.goto(BASE_URL);
-  await page.waitForSelector(".ant-modal-container:visible", {
+  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
     timeout: 15000,
   });
-  await closeModal(page);
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
+  // 弹窗路径开合一次（mock 模式不启动自动弹，走手动开关）。
   await openConnectionModal(page);
-  await clickModalConnect(page);
+  await closeModal(page);
   await page.waitForTimeout(800);
 
   expect(errors).toEqual([]);

@@ -1,47 +1,54 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { MenuProps } from "antd";
 import {
   Button,
   ConfigProvider,
+  Dropdown,
   Layout,
   Modal,
   Segmented,
   Select,
   Space,
-  Tag,
-  theme as antdTheme,
+  Tabs,
+  Tooltip,
   Typography,
 } from "antd";
 import {
-  PlusOutlined,
-  SettingOutlined,
   ApiOutlined,
-  DisconnectOutlined,
   BulbOutlined,
+  DisconnectOutlined,
+  LeftOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  MoreOutlined,
+  PlusOutlined,
+  QuestionCircleOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import type { ConnectionState } from "@mamep2026/communication";
-import type { RowId } from "@mamep2026/domain";
+import type { RowId, SheetId } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
+import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
 import { BottomPanel } from "./components/BottomPanel";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
 import { PluginManagerModal } from "./components/PluginManagerModal";
 import { RegisterTable } from "./components/RegisterTable";
+import { buildSheetMenuItems } from "./components/SheetMenu";
 import { TraceWindow } from "./components/TraceWindow";
 
-type TagColor =
-  "default" | "processing" | "green" | "orange" | "red" | "warning";
-
-const STATE_COLORS: Record<ConnectionState, TagColor> = {
-  disconnected: "default",
-  "selecting-device": "processing",
-  connecting: "processing",
-  connected: "green",
-  disconnecting: "processing",
-  "reconnect-waiting": "warning",
-  reconnecting: "processing",
-  interrupted: "orange",
-  failed: "red",
+/** 状态圆点颜色（形状 + 文字之外的颜色提示，取 antd 语义 token）。 */
+const STATE_DOT_COLOR: Record<ConnectionState, string> = {
+  disconnected: "var(--ant-color-text-quaternary)",
+  "selecting-device": "var(--ant-color-primary)",
+  connecting: "var(--ant-color-primary)",
+  connected: "var(--ant-color-success)",
+  disconnecting: "var(--ant-color-primary)",
+  "reconnect-waiting": "var(--ant-color-warning)",
+  reconnecting: "var(--ant-color-primary)",
+  interrupted: "var(--ant-color-warning)",
+  failed: "var(--ant-color-error)",
 };
 
 export function MamepApp(): React.ReactNode {
@@ -56,6 +63,8 @@ export function MamepApp(): React.ReactNode {
   const setActiveSheetId = useAppStore((s) => s.setActiveSheetId);
   const setConnectionModalOpen = useAppStore((s) => s.setConnectionModalOpen);
   const setPluginModalOpen = useAppStore((s) => s.setPluginModalOpen);
+  const setWorkspace = useAppStore((s) => s.setWorkspace);
+  const appendMessage = useAppStore((s) => s.appendMessage);
   const settingsOpen = useAppStore((s) => s.settingsModalOpen);
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
@@ -64,9 +73,24 @@ export function MamepApp(): React.ReactNode {
   const renameSheet = useAppStore((s) => s.renameSheet);
   const traceWindows = useAppStore((s) => s.traceWindows);
   const appendTraceSample = useAppStore((s) => s.appendTraceSample);
-  const appendMessage = useAppStore((s) => s.appendMessage);
-  const [readAllRunning, setReadAllRunning] = useState(false);
-  const [editingSheetName, setEditingSheetName] = useState<string | null>(null);
+  const setPanelLayout = useAppStore((s) => s.setPanelLayout);
+  const sidebarCollapsed = useAppStore(
+    (s) => s.workspace.panelLayout.sidebarCollapsed,
+  );
+  const closeSheet = useAppStore((s) => s.closeSheet);
+  const duplicateSheet = useAppStore((s) => s.duplicateSheet);
+  const moveSheetTo = useAppStore((s) => s.moveSheetTo);
+  const editingSheetId = useAppStore((s) => s.editingSheetId);
+  const setEditingSheetId = useAppStore((s) => s.setEditingSheetId);
+  const pendingDeleteSheetId = useAppStore((s) => s.pendingDeleteSheetId);
+  const setPendingDeleteSheetId = useAppStore((s) => s.setPendingDeleteSheetId);
+  const pendingBulkClose = useAppStore((s) => s.pendingBulkClose);
+  const setPendingBulkClose = useAppStore((s) => s.setPendingBulkClose);
+  const closeOtherSheets = useAppStore((s) => s.closeOtherSheets);
+  const closeSheetsToRight = useAppStore((s) => s.closeSheetsToRight);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const dragIndex = useRef<number | null>(null);
 
   // 连接状态同步。
   useEffect(() => {
@@ -113,177 +137,359 @@ export function MamepApp(): React.ReactNode {
     }
   };
 
-  const handleReadAll = async (): Promise<void> => {
-    if (host === null || host === undefined || currentSheet === undefined)
-      return;
-    setReadAllRunning(true);
-    try {
-      const handle = host.readAllRows(
-        currentSheet.rows.map((row) => ({
-          key: row.rowId,
-          address: row.addressValue?.value ?? null,
-        })),
-      );
-      const result = await handle.promise;
+  const handleResetWorkspace = (): void => {
+    if (host === null || host === undefined) return;
+    void host.resetWorkspace().then((result) => {
+      setResetConfirmOpen(false);
       if (result.ok) {
+        setWorkspace(result.value);
         appendMessage({
           timestamp: Date.now(),
           level: "info",
-          messageKey: `Read All: ${result.value.successCount} succeeded, ${result.value.failureCount} failed, ${result.value.skippedCount} skipped`,
+          messageKey: "messages.workspaceReset",
           detail: null,
         });
+      } else {
+        appendMessage({
+          timestamp: Date.now(),
+          level: "error",
+          messageKey: "messages.resetFailed",
+          params: { detail: result.error.code },
+          detail: result.error.code,
+        });
       }
-    } finally {
-      setReadAllRunning(false);
-    }
+    });
   };
 
+  const slaveAddress = workspace.connectionProfiles[0]?.slaveAddress ?? 1;
+
+  const handleRenameSheet = (sheetId: SheetId): void => {
+    setActiveSheetId(sheetId);
+    setEditingSheetId(sheetId);
+  };
+
+  const handleDeleteSheet = (sheetId: SheetId): void => {
+    setPendingDeleteSheetId(sheetId);
+  };
+
+  const confirmDeleteSheet = (): void => {
+    if (pendingDeleteSheetId !== null) {
+      closeSheet(pendingDeleteSheetId);
+    }
+    setPendingDeleteSheetId(null);
+  };
+
+  const handleCloseOthers = (sheetId: SheetId): void => {
+    setPendingBulkClose({ kind: "others", sheetId });
+  };
+
+  const handleCloseToRight = (sheetId: SheetId): void => {
+    setPendingBulkClose({ kind: "right", sheetId });
+  };
+
+  const confirmBulkClose = (): void => {
+    if (pendingBulkClose !== null) {
+      if (pendingBulkClose.kind === "others") {
+        closeOtherSheets(pendingBulkClose.sheetId);
+      } else {
+        closeSheetsToRight(pendingBulkClose.sheetId);
+      }
+    }
+    setPendingBulkClose(null);
+  };
+
+  // 确认弹窗中「将关闭的标签页数量」（关闭其他=总数-1；关闭右侧=右侧表数）。
+  const bulkCloseCount =
+    pendingBulkClose === null
+      ? 0
+      : pendingBulkClose.kind === "others"
+        ? workspace.sheets.length - 1
+        : Math.max(
+            0,
+            workspace.sheets.length -
+              1 -
+              workspace.sheets.findIndex(
+                (sheet) => sheet.sheetId === pendingBulkClose.sheetId,
+              ),
+          );
+
+  const sheetMenu = (
+    sheetId: SheetId,
+    index: number,
+  ): NonNullable<MenuProps["items"]> =>
+    buildSheetMenuItems(t, sheetId, index, workspace.sheets.length, {
+      onRename: handleRenameSheet,
+      onDuplicate: duplicateSheet,
+      onCloseOthers: handleCloseOthers,
+      onCloseToRight: handleCloseToRight,
+      onMoveUp: (id) => moveSheetTo(id, index - 1),
+      onMoveDown: (id) => moveSheetTo(id, index + 1),
+      onDelete: handleDeleteSheet,
+    });
+
   return (
-    <ConfigProvider
-      theme={{
-        algorithm:
-          theme === "dark"
-            ? antdTheme.darkAlgorithm
-            : antdTheme.defaultAlgorithm,
-      }}
-    >
+    <ConfigProvider theme={buildTheme(theme === "dark")}>
       <Layout style={{ height: "100vh" }}>
-        <Layout.Header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            paddingInline: 12,
-            background: theme === "dark" ? "#141414" : "#fff",
-            borderBottom: "1px solid rgba(5,5,5,0.06)",
-          }}
-        >
-          <Typography.Text strong>{t("app.title")}</Typography.Text>
-          <Tag>{t("app.protocol")}</Tag>
-          <Button size="small" icon={<PlusOutlined />} onClick={addSheet}>
-            {t("topbar.newSheet")}
-          </Button>
+        <Layout.Header className="mamep-header">
           <Button
+            type="text"
             size="small"
-            icon={<ApiOutlined />}
-            onClick={() => setConnectionModalOpen(true)}
-          >
-            {t("topbar.connectionSettings")}
-          </Button>
-          <Button
-            size="small"
-            type={connected ? "default" : "primary"}
-            danger={connected}
-            icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
-            onClick={handleConnectToggle}
-            style={{ fontWeight: 600, letterSpacing: 0.5 }}
-          >
-            {connected ? t("topbar.disconnect") : t("topbar.connect")}
-          </Button>
-          <Tag color={STATE_COLORS[connectionState]}>
-            {t(`state.${connectionState}`)}
-          </Tag>
-          <Button
-            size="small"
-            loading={readAllRunning}
-            onClick={() => void handleReadAll()}
-          >
-            {t("topbar.readAll")}
-          </Button>
-          <span style={{ flex: 1 }} />
-          <Button size="small" onClick={() => setPluginModalOpen(true)}>
-            {t("topbar.pluginManager")}
-          </Button>
-          <Button
-            size="small"
-            icon={<SettingOutlined />}
-            onClick={() => setSettingsOpen(true)}
-          >
-            {t("topbar.settings")}
-          </Button>
-          <Button
-            size="small"
-            icon={<BulbOutlined />}
-            aria-label={t("topbar.theme")}
-            onClick={() => {
-              const next = theme === "light" ? "dark" : "light";
-              setTheme(next);
-            }}
+            aria-label={t("topbar.toggleSidebar")}
+            icon={
+              sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
+            }
+            onClick={() =>
+              setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
+            }
           />
+          <div className="mamep-header__brand">
+            <Typography.Text className="mamep-header__brand-title">
+              {t("app.title")}
+            </Typography.Text>
+            <span className="mamep-header__protocol">
+              {host !== null && host !== undefined && host.isMockMode
+                ? t("topbar.mock")
+                : t("app.protocol")}
+            </span>
+          </div>
+          <div className="mamep-header__divider" />
+          <div className="connection-cluster">
+            <Button
+              size="small"
+              icon={<ApiOutlined />}
+              onClick={() => setConnectionModalOpen(true)}
+            >
+              {t("topbar.connectionSettings")}
+            </Button>
+            <Button
+              size="small"
+              type={connected ? "default" : "primary"}
+              danger={connected}
+              icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
+              onClick={handleConnectToggle}
+              style={{ fontWeight: 600 }}
+            >
+              {connected ? t("topbar.disconnect") : t("topbar.connect")}
+            </Button>
+            <span className="status-badge">
+              <span
+                className="status-badge__dot"
+                style={{ backgroundColor: STATE_DOT_COLOR[connectionState] }}
+              />
+              <span>
+                {t(`state.${connectionState}`)}
+                {" · "}
+                {t("topbar.rtuSlave", { address: slaveAddress })}
+              </span>
+            </span>
+          </div>
+          <span className="mamep-header__spacer" />
+          <div className="mamep-header__group">
+            <Button size="small" onClick={() => setPluginModalOpen(true)}>
+              {t("topbar.pluginManager")}
+            </Button>
+            <Button
+              size="small"
+              icon={<SettingOutlined />}
+              onClick={() => setSettingsOpen(true)}
+            >
+              {t("topbar.settings")}
+            </Button>
+            <Button
+              size="small"
+              icon={<QuestionCircleOutlined />}
+              onClick={() => setHelpOpen(true)}
+            >
+              {t("topbar.help")}
+            </Button>
+            <Button
+              size="small"
+              icon={<BulbOutlined />}
+              aria-label={t("topbar.theme")}
+              onClick={() => {
+                const next = theme === "light" ? "dark" : "light";
+                setTheme(next);
+              }}
+            />
+          </div>
         </Layout.Header>
-        <Layout>
+        <Layout className="mamep-main">
           <Layout.Sider
-            width={180}
-            theme={theme === "dark" ? "dark" : "light"}
-            style={{ borderRight: "1px solid rgba(5,5,5,0.06)" }}
+            className="sheet-sidebar"
+            width={160}
+            collapsedWidth={0}
+            trigger={null}
+            collapsible
+            collapsed={sidebarCollapsed}
+            theme="light"
           >
-            <div style={{ padding: 8 }}>
-              <Typography.Text type="secondary">
-                {t("table.sheet")}
-              </Typography.Text>
-              <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>
-                {workspace.sheets.map((sheet) => (
+            <div className="sheet-sidebar__head">
+              <span className="sheet-sidebar__title">
+                {t("sidebar.workspace")}
+              </span>
+              <Button
+                type="text"
+                size="small"
+                className="sheet-sidebar__collapse"
+                aria-label={t("topbar.toggleSidebar")}
+                icon={<LeftOutlined />}
+                onClick={() => setPanelLayout({ sidebarCollapsed: true })}
+              />
+            </div>
+            <div className="sheet-sidebar__section">
+              <span className="sheet-sidebar__section-title">
+                {t("sidebar.registerTables")}
+              </span>
+              <Tooltip title={t("sidebar.newTable")}>
+                <Button
+                  type="text"
+                  size="small"
+                  className="sheet-sidebar__section-action"
+                  aria-label={t("sidebar.newTable")}
+                  icon={<PlusOutlined />}
+                  onClick={addSheet}
+                />
+              </Tooltip>
+            </div>
+            <ul className="sheet-sidebar__list">
+              {workspace.sheets.map((sheet, index) => (
+                <Dropdown
+                  key={sheet.sheetId}
+                  trigger={["contextMenu"]}
+                  menu={{ items: sheetMenu(sheet.sheetId, index) }}
+                >
                   <li
-                    key={sheet.sheetId}
-                    onClick={() => setActiveSheetId(sheet.sheetId)}
-                    style={{
-                      padding: "6px 8px",
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      background:
-                        sheet.sheetId === currentSheet?.sheetId
-                          ? "rgba(22,119,255,0.15)"
-                          : undefined,
+                    className={
+                      sheet.sheetId === currentSheet?.sheetId
+                        ? "sheet-item sheet-item--active"
+                        : "sheet-item"
+                    }
+                    draggable
+                    onDragStart={() => {
+                      dragIndex.current = index;
                     }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const fromIndex = dragIndex.current;
+                      dragIndex.current = null;
+                      if (fromIndex === null || fromIndex === index) return;
+                      const source = workspace.sheets[fromIndex];
+                      if (source !== undefined) {
+                        moveSheetTo(source.sheetId, index);
+                      }
+                    }}
+                    onClick={() => setActiveSheetId(sheet.sheetId)}
+                    onContextMenu={(event) => event.preventDefault()}
                   >
-                    {editingSheetName === sheet.sheetId ? (
+                    {editingSheetId === sheet.sheetId ? (
                       <input
+                        className="sheet-item__input"
                         defaultValue={sheet.name}
                         autoFocus
-                        style={{ width: "100%" }}
-                        onBlur={(e) => {
-                          renameSheet(sheet.sheetId, e.target.value);
-                          setEditingSheetName(null);
+                        onBlur={(event) => {
+                          renameSheet(sheet.sheetId, event.target.value);
+                          setEditingSheetId(null);
                         }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") setEditingSheetName(null);
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            renameSheet(
+                              sheet.sheetId,
+                              event.currentTarget.value,
+                            );
+                            setEditingSheetId(null);
+                          }
                         }}
                       />
                     ) : (
                       <span
-                        onDoubleClick={() => setEditingSheetName(sheet.sheetId)}
+                        className="sheet-item__name"
+                        onDoubleClick={() => setEditingSheetId(sheet.sheetId)}
                       >
                         {sheet.name}
                       </span>
                     )}
+                    <Dropdown
+                      menu={{ items: sheetMenu(sheet.sheetId, index) }}
+                      trigger={["click"]}
+                    >
+                      <Button
+                        type="text"
+                        size="small"
+                        className="sheet-item__more"
+                        aria-label={t("table.moreActions")}
+                        icon={<MoreOutlined />}
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                    </Dropdown>
                   </li>
-                ))}
-              </ul>
-            </div>
+                </Dropdown>
+              ))}
+            </ul>
+            <div className="sheet-sidebar__footer">{t("sidebar.footer")}</div>
           </Layout.Sider>
-          <Layout.Content
-            style={{
-              padding: 8,
-              overflow: "auto",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          <Layout.Content className="mamep-body">
+            <div className="register-table-wrap">
               {currentSheet !== undefined ? (
-                <RegisterTable sheetId={currentSheet.sheetId} />
+                <Tabs
+                  type="editable-card"
+                  size="small"
+                  className="register-table-tabs"
+                  activeKey={currentSheet.sheetId}
+                  onChange={(key) => setActiveSheetId(key as SheetId)}
+                  onEdit={(targetKey, action) => {
+                    if (action === "add") {
+                      addSheet();
+                    } else if (typeof targetKey === "string") {
+                      handleDeleteSheet(targetKey as SheetId);
+                    }
+                  }}
+                  items={workspace.sheets.map((sheet, index) => ({
+                    key: sheet.sheetId,
+                    label: (
+                      <Dropdown
+                        trigger={["contextMenu"]}
+                        menu={{ items: sheetMenu(sheet.sheetId, index) }}
+                      >
+                        {editingSheetId === sheet.sheetId ? (
+                          <input
+                            className="sheet-tab__input"
+                            defaultValue={sheet.name}
+                            onClick={(event) => event.stopPropagation()}
+                            onBlur={(event) => {
+                              renameSheet(sheet.sheetId, event.target.value);
+                              setEditingSheetId(null);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                renameSheet(
+                                  sheet.sheetId,
+                                  event.currentTarget.value,
+                                );
+                                setEditingSheetId(null);
+                              } else if (event.key === "Escape") {
+                                setEditingSheetId(null);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span
+                            className="sheet-tab__label"
+                            onDoubleClick={() =>
+                              setEditingSheetId(sheet.sheetId)
+                            }
+                          >
+                            {sheet.name}
+                          </span>
+                        )}
+                      </Dropdown>
+                    ),
+                    children: <RegisterTable sheetId={sheet.sheetId} />,
+                  }))}
+                />
               ) : null}
             </div>
-            <div
-              style={{
-                height: 220,
-                borderTop: "1px solid rgba(5,5,5,0.06)",
-                overflow: "auto",
-                paddingInline: 8,
-              }}
-            >
-              <BottomPanel />
-            </div>
+            <BottomPanel />
           </Layout.Content>
         </Layout>
       </Layout>
@@ -300,7 +506,7 @@ export function MamepApp(): React.ReactNode {
         onCancel={() => setSettingsOpen(false)}
         footer={null}
       >
-        <Space direction="vertical" style={{ width: "100%" }}>
+        <Space orientation="vertical" style={{ width: "100%" }}>
           <div>
             <Typography.Text>{t("settings.theme")}</Typography.Text>
             <Segmented
@@ -326,10 +532,73 @@ export function MamepApp(): React.ReactNode {
               ]}
             />
           </div>
+          <div>
+            <Button danger size="small" onClick={() => setResetConfirmOpen(true)}>
+              {t("settings.resetWorkspace")}
+            </Button>
+          </div>
           <Typography.Paragraph type="secondary">
             {t("settings.aboutText")}
           </Typography.Paragraph>
         </Space>
+      </Modal>
+
+      <Modal
+        title={t("settings.resetConfirmTitle")}
+        open={resetConfirmOpen}
+        onCancel={() => setResetConfirmOpen(false)}
+        onOk={() => void handleResetWorkspace()}
+        okText={t("settings.resetOk")}
+        okButtonProps={{ danger: true }}
+      >
+        <Typography.Text>{t("settings.resetConfirmContent")}</Typography.Text>
+      </Modal>
+
+      <Modal
+        title={t("table.deleteConfirmTitle")}
+        open={pendingDeleteSheetId !== null}
+        onCancel={() => setPendingDeleteSheetId(null)}
+        onOk={confirmDeleteSheet}
+        okText={t("table.deleteOk")}
+        okButtonProps={{ danger: true }}
+      >
+        <Typography.Text>
+          {t("table.deleteConfirmContent", {
+            name:
+              workspace.sheets.find(
+                (sheet) => sheet.sheetId === pendingDeleteSheetId,
+              )?.name ?? "",
+          })}
+        </Typography.Text>
+      </Modal>
+
+      <Modal
+        title={
+          pendingBulkClose?.kind === "right"
+            ? t("table.closeToRightConfirmTitle")
+            : t("table.closeOthersConfirmTitle")
+        }
+        open={pendingBulkClose !== null}
+        onCancel={() => setPendingBulkClose(null)}
+        onOk={confirmBulkClose}
+        okText={t("table.deleteOk")}
+        okButtonProps={{ danger: true }}
+        cancelText={t("connection.cancel")}
+      >
+        <Typography.Text>
+          {pendingBulkClose?.kind === "right"
+            ? t("table.closeToRightConfirmContent", { count: bulkCloseCount })
+            : t("table.closeOthersConfirmContent", { count: bulkCloseCount })}
+        </Typography.Text>
+      </Modal>
+
+      <Modal
+        title={t("help.title")}
+        open={helpOpen}
+        onCancel={() => setHelpOpen(false)}
+        footer={null}
+      >
+        <Typography.Paragraph>{t("settings.aboutText")}</Typography.Paragraph>
       </Modal>
     </ConfigProvider>
   );

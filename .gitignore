@@ -31,3 +31,4 @@ apps/web/dist
 *.sln
 *.sw?
 .env
+_screenshots

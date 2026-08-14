@@ -1,0 +1,215 @@
+/**
+ * 行剪贴板模型（纯函数，docs/AGENTS.md §9.2/§32-26）：
+ * - 复制/剪切只携带可粘贴字段（name/addressValue/dataType/cellText/comment），运行时状态清零；
+ * - 地址以内部十进制数值传递，粘贴时按目标表进制重新格式化，避免跨表进制歧义；
+ * - 系统剪贴板 CSV：表头 Name,Register,Data,Type,Comment；Register 为十进制数值；
+ * - 粘贴非法数据不得静默丢弃：行级 issue 汇总返回，可保留部分可恢复字段。
+ */
+import { describe, expect, it } from "vitest";
+import {
+  createEmptyRow,
+  createRegisterSheet,
+  newRowId,
+  type RegisterRow,
+  type RegisterSheet,
+} from "@mamep2026/domain";
+import { renumberRows } from "./row-operations";
+import {
+  copyRowsToClipboard,
+  cutRowsFromSheet,
+  decodeClipboardCsv,
+  encodeClipboardCsv,
+  pasteClipboardRows,
+  toClipboardData,
+  type RowClipboardData,
+} from "./row-clipboard";
+
+function sheetWithRows(count: number): RegisterSheet {
+  const sheet = createRegisterSheet("S", 0);
+  const rows = Array.from({ length: count }, (_, i) => {
+    const row = createEmptyRow();
+    row.name = `R${i + 1}`;
+    return row;
+  });
+  sheet.rows = renumberRows(rows);
+  return sheet;
+}
+
+function filledRow(name: string): RegisterRow {
+  const row = createEmptyRow();
+  row.name = name;
+  row.comment = "c";
+  row.addressDraft = "0010";
+  row.dataType = "unsigned";
+  row.pollingEnabled = true;
+  row.traceEnabled = true;
+  row.cellText = "1234";
+  return row;
+}
+
+describe("row clipboard data extraction", () => {
+  it("toClipboardData keeps editable fields and drops runtime state", () => {
+    const row = filledRow("Speed");
+    const data = toClipboardData(row);
+    expect(data.name).toBe("Speed");
+    expect(data.comment).toBe("c");
+    expect(data.dataType).toBe("unsigned");
+    expect(data.cellText).toBe("1234");
+    expect(data.addressValue).toBeNull(); // addressDraft 未提交
+  });
+
+  it("copyRowsToClipboard returns payload in table order and does not modify the sheet", () => {
+    const sheet = sheetWithRows(3);
+    const before = sheet.rows.map((r) => r.rowId);
+    const payload = copyRowsToClipboard(sheet, [
+      sheet.rows[2]?.rowId ?? newRowId(),
+      sheet.rows[0]?.rowId ?? newRowId(),
+    ]);
+    expect(payload.map((p) => p.name)).toEqual(["R1", "R3"]);
+    expect(sheet.rows.map((r) => r.rowId)).toEqual(before);
+  });
+
+  it("cutRowsFromSheet removes the rows and returns their payload", () => {
+    const sheet = sheetWithRows(4);
+    const targetId = sheet.rows[1]?.rowId ?? newRowId();
+    const { sheet: updated, payload } = cutRowsFromSheet(sheet, [targetId]);
+    expect(updated.rows.map((r) => r.name)).toEqual(["R1", "R3", "R4"]);
+    expect(updated.rows.map((r) => r.order)).toEqual([1, 2, 3]);
+    expect(payload).toHaveLength(1);
+    expect(payload[0]?.name).toBe("R2");
+  });
+});
+
+describe("pasteClipboardRows", () => {
+  const payload: RowClipboardData[] = [
+    {
+      name: "X",
+      addressValue: 0x10,
+      dataType: "hex",
+      cellText: "1234",
+      comment: "c1",
+    },
+    {
+      name: "Y",
+      addressValue: null,
+      dataType: "unsigned",
+      cellText: "",
+      comment: "",
+    },
+  ];
+
+  it("inserts rows after the target row with new ids, renumbers and formats address per radix", () => {
+    const sheet = sheetWithRows(2);
+    const source = sheet.rows[0];
+    expect(source).toBeDefined();
+    const { sheet: updated, issues } = pasteClipboardRows(
+      sheet,
+      (source as RegisterRow).rowId,
+      payload,
+      "dec",
+    );
+    expect(updated.rows).toHaveLength(4);
+    expect(updated.rows.map((r) => r.order)).toEqual([1, 2, 3, 4]);
+    const pastedX = updated.rows[1];
+    expect(pastedX).toBeDefined();
+    expect(pastedX?.name).toBe("X");
+    expect(pastedX?.addressValue?.value).toBe(0x10);
+    expect(pastedX?.addressDraft).toBe("16");
+    expect(pastedX?.dataType).toBe("hex");
+    expect(pastedX?.cellText).toBe("1234");
+    expect(pastedX?.comment).toBe("c1");
+    expect(pastedX?.pollingEnabled).toBe(false);
+    expect(pastedX?.traceEnabled).toBe(false);
+    expect(pastedX?.rowId).not.toBe((source as RegisterRow).rowId);
+    expect(updated.rows[2]?.name).toBe("Y");
+    expect(updated.rows[2]?.addressValue).toBeNull();
+    expect(issues).toEqual([]);
+  });
+
+  it("pastes before the target when requested via addRowAfter-style semantics (after target)", () => {
+    // pasteClipboardRows 语义为“在目标行之后插入”；此处验证目标行不存在时追加末尾。
+    const sheet = sheetWithRows(1);
+    const { sheet: updated } = pasteClipboardRows(
+      sheet,
+      "missing",
+      payload,
+      "hex",
+    );
+    expect(updated.rows).toHaveLength(3);
+    expect(updated.rows[1]?.name).toBe("X");
+    expect(updated.rows[1]?.addressDraft).toBe("0010");
+  });
+});
+
+describe("clipboard CSV encode/decode", () => {
+  it("encodes rows to CSV with header and escapes quotes, commas and newlines", () => {
+    const payload: RowClipboardData[] = [
+      {
+        name: 'A, "quoted"',
+        addressValue: 31,
+        dataType: "hex",
+        cellText: "001F",
+        comment: "line1\nline2",
+      },
+      {
+        name: "B",
+        addressValue: null,
+        dataType: "binary",
+        cellText: "",
+        comment: "",
+      },
+    ];
+    const csv = encodeClipboardCsv(payload);
+    const lines = csv.split("\n");
+    expect(lines[0]).toBe("Name,Register,Data,Type,Comment");
+    expect(csv).toContain('"A, ""quoted"""');
+    expect(csv).toContain("line1\nline2");
+    expect(csv).toContain("31");
+  });
+
+  it("round-trips rows through CSV", () => {
+    const payload: RowClipboardData[] = [
+      {
+        name: "Speed",
+        addressValue: 1,
+        dataType: "unsigned-0.1",
+        cellText: "12.3",
+        comment: "rpm",
+      },
+      {
+        name: "B",
+        addressValue: null,
+        dataType: "binary",
+        cellText: "0000000000000001",
+        comment: "",
+      },
+    ];
+    const decoded = decodeClipboardCsv(encodeClipboardCsv(payload));
+    expect(decoded.issues).toEqual([]);
+    expect(decoded.rows).toEqual(payload);
+  });
+
+  it("reports issues for out-of-range address and unknown type without dropping rows", () => {
+    const csv = [
+      "Name,Register,Data,Type,Comment",
+      "BadAddr,70000,001F,hex,",
+      "BadType,1,001F,not-a-type,",
+      "Ok,2,00FF,hex,",
+      "",
+    ].join("\n");
+    const decoded = decodeClipboardCsv(csv);
+    expect(decoded.rows).toHaveLength(3);
+    expect(decoded.rows[0]?.addressValue).toBeNull();
+    expect(decoded.rows[1]?.dataType).toBe("hex");
+    expect(decoded.rows[2]?.addressValue).toBe(2);
+    expect(decoded.issues.length).toBe(2);
+  });
+
+  it("treats the first line as data when it is not the header", () => {
+    const csv = "A,1,00FF,hex,note\nB,2,0001,unsigned,";
+    const decoded = decodeClipboardCsv(csv);
+    expect(decoded.rows).toHaveLength(2);
+    expect(decoded.rows[0]?.name).toBe("A");
+    expect(decoded.rows[1]?.name).toBe("B");
+  });
+});

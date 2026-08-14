@@ -94,4 +94,28 @@ describe("workspace schema round-trip", () => {
       "vendor-value",
     );
   });
+
+  it("defaults sheet registerRadix to dec for legacy data without the field", () => {
+    const legacy = JSON.parse(serializeWorkspace(createEmptyWorkspace()));
+    // 模拟老版本数据：sheet 无 registerRadix 字段。
+    for (const sheet of legacy.sheets) {
+      delete sheet.registerRadix;
+    }
+    const parsed = parseWorkspace(legacy);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.registerRadix).toBe("dec");
+  });
+
+  it("preserves per-sheet registerRadix across a round-trip", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      const sheet = w.sheets[0];
+      if (sheet === undefined) return;
+      sheet.registerRadix = "hex";
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.registerRadix).toBe("hex");
+  });
 });

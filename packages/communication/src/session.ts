@@ -210,6 +210,61 @@ export class CommunicationSession {
         });
       }
     });
+    // 设备拔出 / 传输错误：外部事件（docs/AGENTS.md §11.4），转为 interrupted/failed。
+    options.transport.onClose(() => this.handleTransportClosed());
+    options.transport.onError((error) => this.handleTransportError(error));
+  }
+
+  private handleTransportClosed(): void {
+    const state = this.stateMachine.getState();
+    if (state === "connected") {
+      this.pendingExchange?.cancel("transport-closed");
+      this.pendingExchange = null;
+      this.enterInterrupted();
+    } else if (state === "connecting") {
+      this.enterFailed();
+    }
+    // 正常 disconnect 路径：状态已是 disconnecting，忽略避免误转 interrupted。
+  }
+
+  private handleTransportError(error: MamepError): void {
+    const state = this.stateMachine.getState();
+    if (state === "connected") {
+      this.pendingExchange?.cancel("transport-error");
+      this.pendingExchange = null;
+      this.enterInterrupted();
+    } else if (state === "connecting") {
+      this.enterFailed();
+    }
+    this.emitLog({
+      timestamp: this.options.clock.now(),
+      direction: "response",
+      bytes: new Uint8Array(0),
+      protocol: "rtu",
+      slaveAddress: this.options.config.slaveAddress,
+      functionCode: null,
+      userAddress: null,
+      sentAddress: null,
+      quantity: null,
+      attempt: 0,
+      status: "failure",
+      errorCode: error.code,
+      exceptionCode: null,
+      source: "connection-control",
+      durationMs: null,
+    });
+  }
+
+  private enterInterrupted(): void {
+    if (!this.stateMachine.transition("interrupted").ok) {
+      this.stateMachine.forceState("interrupted");
+    }
+  }
+
+  private enterFailed(): void {
+    if (!this.stateMachine.transition("failed").ok) {
+      this.stateMachine.forceState("failed");
+    }
   }
 
   getState(): ConnectionState {

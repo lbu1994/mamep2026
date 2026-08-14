@@ -48,6 +48,8 @@ export const dataTypes: readonly DataType[] = [
 export type Parity = "none" | "even" | "odd";
 export type FlowControl = "off" | "rts-cts" | "xon-xoff";
 export type AddressAdjustMode = "off" | "on";
+/** Register 地址列的显示/输入进制（按表独立设置，默认 DEC，2026-08-14）。 */
+export type RegisterRadix = "dec" | "hex";
 
 /** RTU 连接配置（docs/TECH_DESIGN.md §18.4，ADR-013 字段）。 */
 export interface RtuConnectionProfile {
@@ -99,6 +101,8 @@ export interface RegisterSheet {
   type: "holding-register";
   order: number;
   rows: RegisterRow[];
+  /** Register 地址列进制：默认 DEC（每表独立，ADR-014） */
+  registerRadix: RegisterRadix;
   createdAt: number;
   updatedAt: number;
 }
@@ -240,6 +244,7 @@ export function createRegisterSheet(
     type: "holding-register",
     order,
     rows: [],
+    registerRadix: defaultConfig.registerTable.addressRadix,
     createdAt: now,
     updatedAt: now,
   };

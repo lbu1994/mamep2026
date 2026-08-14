@@ -244,3 +244,70 @@ describe("CommunicationSession writeRegister", () => {
     if (result.ok) expect(result.value.kind).toBe("write-succeeded-no-verify");
   });
 });
+
+describe("CommunicationSession transport close/error", () => {
+  it("transitions to interrupted when the transport closes unexpectedly", async () => {
+    const { session, transport } = makeSession();
+    await session.connect();
+    expect(session.getState()).toBe("connected");
+
+    transport.simulateClose();
+
+    expect(session.getState()).toBe("interrupted");
+  });
+
+  it("rejects new requests after an unexpected close", async () => {
+    const { session, transport } = makeSession();
+    await session.connect();
+    transport.simulateClose();
+
+    const result = await session.readRegister(0x0001, {
+      source: "manual-read",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("CONNECTION_NOT_CONNECTED");
+  });
+
+  it("cancels an in-flight exchange when the transport closes", async () => {
+    const { session, transport, clock } = makeSession();
+    await session.connect();
+    const promise = session.readRegister(0x0001, { source: "manual-read" });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+
+    transport.simulateClose();
+
+    const result = await promise;
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("CANCELLED");
+  });
+
+  it("transitions to interrupted and logs a failure on transport error", async () => {
+    const logs: CommunicationLogEvent[] = [];
+    const { session, transport } = makeSession({ onLog: (e) => logs.push(e) });
+    await session.connect();
+
+    transport.simulateError({
+      code: "SERIAL_DEVICE_DISCONNECTED",
+      category: "connection",
+      severity: "error",
+      retryable: false,
+      userMessageKey: "errors.serialDeviceDisconnected",
+      technicalMessage: "device unplugged",
+    });
+
+    expect(session.getState()).toBe("interrupted");
+    expect(
+      logs.some(
+        (l) => l.status === "failure" && l.errorCode === "SERIAL_DEVICE_DISCONNECTED",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not interrupt during a normal disconnect", async () => {
+    const { session } = makeSession();
+    await session.connect();
+    // FakeTransport.close() 内部会触发 close 监听器。
+    await session.disconnect();
+    expect(session.getState()).toBe("disconnected");
+  });
+});

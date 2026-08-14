@@ -5,9 +5,28 @@
 import {
   createEmptyRow,
   newRowId,
+  RawRegisterValue,
   type RegisterRow,
   type RegisterSheet,
+  type Result,
 } from "@mamep2026/domain";
+import { ok } from "@mamep2026/domain";
+import { formatRawValue } from "@mamep2026/data-conversion";
+
+/** 应用读取成功结果：按 Type 格式化并强制覆盖单元格（单一当前值模型，§15.1）。 */
+export function applyReadValueToRow(
+  row: RegisterRow,
+  raw: number,
+): Result<RegisterRow> {
+  const rawValue = RawRegisterValue.create(raw);
+  if (!rawValue.ok) return rawValue;
+  return ok({
+    ...row,
+    cellText: formatRawValue(raw, row.dataType),
+    lastKnownRawValue: rawValue.value,
+    updatedAt: Date.now(),
+  });
+}
 
 export function renumberRows(rows: readonly RegisterRow[]): RegisterRow[] {
   return rows.map((row, index) => ({ ...row, order: index + 1 }));
@@ -79,4 +98,72 @@ export function duplicateRow(
     ...sheet.rows.slice(index + 1),
   ];
   return { ...sheet, rows: renumberRows(rows), updatedAt: Date.now() };
+}
+
+/** 在指定行之前插入空行（不继承字段）；目标行不存在时追加末尾。 */
+export function insertRowBefore(
+  sheet: RegisterSheet,
+  rowId: string,
+): RegisterSheet {
+  const index = sheet.rows.findIndex((row) => row.rowId === rowId);
+  const newRow = createEmptyRow();
+  const rows =
+    index === -1
+      ? [...sheet.rows, newRow]
+      : [...sheet.rows.slice(0, index), newRow, ...sheet.rows.slice(index)];
+  return { ...sheet, rows: renumberRows(rows), updatedAt: Date.now() };
+}
+
+/**
+ * 批量移动：把选中行作为有序集合整体上/下移一个位置（与最近的非选中行交换），
+ * 保持选中行之间的相对顺序；边界或全选时为 no-op。
+ */
+export function moveRows(
+  sheet: RegisterSheet,
+  rowIds: readonly string[],
+  direction: "up" | "down",
+): RegisterSheet {
+  const idSet = new Set(rowIds);
+  const rows = [...sheet.rows];
+  if (direction === "up") {
+    for (let i = 0; i < rows.length; i += 1) {
+      const current = rows[i];
+      if (current !== undefined && idSet.has(current.rowId) && i > 0) {
+        const above = rows[i - 1];
+        if (above !== undefined && !idSet.has(above.rowId)) {
+          rows[i] = above;
+          rows[i - 1] = current;
+        }
+      }
+    }
+  } else {
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      const current = rows[i];
+      if (
+        current !== undefined &&
+        idSet.has(current.rowId) &&
+        i < rows.length - 1
+      ) {
+        const below = rows[i + 1];
+        if (below !== undefined && !idSet.has(below.rowId)) {
+          rows[i] = below;
+          rows[i + 1] = current;
+        }
+      }
+    }
+  }
+  return { ...sheet, rows: renumberRows(rows), updatedAt: Date.now() };
+}
+
+/** 批量删除行并重编号。 */
+export function deleteRows(
+  sheet: RegisterSheet,
+  rowIds: readonly string[],
+): RegisterSheet {
+  const idSet = new Set(rowIds);
+  return {
+    ...sheet,
+    rows: renumberRows(sheet.rows.filter((row) => !idSet.has(row.rowId))),
+    updatedAt: Date.now(),
+  };
 }

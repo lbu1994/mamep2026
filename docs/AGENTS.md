@@ -877,7 +877,11 @@ Type 只改变数值解释、输入和显示，不改变寄存器原始值和通
 
 ### 16.6 地址
 
-内部地址范围为 0 至 65535，UI 显示为四位大写十六进制。
+内部地址范围为 0 至 65535。Register 列进制按表独立设置（ADR-014，2026-08-14）：
+
+- 默认 DEC：仅接受十进制数字，值域 0~65535，超范围报错；提交保留去空格后的原文本（不补零）。
+- HEX：仅接受 1~4 位十六进制字符（不接受 0x 前缀）；提交后自动补全为 4 位大写（不足四位前补 0）。
+- 切换进制不重排已提交的 addressDraft（仅影响列头与后续输入解析）；设置随工作区按表持久化，复制表继承源表进制。
 
 地址编辑必须区分：
 
@@ -1024,7 +1028,7 @@ Data 单元格采用单一当前值模型：
 - 同一时刻只执行一个保存任务
 - 保存中发生新修改时，后续保存最新快照
 - 保存失败不清除内存状态
-- UI 必须展示保存中、已保存或失败
+- 自动保存静默执行，不展示保存状态；仅手动保存场景展示保存中、已保存或失败
 - Electron 文件保存使用临时文件、备份和原子替换
 - 工作区必须包含 schemaVersion
 
@@ -1353,6 +1357,8 @@ UI 必须：
 
 领域模型不得依赖 Ant Design Table 的内部数据结构。
 
+> **已确认行为（2026-08-15，见 [ADR-015](adr/ADR-015-行编辑交互与剪贴板决策.md)）**：行编辑（新增/插入/删除/上移/下移/复制/剪切/粘贴/多行选择/键盘快捷操作/右键上下文菜单）已在浏览器 MVP 完整实现。多选用 Ant Design Table `rowSelection` 原生能力（复选框列、表头全选、Shift 范围选择、Ctrl 多选），领域层只持有 `selectedRowIds: RowId[]`；行级右键菜单用 `Dropdown trigger={['contextMenu']}`；删除（含多选）直接执行不弹确认、不引入撤销；键盘快捷键 Alt+↑/↓、Delete、Ctrl+C/X/V、Ctrl+I 仅在焦点不在文本输入控件时生效；系统剪贴板经 `AppHost` 端口（`navigator.clipboard`）。
+
 ### 25.5 可访问性
 
 必须保证：
@@ -1496,26 +1502,16 @@ UI 必须：
 
 项目初始化完成后，根级 package.json 应提供稳定的统一脚本。AI 必须优先使用仓库已经存在的脚本，不得假设脚本名称。
 
-当前实际脚本（2026-08，根 package.json）：`pnpm dev`（仅网页端 Vite，不启动 Electron）、`pnpm dev:electron`、`pnpm build`、`pnpm build:electron`、`pnpm build:vscode`、`pnpm lint`、`pnpm preview`；尚未建立 test / typecheck 等统一脚本（vitest、playwright 已安装未配置），不得声称执行过不存在的命令。
+当前实际脚本（2026-08-15，根 package.json）：`pnpm dev`（仅网页端 Vite，不启动 Electron）、`pnpm dev:electron`、`pnpm build`、`pnpm build:electron`、`pnpm build:vscode`、`pnpm lint`、`pnpm typecheck`（turbo 全包 `tsc --noEmit`）、`pnpm test`（turbo 全包 vitest）、`pnpm test:acceptance`、`pnpm test:e2e:web`（Playwright 系统 Edge）、`pnpm preview`、`pnpm format`、`pnpm format:check`。以根 package.json 实际脚本为准，不得声称执行过不存在的命令。
 
-建议统一提供：
+以下脚本尚未建立，属建议而非断言，不得假设其存在：
 
     pnpm install
-    pnpm format
-    pnpm format:check
-    pnpm lint
-    pnpm typecheck
-    pnpm test
     pnpm test:unit
     pnpm test:integration
-    pnpm test:acceptance
-    pnpm test:e2e:web
     pnpm test:e2e:electron
     pnpm test:e2e:vscode
-    pnpm build
     pnpm build:web
-    pnpm build:electron
-    pnpm build:vscode
 
 如果实际脚本尚未建立：
 

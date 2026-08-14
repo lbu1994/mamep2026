@@ -4,6 +4,8 @@
  */
 import type {
   DataType,
+  PanelLayout,
+  RegisterRadix,
   RegisterRow,
   RowId,
   SheetId,
@@ -25,9 +27,19 @@ import type { Result } from "@mamep2026/domain";
 import {
   addRowAfter,
   commitAddress,
+  copyRowsToClipboard,
+  cutRowsFromSheet,
+  decodeClipboardCsv,
+  deleteRows,
   duplicateRow,
+  encodeClipboardCsv,
+  insertRowBefore,
   moveRow,
+  moveRows,
+  pasteClipboardRows,
   renumberRows,
+  type ClipboardIssue,
+  type RowClipboardData,
 } from "@mamep2026/register-table";
 import { create } from "zustand";
 import type { AppHost } from "./host";
@@ -54,6 +66,10 @@ export interface AppStoreState {
   connectionModalOpen: boolean;
   pluginModalOpen: boolean;
   settingsModalOpen: boolean;
+  editingSheetId: SheetId | null;
+  pendingDeleteSheetId: SheetId | null;
+  /** 批量关闭（关闭其他/右侧）确认弹窗状态；null 表示未在确认。 */
+  pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null;
   theme: "light" | "dark";
   saveStatus: SaveStatus;
   messages: ApplicationMessage[];
@@ -68,9 +84,16 @@ export interface AppStoreState {
   setConnectionModalOpen: (open: boolean) => void;
   setPluginModalOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
+  setEditingSheetId: (sheetId: SheetId | null) => void;
+  setPendingDeleteSheetId: (sheetId: SheetId | null) => void;
+  setPendingBulkClose: (
+    pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null,
+  ) => void;
   setTheme: (theme: "light" | "dark") => void;
   setSaveStatus: (status: SaveStatus) => void;
   setActiveSheetId: (sheetId: SheetId) => void;
+  /** 更新工作区面板布局（侧栏/底部面板折叠、高度、活动 tab），随自动保存持久化。 */
+  setPanelLayout: (partial: Partial<PanelLayout>) => void;
 
   updateRow: (rowId: RowId, updater: (row: RegisterRow) => RegisterRow) => void;
   commitRowAddress: (rowId: RowId, draft: string) => Result<RegisterRow>;
@@ -78,11 +101,30 @@ export interface AppStoreState {
   deleteRow: (sheetId: SheetId, rowId: RowId) => void;
   moveRow: (sheetId: SheetId, rowId: RowId, direction: "up" | "down") => void;
   duplicateRowInSheet: (sheetId: SheetId, rowId: RowId) => void;
+  /** 行多选与剪贴板：会话状态，不随工作区持久化（§19.2）。 */
+  selectedRowIds: RowId[];
+  clipboardPayload: RowClipboardData[] | null;
+  setSelectedRowIds: (rowIds: RowId[]) => void;
+  insertRowAfter: (sheetId: SheetId, rowId: RowId) => void;
+  insertRowBefore: (sheetId: SheetId, rowId: RowId) => void;
+  moveSelectedRows: (sheetId: SheetId, direction: "up" | "down") => void;
+  deleteSelectedRows: (sheetId: SheetId) => void;
+  copySelectedRows: (sheetId: SheetId) => void;
+  cutSelectedRows: (sheetId: SheetId) => void;
+  /** 粘贴到 afterRowId 之后；afterRowId 为 null 时追加到表尾。 */
+  pasteRows: (sheetId: SheetId, afterRowId: RowId | null) => Promise<void>;
   addSheet: () => void;
   renameSheet: (sheetId: SheetId, name: string) => void;
   closeSheet: (sheetId: SheetId) => void;
+  /** 关闭除目标表外的所有表；目标表保留并成为活动表。 */
+  closeOtherSheets: (sheetId: SheetId) => void;
+  /** 关闭目标表右侧的所有表；目标表保留并成为活动表。 */
+  closeSheetsToRight: (sheetId: SheetId) => void;
   duplicateSheet: (sheetId: SheetId) => void;
+  moveSheetTo: (sheetId: SheetId, toIndex: number) => void;
   setRowDataType: (rowId: RowId, dataType: DataType) => void;
+  /** 设置某张表的 Register 地址列进制（DEC/HEX），随自动保存持久化（ADR-014）。 */
+  setSheetRegisterRadix: (sheetId: SheetId, radix: RegisterRadix) => void;
 
   openTraceWindow: (rowId: RowId) => void;
   closeTraceWindow: (rowId: RowId) => void;
@@ -101,13 +143,6 @@ export interface AppStoreState {
   setNotes: (notes: string) => void;
 }
 
-function currentSheet(
-  state: AppStoreState,
-): Workspace["sheets"][number] | undefined {
-  const id = state.activeSheetId ?? state.workspace.activeSheetId;
-  return state.workspace.sheets.find((sheet) => sheet.sheetId === id);
-}
-
 export const useAppStore = create<AppStoreState>()((set, get) => ({
   host: null,
   workspace: createEmptyWorkspace(),
@@ -117,20 +152,34 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   connectionModalOpen: false,
   pluginModalOpen: false,
   settingsModalOpen: false,
+  editingSheetId: null,
+  pendingDeleteSheetId: null,
+  pendingBulkClose: null,
   theme: "light",
   saveStatus: "idle",
   messages: [],
   commLog: [],
   traceWindows: {},
   pollingKeys: {},
+  selectedRowIds: [],
+  clipboardPayload: null,
 
   setHost: (host) => set({ host }),
-  setWorkspace: (workspace) => set({ workspace }),
+  setWorkspace: (workspace) =>
+    set((state) => ({
+      workspace,
+      // 加载工作区时回填持久化的主题，避免刷新后恒为浅色。
+      theme: workspace.preferences.theme ?? state.theme,
+    })),
   setLoaded: () => set({ loaded: true }),
   setConnectionState: (connectionState) => set({ connectionState }),
   setConnectionModalOpen: (connectionModalOpen) => set({ connectionModalOpen }),
   setPluginModalOpen: (pluginModalOpen) => set({ pluginModalOpen }),
   setSettingsModalOpen: (settingsModalOpen) => set({ settingsModalOpen }),
+  setEditingSheetId: (editingSheetId) => set({ editingSheetId }),
+  setPendingDeleteSheetId: (pendingDeleteSheetId) =>
+    set({ pendingDeleteSheetId }),
+  setPendingBulkClose: (pendingBulkClose) => set({ pendingBulkClose }),
   setTheme: (theme) =>
     set((state) => ({
       theme,
@@ -144,6 +193,15 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     set((state) => ({
       activeSheetId,
       workspace: { ...state.workspace, activeSheetId },
+    })),
+
+  setPanelLayout: (partial) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        panelLayout: { ...state.workspace.panelLayout, ...partial },
+        updatedAt: Date.now(),
+      },
     })),
 
   updateRow: (rowId, updater) =>
@@ -162,9 +220,11 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }),
 
   commitRowAddress: (rowId, draft) => {
-    const sheet = currentSheet(get());
+    // 按 rowId 在全部表中定位所属表，取该表的地址进制（每表独立，ADR-014）。
+    const sheets = get().workspace.sheets;
+    const sheet = sheets.find((s) => s.rows.some((r) => r.rowId === rowId));
     const row = sheet?.rows.find((r) => r.rowId === rowId);
-    if (row === undefined) {
+    if (row === undefined || sheet === undefined) {
       return {
         ok: false as const,
         error: {
@@ -177,7 +237,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
       };
     }
-    const result = commitAddress(row, draft);
+    const result = commitAddress(row, draft, sheet.registerRadix);
     if (result.ok) {
       get().updateRow(rowId, () => result.value);
     }
@@ -242,6 +302,177 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       },
     })),
 
+  setSelectedRowIds: (rowIds) => set({ selectedRowIds: rowIds }),
+
+  insertRowAfter: (sheetId, rowId) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId ? addRowAfter(sheet, rowId) : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
+    })),
+
+  insertRowBefore: (sheetId, rowId) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId ? insertRowBefore(sheet, rowId) : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
+    })),
+
+  moveSelectedRows: (sheetId, direction) =>
+    set((state) => {
+      const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
+      if (sheet === undefined || state.selectedRowIds.length === 0) {
+        return state;
+      }
+      const updated = moveRows(sheet, state.selectedRowIds, direction);
+      return {
+        workspace: {
+          ...state.workspace,
+          sheets: state.workspace.sheets.map((s) =>
+            s.sheetId === sheetId ? updated : s,
+          ),
+          updatedAt: Date.now(),
+        },
+      };
+    }),
+
+  deleteSelectedRows: (sheetId) =>
+    set((state) => {
+      const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
+      if (sheet === undefined || state.selectedRowIds.length === 0) {
+        return state;
+      }
+      const updated = deleteRows(sheet, state.selectedRowIds);
+      return {
+        workspace: {
+          ...state.workspace,
+          sheets: state.workspace.sheets.map((s) =>
+            s.sheetId === sheetId ? updated : s,
+          ),
+          updatedAt: Date.now(),
+        },
+        selectedRowIds: [],
+      };
+    }),
+
+  copySelectedRows: (sheetId) => {
+    const state = get();
+    const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
+    if (sheet === undefined || state.selectedRowIds.length === 0) return;
+    const payload = copyRowsToClipboard(sheet, state.selectedRowIds);
+    set({ clipboardPayload: payload });
+    const host = state.host;
+    if (host !== null) {
+      void host
+        .copyTextToClipboard(encodeClipboardCsv(payload))
+        .then((result) => {
+          if (!result.ok) {
+            get().appendMessage({
+              timestamp: Date.now(),
+              level: "warning",
+              messageKey: "messages.clipboardWriteFailed",
+              params: { detail: result.error.code },
+              detail: result.error.code,
+            });
+          }
+        });
+    }
+  },
+
+  cutSelectedRows: (sheetId) => {
+    const state = get();
+    const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
+    if (sheet === undefined || state.selectedRowIds.length === 0) return;
+    const { sheet: updated, payload } = cutRowsFromSheet(
+      sheet,
+      state.selectedRowIds,
+    );
+    set({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((s) =>
+          s.sheetId === sheetId ? updated : s,
+        ),
+        updatedAt: Date.now(),
+      },
+      clipboardPayload: payload,
+      selectedRowIds: [],
+    });
+    const host = state.host;
+    if (host !== null) {
+      void host
+        .copyTextToClipboard(encodeClipboardCsv(payload))
+        .then((result) => {
+          if (!result.ok) {
+            get().appendMessage({
+              timestamp: Date.now(),
+              level: "warning",
+              messageKey: "messages.clipboardWriteFailed",
+              params: { detail: result.error.code },
+              detail: result.error.code,
+            });
+          }
+        });
+    }
+  },
+
+  pasteRows: async (sheetId, afterRowId) => {
+    const state = get();
+    const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
+    if (sheet === undefined) return;
+    let payload: RowClipboardData[] | null = null;
+    let issues: ClipboardIssue[] = [];
+    const host = state.host;
+    // 系统剪贴板为优先来源；读取失败/无内容时回退到应用内剪贴板。
+    if (host !== null) {
+      const readResult = await host.readTextFromClipboard();
+      if (readResult.ok && readResult.value !== null) {
+        const decoded = decodeClipboardCsv(readResult.value);
+        payload = decoded.rows;
+        issues = decoded.issues;
+      }
+    }
+    if (payload === null || payload.length === 0) {
+      payload = state.clipboardPayload;
+    }
+    if (payload === null || payload.length === 0) return;
+    const last = sheet.rows[sheet.rows.length - 1];
+    const targetId = afterRowId ?? last?.rowId ?? "";
+    const { sheet: updated, issues: pasteIssues } = pasteClipboardRows(
+      sheet,
+      targetId,
+      payload,
+      sheet.registerRadix,
+    );
+    const allIssues = [...issues, ...pasteIssues];
+    set({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((s) =>
+          s.sheetId === sheetId ? updated : s,
+        ),
+        updatedAt: Date.now(),
+      },
+    });
+    if (allIssues.length > 0) {
+      get().appendMessage({
+        timestamp: Date.now(),
+        level: "warning",
+        messageKey: "messages.pasteIssues",
+        params: { count: allIssues.length },
+        detail: null,
+      });
+    }
+  },
+
   addSheet: () =>
     set((state) => {
       const order = state.workspace.sheets.length;
@@ -293,24 +524,102 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     }),
 
-  duplicateSheet: (sheetId) =>
+  closeOtherSheets: (sheetId) =>
     set((state) => {
-      const source = state.workspace.sheets.find(
+      const target = state.workspace.sheets.find(
         (sheet) => sheet.sheetId === sheetId,
       );
+      // 目标不存在或已是唯一表：无副作用（不触发保存/轮询同步）。
+      if (target === undefined || state.workspace.sheets.length <= 1) {
+        return state;
+      }
+      const sheets = [{ ...target, order: 0 }];
+      return {
+        workspace: {
+          ...state.workspace,
+          sheets,
+          activeSheetId: sheetId,
+          updatedAt: Date.now(),
+        },
+        activeSheetId: sheetId,
+      };
+    }),
+
+  closeSheetsToRight: (sheetId) =>
+    set((state) => {
+      const index = state.workspace.sheets.findIndex(
+        (sheet) => sheet.sheetId === sheetId,
+      );
+      // 目标不存在或已是末位表：无副作用。
+      if (index === -1 || index === state.workspace.sheets.length - 1) {
+        return state;
+      }
+      const sheets = state.workspace.sheets
+        .slice(0, index + 1)
+        .map((sheet, i) => ({ ...sheet, order: i }));
+      return {
+        workspace: {
+          ...state.workspace,
+          sheets,
+          activeSheetId: sheetId,
+          updatedAt: Date.now(),
+        },
+        activeSheetId: sheetId,
+      };
+    }),
+
+  duplicateSheet: (sheetId) =>
+    set((state) => {
+      const sourceIndex = state.workspace.sheets.findIndex(
+        (sheet) => sheet.sheetId === sheetId,
+      );
+      const source = state.workspace.sheets[sourceIndex];
       if (source === undefined) return state;
-      const order = state.workspace.sheets.length;
-      const copy = createRegisterSheet(`${source.name} copy`, order);
+      const copy = createRegisterSheet(`${source.name} Copy`, sourceIndex + 1);
+      // 副本继承源表的 Register 地址进制（结构偏好随复制保留）。
+      copy.registerRadix = source.registerRadix;
       copy.rows = source.rows.map((row) => ({
         ...row,
         rowId: newRowId(),
         pollingEnabled: false,
         traceEnabled: false,
       }));
+      const sheets = [...state.workspace.sheets];
+      sheets.splice(sourceIndex + 1, 0, copy);
+      const reordered = sheets.map((sheet, index) => ({
+        ...sheet,
+        order: index,
+      }));
       return {
         workspace: {
           ...state.workspace,
-          sheets: [...state.workspace.sheets, copy],
+          sheets: reordered,
+          activeSheetId: copy.sheetId,
+          updatedAt: Date.now(),
+        },
+        activeSheetId: copy.sheetId,
+      };
+    }),
+
+  moveSheetTo: (sheetId, toIndex) =>
+    set((state) => {
+      const fromIndex = state.workspace.sheets.findIndex(
+        (sheet) => sheet.sheetId === sheetId,
+      );
+      if (fromIndex === -1 || fromIndex === toIndex) return state;
+      const sheets = [...state.workspace.sheets];
+      const [moved] = sheets.splice(fromIndex, 1);
+      if (moved === undefined) return state;
+      const clamp = Math.max(0, Math.min(toIndex, sheets.length));
+      sheets.splice(clamp, 0, moved);
+      const reordered = sheets.map((sheet, index) => ({
+        ...sheet,
+        order: index,
+      }));
+      return {
+        workspace: {
+          ...state.workspace,
+          sheets: reordered,
           updatedAt: Date.now(),
         },
       };
@@ -321,6 +630,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       ...row,
       dataType,
       updatedAt: Date.now(),
+    })),
+
+  setSheetRegisterRadix: (sheetId, radix) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId
+            ? { ...sheet, registerRadix: radix, updatedAt: Date.now() }
+            : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
     })),
 
   openTraceWindow: (rowId) =>

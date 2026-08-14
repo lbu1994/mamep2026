@@ -55,6 +55,8 @@ const sheetSchema = z.object({
   type: z.literal("holding-register"),
   order: z.number().int(),
   rows: z.array(rowSchema),
+  /** Register 地址列进制：默认 DEC（ADR-014）；老数据缺省时补默认值，无需迁移 */
+  registerRadix: z.enum(["dec", "hex"]).default("dec"),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react";
-import { formatRawValue } from "@mamep2026/data-conversion";
 import type { RowId } from "@mamep2026/domain";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
 import type { CommunicationLogEvent } from "@mamep2026/communication";
@@ -11,6 +10,7 @@ import {
   createIdbKeyValueStore,
   IndexedDBWorkspaceRepository,
 } from "@mamep2026/platform-web";
+import { applyPollResult, buildPollingTargets } from "@mamep2026/register-table";
 import { MamepApp, useAppStore } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
 
@@ -99,33 +99,34 @@ export default function App(): React.ReactNode {
     host.subscribePollResult((key, address, result) => {
       if (!result.ok) return;
       const state = useAppStore.getState();
-      const sheet = state.workspace.sheets.find((sh) =>
-        sh.rows.some((r) => r.rowId === key),
-      );
-      const row = sheet?.rows.find((r) => r.rowId === key);
-      if (row === undefined) return;
-      // generation 失效：结果对应的请求地址必须仍是该行当前的轮询地址。
       const profile =
         state.workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
-      const rowAddress = row.addressValue?.value;
-      if (rowAddress === undefined) return;
-      const expected =
-        profile.addressAdjust === "on" ? rowAddress - 1 : rowAddress;
-      if (address !== 0 && address !== expected) return;
-      // 读取成功：按当前 Type 格式化并强制覆盖单元格（轮询/全表共用）。
-      updateRow(key as RowId, (r) => ({
-        ...r,
-        cellText: formatRawValue(result.value, row.dataType),
-        updatedAt: Date.now(),
-      }));
+      // 应用层纯函数完成 generation 校验与按 Type 格式化（§17）。
+      const updated = applyPollResult(
+        state.workspace.sheets,
+        key,
+        address,
+        result.value,
+        profile.addressAdjust,
+      );
+      if (updated !== null) updateRow(key as RowId, () => updated);
     });
 
-    // 启动：加载工作区（保持离线）。
+    // 启动：加载工作区。
     void host
       .loadWorkspace()
       .then((result) => {
         if (result.ok) {
           setWorkspace(result.value);
+        } else {
+          // 恢复失败给出明确提示（§16.5.6），应用以空工作区保持可操作。
+          appendMessage({
+            timestamp: Date.now(),
+            level: "error",
+            messageKey: "messages.loadFailed",
+            params: { detail: result.error.code },
+            detail: result.error.code,
+          });
         }
         setLoaded();
         appendMessage({
@@ -134,12 +135,31 @@ export default function App(): React.ReactNode {
           messageKey: "messages.appStarted",
           detail: null,
         });
-        // 每次启动自动弹出 Connection Settings。
-        setConnectionModalOpen(true);
+        if (host.isMockMode) {
+          // Mock 模式：跳过 Connection Settings，用默认 RTU 配置直接连接模拟设备。
+          const profile =
+            (result.ok ? result.value.connectionProfiles[0] : undefined) ??
+            createDefaultRtuProfile();
+          void host.connect(profile, null).then((connectResult) => {
+            if (!connectResult.ok) {
+              appendMessage({
+                timestamp: Date.now(),
+                level: "error",
+                messageKey: "messages.connectFailed",
+                detail: connectResult.error.technicalMessage,
+              });
+            }
+          });
+        } else {
+          // 非 Mock 模式：启动自动弹出 Connection Settings。
+          setConnectionModalOpen(true);
+        }
       })
       .catch(() => {
         setLoaded();
-        setConnectionModalOpen(true);
+        if (!host.isMockMode) {
+          setConnectionModalOpen(true);
+        }
       });
 
     return () => {
@@ -157,21 +177,10 @@ export default function App(): React.ReactNode {
 
     const profile =
       workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
-    const adjust = profile.addressAdjust;
-    const targets: Array<{ key: string; address: number }> = [];
-    for (const sheet of workspace.sheets) {
-      for (const row of sheet.rows) {
-        if (!row.pollingEnabled) continue;
-        const address = row.addressValue?.value;
-        if (address === undefined) continue;
-        if (adjust === "on" && address === 0) continue;
-        targets.push({
-          key: row.rowId,
-          address: adjust === "on" ? address - 1 : address,
-        });
-      }
-    }
-    host.updatePollingTargets(targets);
+    // 应用层纯函数构建轮询目标（含 Address Adjust 偏移与地址 0 跳过）。
+    host.updatePollingTargets(
+      buildPollingTargets(workspace.sheets, profile.addressAdjust),
+    );
   }, [workspace]);
 
   return <MamepApp />;

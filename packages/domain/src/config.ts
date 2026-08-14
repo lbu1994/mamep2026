@@ -17,6 +17,10 @@ export const defaultConfig = {
     /** Address Adjust：默认 OFF（ON 时发送地址 = 用户地址 − 1） */
     addressAdjust: "off",
   },
+  registerTable: {
+    /** Register 地址列进制：默认 DEC（按表独立，ADR-014） */
+    addressRadix: "dec",
+  },
   polling: {
     /** 每行最多一个等待中的轮询任务（内部值，不提供用户配置） */
     maxPendingPollingTasks: 1,

@@ -22,6 +22,10 @@ describe("defaultConfig (docs/AGENTS.md §42 集中默认值)", () => {
     expect(defaultConfig.rtu.addressAdjust).toBe("off");
   });
 
+  it("defaults Register address radix to DEC", () => {
+    expect(defaultConfig.registerTable.addressRadix).toBe("dec");
+  });
+
   it("uses request timeout 1000 ms and retry count 1", () => {
     expect(defaultConfig.rtu.requestTimeoutMs).toBe(1000);
     expect(defaultConfig.rtu.retryCount).toBe(1);

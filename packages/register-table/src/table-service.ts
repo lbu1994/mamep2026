@@ -8,17 +8,17 @@
 import {
   createEmptyRow,
   createMamepError,
-  RawRegisterValue,
   type RegisterRow,
   type Result,
 } from "@mamep2026/domain";
-import { fail, ok } from "@mamep2026/domain";
+import { fail } from "@mamep2026/domain";
 import type {
   CommunicationSession,
   WriteOutcome,
 } from "@mamep2026/communication";
-import { formatRawValue, parseCellText } from "@mamep2026/data-conversion";
+import { parseCellText } from "@mamep2026/data-conversion";
 import { computeSentAddress } from "./address";
+import { applyReadValueToRow } from "./row-operations";
 
 export interface TableServiceDeps {
   getSession: () => CommunicationSession | null;
@@ -66,14 +66,7 @@ export class RegisterTableService {
 
   /** 读取成功后应用结果：按 Type 格式化并强制覆盖单元格文本（单一当前值模型）。 */
   applyReadResult(row: RegisterRow, raw: number): Result<RegisterRow> {
-    const rawValue = RawRegisterValue.create(raw);
-    if (!rawValue.ok) return rawValue;
-    return ok({
-      ...row,
-      cellText: formatRawValue(raw, row.dataType),
-      lastKnownRawValue: rawValue.value,
-      updatedAt: Date.now(),
-    });
+    return applyReadValueToRow(row, raw);
   }
 
   /** 单行写入：校验连接/地址/输入值，转 16 位原始值后发送 FC0x10。 */
