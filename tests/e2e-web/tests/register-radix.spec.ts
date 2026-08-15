@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
@@ -38,6 +38,12 @@ function registerInput(page: Page) {
   return page.getByLabel("Register", { exact: true }).first();
 }
 
+/** 进入可编辑单元格编辑态并填充（非编辑态是 div[role=button]，需先点击，2026-08-15 编辑模式设计）。 */
+async function clickAndFill(locator: Locator, value: string): Promise<void> {
+  await locator.click();
+  await locator.fill(value);
+}
+
 async function addFirstRow(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: "Add Row" })
@@ -72,9 +78,9 @@ test("switching to HEX updates the header and pads committed addresses", async (
 
   await addFirstRow(page);
   const input = registerInput(page);
-  await input.fill("1f");
+  await clickAndFill(input, "1f");
   await input.press("Enter");
-  await expect(input).toHaveValue("001F");
+  await expect(input).toHaveText("001F");
 });
 
 test("HEX mode rejects the 0x prefix and keeps the draft", async ({ page }) => {
@@ -82,10 +88,10 @@ test("HEX mode rejects the 0x prefix and keeps the draft", async ({ page }) => {
   await clickRadix(page, "HEX");
   await addFirstRow(page);
   const input = registerInput(page);
-  await input.fill("0x12");
+  await clickAndFill(input, "0x12");
   await input.press("Enter");
-  await expect(input).toHaveValue("0x12");
-  await expect(input).toHaveClass(/ant-input-status-error/);
+  await expect(input).toHaveText("0x12");
+  await expect(input).toHaveClass(/register-table__editable-cell-value-wrap--error/);
 });
 
 test("DEC mode rejects hex letters and out-of-range values", async ({
@@ -94,21 +100,21 @@ test("DEC mode rejects hex letters and out-of-range values", async ({
   await openApp(page);
   await addFirstRow(page);
   const input = registerInput(page);
-  await input.fill("1F");
+  await clickAndFill(input, "1F");
   await input.press("Enter");
-  await expect(input).toHaveValue("1F");
-  await expect(input).toHaveClass(/ant-input-status-error/);
+  await expect(input).toHaveText("1F");
+  await expect(input).toHaveClass(/register-table__editable-cell-value-wrap--error/);
 
-  await input.fill("70000");
+  await clickAndFill(input, "70000");
   await input.press("Enter");
-  await expect(input).toHaveValue("70000");
-  await expect(input).toHaveClass(/ant-input-status-error/);
+  await expect(input).toHaveText("70000");
+  await expect(input).toHaveClass(/register-table__editable-cell-value-wrap--error/);
 
   // 合法十进制提交成功，无错误态。
-  await input.fill("31");
+  await clickAndFill(input, "31");
   await input.press("Enter");
-  await expect(input).toHaveValue("31");
-  await expect(input).not.toHaveClass(/ant-input-status-error/);
+  await expect(input).toHaveText("31");
+  await expect(input).not.toHaveClass(/register-table__editable-cell-value-wrap--error/);
 });
 
 test("switching mode does not reformat already committed addresses", async ({
@@ -118,14 +124,14 @@ test("switching mode does not reformat already committed addresses", async ({
   await clickRadix(page, "HEX");
   await addFirstRow(page);
   const input = registerInput(page);
-  await input.fill("1f");
+  await clickAndFill(input, "1f");
   await input.press("Enter");
-  await expect(input).toHaveValue("001F");
+  await expect(input).toHaveText("001F");
 
   // 切回 DEC：已提交文本保持 "001F"，不做重排（仅影响后续解析与表头）。
   await clickRadix(page, "DEC");
   await expect(tableHeader(page)).toContainText("Register[DEC]");
-  await expect(input).toHaveValue("001F");
+  await expect(input).toHaveText("001F");
 });
 
 test("radix is per-sheet and survives a reload", async ({ page }) => {

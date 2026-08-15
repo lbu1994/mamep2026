@@ -16,6 +16,7 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 - Electron 主进程仍在 `electron/main.ts`（不在本轮实现/测试范围，仅保证编译与路径引用不破坏）；`vscode-extension/` 同理。
 - **开发进度（2026-08-13）**：浏览器侧 MVP（P0）已实现并验收——文档修正（ADR-013）→ monorepo 迁移 → domain/protocol/data-conversion/communication/workspace/logging/plugin-api/register-table/platform-web/ui 分层实现（TDD，包内测试 170+）→ acceptance 与 e2e-web（Playwright 系统 Edge，mock 传输）全绿。浏览器端支持：Web Serial RTU（含 dev mock 传输 `?mockTransport=1`）、单表寄存器 FC03/FC0x10、单行/全表读取、WP 轮询（间隔=Rx Delay）、TM 追踪窗、多标签页、通信日志（仅字节）、IndexedDB 自动保存与恢复、浅/深主题、i18n（en-US 主 + zh-CN）、最小插件注册表。
 - **开发进度（2026-08-15，ADR-015）**：行编辑完整落地——插入行、剪切/粘贴（系统 CSV + 应用内剪贴板）、多行选择（antd rowSelection 原生）、行级键盘快捷键、行级右键菜单（Dropdown）；多选/剪切/粘贴由 PRD §8.3 P1 提前到 MVP；删除维持直接删除不弹确认（用户决策）。
+- **开发进度（2026-08-15）**：UI 打磨与细节迭代——寄存器表改为 antd `Tabs type="editable-card"`（每 Sheet 一页签，`className="register-table-tabs"`）；通信日志支持自动滚动/暂停/复制（复用 `host.copyTextToClipboard` 端口）；PluginManager 改用 antd 6.6 独立虚拟列表组件 **`Listy`**（`import { Listy } from 'antd'`，用 `items`+`itemRender`；**`List` 已弃用**，使用会在 dev console 报弃用警告、污染 e2e「无 console 错误」断言）；启动分双模式（Mock `?mockTransport=1` 自动连接不弹窗 / 非 Mock 启动弹 Connection Settings）。详细踩坑见 [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md) 与仓库技能 `.agents/skills/browser-e2e-testing/`。
 
 ## 常用命令（以根 package.json 实际脚本为准，不得假设不存在的脚本）
 
@@ -36,6 +37,13 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 - VSCode 插件：webview 当前为 dev 模式（iframe 指向 dev server，`MAMEP_DEV_URL` 可覆盖）；CSP 必须含 `style-src 'unsafe-inline'` 并设置 html/body/iframe 100% 宽高，否则 iframe 缩成 300×150。
 - 浏览器自动化测试：**Playwright 使用系统 Edge**（`channel: "msedge"`），不下载 Chromium。工作流见 [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md)。
 - dev server 是后台长驻进程，会话中可能被系统清理；测试前先确认 5173 端口，停了就重启 `pnpm dev`。
+- **antd v6（6.6）关键差异（写 UI / 测试选择器前必读）**：
+  - `Tabs` 活动面板 DOM 类名是 `.ant-tabs-content-active`（**不是** v5 的 `.ant-tabs-tabpane`，v6 无该类名）；页面有两个 Tabs 时选择器必须限定范围（表格用 `.register-table-tabs ...`，否则 BottomPanel 的页签会误匹配）。
+  - `Tabs` 的 `+` 新建按钮 `.ant-tabs-nav-add` 在 DOM 里出现两次，可见的在 `.ant-tabs-nav-list` 内，用 `.ant-tabs-nav-list .ant-tabs-nav-add` 定位。
+  - `List` 组件已弃用（dev console 报错）；虚拟列表用 `Listy`（`items`+`itemRender`，渲染类 `.ant-listy-item`）。
+  - 弹窗（Modal）结构用 `.ant-modal-container` / `.ant-modal-body`，没有 `.ant-modal-content`。
+  - 弃用/错误用法会导致 dev console.error，破坏 e2e「无 console 错误」断言。
+  - 组件测试（`packages/ui`）用 jsdom，BottomPanel 类组件需包 `<AntApp>`（`App.useApp()`）；`turbo` 跑 typecheck/lint 会进 TUI 备用缓冲区吞输出，用 `$env:TURBO_UI="0"; pnpm typecheck` 流式输出。
 
 ## 测试约定
 

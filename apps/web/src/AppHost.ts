@@ -335,6 +335,7 @@ export class BrowserAppHost implements AppHost {
       dataBits: profile?.dataBits ?? 8,
       stopBits: profile?.stopBits ?? 1,
       parity: profile?.parity ?? "none",
+      flowControl: profile?.flowControl ?? "off",
       slaveAddress: profile?.slaveAddress ?? 1,
       timeoutMs: profile?.requestTimeoutMs ?? 1000,
       retryCount: profile?.retryCount ?? 1,

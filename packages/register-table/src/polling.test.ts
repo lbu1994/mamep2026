@@ -119,4 +119,53 @@ describe("applyPollResult", () => {
     expect(pollResultAddressMatches(row, 0x0002, "on")).toBe(true);
     expect(pollResultAddressMatches(row, 0x0003, "on")).toBe(false);
   });
+
+  it("returns the same row reference when the device value is unchanged (polling perf)", () => {
+    const row = makeRow(0x0001, "hex");
+    row.pollingEnabled = true;
+    // 首轮轮询建立 lastKnownRawValue 与 cellText（结果对象将写回 store）。
+    const first = applyPollResult(
+      [makeSheet("s", [row])],
+      row.rowId,
+      0x0001,
+      0x00ab,
+      "off",
+    );
+    expect(first?.cellText).toBe("00AB");
+    expect(first?.lastKnownRawValue?.value).toBe(0x00ab);
+    // 模拟首轮结果已写回 store：后续轮询以 first 为行对象。
+    // 相同值再次轮询：返回原行引用，调用方（updateRow）据此短路，不产生状态变更。
+    const second = applyPollResult(
+      [makeSheet("s", [first as RegisterRow])],
+      first?.rowId ?? row.rowId,
+      0x0001,
+      0x00ab,
+      "off",
+    );
+    expect(second).toBe(first);
+  });
+
+  it("re-formats when the data type changed even if the value is unchanged", () => {
+    const row = makeRow(0x0001, "hex");
+    row.pollingEnabled = true;
+    const first = applyPollResult(
+      [makeSheet("s", [row])],
+      row.rowId,
+      0x0001,
+      0x00ab,
+      "off",
+    );
+    if (first === null) throw new Error("first poll failed");
+    // 用户切换 dataType（setRowDataType 不重格式化 cellText）：cellText 仍是旧格式。
+    const changed = { ...first, dataType: "unsigned" as const };
+    const result = applyPollResult(
+      [makeSheet("s", [changed])],
+      changed.rowId,
+      0x0001,
+      0x00ab,
+      "off",
+    );
+    expect(result).not.toBe(changed);
+    expect(result?.cellText).toBe("171");
+  });
 });

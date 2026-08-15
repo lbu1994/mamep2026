@@ -117,6 +117,8 @@ Mamep2026 是一款面向设备开发人员和嵌入式开发人员的轻量化�
 | Electron |       支持 |       支持 |
 | VSCode   |       支持 |       支持 |
 
+> 实现状态（2026-08-15）：上表为三端产品规划。当前浏览器侧 MVP 已落地（Web Serial RTU，能力矩阵 `serialPorts: "browser-picker"`）；Electron 与 VSCode 侧（含 Modbus TCP）为规划目标，当前仅保证编译与路径引用不破坏（见 §7 与根 [AGENTS.md](../AGENTS.md)）。
+
 核心产品价值：
 
 - 使用一张表管理任意不连续保持寄存器
@@ -141,6 +143,8 @@ MVP 交付形态为三端运行骨架加核心调试闭环：
 - 浏览器、Electron 和 VSCode 三端均能启动并加载同一套共享 UI 页面，页面显示一致；
 - 三端功能完整度按 PRD 优先级逐步补齐，骨架阶段不要求串口、TCP 等能力生效；
 - 三端骨架必须符合各自安全边界：Electron 为 Main、Preload、Renderer 隔离，VSCode 为 Extension Host 与 Webview 隔离。
+
+> 当前状态（2026-08-15）：浏览器侧 MVP（P0）已实现并验收；Electron 与 VSCode 骨架尚未在本轮实现/验证（仅保证编译与路径引用不破坏）。
 
 ### 5.1 当前核心协议范围
 
@@ -284,7 +288,7 @@ Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置
 
 实际目录尚未创建或与上述结构存在合理差异时，应以当前已确认的工程结构和 ADR 为准，不得为了匹配示意结构进行无关的大规模移动。
 
-当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`electron/main.ts` 与 `vscode-extension/` 保持不变（不在浏览器 MVP 实现与测试范围）。
+当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`electron/main.ts` 与 `vscode-extension/` 保持不变（不在浏览器 MVP 实现与测试范围）。注：对应目标结构中的 `apps/electron`、`apps/vscode-extension`，目前均位于仓库根目录而非 `apps/` 下；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
 
 ### 7.1 模块责任
 
@@ -1326,7 +1330,7 @@ UI 必须：
 
 ### 25.3 连接配置
 
-连接配置使用 Modal（每次应用启动自动弹出，浏览器端仅提供 Modbus RTU 配置）。Connection Settings、Plugin Manager、Settings 的入口统一放在顶部应用栏，不放在侧边栏。
+连接配置使用 Modal（浏览器非 Mock 模式启动时自动弹出；dev Mock 传输模式 `?mockTransport=1` 下自动连接模拟设备、不弹出，见 [浏览器端自动化测试方法指南](浏览器端自动化测试方法指南.md)；浏览器端仅提供 Modbus RTU 配置）。Connection Settings、Plugin Manager、Settings 的入口统一放在顶部应用栏，不放在侧边栏。
 
 连接失败时必须：
 

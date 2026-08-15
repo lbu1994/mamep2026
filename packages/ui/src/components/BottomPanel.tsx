@@ -1,11 +1,55 @@
-import { useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Descriptions, Input, Tabs, Tag, Typography } from "antd";
-import { DownOutlined, UpOutlined } from "@ant-design/icons";
+import {
+  App,
+  Badge,
+  Button,
+  Descriptions,
+  Input,
+  Space,
+  Switch,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
+import { CopyOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
+import type { FlowControl } from "@mamep2026/domain";
+import type { CommunicationLogEntry } from "@mamep2026/logging";
 import { useAppStore } from "../app-store";
+import { isNearBottom } from "../log-scroll";
+
+/**
+ * 通信日志单行（性能优化）：memo 后追加新日志时，旧行 entry 引用不变即跳过整棵子树重渲染，
+ * 避免高频轮询日志把 O(n) 列表重渲染（含 toLocaleTimeString 与 antd Tag 开销）摊到每次 append。
+ */
+const CommLogRow = memo(function CommLogRow({
+  entry,
+}: {
+  entry: CommunicationLogEntry;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="log-row">
+      <span className="log-row__time">
+        {new Date(entry.timestamp).toLocaleTimeString()}
+      </span>
+      <Tag color={entry.direction === "request" ? "blue" : "green"}>
+        {entry.direction === "request"
+          ? t("panel.request")
+          : t("panel.response")}
+      </Tag>
+      <span className="log-row__text">
+        <Typography.Text code>{entry.bytesHex}</Typography.Text>
+      </span>
+    </div>
+  );
+});
+CommLogRow.displayName = "CommLogRow";
 
 export function BottomPanel(): React.ReactNode {
   const { t, i18n } = useTranslation();
+  const { message } = App.useApp();
   const messages = useAppStore((s) => s.messages);
   const commLog = useAppStore((s) => s.commLog);
   const clearCommLog = useAppStore((s) => s.clearCommLog);
@@ -18,12 +62,7 @@ export function BottomPanel(): React.ReactNode {
   const connectionState = useAppStore((s) => s.connectionState);
 
   const collapsed = panelLayout.bottomPanelCollapsed;
-  const panelHeight = panelLayout.bottomPanelHeight;
   const activeTab = panelLayout.activeBottomTab;
-
-  // 拖拽调高：clamp 到 [120, 60% 视口]，松手后持久化到 panelLayout。
-  const [dragHeight, setDragHeight] = useState<number | null>(null);
-  const dragHeightRef = useRef<number | null>(null);
 
   // 折叠时新错误到达 → Messages 标签红点（事件驱动，避免在 effect 中 setState）。
   const [seenCount, setSeenCount] = useState(0);
@@ -39,31 +78,6 @@ export function BottomPanel(): React.ReactNode {
 
   const markSeen = (): void => setSeenCount(messages.length);
 
-  const handleResizeStart = (e: React.PointerEvent<HTMLDivElement>): void => {
-    const startY = e.clientY;
-    const startHeight = panelHeight;
-    dragHeightRef.current = startHeight;
-    setDragHeight(startHeight);
-    const onMove = (ev: PointerEvent): void => {
-      const next = Math.min(
-        Math.max(startHeight + (startY - ev.clientY), 120),
-        Math.floor(window.innerHeight * 0.6),
-      );
-      dragHeightRef.current = next;
-      setDragHeight(next);
-    };
-    const onUp = (): void => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      const height = dragHeightRef.current;
-      dragHeightRef.current = null;
-      if (height !== null) setPanelLayout({ bottomPanelHeight: height });
-      setDragHeight(null);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  };
-
   const toggleCollapsed = (): void => {
     if (collapsed) markSeen();
     setPanelLayout({ bottomPanelCollapsed: !collapsed });
@@ -77,6 +91,51 @@ export function BottomPanel(): React.ReactNode {
 
   const levelColor = (level: string): string =>
     level === "error" ? "red" : level === "warning" ? "orange" : "blue";
+
+  // 通信日志：自动滚动开关（会话级，不持久化）+ 跟随状态。
+  const [autoScroll, setAutoScroll] = useState(true);
+  const stickToBottom = useRef(true);
+  const commListRef = useRef<HTMLDivElement | null>(null);
+
+  // 新日志到达时，若开关开启且用户未上滚离开底部，则自动滚动到底部。
+  // 性能优化：rAF 合并高频 append，避免每秒数十次同步写 scrollTop。
+  useEffect(() => {
+    if (!autoScroll || !stickToBottom.current) return;
+    const el = commListRef.current;
+    if (el === null) return;
+    const handle = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(handle);
+  }, [commLog.length, autoScroll]);
+
+  const handleCommScroll = (e: React.UIEvent<HTMLDivElement>): void => {
+    const el = e.currentTarget;
+    stickToBottom.current = isNearBottom(
+      el.scrollHeight,
+      el.scrollTop,
+      el.clientHeight,
+    );
+  };
+
+  const handleCopy = async (): Promise<void> => {
+    if (host === null || commLog.length === 0) return;
+    const text = commLog
+      .map((entry) => {
+        const direction =
+          entry.direction === "request"
+            ? t("panel.request")
+            : t("panel.response");
+        return `[${new Date(entry.timestamp).toLocaleTimeString()}] ${direction}  ${entry.bytesHex}`;
+      })
+      .join("\n");
+    const result = await host.copyTextToClipboard(text);
+    if (result.ok) {
+      message.success(t("panel.copySuccess"));
+    } else {
+      message.error(t("errors.clipboardUnavailable"));
+    }
+  };
 
   const messagesTab = (
     <div className="log-list">
@@ -108,33 +167,58 @@ export function BottomPanel(): React.ReactNode {
   );
 
   const commLogTab = (
-    <div>
-      <Button size="small" onClick={clearCommLog} style={{ marginBottom: 4 }}>
-        {t("panel.clear")}
-      </Button>
-      <div className="log-list">
-        {commLog.map((entry, index) => (
-          <div key={index} className="log-row">
-            <span className="log-row__time">
-              {new Date(entry.timestamp).toLocaleTimeString()}
+    <div className="comm-log">
+      <div className="comm-log__toolbar">
+        <Space size="small">
+          <Tooltip title={t("panel.autoScroll")}>
+            <span className="comm-log__autoscroll">
+              <Switch
+                size="small"
+                checked={autoScroll}
+                onChange={setAutoScroll}
+                aria-label={t("panel.autoScroll")}
+              />
+              <Typography.Text>{t("panel.autoScroll")}</Typography.Text>
             </span>
-            <Tag color={entry.direction === "request" ? "blue" : "green"}>
-              {entry.direction === "request"
-                ? t("panel.request")
-                : t("panel.response")}
-            </Tag>
-            <span className="log-row__text">
-              <Typography.Text code>{entry.bytesHex}</Typography.Text>
-            </span>
-          </div>
-        ))}
+          </Tooltip>
+          <Button
+            size="small"
+            icon={<CopyOutlined />}
+            disabled={commLog.length === 0 || host === null}
+            onClick={() => void handleCopy()}
+          >
+            {t("panel.copy")}
+          </Button>
+          <Button size="small" onClick={clearCommLog}>
+            {t("panel.clear")}
+          </Button>
+        </Space>
+      </div>
+      <div
+        ref={commListRef}
+        className="log-list comm-log__list"
+        onScroll={handleCommScroll}
+      >
+        {commLog.length === 0 ? (
+          <Typography.Text type="secondary">—</Typography.Text>
+        ) : (
+          commLog.map((entry, index) => (
+            <CommLogRow key={index} entry={entry} />
+          ))
+        )}
       </div>
     </div>
   );
 
+  const flowControlLabels: Record<FlowControl, string> = {
+    off: t("connection.flowOff"),
+    "rts-cts": t("connection.flowRtsCts"),
+    "xon-xoff": t("connection.flowXonXoff"),
+  };
+
   const propertiesTab =
     properties === null ? null : (
-      <Descriptions size="small" column={2}>
+      <Descriptions size="small" column={3}>
         <Descriptions.Item label={t("panel.serialPort")}>
           {properties.portLabel ?? "-"}
         </Descriptions.Item>
@@ -150,8 +234,17 @@ export function BottomPanel(): React.ReactNode {
         <Descriptions.Item label={t("connection.parity")}>
           {properties.parity}
         </Descriptions.Item>
+        <Descriptions.Item label={t("connection.flowControl")}>
+          {flowControlLabels[properties.flowControl]}
+        </Descriptions.Item>
         <Descriptions.Item label={t("panel.slave")}>
           {properties.slaveAddress}
+        </Descriptions.Item>
+        <Descriptions.Item label={t("connection.timeout")}>
+          {properties.timeoutMs}
+        </Descriptions.Item>
+        <Descriptions.Item label={t("connection.retry")}>
+          {properties.retryCount}
         </Descriptions.Item>
         <Descriptions.Item label={t("connection.rxDelay")}>
           {properties.rxDelayMs}
@@ -176,24 +269,12 @@ export function BottomPanel(): React.ReactNode {
     />
   );
 
-  const height = dragHeight ?? panelHeight;
-
   return (
     <div
       className={
         collapsed ? "bottom-panel bottom-panel--collapsed" : "bottom-panel"
       }
-      style={collapsed ? undefined : { height }}
     >
-      <div
-        className={
-          dragHeight !== null
-            ? "bottom-panel__resize bottom-panel__resize--active"
-            : "bottom-panel__resize"
-        }
-        aria-hidden="true"
-        onPointerDown={handleResizeStart}
-      />
       <Tabs
         size="small"
         activeKey={activeTab}
@@ -211,10 +292,16 @@ export function BottomPanel(): React.ReactNode {
           {
             key: "messages",
             label: (
-              <>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
                 {t("panel.messages")}
-                {unseenError ? <span className="messages-dot" /> : null}
-              </>
+                <Badge dot={unseenError} />
+              </span>
             ),
             children: messagesTab,
           },

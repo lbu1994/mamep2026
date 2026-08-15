@@ -50,6 +50,7 @@ function registerExamplePlugin(registry: PluginRegistry): void {
     version: "1.0.0",
     description:
       "A built-in UI-safe example plugin that validates the plugin boundary.",
+    author: "Mamep2026 Team",
     platform: { web: true, node: false },
     permissions: ["ui.panel"],
     contributions: {
@@ -69,7 +70,6 @@ export default function App(): React.ReactNode {
   const setSaveStatus = useAppStore((s) => s.setSaveStatus);
   const updateRow = useAppStore((s) => s.updateRow);
   const setConnectionState = useAppStore((s) => s.setConnectionState);
-  const workspace = useAppStore((s) => s.workspace);
 
   const mockTransport = useMemo(() => isMockMode(), []);
 
@@ -169,19 +169,24 @@ export default function App(): React.ReactNode {
   }, []);
 
   // 工作区变更 -> 自动保存；WP 轮询目标同步（Address Adjust 应用于轮询地址）。
+  // 用 store 命令式订阅代替 React 选择器 + useEffect：行数据更新（编辑/WP 轮询）
+  // 不再触发 App 与 <MamepApp/> 的级联重渲染（性能优化）；仅 workspace 引用变化时执行副作用。
   useEffect(() => {
-    const host = hostRef.current;
-    if (host === null) return;
-    if (workspace.sheets.length === 0) return;
-    host.scheduleSave(workspace);
+    return useAppStore.subscribe((state, prevState) => {
+      if (state.workspace === prevState.workspace) return;
+      const host = hostRef.current;
+      if (host === null) return;
+      if (state.workspace.sheets.length === 0) return;
+      host.scheduleSave(state.workspace);
 
-    const profile =
-      workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
-    // 应用层纯函数构建轮询目标（含 Address Adjust 偏移与地址 0 跳过）。
-    host.updatePollingTargets(
-      buildPollingTargets(workspace.sheets, profile.addressAdjust),
-    );
-  }, [workspace]);
+      const profile =
+        state.workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
+      // 应用层纯函数构建轮询目标（含 Address Adjust 偏移与地址 0 跳过）。
+      host.updatePollingTargets(
+        buildPollingTargets(state.workspace.sheets, profile.addressAdjust),
+      );
+    });
+  }, []);
 
   return <MamepApp />;
 }

@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
-import type { MenuProps } from "antd";
+import type { MenuProps, MenuRef } from "antd";
 import {
+  App as AntApp,
   Button,
   ConfigProvider,
+  Divider,
   Dropdown,
   Layout,
+  Menu,
   Modal,
+  Popconfirm,
   Segmented,
   Select,
   Space,
+  Splitter,
   Tabs,
   Tooltip,
   Typography,
@@ -51,10 +57,33 @@ const STATE_DOT_COLOR: Record<ConnectionState, string> = {
   failed: "var(--ant-color-error)",
 };
 
+/** 折叠时底部面板仅保留标签栏的高度（px）。 */
+const COLLAPSED_BOTTOM_PANEL_HEIGHT = 40;
+
 export function MamepApp(): React.ReactNode {
   const { t, i18n } = useTranslation();
   const host = useAppStore((s) => s.host);
-  const workspace = useAppStore((s) => s.workspace);
+  // 仅订阅表元数据（id/name）与从站地址：行数据变化不触发本组件重渲染，
+  // 避免单行更新（编辑/WP 轮询）级联重渲染整个应用树（性能优化）。
+  // 注意：useShallow 只对“原语值/原语数组”逐项浅比较，因此投影为两个原语数组，
+  // 再由 useMemo 派生稳定的 { sheetId, name } 元数据数组。
+  const sheetIds = useAppStore(
+    useShallow((s) => s.workspace.sheets.map((sh) => sh.sheetId)),
+  );
+  const sheetNames = useAppStore(
+    useShallow((s) => s.workspace.sheets.map((sh) => sh.name)),
+  );
+  const slaveAddress = useAppStore(
+    (s) => s.workspace.connectionProfiles[0]?.slaveAddress ?? 1,
+  );
+  const sheetMeta = useMemo(
+    () =>
+      sheetIds.map((sheetId, index) => ({
+        sheetId,
+        name: sheetNames[index] ?? "",
+      })),
+    [sheetIds, sheetNames],
+  );
   const connectionState = useAppStore((s) => s.connectionState);
   const setConnectionState = useAppStore((s) => s.setConnectionState);
   const activeSheetId = useAppStore(
@@ -71,11 +100,21 @@ export function MamepApp(): React.ReactNode {
   const setTheme = useAppStore((s) => s.setTheme);
   const addSheet = useAppStore((s) => s.addSheet);
   const renameSheet = useAppStore((s) => s.renameSheet);
-  const traceWindows = useAppStore((s) => s.traceWindows);
+  // 只订阅追踪窗的键集合（useShallow 逐项比较）：TM 采样（appendTraceSample 重建整个
+  // record）不改变键集合，MamepApp 不随之重渲染；TraceWindow 组件自身按 rowId 订阅数据。
+  const traceWindowKeys = useAppStore(
+    useShallow((s) => Object.keys(s.traceWindows)),
+  );
   const appendTraceSample = useAppStore((s) => s.appendTraceSample);
   const setPanelLayout = useAppStore((s) => s.setPanelLayout);
   const sidebarCollapsed = useAppStore(
     (s) => s.workspace.panelLayout.sidebarCollapsed,
+  );
+  const bottomPanelCollapsed = useAppStore(
+    (s) => s.workspace.panelLayout.bottomPanelCollapsed,
+  );
+  const bottomPanelHeight = useAppStore(
+    (s) => s.workspace.panelLayout.bottomPanelHeight,
   );
   const closeSheet = useAppStore((s) => s.closeSheet);
   const duplicateSheet = useAppStore((s) => s.duplicateSheet);
@@ -89,8 +128,20 @@ export function MamepApp(): React.ReactNode {
   const closeOtherSheets = useAppStore((s) => s.closeOtherSheets);
   const closeSheetsToRight = useAppStore((s) => s.closeSheetsToRight);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  // Splitter 受控 size 拖拽过程缓冲：onResize 更新本地，onResizeEnd 才持久化到 panelLayout（避免高频写 store）。
+  const [dragPanelHeight, setDragPanelHeight] = useState<number | null>(null);
   const dragIndex = useRef<number | null>(null);
+  const menuRef = useRef<MenuRef>(null);
+
+  // antd Menu 无法通过 items 配置直接给 <li> 设 draggable，提交后在真实 DOM 上补齐，
+  // 保证表项可被真实拖拽排序（E2E 派发合成事件不依赖该属性，但真实用户拖拽需要）。
+  useEffect(() => {
+    menuRef.current?.menu?.list
+      ?.querySelectorAll<HTMLLIElement>("li[data-sheet-id]")
+      .forEach((el) => {
+        el.draggable = true;
+      });
+  });
 
   // 连接状态同步。
   useEffect(() => {
@@ -122,9 +173,9 @@ export function MamepApp(): React.ReactNode {
 
   const currentSheet = useMemo(
     () =>
-      workspace.sheets.find((sheet) => sheet.sheetId === activeSheetId) ??
-      workspace.sheets[0],
-    [workspace, activeSheetId],
+      sheetMeta.find((sheet) => sheet.sheetId === activeSheetId) ??
+      sheetMeta[0],
+    [sheetMeta, activeSheetId],
   );
 
   const connected = connectionState === "connected";
@@ -140,7 +191,6 @@ export function MamepApp(): React.ReactNode {
   const handleResetWorkspace = (): void => {
     if (host === null || host === undefined) return;
     void host.resetWorkspace().then((result) => {
-      setResetConfirmOpen(false);
       if (result.ok) {
         setWorkspace(result.value);
         appendMessage({
@@ -160,8 +210,6 @@ export function MamepApp(): React.ReactNode {
       }
     });
   };
-
-  const slaveAddress = workspace.connectionProfiles[0]?.slaveAddress ?? 1;
 
   const handleRenameSheet = (sheetId: SheetId): void => {
     setActiveSheetId(sheetId);
@@ -203,12 +251,12 @@ export function MamepApp(): React.ReactNode {
     pendingBulkClose === null
       ? 0
       : pendingBulkClose.kind === "others"
-        ? workspace.sheets.length - 1
+        ? sheetMeta.length - 1
         : Math.max(
             0,
-            workspace.sheets.length -
+            sheetMeta.length -
               1 -
-              workspace.sheets.findIndex(
+              sheetMeta.findIndex(
                 (sheet) => sheet.sheetId === pendingBulkClose.sheetId,
               ),
           );
@@ -217,7 +265,7 @@ export function MamepApp(): React.ReactNode {
     sheetId: SheetId,
     index: number,
   ): NonNullable<MenuProps["items"]> =>
-    buildSheetMenuItems(t, sheetId, index, workspace.sheets.length, {
+    buildSheetMenuItems(t, sheetId, index, sheetMeta.length, {
       onRename: handleRenameSheet,
       onDuplicate: duplicateSheet,
       onCloseOthers: handleCloseOthers,
@@ -229,252 +277,217 @@ export function MamepApp(): React.ReactNode {
 
   return (
     <ConfigProvider theme={buildTheme(theme === "dark")}>
-      <Layout style={{ height: "100vh" }}>
-        <Layout.Header className="mamep-header">
-          <Button
-            type="text"
-            size="small"
-            aria-label={t("topbar.toggleSidebar")}
-            icon={
-              sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
-            }
-            onClick={() =>
-              setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
-            }
-          />
-          <div className="mamep-header__brand">
-            <Typography.Text className="mamep-header__brand-title">
-              {t("app.title")}
-            </Typography.Text>
-            <span className="mamep-header__protocol">
-              {host !== null && host !== undefined && host.isMockMode
-                ? t("topbar.mock")
-                : t("app.protocol")}
-            </span>
-          </div>
-          <div className="mamep-header__divider" />
-          <div className="connection-cluster">
+      <AntApp>
+        <Layout style={{ height: "100vh" }}>
+          <Layout.Header className="mamep-header">
             <Button
+              type="text"
               size="small"
-              icon={<ApiOutlined />}
-              onClick={() => setConnectionModalOpen(true)}
-            >
-              {t("topbar.connectionSettings")}
-            </Button>
-            <Button
-              size="small"
-              type={connected ? "default" : "primary"}
-              danger={connected}
-              icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
-              onClick={handleConnectToggle}
-              style={{ fontWeight: 600 }}
-            >
-              {connected ? t("topbar.disconnect") : t("topbar.connect")}
-            </Button>
-            <span className="status-badge">
-              <span
-                className="status-badge__dot"
-                style={{ backgroundColor: STATE_DOT_COLOR[connectionState] }}
-              />
-              <span>
-                {t(`state.${connectionState}`)}
-                {" · "}
-                {t("topbar.rtuSlave", { address: slaveAddress })}
-              </span>
-            </span>
-          </div>
-          <span className="mamep-header__spacer" />
-          <div className="mamep-header__group">
-            <Button size="small" onClick={() => setPluginModalOpen(true)}>
-              {t("topbar.pluginManager")}
-            </Button>
-            <Button
-              size="small"
-              icon={<SettingOutlined />}
-              onClick={() => setSettingsOpen(true)}
-            >
-              {t("topbar.settings")}
-            </Button>
-            <Button
-              size="small"
-              icon={<QuestionCircleOutlined />}
-              onClick={() => setHelpOpen(true)}
-            >
-              {t("topbar.help")}
-            </Button>
-            <Button
-              size="small"
-              icon={<BulbOutlined />}
-              aria-label={t("topbar.theme")}
-              onClick={() => {
-                const next = theme === "light" ? "dark" : "light";
-                setTheme(next);
-              }}
+              aria-label={t("topbar.toggleSidebar")}
+              icon={
+                sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
+              }
+              onClick={() =>
+                setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
+              }
             />
-          </div>
-        </Layout.Header>
-        <Layout className="mamep-main">
-          <Layout.Sider
-            className="sheet-sidebar"
-            width={160}
-            collapsedWidth={0}
-            trigger={null}
-            collapsible
-            collapsed={sidebarCollapsed}
-            theme="light"
-          >
-            <div className="sheet-sidebar__head">
-              <span className="sheet-sidebar__title">
-                {t("sidebar.workspace")}
+            <div className="mamep-header__brand">
+              <Typography.Text className="mamep-header__brand-title">
+                {t("app.title")}
+              </Typography.Text>
+              <span className="mamep-header__protocol">
+                {host !== null && host !== undefined && host.isMockMode
+                  ? t("topbar.mock")
+                  : t("app.protocol")}
               </span>
+            </div>
+            <Divider
+              vertical
+              style={{ height: 20, marginInline: 2, flex: "none" }}
+            />
+            <div className="connection-cluster">
               <Button
-                type="text"
                 size="small"
-                className="sheet-sidebar__collapse"
-                aria-label={t("topbar.toggleSidebar")}
-                icon={<LeftOutlined />}
-                onClick={() => setPanelLayout({ sidebarCollapsed: true })}
+                icon={<ApiOutlined />}
+                onClick={() => setConnectionModalOpen(true)}
+              >
+                {t("topbar.connectionSettings")}
+              </Button>
+              <Button
+                size="small"
+                type={connected ? "default" : "primary"}
+                danger={connected}
+                icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
+                onClick={handleConnectToggle}
+                style={{ fontWeight: 600 }}
+              >
+                {connected ? t("topbar.disconnect") : t("topbar.connect")}
+              </Button>
+              <span className="status-badge">
+                <span
+                  className="status-badge__dot"
+                  style={{ backgroundColor: STATE_DOT_COLOR[connectionState] }}
+                />
+                <span>
+                  {t(`state.${connectionState}`)}
+                  {" · "}
+                  {t("topbar.rtuSlave", { address: slaveAddress })}
+                </span>
+              </span>
+            </div>
+            <span className="mamep-header__spacer" />
+            <div className="mamep-header__group">
+              <Button size="small" onClick={() => setPluginModalOpen(true)}>
+                {t("topbar.pluginManager")}
+              </Button>
+              <Button
+                size="small"
+                icon={<SettingOutlined />}
+                onClick={() => setSettingsOpen(true)}
+              >
+                {t("topbar.settings")}
+              </Button>
+              <Button
+                size="small"
+                icon={<QuestionCircleOutlined />}
+                onClick={() => setHelpOpen(true)}
+              >
+                {t("topbar.help")}
+              </Button>
+              <Button
+                size="small"
+                icon={<BulbOutlined />}
+                aria-label={t("topbar.theme")}
+                onClick={() => {
+                  const next = theme === "light" ? "dark" : "light";
+                  setTheme(next);
+                }}
               />
             </div>
-            <div className="sheet-sidebar__section">
-              <span className="sheet-sidebar__section-title">
-                {t("sidebar.registerTables")}
-              </span>
-              <Tooltip title={t("sidebar.newTable")}>
+          </Layout.Header>
+          <Layout className="mamep-main">
+            <Layout.Sider
+              className="sheet-sidebar"
+              width={160}
+              collapsedWidth={0}
+              trigger={null}
+              collapsible
+              collapsed={sidebarCollapsed}
+              theme="light"
+            >
+              <div className="sheet-sidebar__head">
+                <span className="sheet-sidebar__title">
+                  {t("sidebar.workspace")}
+                </span>
                 <Button
                   type="text"
                   size="small"
-                  className="sheet-sidebar__section-action"
-                  aria-label={t("sidebar.newTable")}
-                  icon={<PlusOutlined />}
-                  onClick={addSheet}
+                  className="sheet-sidebar__collapse"
+                  aria-label={t("topbar.toggleSidebar")}
+                  icon={<LeftOutlined />}
+                  onClick={() => setPanelLayout({ sidebarCollapsed: true })}
                 />
-              </Tooltip>
-            </div>
-            <ul className="sheet-sidebar__list">
-              {workspace.sheets.map((sheet, index) => (
-                <Dropdown
-                  key={sheet.sheetId}
-                  trigger={["contextMenu"]}
-                  menu={{ items: sheetMenu(sheet.sheetId, index) }}
-                >
-                  <li
-                    className={
-                      sheet.sheetId === currentSheet?.sheetId
-                        ? "sheet-item sheet-item--active"
-                        : "sheet-item"
-                    }
-                    draggable
-                    onDragStart={() => {
-                      dragIndex.current = index;
-                    }}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const fromIndex = dragIndex.current;
-                      dragIndex.current = null;
-                      if (fromIndex === null || fromIndex === index) return;
-                      const source = workspace.sheets[fromIndex];
-                      if (source !== undefined) {
-                        moveSheetTo(source.sheetId, index);
-                      }
-                    }}
-                    onClick={() => setActiveSheetId(sheet.sheetId)}
-                    onContextMenu={(event) => event.preventDefault()}
-                  >
-                    {editingSheetId === sheet.sheetId ? (
-                      <input
-                        className="sheet-item__input"
-                        defaultValue={sheet.name}
-                        autoFocus
-                        onBlur={(event) => {
-                          renameSheet(sheet.sheetId, event.target.value);
-                          setEditingSheetId(null);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            renameSheet(
-                              sheet.sheetId,
-                              event.currentTarget.value,
-                            );
-                            setEditingSheetId(null);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span
-                        className="sheet-item__name"
-                        onDoubleClick={() => setEditingSheetId(sheet.sheetId)}
-                      >
-                        {sheet.name}
-                      </span>
-                    )}
+              </div>
+              <div className="sheet-sidebar__section">
+                <span className="sheet-sidebar__section-title">
+                  {t("sidebar.registerTables")}
+                </span>
+                <Tooltip title={t("sidebar.newTable")}>
+                  <Button
+                    type="text"
+                    size="small"
+                    className="sheet-sidebar__section-action"
+                    aria-label={t("sidebar.newTable")}
+                    icon={<PlusOutlined />}
+                    onClick={addSheet}
+                  />
+                </Tooltip>
+              </div>
+              <Menu
+                ref={menuRef}
+                className="sheet-sidebar__list sheet-sidebar__menu"
+                mode="inline"
+                inlineCollapsed={false}
+                selectable
+                selectedKeys={
+                  currentSheet !== undefined ? [currentSheet.sheetId] : []
+                }
+                onClick={({ key, domEvent }) => {
+                  // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
+                  // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
+                  // 而非“切换表”意图，忽略以免把 active 切回源表。
+                  const target = domEvent.target as HTMLElement;
+                  if (target.closest(".ant-dropdown") !== null) return;
+                  setActiveSheetId(key as SheetId);
+                }}
+                onDragStart={(event) => {
+                  const li =
+                    (event.target as HTMLElement).closest<HTMLLIElement>(
+                      "li[data-sheet-index]",
+                    );
+                  if (li?.dataset.sheetIndex !== undefined) {
+                    dragIndex.current = Number(li.dataset.sheetIndex);
+                  }
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const li =
+                    (event.target as HTMLElement).closest<HTMLLIElement>(
+                      "li[data-sheet-index]",
+                    );
+                  const fromIndex = dragIndex.current;
+                  dragIndex.current = null;
+                  if (li?.dataset.sheetIndex === undefined) return;
+                  if (fromIndex === null) return;
+                  const toIndex = Number(li.dataset.sheetIndex);
+                  if (fromIndex === toIndex) return;
+                  const source = sheetMeta[fromIndex];
+                  if (source !== undefined) {
+                    moveSheetTo(source.sheetId, toIndex);
+                  }
+                }}
+                items={sheetMeta.map((sheet, index) => ({
+                  key: sheet.sheetId,
+                  "data-sheet-id": sheet.sheetId,
+                  "data-sheet-index": index,
+                  // rc-menu 会给 inline 顶层 item 内联 padding-left: inlineIndent(24px)，
+                  // 内联样式优先于 CSS，需在 item style 里覆盖回 6px 以保持原视觉。
+                  style: { paddingInline: 6 },
+                  className:
+                    sheet.sheetId === currentSheet?.sheetId
+                      ? "sheet-item sheet-item--active"
+                      : "sheet-item",
+                  label: (
                     <Dropdown
+                      trigger={["contextMenu"]}
                       menu={{ items: sheetMenu(sheet.sheetId, index) }}
-                      trigger={["click"]}
                     >
-                      <Button
-                        type="text"
-                        size="small"
-                        className="sheet-item__more"
-                        aria-label={t("table.moreActions")}
-                        icon={<MoreOutlined />}
-                        onClick={(event) => event.stopPropagation()}
-                      />
-                    </Dropdown>
-                  </li>
-                </Dropdown>
-              ))}
-            </ul>
-            <div className="sheet-sidebar__footer">{t("sidebar.footer")}</div>
-          </Layout.Sider>
-          <Layout.Content className="mamep-body">
-            <div className="register-table-wrap">
-              {currentSheet !== undefined ? (
-                <Tabs
-                  type="editable-card"
-                  size="small"
-                  className="register-table-tabs"
-                  activeKey={currentSheet.sheetId}
-                  onChange={(key) => setActiveSheetId(key as SheetId)}
-                  onEdit={(targetKey, action) => {
-                    if (action === "add") {
-                      addSheet();
-                    } else if (typeof targetKey === "string") {
-                      handleDeleteSheet(targetKey as SheetId);
-                    }
-                  }}
-                  items={workspace.sheets.map((sheet, index) => ({
-                    key: sheet.sheetId,
-                    label: (
-                      <Dropdown
-                        trigger={["contextMenu"]}
-                        menu={{ items: sheetMenu(sheet.sheetId, index) }}
-                      >
+                      <span className="sheet-item__label-wrap">
                         {editingSheetId === sheet.sheetId ? (
                           <input
-                            className="sheet-tab__input"
+                            className="sheet-item__input"
                             defaultValue={sheet.name}
+                            autoFocus
                             onClick={(event) => event.stopPropagation()}
                             onBlur={(event) => {
                               renameSheet(sheet.sheetId, event.target.value);
                               setEditingSheetId(null);
                             }}
                             onKeyDown={(event) => {
+                              event.stopPropagation();
                               if (event.key === "Enter") {
                                 renameSheet(
                                   sheet.sheetId,
                                   event.currentTarget.value,
                                 );
                                 setEditingSheetId(null);
-                              } else if (event.key === "Escape") {
-                                setEditingSheetId(null);
                               }
                             }}
                           />
                         ) : (
                           <span
-                            className="sheet-tab__label"
+                            className="sheet-item__name"
                             onDoubleClick={() =>
                               setEditingSheetId(sheet.sheetId)
                             }
@@ -482,124 +495,235 @@ export function MamepApp(): React.ReactNode {
                             {sheet.name}
                           </span>
                         )}
-                      </Dropdown>
-                    ),
-                    children: <RegisterTable sheetId={sheet.sheetId} />,
-                  }))}
-                />
-              ) : null}
-            </div>
-            <BottomPanel />
-          </Layout.Content>
+                        <Dropdown
+                          menu={{ items: sheetMenu(sheet.sheetId, index) }}
+                          trigger={["click"]}
+                        >
+                          <Button
+                            type="text"
+                            size="small"
+                            className="sheet-item__more"
+                            aria-label={t("table.moreActions")}
+                            icon={<MoreOutlined />}
+                            onClick={(event) => event.stopPropagation()}
+                          />
+                        </Dropdown>
+                      </span>
+                    </Dropdown>
+                  ),
+                }))}
+              />
+              <div className="sheet-sidebar__footer">{t("sidebar.footer")}</div>
+            </Layout.Sider>
+            <Layout.Content className="mamep-body">
+              <Splitter
+                orientation="vertical"
+                style={{ flex: 1, minHeight: 0 }}
+                classNames={{ dragger: "bottom-panel__resize" }}
+                onResize={(sizes) => {
+                  const panelSize = sizes[1];
+                  if (panelSize !== undefined) {
+                    setDragPanelHeight(Math.round(panelSize));
+                  }
+                }}
+                onResizeEnd={(sizes) => {
+                  const panelSize = sizes[1];
+                  if (panelSize !== undefined) {
+                    setPanelLayout({
+                      bottomPanelHeight: Math.round(panelSize),
+                    });
+                    setDragPanelHeight(null);
+                  }
+                }}
+              >
+                <Splitter.Panel>
+                  <div className="register-table-wrap">
+                    {currentSheet !== undefined ? (
+                      <Tabs
+                        type="editable-card"
+                        size="small"
+                        className="register-table-tabs"
+                        activeKey={currentSheet.sheetId}
+                        onChange={(key) => setActiveSheetId(key as SheetId)}
+                        onEdit={(targetKey, action) => {
+                          if (action === "add") {
+                            addSheet();
+                          } else if (typeof targetKey === "string") {
+                            handleDeleteSheet(targetKey as SheetId);
+                          }
+                        }}
+                        items={sheetMeta.map((sheet, index) => ({
+                          key: sheet.sheetId,
+                          label: (
+                            <Dropdown
+                              trigger={["contextMenu"]}
+                              menu={{ items: sheetMenu(sheet.sheetId, index) }}
+                            >
+                              {editingSheetId === sheet.sheetId ? (
+                                <input
+                                  className="sheet-tab__input"
+                                  defaultValue={sheet.name}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onBlur={(event) => {
+                                    renameSheet(
+                                      sheet.sheetId,
+                                      event.target.value,
+                                    );
+                                    setEditingSheetId(null);
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      renameSheet(
+                                        sheet.sheetId,
+                                        event.currentTarget.value,
+                                      );
+                                      setEditingSheetId(null);
+                                    } else if (event.key === "Escape") {
+                                      setEditingSheetId(null);
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <span
+                                  className="sheet-tab__label"
+                                  onDoubleClick={() =>
+                                    setEditingSheetId(sheet.sheetId)
+                                  }
+                                >
+                                  {sheet.name}
+                                </span>
+                              )}
+                            </Dropdown>
+                          ),
+                          children: <RegisterTable sheetId={sheet.sheetId} />,
+                        }))}
+                      />
+                    ) : null}
+                  </div>
+                </Splitter.Panel>
+                <Splitter.Panel
+                  size={
+                    bottomPanelCollapsed
+                      ? COLLAPSED_BOTTOM_PANEL_HEIGHT
+                      : (dragPanelHeight ?? bottomPanelHeight)
+                  }
+                  resizable={!bottomPanelCollapsed}
+                  {...(bottomPanelCollapsed ? {} : { min: 120, max: "60%" })}
+                >
+                  <BottomPanel />
+                </Splitter.Panel>
+              </Splitter>
+            </Layout.Content>
+          </Layout>
         </Layout>
-      </Layout>
 
-      <ConnectionSettingsModal />
-      <PluginManagerModal />
-      {Object.entries(traceWindows).map(([rowId]) => (
-        <TraceWindow key={rowId} rowId={rowId as RowId} />
-      ))}
+        <ConnectionSettingsModal />
+        <PluginManagerModal />
+        {traceWindowKeys.map((rowId) => (
+          <TraceWindow key={rowId} rowId={rowId as RowId} />
+        ))}
 
-      <Modal
-        title={t("settings.title")}
-        open={settingsOpen}
-        onCancel={() => setSettingsOpen(false)}
-        footer={null}
-      >
-        <Space orientation="vertical" style={{ width: "100%" }}>
-          <div>
-            <Typography.Text>{t("settings.theme")}</Typography.Text>
-            <Segmented
-              style={{ marginLeft: 8 }}
-              value={theme}
-              onChange={(value) => setTheme(value as "light" | "dark")}
-              options={[
-                { value: "light", label: t("settings.themeLight") },
-                { value: "dark", label: t("settings.themeDark") },
-              ]}
-            />
-          </div>
-          <div>
-            <Typography.Text type="secondary">{t("app.title")}</Typography.Text>{" "}
-            <Select
-              size="small"
-              value={i18n.language}
-              style={{ width: 100, marginLeft: 8 }}
-              onChange={(value) => void i18n.changeLanguage(value)}
-              options={[
-                { value: "en-US", label: "English" },
-                { value: "zh-CN", label: "中文" },
-              ]}
-            />
-          </div>
-          <div>
-            <Button danger size="small" onClick={() => setResetConfirmOpen(true)}>
-              {t("settings.resetWorkspace")}
-            </Button>
-          </div>
-          <Typography.Paragraph type="secondary">
-            {t("settings.aboutText")}
-          </Typography.Paragraph>
-        </Space>
-      </Modal>
+        <Modal
+          title={t("settings.title")}
+          open={settingsOpen}
+          onCancel={() => setSettingsOpen(false)}
+          footer={null}
+        >
+          <Space orientation="vertical" style={{ width: "100%" }}>
+            <div>
+              <Typography.Text>{t("settings.theme")}</Typography.Text>
+              <Segmented
+                style={{ marginLeft: 8 }}
+                value={theme}
+                onChange={(value) => setTheme(value as "light" | "dark")}
+                options={[
+                  { value: "light", label: t("settings.themeLight") },
+                  { value: "dark", label: t("settings.themeDark") },
+                ]}
+              />
+            </div>
+            <div>
+              <Typography.Text type="secondary">
+                {t("app.title")}
+              </Typography.Text>{" "}
+              <Select
+                size="small"
+                value={i18n.language}
+                style={{ width: 100, marginLeft: 8 }}
+                onChange={(value) => void i18n.changeLanguage(value)}
+                options={[
+                  { value: "en-US", label: "English" },
+                  { value: "zh-CN", label: "中文" },
+                ]}
+              />
+            </div>
+            <div>
+              <Popconfirm
+                title={t("settings.resetConfirmTitle")}
+                description={t("settings.resetConfirmContent")}
+                okText={t("settings.resetOk")}
+                cancelText={t("connection.cancel")}
+                okButtonProps={{ danger: true }}
+                onConfirm={() => void handleResetWorkspace()}
+              >
+                <Button danger size="small">
+                  {t("settings.resetWorkspace")}
+                </Button>
+              </Popconfirm>
+            </div>
+            <Typography.Paragraph type="secondary">
+              {t("settings.aboutText")}
+            </Typography.Paragraph>
+          </Space>
+        </Modal>
 
-      <Modal
-        title={t("settings.resetConfirmTitle")}
-        open={resetConfirmOpen}
-        onCancel={() => setResetConfirmOpen(false)}
-        onOk={() => void handleResetWorkspace()}
-        okText={t("settings.resetOk")}
-        okButtonProps={{ danger: true }}
-      >
-        <Typography.Text>{t("settings.resetConfirmContent")}</Typography.Text>
-      </Modal>
+        <Modal
+          title={t("table.deleteConfirmTitle")}
+          open={pendingDeleteSheetId !== null}
+          onCancel={() => setPendingDeleteSheetId(null)}
+          onOk={confirmDeleteSheet}
+          okText={t("table.deleteOk")}
+          okButtonProps={{ danger: true }}
+        >
+          <Typography.Text>
+            {t("table.deleteConfirmContent", {
+              name:
+                sheetMeta.find(
+                  (sheet) => sheet.sheetId === pendingDeleteSheetId,
+                )?.name ?? "",
+            })}
+          </Typography.Text>
+        </Modal>
 
-      <Modal
-        title={t("table.deleteConfirmTitle")}
-        open={pendingDeleteSheetId !== null}
-        onCancel={() => setPendingDeleteSheetId(null)}
-        onOk={confirmDeleteSheet}
-        okText={t("table.deleteOk")}
-        okButtonProps={{ danger: true }}
-      >
-        <Typography.Text>
-          {t("table.deleteConfirmContent", {
-            name:
-              workspace.sheets.find(
-                (sheet) => sheet.sheetId === pendingDeleteSheetId,
-              )?.name ?? "",
-          })}
-        </Typography.Text>
-      </Modal>
+        <Modal
+          title={
+            pendingBulkClose?.kind === "right"
+              ? t("table.closeToRightConfirmTitle")
+              : t("table.closeOthersConfirmTitle")
+          }
+          open={pendingBulkClose !== null}
+          onCancel={() => setPendingBulkClose(null)}
+          onOk={confirmBulkClose}
+          okText={t("table.deleteOk")}
+          okButtonProps={{ danger: true }}
+          cancelText={t("connection.cancel")}
+        >
+          <Typography.Text>
+            {pendingBulkClose?.kind === "right"
+              ? t("table.closeToRightConfirmContent", { count: bulkCloseCount })
+              : t("table.closeOthersConfirmContent", { count: bulkCloseCount })}
+          </Typography.Text>
+        </Modal>
 
-      <Modal
-        title={
-          pendingBulkClose?.kind === "right"
-            ? t("table.closeToRightConfirmTitle")
-            : t("table.closeOthersConfirmTitle")
-        }
-        open={pendingBulkClose !== null}
-        onCancel={() => setPendingBulkClose(null)}
-        onOk={confirmBulkClose}
-        okText={t("table.deleteOk")}
-        okButtonProps={{ danger: true }}
-        cancelText={t("connection.cancel")}
-      >
-        <Typography.Text>
-          {pendingBulkClose?.kind === "right"
-            ? t("table.closeToRightConfirmContent", { count: bulkCloseCount })
-            : t("table.closeOthersConfirmContent", { count: bulkCloseCount })}
-        </Typography.Text>
-      </Modal>
-
-      <Modal
-        title={t("help.title")}
-        open={helpOpen}
-        onCancel={() => setHelpOpen(false)}
-        footer={null}
-      >
-        <Typography.Paragraph>{t("settings.aboutText")}</Typography.Paragraph>
-      </Modal>
+        <Modal
+          title={t("help.title")}
+          open={helpOpen}
+          onCancel={() => setHelpOpen(false)}
+          footer={null}
+        >
+          <Typography.Paragraph>{t("settings.aboutText")}</Typography.Paragraph>
+        </Modal>
+      </AntApp>
     </ConfigProvider>
   );
 }

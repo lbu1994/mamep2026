@@ -233,6 +233,15 @@ export function createEmptyRow(): RegisterRow {
 }
 
 /** 创建新的寄存器表标签页。 */
+/** 新建表默认空行：order 从 1 连续编号（与 renumberRows 惯例一致）。 */
+function createDefaultSheetRows(count: number): RegisterRow[] {
+  return Array.from({ length: count }, (_, index) => {
+    const row = createEmptyRow();
+    row.order = index + 1;
+    return row;
+  });
+}
+
 export function createRegisterSheet(
   name: string,
   order: number,
@@ -243,7 +252,7 @@ export function createRegisterSheet(
     name,
     type: "holding-register",
     order,
-    rows: [],
+    rows: createDefaultSheetRows(defaultConfig.registerTable.defaultRowCount),
     registerRadix: defaultConfig.registerTable.addressRadix,
     createdAt: now,
     updatedAt: now,

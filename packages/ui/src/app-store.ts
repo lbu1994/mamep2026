@@ -206,14 +206,28 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
 
   updateRow: (rowId, updater) =>
     set((state) => {
-      const sheets = state.workspace.sheets.map((sheet) => {
-        const index = sheet.rows.findIndex((row) => row.rowId === rowId);
-        if (index === -1) return sheet;
-        const rows = [...sheet.rows];
-        const current = rows[index];
-        if (current !== undefined) rows[index] = updater(current);
-        return { ...sheet, rows, updatedAt: Date.now() };
-      });
+      // 外科手术式更新（性能优化）：只重建包含目标行的 sheet 及其 rows 数组，
+      // 其余 sheet 对象与 rows 引用保持不变，避免单行变化（击键/WP 轮询结果）
+      // 引发非活动表乃至全应用重渲染。找不到目标行时不产生状态变更。
+      const sheetIndex = state.workspace.sheets.findIndex((sheet) =>
+        sheet.rows.some((row) => row.rowId === rowId),
+      );
+      if (sheetIndex === -1) return {};
+      const sheet = state.workspace.sheets[sheetIndex];
+      if (sheet === undefined) return {};
+      const rowIndex = sheet.rows.findIndex((row) => row.rowId === rowId);
+      if (rowIndex === -1) return {};
+      const current = sheet.rows[rowIndex];
+      if (current === undefined) return {};
+      const next = updater(current);
+      // 性能优化：updater 返回原行引用表示无实际变化（如轮询值未变时 applyPollResult
+      // 短路返回原行），直接返回空变更——不重建 rows/sheet/workspace，从而切断
+      // 级联重渲染、自动保存与轮询目标重建的整条链路。
+      if (next === current) return {};
+      const rows = [...sheet.rows];
+      rows[rowIndex] = next;
+      const sheets = [...state.workspace.sheets];
+      sheets[sheetIndex] = { ...sheet, rows, updatedAt: Date.now() };
       return {
         workspace: { ...state.workspace, sheets, updatedAt: Date.now() },
       };

@@ -154,11 +154,13 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   const dataInput = page.getByLabel("Data").first();
-  await expect(dataInput).toHaveValue("00AB");
+  await expect(dataInput).toHaveText("00AB");
 
   // WRITE: entering 12AB updates the mock device register.
+  // 可编辑单元格在 Enter/blur 才提交到 store，WRITE 读的是已提交的 cellText，须先提交。
   await dataInput.click();
   await dataInput.fill("12AB");
+  await dataInput.press("Enter");
   await page
     .getByRole("button", { name: "WRITE", exact: true })
     .first()
@@ -206,8 +208,10 @@ test("read all updates eligible rows and reports a summary message", async ({
       .evaluate((el) => (el as HTMLElement).click());
   }
   const addressInputs = page.getByLabel("Register", { exact: true });
+  await addressInputs.nth(0).click();
   await addressInputs.nth(0).fill("0001");
   await addressInputs.nth(0).press("Enter");
+  await addressInputs.nth(1).click();
   await addressInputs.nth(1).fill("0002");
   await addressInputs.nth(1).press("Enter");
 
@@ -215,8 +219,8 @@ test("read all updates eligible rows and reports a summary message", async ({
     .getByRole("button", { name: "Read All" })
     .evaluate((el) => (el as HTMLElement).click());
   const dataInputs = page.getByLabel("Data");
-  await expect(dataInputs.nth(0)).toHaveValue("0102", { timeout: 8000 });
-  await expect(dataInputs.nth(1)).toHaveValue("0304", { timeout: 8000 });
+  await expect(dataInputs.nth(0)).toHaveText("0102", { timeout: 8000 });
+  await expect(dataInputs.nth(1)).toHaveText("0304", { timeout: 8000 });
 });
 
 test("WP polling refreshes the data cell at the Rx Delay interval", async ({
@@ -228,6 +232,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
   const addressInput = page.getByLabel("Register", { exact: true }).first();
+  await addressInput.click();
   await addressInput.fill("0003");
   await addressInput.press("Enter");
 
@@ -244,7 +249,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
     .evaluate((el) => (el as HTMLElement).click());
 
   const dataInput = page.getByLabel("Data").first();
-  await expect(dataInput).toHaveValue("0007", { timeout: 8000 });
+  await expect(dataInput).toHaveText("0007", { timeout: 8000 });
 
   // Changing the device value is picked up by polling (forced overwrite).
   await page.evaluate(() =>
@@ -254,7 +259,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
       }
     ).__mamepMock.setRegister(0x0003, 0x00ff),
   );
-  await expect(dataInput).toHaveValue("00FF", { timeout: 8000 });
+  await expect(dataInput).toHaveText("00FF", { timeout: 8000 });
 
   await page
     .getByLabel("WP")
@@ -271,6 +276,7 @@ test("TM opens a Memory Trace window and collects samples", async ({
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
   const addressInput = page.getByLabel("Register", { exact: true }).first();
+  await addressInput.click();
   await addressInput.fill("0004");
   await addressInput.press("Enter");
 
@@ -317,9 +323,12 @@ test("sheets can be added and the workspace survives a reload", async ({
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
   const addressInput = page.getByLabel("Register", { exact: true }).first();
+  await addressInput.click();
   await addressInput.fill("10");
   await addressInput.press("Enter");
+  await page.getByLabel("Name").first().click();
   await page.getByLabel("Name").first().fill("SpeedRef");
+  await page.getByLabel("Name").first().press("Enter");
 
   // Add a second sheet.
   await page
@@ -345,8 +354,8 @@ test("sheets can be added and the workspace survives a reload", async ({
     .evaluate((el) => (el as HTMLElement).click());
   await expect(
     page.getByLabel("Register", { exact: true }).first(),
-  ).toHaveValue("10");
-  await expect(page.getByLabel("Name").first()).toHaveValue("SpeedRef");
+  ).toHaveText("10");
+  await expect(page.getByLabel("Name").first()).toHaveText("SpeedRef");
   await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
   await expect(page.locator(".ant-layout-header")).toContainText("Online");
 });
@@ -363,6 +372,13 @@ test("plugin manager lists the built-in plugin with enable toggle", async ({
   const modal = page.locator(".ant-modal-container:visible");
   await expect(modal).toContainText("Example Panel");
   await expect(modal).toContainText("1.0.0");
+  // 作者（示例插件已声明 author）。
+  await expect(modal).toContainText("Mamep2026 Team");
+  // 平台能力：Web/Node 双 Tag（web 支持着色，node 灰）。
+  await expect(modal.getByText("Web", { exact: true })).toBeVisible();
+  await expect(modal.getByText("Node", { exact: true })).toBeVisible();
+  // 权限：ui.panel 的人类可读标签。
+  await expect(modal).toContainText("UI Panel");
 });
 
 test("no console errors during a full interaction round", async ({ page }) => {

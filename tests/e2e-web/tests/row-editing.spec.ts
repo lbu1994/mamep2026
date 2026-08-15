@@ -14,6 +14,10 @@ function row(page: Page, index: number) {
   return page.locator(".ant-table-tbody tr[data-row-key]").nth(index);
 }
 
+async function rowCount(page: Page): Promise<number> {
+  return page.locator(".ant-table-tbody tr[data-row-key]").count();
+}
+
 async function addRows(page: Page, count: number): Promise<void> {
   for (let i = 0; i < count; i += 1) {
     await page.getByRole("button", { name: "Add Row" }).first().click();
@@ -25,8 +29,12 @@ async function fillRow(
   index: number,
   data: { name: string; address: string },
 ): Promise<void> {
-  await row(page, index).getByLabel("Name").fill(data.name);
+  // 可编辑单元格为「点击进入编辑」交互（非编辑态是 div[role=button]），需先点击再填充。
+  const nameInput = row(page, index).getByLabel("Name");
+  await nameInput.click();
+  await nameInput.fill(data.name);
   const addressInput = row(page, index).getByLabel("Register");
+  await addressInput.click();
   await addressInput.fill(data.address);
   await addressInput.press("Enter");
 }
@@ -41,6 +49,7 @@ test("row context menu inserts an empty row below the target", async ({
   page,
 }) => {
   await openApp(page);
+  const base = await rowCount(page); // 默认表现在自带 defaultRowCount 行
   await addRows(page, 1);
   await fillRow(page, 0, { name: "R1", address: "100" });
 
@@ -68,16 +77,17 @@ test("row context menu inserts an empty row below the target", async ({
     .locator(".ant-dropdown-menu-item", { hasText: "Insert Row Below" })
     .click();
   await expect(page.locator(".ant-table-tbody tr[data-row-key]")).toHaveCount(
-    2,
+    base + 2,
   );
-  await expect(row(page, 1).getByLabel("Name")).toHaveValue("");
-  await expect(row(page, 1).getByLabel("Register")).toHaveValue("");
+  await expect(row(page, 1).getByLabel("Name")).toHaveText("");
+  await expect(row(page, 1).getByLabel("Register")).toHaveText("");
 });
 
 test("checkbox multi-select, shift range and select-all update the toolbar", async ({
   page,
 }) => {
   await openApp(page);
+  const base = await rowCount(page); // 默认表现在自带 defaultRowCount 行
   await addRows(page, 4);
 
   // 逐行勾选实现多选。
@@ -93,11 +103,14 @@ test("checkbox multi-select, shift range and select-all update the toolbar", asy
   await page
     .locator(".ant-table-thead .ant-table-selection-column .ant-checkbox-input")
     .click();
-  await expect(page.locator(".table-toolbar")).toContainText("4 selected");
+  await expect(page.locator(".table-toolbar")).toContainText(
+    `${base + 4} selected`,
+  );
 });
 
 test("copy and paste via keyboard preserves row data", async ({ page }) => {
   await openApp(page);
+  const base = await rowCount(page); // 默认表现在自带 defaultRowCount 行
   await addRows(page, 2);
   await fillRow(page, 0, { name: "R1", address: "100" });
   await fillRow(page, 1, { name: "R2", address: "200" });
@@ -106,24 +119,27 @@ test("copy and paste via keyboard preserves row data", async ({ page }) => {
   await page
     .locator(".ant-table-thead .ant-table-selection-column .ant-checkbox-input")
     .click();
-  await expect(page.locator(".table-toolbar")).toContainText("2 selected");
+  await expect(page.locator(".table-toolbar")).toContainText(
+    `${base + 2} selected`,
+  );
 
   await page.keyboard.press("Control+c");
   await page.waitForTimeout(150);
   await page.keyboard.press("Control+v");
   await expect(page.locator(".ant-table-tbody tr[data-row-key]")).toHaveCount(
-    4,
+    (base + 2) * 2,
   );
-  await expect(row(page, 2).getByLabel("Name")).toHaveValue("R1");
-  await expect(row(page, 3).getByLabel("Name")).toHaveValue("R2");
+  await expect(row(page, base + 2).getByLabel("Name")).toHaveText("R1");
+  await expect(row(page, base + 3).getByLabel("Name")).toHaveText("R2");
   // 粘贴行的地址按目标表进制重新格式化。
-  await expect(row(page, 2).getByLabel("Register")).toHaveValue("100");
+  await expect(row(page, base + 2).getByLabel("Register")).toHaveText("100");
 });
 
 test("keyboard Delete removes selected rows and clears selection", async ({
   page,
 }) => {
   await openApp(page);
+  const base = await rowCount(page); // 默认表现在自带 defaultRowCount 行
   await addRows(page, 3);
 
   await selectionCheckbox(page, 0).click();
@@ -132,7 +148,7 @@ test("keyboard Delete removes selected rows and clears selection", async ({
 
   await page.keyboard.press("Delete");
   await expect(page.locator(".ant-table-tbody tr[data-row-key]")).toHaveCount(
-    1,
+    base + 1,
   );
   await expect(page.locator(".table-toolbar")).not.toContainText("selected");
 });

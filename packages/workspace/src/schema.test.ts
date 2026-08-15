@@ -46,7 +46,8 @@ describe("workspace schema round-trip", () => {
     const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    const row = parsed.value.sheets[0]?.rows[0];
+    // 默认表预置 defaultRowCount 个空行（default-50-rows 特性），push 的行在末尾。
+    const row = parsed.value.sheets[0]?.rows.at(-1);
     expect(row).toBeDefined();
     expect(row?.name).toBe("Speed Ref");
     expect(row?.comment).toBe("unit: rpm");

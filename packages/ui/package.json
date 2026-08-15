@@ -12,21 +12,21 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "antd": "catalog:",
     "@ant-design/icons": "catalog:",
-    "i18next": "catalog:",
-    "react": "catalog:",
-    "react-dom": "catalog:",
-    "react-i18next": "catalog:",
-    "zustand": "catalog:",
-    "@mamep2026/domain": "workspace:*",
     "@mamep2026/communication": "workspace:*",
     "@mamep2026/data-conversion": "workspace:*",
+    "@mamep2026/domain": "workspace:*",
     "@mamep2026/logging": "workspace:*",
     "@mamep2026/platform-api": "workspace:*",
     "@mamep2026/plugin-api": "workspace:*",
     "@mamep2026/register-table": "workspace:*",
-    "@mamep2026/workspace": "workspace:*"
+    "@mamep2026/workspace": "workspace:*",
+    "antd": "catalog:",
+    "i18next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-i18next": "catalog:",
+    "zustand": "catalog:"
   },
   "devDependencies": {
     "@mamep2026/typescript-config": "workspace:*",

@@ -112,7 +112,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
         </Typography.Paragraph>
       ) : null}
       <Form layout="vertical" size="small">
-        <Row gutter={24}>
+        <Row gutter={16}>
           <Col span={12}>
             <div className="connection-settings-group">
               {t("connection.groupCommunication")}
@@ -316,7 +316,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
             type="error"
             showIcon
             message={connectError}
-            style={{ marginTop: 12 }}
+            style={{ marginTop: 8 }}
           />
         ) : null}
       </Form>

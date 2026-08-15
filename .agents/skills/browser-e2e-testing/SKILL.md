@@ -33,6 +33,12 @@ description: 在 VS Code 内置浏览器中对 Web 工程执行自动化交互�
 - **`run_playwright_code` 必须是纯 JS**（不能写 `el as HTMLElement` 这类 TS 语法），`return` 可 JSON 序列化的值，异步操作要 `await`。
 - **未跑完会返回 `deferredResultId`**：用同一 `pageId`、不带 code 再调用一次拿结果。
 - **antd v6 Modal 结构变了**：没有 `.ant-modal-content`，改用 `.ant-modal-container` / `.ant-modal-body` 定位弹窗内元素。
+- **antd v6 Tabs 结构变了（页面有两个 Tabs 时极易误匹配）**：
+  - 活动面板 DOM 类是 `.ant-tabs-content-active`（**不是** v5 的 `.ant-tabs-tabpane`，v6 无 tabpane 类）。Mamep2026 主表格页签类名是 `.register-table-tabs`，断言表格列头/单元格时选择器必须限定 `.register-table-tabs .ant-tabs-content-active ...`，否则会误匹配 BottomPanel 的页签。
+  - `+` 新建按钮 `.ant-tabs-nav-add` 在 DOM 出现两次，可见的在 `.ant-tabs-nav-list` 内，用 `.ant-tabs-nav-list .ant-tabs-nav-add` 定位。
+  - 页签关闭按钮 `.ant-tabs-tab-remove` 是 `div[role=tab]` 的兄弟节点，定位用 `.ant-tabs-tab` 容器 hasText + 后代 remove，不能从 `getByRole('tab')` 下找。
+- **antd v6 `List` 已弃用**：使用会在 dev console 报弃用警告，污染「无 console 错误」断言。虚拟列表用 `Listy`（`items`+`itemRender`，渲染类 `.ant-listy-item`）。PluginManager 已用它。
+- **弃用/错误用法导致 dev console.error**：e2e 断言「无 console 错误」前，改动 UI 组件后务必检查没有使用已弃用的 antd API（如 `List`、`Tag bordered`、`Space direction` 等）。
 - **HMR 会让服务单例脱钩**：改了服务模块后遇到诡异状态先整页 `reload`。
 - **弹窗（antd Modal）里选 Select**：先对目标 Select 容器 `dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))` 打开下拉，再点 `.ant-select-dropdown:visible [title="选项文字"]`。别用 `:has-text` 匹配 label。
 - **日志面板**：`allInnerTexts()` 返回当前渲染行；要看最新日志取数组**末尾**。

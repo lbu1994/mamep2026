@@ -29,6 +29,7 @@
 | `pnpm dev:electron` | Electron 开发模式 |
 | `pnpm build` / `pnpm build:electron` | 构建网页端 / Electron |
 | `pnpm build:vscode` | 编译 `vscode-extension/` |
+| `pnpm preview` | 本地预览网页端构建产物（apps/web，`vite preview`） |
 | `pnpm lint` | ESLint（全仓） |
 | `pnpm typecheck` | turbo 全包类型检查 |
 | `pnpm test` | turbo 全包 vitest |

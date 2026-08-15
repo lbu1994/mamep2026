@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createEmptyWorkspace, type SheetId } from "@mamep2026/domain";
+import {
+  createEmptyWorkspace,
+  defaultConfig,
+  type RowId,
+  type SheetId,
+} from "@mamep2026/domain";
 import { useAppStore } from "./app-store";
 
 beforeEach(() => {
@@ -21,6 +26,20 @@ function firstSheetId(): SheetId {
   const sheet = useAppStore.getState().workspace.sheets[0];
   if (sheet === undefined) throw new Error("missing sheet");
   return sheet.sheetId;
+}
+
+/** 清空所有表的行：默认表现在自带 defaultRowCount 行，行操作用例需在受控状态下验证。 */
+function clearAllSheetRows(): void {
+  useAppStore.setState((state) => ({
+    workspace: {
+      ...state.workspace,
+      sheets: state.workspace.sheets.map((sheet) => ({
+        ...sheet,
+        rows: [],
+      })),
+      updatedAt: Date.now(),
+    },
+  }));
 }
 
 describe("moveSheetTo", () => {
@@ -73,6 +92,7 @@ describe("duplicateSheet", () => {
 
   it("副本行使用新 rowId 且关闭轮询/追踪", () => {
     const store = useAppStore.getState();
+    clearAllSheetRows();
     const sourceId = firstSheetId();
     store.addRow(sourceId);
     const source = useAppStore.getState().workspace.sheets[0];
@@ -88,6 +108,18 @@ describe("duplicateSheet", () => {
   });
 });
 
+describe("addSheet 默认行", () => {
+  it("新建表默认生成 defaultRowCount 个空行", () => {
+    const store = useAppStore.getState();
+    store.addSheet();
+    const sheet = useAppStore.getState().workspace.sheets[1];
+    if (sheet === undefined) throw new Error("missing sheet");
+    expect(sheet.rows).toHaveLength(
+      defaultConfig.registerTable.defaultRowCount,
+    );
+  });
+});
+
 describe("closeSheet", () => {
   it("删除最后一张表后自动新建空表", () => {
     const store = useAppStore.getState();
@@ -95,7 +127,9 @@ describe("closeSheet", () => {
     const after = useAppStore.getState();
     expect(after.workspace.sheets).toHaveLength(1);
     expect(after.workspace.sheets[0]?.name).toBe("Sheet 1");
-    expect(after.workspace.sheets[0]?.rows).toHaveLength(0);
+    expect(after.workspace.sheets[0]?.rows).toHaveLength(
+      defaultConfig.registerTable.defaultRowCount,
+    );
     expect(after.activeSheetId).toBe(after.workspace.sheets[0]?.sheetId);
   });
 });
@@ -138,6 +172,7 @@ describe("closeOtherSheets", () => {
 
   it("不影响被保留表的行数据", () => {
     const store = useAppStore.getState();
+    clearAllSheetRows();
     const target = firstSheetId();
     store.addRow(target);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
@@ -207,6 +242,7 @@ describe("closeSheetsToRight", () => {
 
   it("不影响被保留表的行数据", () => {
     const store = useAppStore.getState();
+    clearAllSheetRows();
     const target = firstSheetId();
     store.addRow(target);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
@@ -345,6 +381,10 @@ describe("row selection actions", () => {
 });
 
 describe("row insert / batch actions", () => {
+  beforeEach(() => {
+    clearAllSheetRows();
+  });
+
   it("insertRowAfter / insertRowBefore 插入空行并重编号", () => {
     const store = useAppStore.getState();
     const sheetId = firstSheetId();
@@ -448,5 +488,79 @@ describe("row insert / batch actions", () => {
     expect(after.workspace.sheets[0]?.rows.map((r) => r.order)).toEqual([
       1, 2, 3,
     ]);
+  });
+});
+
+describe("updateRow 引用稳定性（性能：单行更新不重建其余表/行）", () => {
+  beforeEach(() => {
+    clearAllSheetRows();
+  });
+
+  it("只重建目标行所在 sheet 与目标行对象，其余 sheet/rows 引用保持不变", () => {
+    const store = useAppStore.getState();
+    const sheetId = firstSheetId();
+    store.addSheet(); // Sheet 2（默认行）
+    store.addRow(sheetId); // Sheet1 R1
+    store.addRow(sheetId); // Sheet1 R2
+    const before = useAppStore.getState();
+    const sheet1 = before.workspace.sheets[0];
+    const sheet2 = before.workspace.sheets[1];
+    if (sheet1 === undefined || sheet2 === undefined)
+      throw new Error("missing sheets");
+    const row1 = sheet1.rows[0];
+    const row2 = sheet1.rows[1];
+    if (row1 === undefined || row2 === undefined) throw new Error("missing rows");
+
+    useAppStore.getState().updateRow(row1.rowId, (r) => ({
+      ...r,
+      name: "updated",
+      updatedAt: Date.now(),
+    }));
+
+    const after = useAppStore.getState();
+    // 未修改的表：sheet 对象与 rows 数组引用不变
+    expect(after.workspace.sheets[1]).toBe(sheet2);
+    // 目标行所在 sheet 是新对象，但未修改行引用不变
+    expect(after.workspace.sheets[0]).not.toBe(sheet1);
+    expect(after.workspace.sheets[0]?.rows[1]).toBe(row2);
+    // 仅目标行对象变化且内容已更新
+    expect(after.workspace.sheets[0]?.rows[0]).not.toBe(row1);
+    expect(after.workspace.sheets[0]?.rows[0]?.name).toBe("updated");
+    // updatedAt 推进（持久化语义不变）
+    expect(after.workspace.updatedAt).toBeGreaterThanOrEqual(
+      before.workspace.updatedAt,
+    );
+    expect(after.workspace.sheets[0]?.updatedAt).toBeGreaterThanOrEqual(
+      sheet1.updatedAt,
+    );
+  });
+
+  it("找不到目标行时不产生任何状态变更", () => {
+    const before = useAppStore.getState();
+    useAppStore.getState().updateRow("missing" as RowId, (r) => r);
+    expect(useAppStore.getState().workspace).toBe(before.workspace);
+  });
+
+  it("updater 返回原行引用时不产生任何状态变更（轮询值未变短路，性能优化）", () => {
+    const store = useAppStore.getState();
+    const sheetId = firstSheetId();
+    store.addRow(sheetId); // 默认表 R1
+    const before = useAppStore.getState();
+    const sheet = before.workspace.sheets[0];
+    const row = sheet?.rows[0];
+    if (sheet === undefined || row === undefined) throw new Error("missing row");
+    // updater 返回同一引用：整条链（rows/sheet/workspace 重建、自动保存、轮询目标重建）短路。
+    useAppStore.getState().updateRow(row.rowId, (r) => r);
+    expect(useAppStore.getState().workspace).toBe(before.workspace);
+    // 正常更新仍生效（回归保护）。
+    useAppStore.getState().updateRow(row.rowId, (r) => ({
+      ...r,
+      name: "updated",
+      updatedAt: Date.now(),
+    }));
+    expect(useAppStore.getState().workspace).not.toBe(before.workspace);
+    expect(useAppStore.getState().workspace.sheets[0]?.rows[0]?.name).toBe(
+      "updated",
+    );
   });
 });

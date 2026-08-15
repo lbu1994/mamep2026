@@ -3,6 +3,7 @@
  * 实现由 apps/web 的 composition root 提供。
  */
 import type {
+  FlowControl,
   PlatformCapabilities,
   RegisterRow,
   Result,
@@ -34,6 +35,7 @@ export interface CommProperties {
   dataBits: number;
   stopBits: number;
   parity: string;
+  flowControl: FlowControl;
   slaveAddress: number;
   timeoutMs: number;
   retryCount: number;

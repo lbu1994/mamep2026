@@ -472,6 +472,8 @@ Host 负责装配具体适配器，不实现领域规则。
 
 # 6. 项目结构
 
+> 本节为规划目标结构。当前实际（2026-08，浏览器 MVP）：`apps/` 仅 `web/`；Electron 主进程在根 `electron/main.ts`、VSCode 插件在根 `vscode-extension/`（均不在 `apps/` 下）；`packages/` 现有 domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit（尚未创建 platform-node、platform-electron、platform-vscode、ui-theme、schemas、shared-utils）；`tooling/` 仅 typescript-config；`tests/` 仅 acceptance 与 e2e-web；尚无 `plugins/` 目录。详细现状见 docs/AGENTS.md §7。
+
 建议项目结构如下：
 
     mamep2026/
@@ -558,6 +560,8 @@ Host 负责装配具体适配器，不实现领域规则。
 
 ## 6.2 apps/electron
 
+> 当前状态（2026-08）：Electron 主进程位于根目录 `electron/main.ts`（单文件，无 preload/IPC，保持 `contextIsolation: true`、`nodeIntegration: false`）；dev 用 `VITE_DEV_SERVER_URL` 加载网页，生产 `loadFile` 指向 `apps/web/dist/index.html`。本节 main/preload/renderer 三层结构为设计目标，当前仅保证编译与路径引用不破坏（不在浏览器 MVP 实现与测试范围）。
+
 ### main
 
 职责：
@@ -592,6 +596,8 @@ Host 负责装配具体适配器，不实现领域规则。
 - 不直接访问 Node.js。
 
 ## 6.3 apps/vscode-extension
+
+> 当前状态（2026-08）：扩展位于根目录 `vscode-extension/`（入口 `src/extension.ts`）；webview 当前为 dev 模式（iframe 指向 dev server，`MAMEP_DEV_URL` 可覆盖），尚未落地本节所述的独立 webview 目录与类型化 RPC。本节为设计目标。
 
 ### extension
 
@@ -809,6 +815,8 @@ Host 负责装配具体适配器，不实现领域规则。
 | VSCode 命令  |                   不支持 |   不支持 |           支持 |
 | 系统通知     |               浏览器能力 |     支持 |    VSCode 通知 |
 | 自动更新     |                   不适用 | 后续支持 | 由 VSCode 管理 |
+
+> 实现状态（2026-08-15）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron 与 VSCode 列（含 Modbus TCP、Node 串口、文件持久化）为规划目标，当前未实现/未验证。
 
 能力矩阵通过 PlatformCapabilities 对象注入 UI。
 
@@ -1050,6 +1058,8 @@ RTU 和 TCP 可以使用不同的 Transport 配置，但应向 CommunicationSess
 - 不保存可用于自动重连的授权假设。
 
 ## 9.3 Node Serial Adapter
+
+> 实现状态（2026-08）：本 Adapter 为 Electron/VSCode 共用设计，当前未实现（浏览器 MVP 不含 Node 串口路径）。
 
 Electron 和 VSCode 共用 Node Serial Adapter。
 
@@ -2684,12 +2694,7 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 
 ## 26.7 浏览器端到端测试
 
-使用 Playwright。
-
-由于浏览器自动化对 Web Serial 支持有限，应采用两种方式：
-
-1. Host API 模拟模式完成主要 UI 验收；
-2. 在受控 Chromium 和测试设备环境中进行少量真实 Web Serial 验收。
+当前实现（2026-08）：浏览器 E2E 使用 Playwright（系统 Edge，`channel: "msedge"`），通过 dev 内置模拟 Modbus RTU 传输 `?mockTransport=1`（生产构建不包含）完成主要 UI 验收（tests/e2e-web，配置见 [浏览器端自动化测试方法指南](浏览器端自动化测试方法指南.md)）；真实 Web Serial 验收留待后续。
 
 自动化覆盖：
 
@@ -3185,6 +3190,8 @@ MVP 不接入默认云端遥测。
 10. ADR-010：MVP 插件限制为内置和受信任来源；
 11. ADR-011：Electron Renderer 使用严格进程隔离；
 12. ADR-012：插件通信必须经过统一调度器。
+
+> 现状注记（2026-08）：`docs/adr/` 当前已落地的决策文件为 ADR-013（monorepo 迁移与产品决策确认）、ADR-014（寄存器地址进制显示选择）、ADR-015（行编辑交互与剪贴板决策）；上述 ADR-001~012 为规划清单，尚无以文件形式归档的独立记录。
 
 每个 ADR 应包含：
 

@@ -20,6 +20,8 @@ export const defaultConfig = {
   registerTable: {
     /** Register 地址列进制：默认 DEC（按表独立，ADR-014） */
     addressRadix: "dec",
+    /** 新建寄存器表默认填充的行数（2026-08-15） */
+    defaultRowCount: 50,
   },
   polling: {
     /** 每行最多一个等待中的轮询任务（内部值，不提供用户配置） */

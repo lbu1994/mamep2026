@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Input, Select, Slider, Space, Table, Typography } from "antd";
+import { Button, Card, Input, Select, Slider, Space, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { RegisterRow, RowId } from "@mamep2026/domain";
 import { useAppStore, type BufferSizeOption } from "../app-store";
@@ -104,23 +104,18 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   ];
 
   return (
-    <div
+    <Card
+      size="small"
       className="trace-window"
       style={{
         position: "fixed",
         right: 24,
         top: 80,
         width: 360,
-        background: "var(--trace-bg, #fff)",
-        border: "1px solid #d9d9d9",
-        borderRadius: 8,
-        padding: 12,
         zIndex: 1000,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
       }}
-    >
-      <Space style={{ justifyContent: "space-between", width: "100%" }}>
-        <Typography.Text strong>{t("trace.title")}</Typography.Text>
+      title={t("trace.title")}
+      extra={
         <Button
           size="small"
           type="text"
@@ -128,8 +123,9 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
         >
           ✕
         </Button>
-      </Space>
-      <Space orientation="vertical" style={{ width: "100%" }} size={6}>
+      }
+    >
+      <Space orientation="vertical" style={{ width: "100%" }} size={4}>
         <Space>
           <Typography.Text type="secondary">{t("trace.name")}</Typography.Text>
           <Input
@@ -223,6 +219,6 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
           />
         </Space>
       </Space>
-    </div>
+    </Card>
   );
 }

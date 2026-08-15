@@ -6,6 +6,7 @@
  * 本模块为纯函数，供 Application/Host 消费，不触碰 React 或平台 API。
  */
 import type { RegisterRow, RegisterSheet } from "@mamep2026/domain";
+import { formatRawValue } from "@mamep2026/data-conversion";
 import { applyReadValueToRow } from "./row-operations";
 
 export interface PollingTarget {
@@ -51,6 +52,9 @@ export function pollResultAddressMatches(
 /**
  * 应用轮询/全表读取结果：定位行 → generation 校验 → 按 Type 格式化并更新原始值。
  * 行不存在或地址已失效时返回 null（调用方忽略）。
+ * 性能优化：设备值未变化（lastKnownRawValue 相同）且显示文本与当前 Type 格式化一致时，
+ * 返回原行引用——调用方（store.updateRow）据此短路，不重建 rows/sheet/workspace，
+ * 避免高频轮询触发无谓的重渲染、自动保存与轮询目标重建。
  */
 export function applyPollResult(
   sheets: readonly RegisterSheet[],
@@ -63,6 +67,13 @@ export function applyPollResult(
     const row = sheet.rows.find((r) => r.rowId === key);
     if (row === undefined) continue;
     if (!pollResultAddressMatches(row, address, addressAdjust)) return null;
+    if (
+      row.lastKnownRawValue !== null &&
+      row.lastKnownRawValue.value === raw &&
+      row.cellText === formatRawValue(raw, row.dataType)
+    ) {
+      return row;
+    }
     const applied = applyReadValueToRow(row, raw);
     return applied.ok ? applied.value : null;
   }
