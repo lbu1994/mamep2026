@@ -489,6 +489,19 @@ body {
   text-align: center;
 }
 
+/* Register/Data/Type 列内容居中：正文对齐由列级 align="center"（rc-table 设置在
+   单元格元素 text-align）完成；此处补充编辑态 Input 与 Type 下拉选中项的居中
+   （antd 组件自带 text-align/flex 布局，需显式覆盖，且只作用于这三列）。
+   注意：antd v6 Select 选中值文本位于 .ant-select-content（v5 的
+   .ant-select-selection-item 类已不存在）。 */
+.register-table-tabs .register-table__cell--center .ant-input {
+  text-align: center;
+}
+
+.register-table-tabs .register-table__cell--center .ant-select-content {
+  text-align: center;
+}
+
 /* ---------------- 底部面板 ---------------- */
 
 .bottom-panel {

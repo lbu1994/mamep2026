@@ -850,6 +850,8 @@ export function RegisterTable({
             : t("table.registerDec"),
         key: "address",
         width: 112,
+        align: "center",
+        className: "register-table__cell--center",
         render: (_, row) => (
           <RegisterCell
             rowId={row.rowId}
@@ -880,6 +882,8 @@ export function RegisterTable({
         title: t("table.data"),
         key: "data",
         width: 110,
+        align: "center",
+        className: "register-table__cell--center",
         render: (_, row) => (
           <DataCell rowId={row.rowId} cellText={row.cellText} />
         ),
@@ -895,6 +899,8 @@ export function RegisterTable({
         title: t("table.type"),
         key: "type",
         width: 132,
+        align: "center",
+        className: "register-table__cell--center",
         render: (_, row) => (
           <TypeCell rowId={row.rowId} dataType={row.dataType} />
         ),

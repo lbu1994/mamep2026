@@ -35,7 +35,7 @@ import {
 import type { ConnectionState } from "@mamep2026/communication";
 import type { RowId, SheetId } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
-import { buildTheme } from "./theme";
+import { buildTheme, MONO_FONT_STACK } from "./theme";
 import { useAppStore } from "./app-store";
 import { BottomPanel } from "./components/BottomPanel";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
@@ -541,65 +541,71 @@ export function MamepApp(): React.ReactNode {
                 <Splitter.Panel>
                   <div className="register-table-wrap">
                     {currentSheet !== undefined ? (
-                      <Tabs
-                        type="editable-card"
-                        size="small"
-                        className="register-table-tabs"
-                        activeKey={currentSheet.sheetId}
-                        onChange={(key) => setActiveSheetId(key as SheetId)}
-                        onEdit={(targetKey, action) => {
-                          if (action === "add") {
-                            addSheet();
-                          } else if (typeof targetKey === "string") {
-                            handleDeleteSheet(targetKey as SheetId);
-                          }
-                        }}
-                        items={sheetMeta.map((sheet, index) => ({
-                          key: sheet.sheetId,
-                          label: (
-                            <Dropdown
-                              trigger={["contextMenu"]}
-                              menu={{ items: sheetMenu(sheet.sheetId, index) }}
-                            >
-                              {editingSheetId === sheet.sheetId ? (
-                                <input
-                                  className="sheet-tab__input"
-                                  defaultValue={sheet.name}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onBlur={(event) => {
-                                    renameSheet(
-                                      sheet.sheetId,
-                                      event.target.value,
-                                    );
-                                    setEditingSheetId(null);
-                                  }}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
+                      <ConfigProvider
+                        theme={{ token: { fontFamily: MONO_FONT_STACK } }}
+                      >
+                        <Tabs
+                          type="editable-card"
+                          size="small"
+                          className="register-table-tabs"
+                          activeKey={currentSheet.sheetId}
+                          onChange={(key) => setActiveSheetId(key as SheetId)}
+                          onEdit={(targetKey, action) => {
+                            if (action === "add") {
+                              addSheet();
+                            } else if (typeof targetKey === "string") {
+                              handleDeleteSheet(targetKey as SheetId);
+                            }
+                          }}
+                          items={sheetMeta.map((sheet, index) => ({
+                            key: sheet.sheetId,
+                            label: (
+                              <Dropdown
+                                trigger={["contextMenu"]}
+                                menu={{
+                                  items: sheetMenu(sheet.sheetId, index),
+                                }}
+                              >
+                                {editingSheetId === sheet.sheetId ? (
+                                  <input
+                                    className="sheet-tab__input"
+                                    defaultValue={sheet.name}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onBlur={(event) => {
                                       renameSheet(
                                         sheet.sheetId,
-                                        event.currentTarget.value,
+                                        event.target.value,
                                       );
                                       setEditingSheetId(null);
-                                    } else if (event.key === "Escape") {
-                                      setEditingSheetId(null);
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        renameSheet(
+                                          sheet.sheetId,
+                                          event.currentTarget.value,
+                                        );
+                                        setEditingSheetId(null);
+                                      } else if (event.key === "Escape") {
+                                        setEditingSheetId(null);
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  <span
+                                    className="sheet-tab__label"
+                                    onDoubleClick={() =>
+                                      setEditingSheetId(sheet.sheetId)
                                     }
-                                  }}
-                                />
-                              ) : (
-                                <span
-                                  className="sheet-tab__label"
-                                  onDoubleClick={() =>
-                                    setEditingSheetId(sheet.sheetId)
-                                  }
-                                >
-                                  {sheet.name}
-                                </span>
-                              )}
-                            </Dropdown>
-                          ),
-                          children: <RegisterTable sheetId={sheet.sheetId} />,
-                        }))}
-                      />
+                                  >
+                                    {sheet.name}
+                                  </span>
+                                )}
+                              </Dropdown>
+                            ),
+                            children: <RegisterTable sheetId={sheet.sheetId} />,
+                          }))}
+                        />
+                      </ConfigProvider>
                     ) : null}
                   </div>
                 </Splitter.Panel>

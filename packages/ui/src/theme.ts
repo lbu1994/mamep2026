@@ -2,6 +2,13 @@ import type { ThemeConfig } from "antd";
 import { theme as antdTheme } from "antd";
 
 /**
+ * 等宽字体栈（寄存器表整体与通信日志共用，便于地址/数值按列对齐阅读）。
+ * 与 apps/web/src/index.css 中 .log-list 使用的字体栈保持一致。
+ */
+export const MONO_FONT_STACK =
+  'ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, Menlo, monospace';
+
+/**
  * Mamep2026 应用级主题（docs/AGENTS.md §25.1）。
  *
  * 基于 antd 默认 / 暗色算法，叠加面向工业调试工具的紧凑、专业 token：
