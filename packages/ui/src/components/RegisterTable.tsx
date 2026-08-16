@@ -841,6 +841,8 @@ export function RegisterTable({
         title: t("table.name"),
         key: "name",
         width: 140,
+        // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
+        ellipsis: true,
         render: (_, row) => <NameCell rowId={row.rowId} name={row.name} />,
       },
       {
@@ -851,10 +853,12 @@ export function RegisterTable({
         key: "address",
         // 默认宽 130：112px 时等宽字体下表头 "Register[DEC]"（13 字符 ≈101px + padding 12px）
         // 会换行（"]" 挤到第二行）；130px 单行完整显示，且与 Name(140)/Type(132) 视觉协调。
-        // 拖拽仍可自由调整（minWidth 80），此值仅默认宽度。
+        // 拖拽仍可自由调整（minWidth 80），此值仅默认宽度；列窄于标题时由 ellipsis 单行省略。
         width: 130,
         align: "center",
         className: "register-table__cell--center",
+        // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
+        ellipsis: true,
         render: (_, row) => (
           <RegisterCell
             rowId={row.rowId}
@@ -887,6 +891,8 @@ export function RegisterTable({
         width: 110,
         align: "center",
         className: "register-table__cell--center",
+        // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
+        ellipsis: true,
         render: (_, row) => (
           <DataCell rowId={row.rowId} cellText={row.cellText} />
         ),
@@ -911,6 +917,8 @@ export function RegisterTable({
       {
         title: t("table.comment"),
         key: "comment",
+        // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
+        ellipsis: true,
         render: (_, row) => (
           <CommentCell rowId={row.rowId} comment={row.comment} />
         ),

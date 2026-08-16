@@ -502,6 +502,28 @@ body {
   text-align: center;
 }
 
+/* 寄存器表固定行高与单行不换行（虚拟滚动固定行高前提，表头 26px / 正文 29px）：
+   - 表头 th 全部 nowrap：列窄时标题也不折行成 2 行（含无列级 ellipsis 的 READ/WRITE 等列）。
+   - 表头/正文显式 height：与 TS 常量 ROW_HEIGHT(29) 及虚拟滚动 listItemHeight 保持一致，
+     防止任何单元格内容把行撑高。
+   - 文本列（Name/Register/Data/Comment）的长文本由列级 ellipsis（框架 ant-table-cell-ellipsis）
+     在单元格层 nowrap + overflow:hidden + text-overflow:ellipsis，并带 title 提示完整内容；
+     其余列内容均为定高控件（按钮/开关/下拉/复选框），行高恒定、不会折行。
+   - 已知取舍：表头 ellipsis 的 overflow:hidden 会裁剪拖拽手柄（react-resizable-handle 右缘 -5px
+     悬出列边界），列宽拖拽仍可用（命中区收窄到列内 ~5px、hover 竖线保留），换取表头标题在
+     窄列下正确省略、绝不折行。 */
+.register-table-tabs .ant-table-wrapper .ant-table-thead .ant-table-cell {
+  white-space: nowrap;
+}
+
+.register-table-tabs .ant-table-wrapper .ant-table-thead > tr > th {
+  height: 26px;
+}
+
+.register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td {
+  height: 29px;
+}
+
 /* ---------------- 底部面板 ---------------- */
 
 .bottom-panel {
