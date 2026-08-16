@@ -32,3 +32,5 @@ apps/web/dist
 *.sw?
 .env
 _screenshots
+
+.venv/*
