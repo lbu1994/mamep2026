@@ -143,11 +143,23 @@ export function BottomPanel(): React.ReactNode {
         <Typography.Text type="secondary">—</Typography.Text>
       ) : (
         messages.map((message, index) => (
-          <div key={index} className="log-row">
+          <div
+            key={index}
+            className={
+              "log-row" +
+              (message.level === "error"
+                ? " log-row--error"
+                : message.level === "warning"
+                  ? " log-row--warning"
+                  : "")
+            }
+          >
             <span className="log-row__time">
               {new Date(message.timestamp).toLocaleTimeString()}
             </span>
-            <Tag color={levelColor(message.level)}>{message.level}</Tag>
+            <Tag className="log-row__level" color={levelColor(message.level)}>
+              {message.level}
+            </Tag>
             <span className="log-row__text">
               {i18n.exists(message.messageKey)
                 ? t(message.messageKey, {

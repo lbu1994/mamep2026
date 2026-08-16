@@ -4,8 +4,8 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 DISCONNECT 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
 }
@@ -32,7 +32,8 @@ test("sidebar shows workspace and register-table sections plus footer", async ({
   await expect(sider).toContainText("Workspace");
   await expect(sider).toContainText("Register Tables");
   await expect(sider).toContainText("Sheet 1");
-  await expect(sider).toContainText("Browser v0.0.0");
+  // 版本信息（跟随根 package.json 版本，不断言具体版本号）。
+  await expect(sider).toContainText(/Browser v\d+\.\d+\.\d+/);
 });
 
 test("top bar shows status chip, MOCK badge and Help", async ({ page }) => {

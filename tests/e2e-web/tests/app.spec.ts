@@ -9,8 +9,8 @@ async function openApp(page: Page): Promise<void> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 DISCONNECT 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
 }
@@ -41,7 +41,7 @@ async function openConnectionModal(page: Page): Promise<void> {
 async function clickModalConnect(page: Page): Promise<void> {
   await page
     .locator(".ant-modal-container:visible .ant-btn")
-    .filter({ hasText: "CONNECT" })
+    .filter({ hasText: "Connect" })
     .evaluate((el) => (el as HTMLElement).click());
 }
 
@@ -52,10 +52,10 @@ test("mock startup skips Connection Settings and auto-connects", async ({
 
   // 启动即进主界面：不出现 Connection Settings 弹窗。
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
-  // 自动连接 mock：MOCK 徽标、DISCONNECT 按钮、Online 状态。
+  // 自动连接 mock：MOCK 徽标、Disconnect 按钮、Online 状态。
   const header = page.locator(".ant-layout-header");
   await expect(header).toContainText("MOCK");
-  await expect(header).toContainText("DISCONNECT");
+  await expect(header).toContainText("Disconnect");
   await expect(header).toContainText("Online");
 });
 
@@ -90,9 +90,9 @@ test("register table has the fixed column set and full READ/WRITE labels", async
     "Name",
     "Register[DEC]",
     "WP",
-    "READ",
+    "Read",
     "Data",
-    "WRITE",
+    "Write",
     "Type",
     "Comment",
   ]) {
@@ -114,10 +114,10 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
 
   // 启动已自动连接：先断开，再走弹窗连接路径（保持 Connection Settings 流程覆盖）。
   await page
-    .getByRole("button", { name: /DISCONNECT/ })
+    .getByRole("button", { name: /Disconnect/ })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator(".ant-layout-header")).not.toContainText(
-    "DISCONNECT",
+    "Disconnect",
   );
 
   // Preset the mock device register.
@@ -142,27 +142,27 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
   await openConnectionModal(page);
   await clickModalConnect(page);
 
-  // Connected: top bar button becomes DISCONNECT and state is Online.
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  // Connected: top bar button becomes Disconnect and state is Online.
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 8000,
   });
   await expect(page.locator(".ant-layout-header")).toContainText("Online");
 
-  // READ: Data shows 00AB (hex).
+  // Read: Data shows 00AB (hex).
   await page
-    .getByRole("button", { name: "READ", exact: true })
+    .getByRole("button", { name: "Read", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   const dataInput = page.getByLabel("Data").first();
   await expect(dataInput).toHaveText("00AB");
 
-  // WRITE: entering 12AB updates the mock device register.
+  // Write: entering 12AB updates the mock device register.
   // 可编辑单元格在 Enter/blur 才提交到 store，WRITE 读的是已提交的 cellText，须先提交。
   await dataInput.click();
   await dataInput.fill("12AB");
   await dataInput.press("Enter");
   await page
-    .getByRole("button", { name: "WRITE", exact: true })
+    .getByRole("button", { name: "Write", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect
@@ -341,7 +341,7 @@ test("sheets can be added and the workspace survives a reload", async ({
   await page.waitForTimeout(1000);
   await page.reload();
   // Mock 模式 reload 后不弹窗，自动连接完成即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
 
@@ -352,9 +352,9 @@ test("sheets can be added and the workspace survives a reload", async ({
     .locator(".ant-layout-sider li")
     .filter({ hasText: "Sheet 1" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(
-    page.getByLabel("Register", { exact: true }).first(),
-  ).toHaveText("10");
+  await expect(page.getByLabel("Register", { exact: true }).first()).toHaveText(
+    "10",
+  );
   await expect(page.getByLabel("Name").first()).toHaveText("SpeedRef");
   await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
   await expect(page.locator(".ant-layout-header")).toContainText("Online");
@@ -389,7 +389,7 @@ test("no console errors during a full interaction round", async ({ page }) => {
   });
 
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
   await page

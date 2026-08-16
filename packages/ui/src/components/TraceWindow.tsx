@@ -1,6 +1,16 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Card, Input, Select, Slider, Space, Table, Typography } from "antd";
+import {
+  Button,
+  Card,
+  Input,
+  Select,
+  Slider,
+  Space,
+  Table,
+  Tooltip,
+  Typography,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { RegisterRow, RowId } from "@mamep2026/domain";
 import { useAppStore, type BufferSizeOption } from "../app-store";
@@ -116,13 +126,16 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
       }}
       title={t("trace.title")}
       extra={
-        <Button
-          size="small"
-          type="text"
-          onClick={() => closeTraceWindow(rowId)}
-        >
-          ✕
-        </Button>
+        <Tooltip title={t("trace.close")}>
+          <Button
+            size="small"
+            type="text"
+            aria-label={t("trace.close")}
+            onClick={() => closeTraceWindow(rowId)}
+          >
+            ✕
+          </Button>
+        </Tooltip>
       }
     >
       <Space orientation="vertical" style={{ width: "100%" }} size={4}>

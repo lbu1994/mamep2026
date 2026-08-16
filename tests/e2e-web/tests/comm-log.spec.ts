@@ -9,8 +9,8 @@ async function openApp(page: Page): Promise<void> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 DISCONNECT 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
   expect(errors, `console/page errors during startup: ${errors.join(" | ")}`).toEqual([]);
@@ -35,7 +35,7 @@ async function openCommLogTab(page: Page): Promise<void> {
 
 async function readOnce(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "READ", exact: true })
+    .getByRole("button", { name: "Read", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForTimeout(30);

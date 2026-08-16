@@ -1,8 +1,94 @@
 /* =========================================================
    Mamep2026 — 应用级样式
-   取色统一使用 antd CSS 变量（--ant-*，由 ConfigProvider cssVar 输出），
-   保证浅/深主题自动适配；只在极少数地方提供 fallback。
+   取色统一使用语义设计令牌（--mamep-*，见下方 Token 块），
+   令牌大部分映射到 antd CSS 变量（--ant-*，由 ConfigProvider cssVar 输出），
+   浅/深主题自动适配；仅暗色需要独立微调的值在
+   [data-mamep-theme="dark"] 块中定义（由 MamepApp 在 <html> 上同步该属性）。
    ========================================================= */
+
+/* ---------------- 语义设计令牌（设计系统基础） ----------------
+   命名与任务清单一一对应；组件样式不得散落固定颜色，统一取这里的变量。
+   Light（:root）与 Dark（[data-mamep-theme="dark"]）使用相同 Token 名，仅赋值不同。
+   注意：antd cssVar 的 --ant-* 变量只在 antd 组件作用域（.ant 后代）可解析，
+   :root 上无法引用，因此本令牌全部显式赋值（与 scripts/check-contrast.mjs 的
+   调色板保持一致），不依赖 antd CSS 变量；antd 组件自身的配色仍由 antd 主题负责。 */
+
+:root {
+  /* 字体角色 */
+  --mamep-font-ui:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mamep-font-mono:
+    ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, Menlo,
+    "PingFang SC", "Microsoft YaHei", monospace;
+
+  /* 背景层级：应用 / 导航(顶栏) / 侧栏 / 内容面板 / 浮层 / 悬停 / 选中（Light） */
+  --mamep-bg-app: #f2f3f5;
+  --mamep-bg-nav: #ffffff;
+  --mamep-bg-sidebar: #ffffff;
+  --mamep-bg-panel: #ffffff;
+  --mamep-bg-elevated: #ffffff;
+  --mamep-bg-hover: rgba(0, 0, 0, 0.06);
+  --mamep-bg-selected: #e6f4ff;
+
+  /* 文字灰阶（Light，AA 校准：tertiary 4.74:1、disabled 3.03:1） */
+  --mamep-text-primary: rgba(0, 0, 0, 0.88);
+  --mamep-text-secondary: rgba(0, 0, 0, 0.65);
+  --mamep-text-tertiary: rgba(0, 0, 0, 0.55);
+  --mamep-text-disabled: rgba(0, 0, 0, 0.42);
+
+  /* 边框：弱（单元格/分割线）/ 默认（输入框） / 强（一级区域边界）（Light） */
+  --mamep-border-subtle: rgba(5, 5, 5, 0.06);
+  --mamep-border-default: #d9d9d9;
+  --mamep-border-strong: rgba(0, 0, 0, 0.15);
+
+  /* 品牌与状态（Light） */
+  --mamep-brand-primary: #1460d6;
+  --mamep-status-info: #1677ff;
+  --mamep-status-success: #389e0d;
+  --mamep-status-warning: #c08a00;
+  --mamep-status-error: #cf1322;
+  --mamep-status-danger-action: #cf1322;
+
+  /* 焦点环 / 阴影 / 圆角 / 间距 */
+  --mamep-focus-ring: #1460d6;
+  --mamep-shadow-overlay: 0 6px 16px 0 rgba(0, 0, 0, 0.08);
+  --mamep-radius-control: 4px;
+  --mamep-radius-panel: 4px;
+  --mamep-spacing-xs: 4px;
+  --mamep-spacing-sm: 8px;
+  --mamep-spacing-md: 12px;
+  --mamep-spacing-lg: 16px;
+}
+
+/* 暗黑模式：独立设计，不简单反色。四级深灰背景（应用/导航/面板/浮层）+ 低饱和选中 + 亮化文字 */
+[data-mamep-theme="dark"] {
+  --mamep-bg-app: #101014;
+  --mamep-bg-nav: #141414;
+  --mamep-bg-sidebar: #141414;
+  --mamep-bg-panel: #16161c;
+  --mamep-bg-elevated: #1f1f1f;
+  --mamep-bg-hover: rgba(255, 255, 255, 0.08);
+  --mamep-bg-selected: #152d50;
+
+  --mamep-text-primary: rgba(255, 255, 255, 0.85);
+  --mamep-text-secondary: rgba(255, 255, 255, 0.65);
+  --mamep-text-tertiary: rgba(255, 255, 255, 0.62);
+  --mamep-text-disabled: rgba(255, 255, 255, 0.38);
+
+  --mamep-border-subtle: rgba(255, 255, 255, 0.12);
+  --mamep-border-default: #424242;
+  --mamep-border-strong: rgba(255, 255, 255, 0.2);
+
+  --mamep-brand-primary: #1668dc;
+  --mamep-status-info: #1668dc;
+  --mamep-status-success: #49aa19;
+  --mamep-status-warning: #d89614;
+  --mamep-status-error: #dc4446;
+  --mamep-status-danger-action: #dc4446;
+
+  --mamep-focus-ring: #6ba1ff;
+}
 
 html,
 body,
@@ -13,16 +99,8 @@ body,
 }
 
 body {
-  font-family: var(
-    --ant-font-family,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    sans-serif
-  );
+  background: var(--mamep-bg-app);
+  font-family: var(--mamep-font-ui);
 }
 
 .connection-settings-group {
@@ -74,7 +152,7 @@ body {
 }
 
 .mamep-header__brand-title {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.2px;
   color: var(--ant-color-text);
@@ -103,23 +181,47 @@ body {
   flex: 1;
 }
 
-/* 连接控制区：Connection Settings + CONNECT + 状态，作为完整逻辑单元 */
+/* 连接控制区：左侧「Connection 入口 + 只读状态摘要」+ 弱分隔 + 右侧 Connect/Disconnect 操作，
+   作为完整逻辑单元；操作与状态明确分组，避免 Disconnect 与状态摘要语义混淆。 */
 .connection-cluster {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 2px 4px;
   border: 1px solid var(--ant-color-split);
   border-radius: 6px;
   background: var(--ant-color-bg-container);
 }
 
-/* 连接状态：圆点 + 文字，颜色之外仍有形状/文字表达 */
+.connection-cluster__primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.connection-cluster__sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  background: var(--mamep-border-subtle);
+}
+
+.connection-cluster__action {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* 连接状态摘要：只读 chip（柔和底色、无按钮语义），与 Disconnect 操作分离 */
 .status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  padding: 1px 8px;
   font-size: 12px;
+  line-height: 18px;
+  border-radius: 999px;
+  background: var(--ant-color-fill-secondary);
   white-space: nowrap;
 }
 
@@ -138,10 +240,7 @@ body {
   height: 100%;
   min-width: 0;
   background: var(--ant-color-bg-container);
-}
-
-.sheet-sidebar:not(.ant-layout-sider-collapsed) {
-  border-right: 1px solid var(--ant-color-split);
+  border-right: 1px solid var(--mamep-border-subtle);
 }
 
 .sheet-sidebar__head {
@@ -197,6 +296,10 @@ body {
   font-weight: 600;
 }
 
+.sheet-sidebar__menu .ant-menu-item-selected::after {
+  border-inline-end: none;
+}
+
 .sheet-item__label-wrap {
   display: flex;
   align-items: center;
@@ -205,6 +308,7 @@ body {
 }
 
 .sheet-item {
+  position: relative;
   display: flex;
   align-items: center;
   height: 26px;
@@ -219,10 +323,28 @@ body {
   background: var(--ant-color-fill-secondary);
 }
 
+/* 可见键盘焦点（WCAG 2.2）：侧栏表项 */
+.sheet-item:focus-visible {
+  outline: 2px solid var(--mamep-focus-ring);
+  outline-offset: -2px;
+}
+
+/* 选中态：品牌色文字 + 柔和背景 + 左侧指示条（Light/Dark 一致语义，暗色低饱和） */
 .sheet-item--active {
   background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary-text);
   font-weight: 600;
+}
+
+.sheet-item--active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--mamep-brand-primary);
 }
 
 .sheet-item__name {
@@ -273,9 +395,28 @@ body {
   margin-top: auto;
   flex: none;
   padding: 6px 8px 8px;
+  border-top: 1px solid var(--mamep-border-subtle);
   font-size: 11px;
-  color: var(--ant-color-text-quaternary);
+  color: var(--mamep-text-tertiary);
   white-space: nowrap;
+}
+
+/* 折叠窄条：仅保留 head 展开按钮与「新建表」图标（Tooltip/aria 可访问），其余隐藏居中 */
+.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__head {
+  justify-content: center;
+  padding: 6px 0 0;
+}
+
+.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__title,
+.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__section-title,
+.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__menu,
+.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__footer {
+  display: none;
+}
+
+.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__section {
+  justify-content: center;
+  padding: 8px 0 0;
 }
 
 /* 表项 More 按钮：平时淡出，悬停/聚焦时显现，降低视觉噪声 */
@@ -290,6 +431,20 @@ body {
   opacity: 1;
 }
 
+/* 系统减少动画偏好：关闭脉冲/过渡动画 */
+@media (prefers-reduced-motion: reduce) {
+  .register-table__wp-indicator {
+    animation: none;
+  }
+
+  .sheet-item__more,
+  .row-actions,
+  .register-table__editable-cell-value-wrap,
+  .register-table-tabs .ant-table-thead .react-resizable-handle::after {
+    transition: none;
+  }
+}
+
 /* ---------------- 寄存器表格 ---------------- */
 
 .register-table-wrap {
@@ -301,8 +456,9 @@ body {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-split);
+  /* 内容面板背景（暗色下与导航/侧栏形成灰阶层次） */
+  background: var(--mamep-bg-panel);
+  border: 1px solid var(--mamep-border-subtle);
   border-radius: 4px;
 }
 
@@ -348,6 +504,34 @@ body {
   height: 100%;
 }
 
+/* Sheet 页签状态：选中/未选中/Hover/关闭按钮清晰，选中与侧边栏统一品牌语义；
+   主题切换不改变页签尺寸（仅颜色变化，antd 固定尺寸）。 */
+.register-table-tabs .ant-tabs-tab {
+  border-radius: 4px 4px 0 0;
+}
+
+.register-table-tabs .ant-tabs-tab:hover {
+  background: var(--ant-color-fill-secondary);
+}
+
+.register-table-tabs .ant-tabs-tab-active {
+  background: var(--mamep-bg-panel);
+}
+
+.register-table-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--mamep-text-primary);
+  font-weight: 600;
+}
+
+.register-table-tabs .ant-tabs-tab-remove:hover {
+  color: var(--mamep-status-error);
+}
+
+.register-table-tabs .ant-tabs-nav-add:hover {
+  color: var(--mamep-brand-primary);
+  border-color: var(--mamep-brand-primary);
+}
+
 .sheet-tab__input {
   width: 110px;
   padding: 1px 6px;
@@ -364,6 +548,21 @@ body {
   align-items: center;
   gap: 6px;
   padding: 6px 8px 4px;
+}
+
+/* 工具栏按功能分组（行操作 | 批量操作 | 显示设置），弱分割线而非多重容器边框 */
+.table-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.table-toolbar__sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--mamep-border-subtle);
 }
 
 .table-toolbar__spacer {
@@ -413,7 +612,7 @@ body {
 
 .register-table-tabs .ant-table-thead .react-resizable-handle {
   position: absolute;
-  right: -5px;
+  right: 0;
   top: 0;
   bottom: 0;
   width: 10px;
@@ -465,8 +664,10 @@ body {
   border-color: var(--ant-color-border);
 }
 
+/* 可见键盘焦点环（WCAG 2.2）：可编辑单元格 */
 .register-table__editable-cell-value-wrap:focus-visible {
-  outline: none;
+  outline: 2px solid var(--mamep-focus-ring);
+  outline-offset: -2px;
 }
 
 /* Register 地址校验错误态（addressDraft 非空但未解析成功） */
@@ -502,6 +703,47 @@ body {
   text-align: center;
 }
 
+/* 数据字体角色：Register/Data 列（含表头与编辑态输入）使用等宽字体；
+   Name/Comment/Type 与控件使用 UI 无衬线字体（antd 全局 fontFamily）。 */
+.register-table-tabs .register-table__cell--mono,
+.register-table-tabs .register-table__cell--mono .ant-input {
+  font-family: var(--mamep-font-mono);
+}
+
+/* WP 开关 + 轮询指示：无合法地址时禁用；开启且在线时显示品牌色脉冲点
+   （非纯颜色状态，配 Tooltip 与 aria-label 表达「正在轮询」）。 */
+.register-table__wp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.register-table__wp-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mamep-brand-primary);
+  animation: mamep-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes mamep-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+/* Data 空值占位「—」：区分「尚未读取/无值」与「有值」（辅助色） */
+.register-table__editable-cell-value-placeholder {
+  color: var(--mamep-text-tertiary);
+}
+
 /* 寄存器表固定行高与单行不换行（虚拟滚动固定行高前提，表头 26px / 正文 29px）：
    - 表头 th 全部 nowrap：列窄时标题也不折行成 2 行（含无列级 ellipsis 的 READ/WRITE 等列）。
    - 表头/正文显式 height：与 TS 常量 ROW_HEIGHT(29) 及虚拟滚动 listItemHeight 保持一致，
@@ -518,6 +760,16 @@ body {
 
 .register-table-tabs .ant-table-wrapper .ant-table-thead > tr > th {
   height: 26px;
+  background: var(--ant-color-fill-secondary);
+}
+
+/* 行选中：品牌浅底 + 复选框（不只依赖复选框；与侧栏/页签选中语义一致） */
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  > tr.ant-table-row-selected
+  > td {
+  background: var(--ant-color-primary-bg);
 }
 
 .register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td {
@@ -531,8 +783,8 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--ant-color-bg-container);
-  border-top: 1px solid var(--ant-color-split);
+  background: var(--mamep-bg-panel);
+  border-top: 1px solid var(--mamep-border-subtle);
 }
 
 /* Splitter 拖拽条（经 classNames={{ dragger }} 映射，光标与 hover 对齐原分隔条） */
@@ -575,6 +827,12 @@ body {
   height: 100%;
 }
 
+/* 底部面板页签可见键盘焦点 */
+.bottom-panel .ant-tabs-tab:focus-visible {
+  outline: 2px solid var(--mamep-focus-ring);
+  outline-offset: -2px;
+}
+
 .bottom-panel--collapsed .ant-tabs-content-holder,
 .bottom-panel--collapsed .ant-tabs-body-holder {
   display: none;
@@ -598,10 +856,31 @@ body {
   border-bottom: 1px dashed var(--ant-color-split);
 }
 
+/* 时间：固定宽度等宽数据列，保证日志扫描对齐 */
 .log-row__time {
   flex: none;
+  min-width: 60px;
+  font-family: var(--mamep-font-mono);
+  font-size: 11px;
   color: var(--ant-color-text-tertiary);
   white-space: nowrap;
+}
+
+.log-row__level {
+  flex: none;
+  margin-inline-end: 0;
+  text-transform: capitalize;
+}
+
+/* Warning/Error 行权重高于 Info：左侧强调条 + 级别 Tag（颜色 + 文字） */
+.log-row--error {
+  border-left: 3px solid var(--mamep-status-error);
+  padding-left: 4px;
+}
+
+.log-row--warning {
+  border-left: 3px solid var(--mamep-status-warning);
+  padding-left: 4px;
 }
 
 .log-row__text {

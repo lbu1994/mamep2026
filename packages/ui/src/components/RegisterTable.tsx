@@ -74,6 +74,8 @@ interface EditableCellValueProps {
   error?: boolean;
   /** 错误提示文案（error 时 Tooltip 内容）。 */
   errorTip?: string;
+  /** 值为空且非编辑态时的占位文本（辅助色，不进入编辑草稿）。 */
+  emptyText?: string;
   /** 提交回调（Enter/失焦）：参数为最终草稿；草稿未变时不调用。 */
   onCommit: (value: string) => void;
 }
@@ -83,6 +85,7 @@ function EditableCellValue({
   ariaLabel,
   error = false,
   errorTip,
+  emptyText,
   onCommit,
 }: EditableCellValueProps): React.ReactNode {
   const [editing, setEditing] = useState(false);
@@ -149,7 +152,13 @@ function EditableCellValue({
         }
       }}
     >
-      {value}
+      {value === "" && emptyText !== undefined ? (
+        <span className="register-table__editable-cell-value-placeholder">
+          {emptyText}
+        </span>
+      ) : (
+        value
+      )}
     </div>
   );
   return error && errorTip !== undefined ? (
@@ -261,35 +270,64 @@ const RegisterCell = memo(function RegisterCell({
 const WpCell = memo(function WpCell({
   rowId,
   pollingEnabled,
+  hasAddress,
 }: {
   rowId: RowId;
   pollingEnabled: boolean;
+  hasAddress: boolean;
 }) {
   const { t } = useTranslation();
   const updateRow = useAppStore((s) => s.updateRow);
+  const connected = useAppStore((s) => s.connectionState) === "connected";
+  // 无合法地址时禁用并说明原因（任务要求）；离线不禁用（可预配置，连接后即生效）。
+  const disabled = !hasAddress;
+  // 纯 UI 派生轮询指示：已连接 + 有合法地址 + WP 开启 = 正在轮询。
+  const polling = connected && hasAddress && pollingEnabled;
   return (
-    <Tooltip title={t("table.wpHint")}>
-      <Switch
-        size="small"
-        aria-label="WP"
-        checked={pollingEnabled}
-        onChange={(checked) =>
-          updateRow(rowId, (r) => ({
-            ...r,
-            pollingEnabled: checked,
-            updatedAt: Date.now(),
-          }))
-        }
-      />
+    <Tooltip
+      title={disabled ? t("table.emptyAddressTooltip") : t("table.wpHint")}
+    >
+      <span className="register-table__wp">
+        <Switch
+          size="small"
+          aria-label="WP"
+          checked={pollingEnabled}
+          disabled={disabled}
+          onChange={(checked) =>
+            updateRow(rowId, (r) => ({
+              ...r,
+              pollingEnabled: checked,
+              updatedAt: Date.now(),
+            }))
+          }
+        />
+        {polling ? (
+          <Tooltip title={t("table.pollingActive")}>
+            <span
+              className="register-table__wp-indicator"
+              role="img"
+              aria-label={t("table.pollingActive")}
+            />
+          </Tooltip>
+        ) : null}
+      </span>
     </Tooltip>
   );
 });
 
-const ReadCell = memo(function ReadCell({ rowId }: { rowId: RowId }) {
+const ReadCell = memo(function ReadCell({
+  rowId,
+  hasAddress,
+}: {
+  rowId: RowId;
+  hasAddress: boolean;
+}) {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   const updateRow = useAppStore((s) => s.updateRow);
   const connected = useAppStore((s) => s.connectionState) === "connected";
+  // 离线或未配置合法地址时禁用；无地址时提供 Tooltip 说明原因。
+  const disabled = !connected || !hasAddress;
   const handleRead = async (): Promise<void> => {
     if (host === null || host === undefined) return;
     const state = useAppStore.getState();
@@ -307,14 +345,18 @@ const ReadCell = memo(function ReadCell({ rowId }: { rowId: RowId }) {
     }
     // 读取失败不改变 Data 单元格内容（§17/§25），错误经日志展示。
   };
-  return (
-    <Button
-      size="small"
-      disabled={!connected}
-      onClick={() => void handleRead()}
-    >
+  const button = (
+    <Button size="small" disabled={disabled} onClick={() => void handleRead()}>
       {t("table.read")}
     </Button>
+  );
+  // 无合法地址时禁用并说明原因（禁用元素不触发 Tooltip，需包一层 span）。
+  return !hasAddress ? (
+    <Tooltip title={t("table.emptyAddressTooltip")}>
+      <span>{button}</span>
+    </Tooltip>
+  ) : (
+    button
   );
 });
 
@@ -330,6 +372,8 @@ const DataCell = memo(function DataCell({
     <EditableCellValue
       value={cellText}
       ariaLabel="Data"
+      // 空值占位「—」：区分「尚未读取/无值」与「有值」，纯 UI 派生，不进入草稿。
+      emptyText="—"
       onCommit={(value) =>
         updateRow(rowId, (r) => ({
           ...r,
@@ -341,11 +385,19 @@ const DataCell = memo(function DataCell({
   );
 });
 
-const WriteCell = memo(function WriteCell({ rowId }: { rowId: RowId }) {
+const WriteCell = memo(function WriteCell({
+  rowId,
+  hasAddress,
+}: {
+  rowId: RowId;
+  hasAddress: boolean;
+}) {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   const appendMessage = useAppStore((s) => s.appendMessage);
   const connected = useAppStore((s) => s.connectionState) === "connected";
+  // 离线或未配置合法地址时禁用；无地址时提供 Tooltip 说明原因。
+  const disabled = !connected || !hasAddress;
   const handleWrite = async (): Promise<void> => {
     if (host === null || host === undefined) return;
     const state = useAppStore.getState();
@@ -372,14 +424,18 @@ const WriteCell = memo(function WriteCell({ rowId }: { rowId: RowId }) {
       });
     }
   };
-  return (
-    <Button
-      size="small"
-      disabled={!connected}
-      onClick={() => void handleWrite()}
-    >
+  const button = (
+    <Button size="small" disabled={disabled} onClick={() => void handleWrite()}>
       {t("table.write")}
     </Button>
+  );
+  // 无合法地址时禁用并说明原因（禁用元素不触发 Tooltip，需包一层 span）。
+  return !hasAddress ? (
+    <Tooltip title={t("table.emptyAddressTooltip")}>
+      <span>{button}</span>
+    </Tooltip>
+  ) : (
+    button
   );
 });
 
@@ -921,7 +977,7 @@ export function RegisterTable({
       {
         title: t("table.name"),
         key: "name",
-        width: 140,
+        width: 150,
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
         render: (_, row) => <NameCell rowId={row.rowId} name={row.name} />,
@@ -932,12 +988,11 @@ export function RegisterTable({
             ? t("table.registerHex")
             : t("table.registerDec"),
         key: "address",
-        // 默认宽 130：112px 时等宽字体下表头 "Register[DEC]"（13 字符 ≈101px + padding 12px）
-        // 会换行（"]" 挤到第二行）；130px 单行完整显示，且与 Name(140)/Type(132) 视觉协调。
-        // 拖拽仍可自由调整（minWidth 80），此值仅默认宽度；列窄于标题时由 ellipsis 单行省略。
-        width: 130,
+        // 默认宽 144：等宽字体下表头 "Register[DEC]" 单行完整显示，且与 Name(150)/Type(144)
+        // 视觉协调。拖拽仍可自由调整（minWidth 80），此值仅默认宽度。
+        width: 144,
         align: "center",
-        className: "register-table__cell--center",
+        className: "register-table__cell--center register-table__cell--mono",
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
         render: (_, row) => (
@@ -953,25 +1008,31 @@ export function RegisterTable({
       {
         title: t("table.wp"),
         key: "wp",
-        width: 40,
+        width: 56,
         align: "center",
         render: (_, row) => (
-          <WpCell rowId={row.rowId} pollingEnabled={row.pollingEnabled} />
+          <WpCell
+            rowId={row.rowId}
+            pollingEnabled={row.pollingEnabled}
+            hasAddress={row.addressValue !== null}
+          />
         ),
       },
       {
         title: t("table.read"),
         key: "read",
-        width: 60,
+        width: 64,
         align: "center",
-        render: (_, row) => <ReadCell rowId={row.rowId} />,
+        render: (_, row) => (
+          <ReadCell rowId={row.rowId} hasAddress={row.addressValue !== null} />
+        ),
       },
       {
         title: t("table.data"),
         key: "data",
-        width: 110,
+        width: 124,
         align: "center",
-        className: "register-table__cell--center",
+        className: "register-table__cell--center register-table__cell--mono",
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
         render: (_, row) => (
@@ -981,14 +1042,16 @@ export function RegisterTable({
       {
         title: t("table.write"),
         key: "write",
-        width: 60,
+        width: 64,
         align: "center",
-        render: (_, row) => <WriteCell rowId={row.rowId} />,
+        render: (_, row) => (
+          <WriteCell rowId={row.rowId} hasAddress={row.addressValue !== null} />
+        ),
       },
       {
         title: t("table.type"),
         key: "type",
-        width: 132,
+        width: 144,
         align: "center",
         className: "register-table__cell--center",
         render: (_, row) => (
@@ -1071,10 +1134,12 @@ export function RegisterTable({
       forwardRef<HTMLTableRowElement, MemoTableRowProps>(
         function RegisterTableRow(props, ref) {
           const { _record, _index, _selection, ...rest } = props;
-          // 内部 props 仅供 React.memo 比较器使用，不参与 <tr> 渲染。
-          void _record;
           void _index;
           void _selection;
+          // rc-table 在空数据时也会用自定义行组件渲染空态占位行（record 为 undefined）。
+          // 此时无真实数据行，dnd-kit 用占位 id（不参与 SortableContext 排序），
+          // 避免 useSortable 的 _record.rowId 崩溃；hooks 保持无条件调用（Hooks 规则）。
+          const isEmpty = _record === undefined || _record === null;
           // dnd-kit 可排序行：id 用 rowId（稳定，行数据更新不重建 droppable）。
           // useSortable 内部状态（transform/isDragging）变化会自渲染，不受外层 memo 影响。
           const {
@@ -1085,7 +1150,9 @@ export function RegisterTable({
             transform,
             transition,
             isDragging,
-          } = useSortable({ id: _record.rowId });
+          } = useSortable({
+            id: isEmpty ? "__mamep_empty_row__" : _record.rowId,
+          });
           // 组合 dnd-kit 的 setNodeRef 与 rc-table 转发的 ref（虚拟滚动测量依赖转发 ref）。
           const setRefs = useCallback(
             (node: HTMLTableRowElement | null) => {
@@ -1115,7 +1182,7 @@ export function RegisterTable({
             <RowContext.Provider value={contextValue}>
               <tr
                 {...rest}
-                {...attributes}
+                {...(isEmpty ? {} : attributes)}
                 ref={setRefs}
                 style={style}
                 role="row"
@@ -1141,52 +1208,60 @@ export function RegisterTable({
   return (
     <Flex vertical style={{ height: "100%" }} ref={flexRef}>
       <div className="table-toolbar">
-        {rows.length > 0 ? (
+        <div className="table-toolbar__group">
+          {rows.length > 0 ? (
+            <Button
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => addRow(sheetId)}
+            >
+              {t("table.addRow")}
+            </Button>
+          ) : null}
+          {selectedRowIds.length > 0 ? (
+            <span className="table-toolbar__info">
+              {t("table.rowsSelected", { count: selectedRowIds.length })}
+            </span>
+          ) : null}
+        </div>
+        <span className="table-toolbar__sep" aria-hidden="true" />
+        <div className="table-toolbar__group">
           <Button
             size="small"
-            icon={<PlusOutlined />}
-            onClick={() => addRow(sheetId)}
+            type="primary"
+            loading={readAllRunning}
+            onClick={() => void handleReadAll()}
           >
-            {t("table.addRow")}
+            {t("topbar.readAll")}
           </Button>
-        ) : null}
-        <Button
-          size="small"
-          loading={readAllRunning}
-          onClick={() => void handleReadAll()}
-        >
-          {t("topbar.readAll")}
-        </Button>
-        {selectedRowIds.length > 0 ? (
-          <span className="table-toolbar__info">
-            {t("table.rowsSelected", { count: selectedRowIds.length })}
-          </span>
-        ) : null}
+        </div>
         <span className="table-toolbar__spacer" />
-        <Tooltip title={t("table.registerRadixHint")}>
-          <span className="table-toolbar__radix">
-            <span className="table-toolbar__radix-label">
-              {t("table.registerRadixLabel")}
+        <div className="table-toolbar__group">
+          <Tooltip title={t("table.addressFormatHint")}>
+            <span className="table-toolbar__radix">
+              <span className="table-toolbar__radix-label">
+                {t("table.registerRadixLabel")}
+              </span>
+              <Segmented
+                size="small"
+                aria-label={t("table.addressFormat")}
+                options={[
+                  { label: "DEC", value: "dec" },
+                  { label: "HEX", value: "hex" },
+                ]}
+                value={registerRadix}
+                onChange={(value) => {
+                  if (value === "hex" || value === "dec") {
+                    setSheetRegisterRadix(sheetId, value);
+                  }
+                }}
+              />
             </span>
-            <Segmented
-              size="small"
-              aria-label={t("table.addressFormat")}
-              options={[
-                { label: "DEC", value: "dec" },
-                { label: "HEX", value: "hex" },
-              ]}
-              value={registerRadix}
-              onChange={(value) => {
-                if (value === "hex" || value === "dec") {
-                  setSheetRegisterRadix(sheetId, value);
-                }
-              }}
-            />
+          </Tooltip>
+          <span className="table-toolbar__info">
+            {t("table.rowCount", { count: rows.length })}
           </span>
-        </Tooltip>
-        <span className="table-toolbar__info">
-          {t("table.rowCount", { count: rows.length })}
-        </span>
+        </div>
       </div>
       <DndContext
         modifiers={[restrictToVerticalAxis]}
@@ -1224,8 +1299,8 @@ export function RegisterTable({
                   : {})}
                 scroll={
                   tableBodyHeight > 0
-                    ? { x: 900, y: tableBodyHeight }
-                    : { x: 900 }
+                    ? { x: 920, y: tableBodyHeight }
+                    : { x: 920 }
                 }
                 rowSelection={{
                   // 固定复选框列宽（antd 内置能力）：不可拖拽调整。

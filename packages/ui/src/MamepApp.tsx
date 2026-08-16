@@ -30,6 +30,7 @@ import {
   MoreOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
+  RightOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import type { ConnectionState } from "@mamep2026/communication";
@@ -128,6 +129,16 @@ export function MamepApp(): React.ReactNode {
   const closeOtherSheets = useAppStore((s) => s.closeOtherSheets);
   const closeSheetsToRight = useAppStore((s) => s.closeSheetsToRight);
   const [helpOpen, setHelpOpen] = useState(false);
+  // 窄窗口（≤1100px）将顶栏次要操作（Plugin Manager/Settings/Help/主题）收入 More 下拉；
+  // 连接区（Connection/状态/Disconnect）始终可见。
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1100px)");
+    const update = (): void => setNarrow(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   // Splitter 受控 size 拖拽过程缓冲：onResize 更新本地，onResizeEnd 才持久化到 panelLayout（避免高频写 store）。
   const [dragPanelHeight, setDragPanelHeight] = useState<number | null>(null);
   const dragIndex = useRef<number | null>(null);
@@ -152,6 +163,15 @@ export function MamepApp(): React.ReactNode {
     );
     return unsubscribe;
   }, [host, setConnectionState]);
+
+  // 主题同步到 <html data-mamep-theme>：index.css 的 --mamep-* 暗色令牌依赖该属性，
+  // 与 antd ConfigProvider 的暗色算法一起切换（组件内不得散落主题判断）。
+  useEffect(() => {
+    document.documentElement.dataset.mamepTheme = theme;
+    return () => {
+      delete document.documentElement.dataset.mamepTheme;
+    };
+  }, [theme]);
 
   // Trace 采样 -> store。
   useEffect(() => {
@@ -275,22 +295,57 @@ export function MamepApp(): React.ReactNode {
       onDelete: handleDeleteSheet,
     });
 
+  const toggleTheme = (): void => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+  };
+
+  // 顶栏次要操作：窄窗口收入 More 下拉（与展开态按钮共享动作）。
+  const secondaryMenuItems: NonNullable<MenuProps["items"]> = [
+    {
+      key: "plugins",
+      label: t("topbar.pluginManager"),
+      onClick: () => setPluginModalOpen(true),
+    },
+    {
+      key: "settings",
+      label: t("topbar.settings"),
+      onClick: () => setSettingsOpen(true),
+    },
+    {
+      key: "help",
+      label: t("topbar.help"),
+      onClick: () => setHelpOpen(true),
+    },
+    {
+      key: "theme",
+      label: t("topbar.theme"),
+      onClick: toggleTheme,
+    },
+  ];
+
   return (
     <ConfigProvider theme={buildTheme(theme === "dark")}>
       <AntApp>
         <Layout style={{ height: "100vh" }}>
           <Layout.Header className="mamep-header">
-            <Button
-              type="text"
-              size="small"
-              aria-label={t("topbar.toggleSidebar")}
-              icon={
-                sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
-              }
-              onClick={() =>
-                setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
-              }
-            />
+            <Tooltip title={t("topbar.toggleSidebar")}>
+              <Button
+                type="text"
+                size="small"
+                aria-label={t("topbar.toggleSidebar")}
+                icon={
+                  sidebarCollapsed ? (
+                    <MenuUnfoldOutlined />
+                  ) : (
+                    <MenuFoldOutlined />
+                  )
+                }
+                onClick={() =>
+                  setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
+                }
+              />
+            </Tooltip>
             <div className="mamep-header__brand">
               <Typography.Text className="mamep-header__brand-title">
                 {t("app.title")}
@@ -305,16 +360,34 @@ export function MamepApp(): React.ReactNode {
               vertical
               style={{ height: 20, marginInline: 2, flex: "none" }}
             />
+            {/* 连接区：左侧「Connection 入口 + 只读状态摘要」与右侧「Connect/Disconnect 操作」明确分组 */}
             <div className="connection-cluster">
+              <div className="connection-cluster__primary">
+                <Button
+                  size="small"
+                  icon={<ApiOutlined />}
+                  onClick={() => setConnectionModalOpen(true)}
+                >
+                  {t("topbar.connectionSettings")}
+                </Button>
+                <span className="status-badge">
+                  <span
+                    className="status-badge__dot"
+                    style={{
+                      backgroundColor: STATE_DOT_COLOR[connectionState],
+                    }}
+                  />
+                  <span>
+                    {t(`state.${connectionState}`)}
+                    {" · "}
+                    {t("topbar.rtuSlave", { address: slaveAddress })}
+                  </span>
+                </span>
+              </div>
+              <span className="connection-cluster__sep" aria-hidden="true" />
               <Button
                 size="small"
-                icon={<ApiOutlined />}
-                onClick={() => setConnectionModalOpen(true)}
-              >
-                {t("topbar.connectionSettings")}
-              </Button>
-              <Button
-                size="small"
+                className="connection-cluster__action"
                 type={connected ? "default" : "primary"}
                 danger={connected}
                 icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
@@ -323,53 +396,58 @@ export function MamepApp(): React.ReactNode {
               >
                 {connected ? t("topbar.disconnect") : t("topbar.connect")}
               </Button>
-              <span className="status-badge">
-                <span
-                  className="status-badge__dot"
-                  style={{ backgroundColor: STATE_DOT_COLOR[connectionState] }}
-                />
-                <span>
-                  {t(`state.${connectionState}`)}
-                  {" · "}
-                  {t("topbar.rtuSlave", { address: slaveAddress })}
-                </span>
-              </span>
             </div>
             <span className="mamep-header__spacer" />
             <div className="mamep-header__group">
-              <Button size="small" onClick={() => setPluginModalOpen(true)}>
-                {t("topbar.pluginManager")}
-              </Button>
-              <Button
-                size="small"
-                icon={<SettingOutlined />}
-                onClick={() => setSettingsOpen(true)}
-              >
-                {t("topbar.settings")}
-              </Button>
-              <Button
-                size="small"
-                icon={<QuestionCircleOutlined />}
-                onClick={() => setHelpOpen(true)}
-              >
-                {t("topbar.help")}
-              </Button>
-              <Button
-                size="small"
-                icon={<BulbOutlined />}
-                aria-label={t("topbar.theme")}
-                onClick={() => {
-                  const next = theme === "light" ? "dark" : "light";
-                  setTheme(next);
-                }}
-              />
+              {narrow ? (
+                <Dropdown
+                  menu={{ items: secondaryMenuItems }}
+                  trigger={["click"]}
+                >
+                  <Button
+                    size="small"
+                    icon={<MoreOutlined />}
+                    aria-label={t("topbar.more")}
+                  >
+                    {t("topbar.more")}
+                  </Button>
+                </Dropdown>
+              ) : (
+                <>
+                  <Button size="small" onClick={() => setPluginModalOpen(true)}>
+                    {t("topbar.pluginManager")}
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<SettingOutlined />}
+                    onClick={() => setSettingsOpen(true)}
+                  >
+                    {t("topbar.settings")}
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<QuestionCircleOutlined />}
+                    onClick={() => setHelpOpen(true)}
+                  >
+                    {t("topbar.help")}
+                  </Button>
+                  <Tooltip title={t("topbar.theme")}>
+                    <Button
+                      size="small"
+                      icon={<BulbOutlined />}
+                      aria-label={t("topbar.theme")}
+                      onClick={toggleTheme}
+                    />
+                  </Tooltip>
+                </>
+              )}
             </div>
           </Layout.Header>
           <Layout className="mamep-main">
             <Layout.Sider
               className="sheet-sidebar"
               width={160}
-              collapsedWidth={0}
+              collapsedWidth={36}
               trigger={null}
               collapsible
               collapsed={sidebarCollapsed}
@@ -379,14 +457,20 @@ export function MamepApp(): React.ReactNode {
                 <span className="sheet-sidebar__title">
                   {t("sidebar.workspace")}
                 </span>
-                <Button
-                  type="text"
-                  size="small"
-                  className="sheet-sidebar__collapse"
-                  aria-label={t("topbar.toggleSidebar")}
-                  icon={<LeftOutlined />}
-                  onClick={() => setPanelLayout({ sidebarCollapsed: true })}
-                />
+                <Tooltip title={t("topbar.toggleSidebar")}>
+                  <Button
+                    type="text"
+                    size="small"
+                    className="sheet-sidebar__collapse"
+                    aria-label={t("topbar.toggleSidebar")}
+                    icon={
+                      sidebarCollapsed ? <RightOutlined /> : <LeftOutlined />
+                    }
+                    onClick={() =>
+                      setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
+                    }
+                  />
+                </Tooltip>
               </div>
               <div className="sheet-sidebar__section">
                 <span className="sheet-sidebar__section-title">
@@ -421,10 +505,9 @@ export function MamepApp(): React.ReactNode {
                   setActiveSheetId(key as SheetId);
                 }}
                 onDragStart={(event) => {
-                  const li =
-                    (event.target as HTMLElement).closest<HTMLLIElement>(
-                      "li[data-sheet-index]",
-                    );
+                  const li = (
+                    event.target as HTMLElement
+                  ).closest<HTMLLIElement>("li[data-sheet-index]");
                   if (li?.dataset.sheetIndex !== undefined) {
                     dragIndex.current = Number(li.dataset.sheetIndex);
                   }
@@ -432,10 +515,9 @@ export function MamepApp(): React.ReactNode {
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   event.preventDefault();
-                  const li =
-                    (event.target as HTMLElement).closest<HTMLLIElement>(
-                      "li[data-sheet-index]",
-                    );
+                  const li = (
+                    event.target as HTMLElement
+                  ).closest<HTMLLIElement>("li[data-sheet-index]");
                   const fromIndex = dragIndex.current;
                   dragIndex.current = null;
                   if (li?.dataset.sheetIndex === undefined) return;

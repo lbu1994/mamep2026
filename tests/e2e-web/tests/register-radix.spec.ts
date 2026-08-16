@@ -9,8 +9,8 @@ async function openApp(page: Page): Promise<void> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 DISCONNECT 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
 }
@@ -160,7 +160,7 @@ test("radix is per-sheet and survives a reload", async ({ page }) => {
   // 等待自动保存后刷新，验证每表进制独立持久化。
   await page.waitForTimeout(1200);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
   // 刷新后活动表为 Sheet 1，仍为 HEX。

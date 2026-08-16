@@ -4,8 +4,8 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 DISCONNECT 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
 }
@@ -56,7 +56,7 @@ test("sheet sidebar collapses and the state persists after reload", async ({
   // 等待自动保存后刷新，验证折叠状态持久化。
   await page.waitForTimeout(1200);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
   await expect(page.locator(".ant-layout-sider")).toHaveClass(
@@ -112,7 +112,7 @@ test("bottom panel height can be dragged and persists after reload", async ({
   // 等待自动保存后刷新，验证高度持久化（与拖拽后高度一致）。
   await page.waitForTimeout(1200);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
   await expect.poll(heightOf).toBeGreaterThan(240);

@@ -9,8 +9,8 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 DISCONNECT 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
   return errors;
@@ -55,21 +55,23 @@ async function dragHeaderHandle(
   await page.mouse.up();
 }
 
-test("fixed-width columns expose a resize handle; the flexible Comment column does not", async ({
+test("resizable columns expose a resize handle; fixed-width and flexible columns do not", async ({
   page,
 }) => {
   await openApp(page);
-  // 固定宽列都应有拖拽手柄。
-  for (const label of ["Name", "Register", "Data", "Type", "WP", "WRITE"]) {
+  // 可拖拽列（有默认宽且非固定宽）应有拖拽手柄：Name/Register/Data/Type。
+  for (const label of ["Name", "Register", "Data", "Type"]) {
     await expect(
       headerCell(page, label).locator(".react-resizable-handle"),
     ).toHaveCount(1);
   }
-  // Comment 为弹性列（不设固定宽，否则 table-layout:fixed 会按容器比例拉伸全部列导致列宽失真），
-  // 因此不提供拖拽手柄；其宽度可通过拖其相邻列间接调整。
-  await expect(
-    headerCell(page, "Comment").locator(".react-resizable-handle"),
-  ).toHaveCount(0);
+  // 固定宽列（No/TM/WP/Read/Write/Drag，FIXED_WIDTH_COLUMNS）与弹性列（Comment）不提供手柄；
+  // Comment 的宽度可通过拖其相邻列间接调整。
+  for (const label of ["No", "TM", "WP", "Read", "Write", "Comment"]) {
+    await expect(
+      headerCell(page, label).locator(".react-resizable-handle"),
+    ).toHaveCount(0);
+  }
 });
 
 test("dragging a header handle widens the column and keeps the header text", async ({

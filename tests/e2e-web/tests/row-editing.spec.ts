@@ -4,8 +4,8 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 DISCONNECT 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("DISCONNECT", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
 }
@@ -53,8 +53,8 @@ test("row context menu inserts an empty row below the target", async ({
   await addRows(page, 1);
   await fillRow(page, 0, { name: "R1", address: "100" });
 
-  // 右键目标行弹出菜单，包含全部行编辑项。
-  await row(page, 0).locator("td").nth(3).click({ button: "right" });
+  // 右键目标行最右 drag 列弹出菜单（行级右键菜单由 drag 列触发），包含全部行编辑项。
+  await row(page, 0).locator("td").last().click({ button: "right" });
   const menu = page.locator(".ant-dropdown-menu:visible");
   await expect(menu).toBeVisible();
   for (const item of [
