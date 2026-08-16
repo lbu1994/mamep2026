@@ -587,8 +587,6 @@ body {
 /* ---------------- 日志列表 ---------------- */
 
 .log-list {
-  font-family:
-    ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, Menlo, monospace;
   font-size: 12px;
 }
 

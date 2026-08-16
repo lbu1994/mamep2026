@@ -35,6 +35,7 @@ import {
   encodeClipboardCsv,
   insertRowBefore,
   moveRow,
+  moveRowToIndex,
   moveRows,
   pasteClipboardRows,
   renumberRows,
@@ -100,6 +101,8 @@ export interface AppStoreState {
   addRow: (sheetId: SheetId) => void;
   deleteRow: (sheetId: SheetId, rowId: RowId) => void;
   moveRow: (sheetId: SheetId, rowId: RowId, direction: "up" | "down") => void;
+  /** dnd-kit 拖拽排序：把行移动到目标索引（arrayMove 语义，越界钳制）。 */
+  moveRowToIndex: (sheetId: SheetId, rowId: RowId, targetIndex: number) => void;
   duplicateRowInSheet: (sheetId: SheetId, rowId: RowId) => void;
   /** 行多选与剪贴板：会话状态，不随工作区持久化（§19.2）。 */
   selectedRowIds: RowId[];
@@ -300,6 +303,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ...state.workspace,
         sheets: state.workspace.sheets.map((sheet) =>
           sheet.sheetId === sheetId ? moveRow(sheet, rowId, direction) : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
+    })),
+
+  moveRowToIndex: (sheetId, rowId, targetIndex) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId
+            ? moveRowToIndex(sheet, rowId, targetIndex)
+            : sheet,
         ),
         updatedAt: Date.now(),
       },

@@ -11,6 +11,7 @@ import {
   duplicateRow,
   insertRowBefore,
   moveRow,
+  moveRowToIndex,
   moveRows,
   renumberRows,
 } from "./row-operations";
@@ -129,6 +130,98 @@ describe("insertRowBefore", () => {
     const updated = insertRowBefore(sheet, "missing");
     expect(updated.rows).toHaveLength(2);
     expect(updated.rows[1]?.name).toBe("");
+  });
+});
+
+describe("moveRowToIndex", () => {
+  it("moves a row down to a lower index (arrayMove semantics)", () => {
+    const sheet = sheetWithRows(4);
+    const first = sheet.rows[0];
+    expect(first).toBeDefined();
+    // 语义同 dnd-kit arrayMove：先移除再插入到目标索引。
+    const updated = moveRowToIndex(
+      sheet,
+      (first as { rowId: string }).rowId,
+      2,
+    );
+    expect(updated.rows.map((r) => r.name)).toEqual(["R2", "R3", "R1", "R4"]);
+    expect(updated.rows.map((r) => r.order)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("moves a row up to a higher index (arrayMove semantics)", () => {
+    const sheet = sheetWithRows(4);
+    const last = sheet.rows[3];
+    expect(last).toBeDefined();
+    const updated = moveRowToIndex(sheet, (last as { rowId: string }).rowId, 0);
+    expect(updated.rows.map((r) => r.name)).toEqual(["R4", "R1", "R2", "R3"]);
+  });
+
+  it("moves a row to the adjacent position", () => {
+    const sheet = sheetWithRows(3);
+    const first = sheet.rows[0];
+    expect(first).toBeDefined();
+    const updated = moveRowToIndex(
+      sheet,
+      (first as { rowId: string }).rowId,
+      1,
+    );
+    expect(updated.rows.map((r) => r.name)).toEqual(["R2", "R1", "R3"]);
+  });
+
+  it("clamps an out-of-range target index to the last position", () => {
+    const sheet = sheetWithRows(3);
+    const first = sheet.rows[0];
+    expect(first).toBeDefined();
+    const updated = moveRowToIndex(
+      sheet,
+      (first as { rowId: string }).rowId,
+      100,
+    );
+    expect(updated.rows.map((r) => r.name)).toEqual(["R2", "R3", "R1"]);
+  });
+
+  it("clamps a negative target index to the first position", () => {
+    const sheet = sheetWithRows(3);
+    const last = sheet.rows[2];
+    expect(last).toBeDefined();
+    const updated = moveRowToIndex(
+      sheet,
+      (last as { rowId: string }).rowId,
+      -5,
+    );
+    expect(updated.rows.map((r) => r.name)).toEqual(["R3", "R1", "R2"]);
+  });
+
+  it("is a no-op when the target index equals the current index", () => {
+    const sheet = sheetWithRows(3);
+    const second = sheet.rows[1];
+    expect(second).toBeDefined();
+    const updated = moveRowToIndex(
+      sheet,
+      (second as { rowId: string }).rowId,
+      1,
+    );
+    expect(updated.rows.map((r) => r.name)).toEqual(["R1", "R2", "R3"]);
+    expect(updated).toBe(sheet);
+  });
+
+  it("is a no-op when the row id is missing", () => {
+    const sheet = sheetWithRows(3);
+    const updated = moveRowToIndex(sheet, "missing", 0);
+    expect(updated.rows.map((r) => r.name)).toEqual(["R1", "R2", "R3"]);
+    expect(updated).toBe(sheet);
+  });
+
+  it("renumbers rows after moving", () => {
+    const sheet = sheetWithRows(5);
+    const first = sheet.rows[0];
+    expect(first).toBeDefined();
+    const updated = moveRowToIndex(
+      sheet,
+      (first as { rowId: string }).rowId,
+      3,
+    );
+    expect(updated.rows.map((r) => r.order)).toEqual([1, 2, 3, 4, 5]);
   });
 });
 

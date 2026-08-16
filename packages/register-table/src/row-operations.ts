@@ -100,6 +100,29 @@ export function duplicateRow(
   return { ...sheet, rows: renumberRows(rows), updatedAt: Date.now() };
 }
 
+/**
+ * 按目标索引移动单行（dnd-kit 拖拽排序用）：语义与 `arrayMove(rows, activeIndex, targetIndex)` 一致——
+ * 先移除该行，再插入到目标索引，其余行相应移位；`targetIndex` 越界时钳制到有效范围。
+ * 行号自动重排（复用 `renumberRows`），并更新 `updatedAt`。
+ * 行不存在或目标索引等于当前位置时为 no-op（原样返回 sheet）。
+ */
+export function moveRowToIndex(
+  sheet: RegisterSheet,
+  rowId: string,
+  targetIndex: number,
+): RegisterSheet {
+  const index = sheet.rows.findIndex((row) => row.rowId === rowId);
+  if (index === -1) return sheet;
+  const lastIndex = sheet.rows.length - 1;
+  const clamped = Math.max(0, Math.min(targetIndex, lastIndex));
+  if (index === clamped) return sheet;
+  const rows = [...sheet.rows];
+  const [moved] = rows.splice(index, 1);
+  if (moved === undefined) return sheet;
+  rows.splice(clamped, 0, moved);
+  return { ...sheet, rows: renumberRows(rows), updatedAt: Date.now() };
+}
+
 /** 在指定行之前插入空行（不继承字段）；目标行不存在时追加末尾。 */
 export function insertRowBefore(
   sheet: RegisterSheet,

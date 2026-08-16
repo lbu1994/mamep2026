@@ -13,6 +13,10 @@
   },
   "dependencies": {
     "@ant-design/icons": "catalog:",
+    "@dnd-kit/core": "catalog:",
+    "@dnd-kit/modifiers": "catalog:",
+    "@dnd-kit/sortable": "catalog:",
+    "@dnd-kit/utilities": "catalog:",
     "@mamep2026/communication": "workspace:*",
     "@mamep2026/data-conversion": "workspace:*",
     "@mamep2026/domain": "workspace:*",

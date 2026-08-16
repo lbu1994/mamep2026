@@ -1,7 +1,9 @@
 import {
+  createContext,
   forwardRef,
   memo,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -17,19 +19,22 @@ import {
   Input,
   Segmented,
   Select,
-  Space,
   Switch,
   Table,
   Tooltip,
 } from "antd";
 import type { InputRef } from "antd";
+import { HolderOutlined, PlusOutlined } from "@ant-design/icons";
+import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/core";
+import { DndContext } from "@dnd-kit/core";
+import type { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  PlusOutlined,
-} from "@ant-design/icons";
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { ColumnType, ColumnsType } from "antd/es/table";
 import type { DataType, RegisterRow, RowId, SheetId } from "@mamep2026/domain";
 import { dataTypes } from "@mamep2026/domain";
@@ -433,53 +438,33 @@ const CommentCell = memo(function CommentCell({
   );
 });
 
-const ActionsCell = memo(function ActionsCell({
-  sheetId,
-  rowId,
+// ---- dnd-kit 拖拽排序列（2026-08-16）----
+// 最右列拖拽手柄：仅手柄可拖（setActivatorNodeRef + listeners 经 RowContext 传给手柄按钮），
+// 行体空白处不触发拖拽，避免与单元格编辑/多选冲突。排序动作经 app-store.moveRowToIndex
+// 落到领域层（packages/register-table 的 moveRowToIndex，arrayMove 语义）。
+interface RowContextProps {
+  setActivatorNodeRef?: (element: HTMLElement | null) => void | undefined;
+  listeners?: SyntheticListenerMap | undefined;
+}
+
+const RowContext = createContext<RowContextProps>({});
+
+const DragHandle = memo(function DragHandle({
+  ariaLabel,
 }: {
-  sheetId: SheetId;
-  rowId: RowId;
+  ariaLabel: string;
 }) {
-  const { t } = useTranslation();
-  const moveRowAction = useAppStore((s) => s.moveRow);
-  const duplicateRowInSheet = useAppStore((s) => s.duplicateRowInSheet);
-  const deleteRow = useAppStore((s) => s.deleteRow);
+  const { setActivatorNodeRef, listeners } = useContext(RowContext);
   return (
-    <Space className="row-actions" size={2}>
-      <Tooltip title={t("table.moveUp")}>
-        <Button
-          size="small"
-          icon={<ArrowUpOutlined />}
-          aria-label={t("table.moveUp")}
-          onClick={() => moveRowAction(sheetId, rowId, "up")}
-        />
-      </Tooltip>
-      <Tooltip title={t("table.moveDown")}>
-        <Button
-          size="small"
-          icon={<ArrowDownOutlined />}
-          aria-label={t("table.moveDown")}
-          onClick={() => moveRowAction(sheetId, rowId, "down")}
-        />
-      </Tooltip>
-      <Tooltip title={t("table.duplicateRow")}>
-        <Button
-          size="small"
-          icon={<CopyOutlined />}
-          aria-label={t("table.duplicateRow")}
-          onClick={() => duplicateRowInSheet(sheetId, rowId)}
-        />
-      </Tooltip>
-      <Tooltip title={t("table.deleteRow")}>
-        <Button
-          size="small"
-          danger
-          icon={<DeleteOutlined />}
-          aria-label={t("table.deleteRow")}
-          onClick={() => deleteRow(sheetId, rowId)}
-        />
-      </Tooltip>
-    </Space>
+    <Button
+      type="text"
+      size="small"
+      icon={<HolderOutlined />}
+      style={{ cursor: "move" }}
+      ref={setActivatorNodeRef}
+      aria-label={ariaLabel}
+      {...listeners}
+    />
   );
 });
 
@@ -492,12 +477,22 @@ const ActionsCell = memo(function ActionsCell({
 // 仅「有默认 width 的列」提供手柄：弹性列（Comment）无 width，若强赋固定宽会使
 // table-layout:fixed 下全部列被浏览器按容器比例拉伸、列宽失真（已实测验证），故弹性列不拖拽。
 
+// 固定宽度、不可通过表头拖拽调整的列 key（2026-08-17）。
+// 仅「可拖拽列」挂 onHeaderCell：固定列不提供拖拽手柄、并忽略会话内 colWidths 覆盖。
+const FIXED_WIDTH_COLUMNS = new Set<string>([
+  "no",
+  "tm",
+  "wp",
+  "read",
+  "write",
+  "drag",
+]);
+
 interface ResizeCallbackData {
   size: { width: number; height: number };
 }
 
-interface ResizeHeaderCellProps
-  extends React.ThHTMLAttributes<HTMLTableCellElement> {
+interface ResizeHeaderCellProps extends React.ThHTMLAttributes<HTMLTableCellElement> {
   /** 列配置宽度（px）。 */
   width?: number;
   /** 拖拽回调：由 onHeaderCell 透传（非 antd 标准 ColumnType 属性，仅自定义 header cell 消费）。 */
@@ -674,9 +669,80 @@ export function RegisterTable({
     }
   };
 
+  const moveRowToIndex = useAppStore((s) => s.moveRowToIndex);
+
+  /** dnd-kit 拖拽结束：语义同 arrayMove——把活动行移动到 over 行所在索引，经 store 落到领域层。 */
+  const handleDragEnd = ({ active, over }: DragEndEvent): void => {
+    stopDragScroll();
+    if (active.id === over?.id) return;
+    const overId = over?.id;
+    if (overId === undefined) return;
+    const activeIndex = rows.findIndex((r) => r.rowId === active.id);
+    const overIndex = rows.findIndex((r) => r.rowId === overId);
+    if (activeIndex === -1 || overIndex === -1) return;
+    const activeRow = rows[activeIndex];
+    if (activeRow === undefined) return;
+    moveRowToIndex(sheetId, activeRow.rowId, overIndex);
+  };
+
+  // dnd-kit 自定义边缘自动滚动：antd 虚拟表的滚动容器 `.ant-table-tbody-virtual-holder`
+  // 是 `overflow: hidden`，dnd-kit 的 getScrollableAncestors 正则（/(auto|scroll|overlay)/）
+  // 不识别 hidden，因此拖拽到可视区上下边缘不会自动滚动。
+  // 这里在 onDragMove 检测指针贴近边缘时，用 rAF 驱动 holder.scrollTop
+  // （rc-table 监听原生 scroll 事件更新内层 translateY，已验证程序化 scrollTop 生效）。
+  // 非虚拟模式无需处理：`.ant-table-body` 为 overflow:auto，dnd-kit 原生支持。
+  const EDGE_SCROLL_ZONE = 36;
+  const dragScrollRef = useRef<{ el: HTMLElement | null; raf: number | null }>({
+    el: null,
+    raf: null,
+  });
+  const stopDragScroll = useCallback((): void => {
+    if (dragScrollRef.current.raf !== null) {
+      cancelAnimationFrame(dragScrollRef.current.raf);
+      dragScrollRef.current.raf = null;
+    }
+  }, []);
+  const handleDragStart = useCallback((): void => {
+    stopDragScroll();
+    dragScrollRef.current.el =
+      flexRef.current?.querySelector<HTMLElement>(
+        ".ant-table-tbody-virtual-holder",
+      ) ?? null;
+  }, [stopDragScroll]);
+  const handleDragMove = useCallback(
+    ({ activatorEvent, delta }: DragMoveEvent): void => {
+      const holder = dragScrollRef.current.el;
+      if (holder === null || holder === undefined) return;
+      const rect = holder.getBoundingClientRect();
+      const startY =
+        activatorEvent instanceof MouseEvent ? activatorEvent.clientY : 0;
+      const clientY = startY + delta.y;
+      let step = 0;
+      if (clientY < rect.top + EDGE_SCROLL_ZONE) {
+        step = -Math.max(1, (rect.top + EDGE_SCROLL_ZONE - clientY) / 4);
+      } else if (clientY > rect.bottom - EDGE_SCROLL_ZONE) {
+        step = Math.max(1, (clientY - (rect.bottom - EDGE_SCROLL_ZONE)) / 4);
+      }
+      if (step !== 0 && dragScrollRef.current.raf === null) {
+        const tick = (): void => {
+          holder.scrollTop += step;
+          dragScrollRef.current.raf = requestAnimationFrame(tick);
+        };
+        dragScrollRef.current.raf = requestAnimationFrame(tick);
+      } else if (step === 0) {
+        stopDragScroll();
+      }
+    },
+    [stopDragScroll],
+  );
+  const handleDragCancel = useCallback((): void => {
+    stopDragScroll();
+    dragScrollRef.current.el = null;
+  }, [stopDragScroll]);
+
   const selectedIds = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
 
-  /** 行级右键：阻止默认菜单；目标行不在选中集合时先单选它，再由 Dropdown 弹出菜单。 */
+  /** 行级右键（仅最后一列 drag 列触发）：阻止默认菜单；目标行不在选中集合时先单选它，再由 Dropdown 弹出菜单。 */
   const handleRowContextMenu = (
     rowId: RowId,
     event: React.MouseEvent,
@@ -688,14 +754,29 @@ export function RegisterTable({
     setMenuRowId(rowId);
   };
 
+  /** 行级右键冒泡拦截：仅当单元格层未处理（非 drag 列）时 stopPropagation，
+   * 阻止事件到达 Dropdown 的 contextMenu trigger——rc-trigger 会无条件 preventDefault，
+   * 吞掉浏览器原生右键菜单；drag 列已在单元格层 preventDefault + 打开菜单（defaultPrevented=true），
+   * 放行冒泡让 rc-trigger 记录鼠标点坐标（alignPoint 定位弹出层到右键位置）。 */
+  const handleRowContextMenuBubble = (event: React.MouseEvent): void => {
+    if (!event.defaultPrevented) {
+      event.stopPropagation();
+    }
+  };
+
   // 行级 memo 下 <tr> 的事件闭包可能因 React.memo 跳渲染而滞后，
   // 通过 ref 始终指向最新处理器，避免陈旧闭包（与 keydownRef 同模式）。
   const rowHandlersRef = useRef<{
     onRowContextMenu: (rowId: RowId, event: React.MouseEvent) => void;
-  }>({ onRowContextMenu: () => {} });
+    onRowContextMenuBubble: (event: React.MouseEvent) => void;
+  }>({
+    onRowContextMenu: () => {},
+    onRowContextMenuBubble: () => {},
+  });
   useEffect(() => {
     rowHandlersRef.current = {
       onRowContextMenu: handleRowContextMenu,
+      onRowContextMenuBubble: handleRowContextMenuBubble,
     };
   });
 
@@ -925,28 +1006,38 @@ export function RegisterTable({
       },
       {
         title: "",
-        key: "actions",
-        width: 96,
+        key: "drag",
+        width: 48,
         align: "center",
-        render: (_, row) => (
-          <ActionsCell sheetId={sheetId} rowId={row.rowId} />
-        ),
+        // 仅最后一列（drag 列）响应右键打开行级菜单：preventDefault 抑制系统菜单并记录目标行；
+        // 不 stopPropagation，放行冒泡到 Dropdown trigger 以记录鼠标点坐标（alignPoint 定位）。
+        onCell: (record) => ({
+          onContextMenu: (event) =>
+            rowHandlersRef.current.onRowContextMenu(record.rowId, event),
+        }),
+        render: () => <DragHandle ariaLabel={t("table.dragHandle")} />,
       },
     ],
-    [t, registerRadix, sheetId],
+    [t, registerRadix],
   );
 
   // 合并拖拽列宽并挂载 onHeaderCell（供 ResizableTitle 接收 width/onResize）。
-  // 仅「有默认 width 的列」挂 onHeaderCell：弹性列（Comment）无宽、不拖拽，避免表格全部列有宽被拉伸。
+  // 仅「有默认 width 且非固定宽度」的列挂 onHeaderCell：弹性列（Comment）无宽、不拖拽，
+  // 避免表格全部列有宽被拉伸；固定列（No/TM/WP/READ/WRITE/拖拽手柄列）不挂，宽度不可调。
   // 依赖仅 baseColumns + colWidths：拖拽只更新列定义，行级 MemoRow 比较器不含 columns，行不重渲染。
   const columns = useMemo<ColumnsType<RegisterRow>>(
     () =>
       baseColumns.map((col) => {
-        const width = colWidths[String(col.key)] ?? col.width;
+        const fixed =
+          col.key !== undefined && FIXED_WIDTH_COLUMNS.has(String(col.key));
+        // 固定列忽略会话内 colWidths 覆盖（防御：残留 state 不得改变固定列宽）。
+        const width = fixed
+          ? col.width
+          : (colWidths[String(col.key)] ?? col.width);
         return {
           ...col,
           ...(width !== undefined ? { width } : {}),
-          ...(col.width !== undefined
+          ...(col.width !== undefined && !fixed
             ? {
                 onHeaderCell: (column): ResizeHeaderCellProps => {
                   const cellWidth =
@@ -984,7 +1075,54 @@ export function RegisterTable({
           void _record;
           void _index;
           void _selection;
-          return <tr {...rest} ref={ref} />;
+          // dnd-kit 可排序行：id 用 rowId（稳定，行数据更新不重建 droppable）。
+          // useSortable 内部状态（transform/isDragging）变化会自渲染，不受外层 memo 影响。
+          const {
+            attributes,
+            listeners,
+            setNodeRef,
+            setActivatorNodeRef,
+            transform,
+            transition,
+            isDragging,
+          } = useSortable({ id: _record.rowId });
+          // 组合 dnd-kit 的 setNodeRef 与 rc-table 转发的 ref（虚拟滚动测量依赖转发 ref）。
+          const setRefs = useCallback(
+            (node: HTMLTableRowElement | null) => {
+              setNodeRef(node);
+              if (ref !== null && ref !== undefined) {
+                if (typeof ref === "function") {
+                  ref(node);
+                } else {
+                  ref.current = node;
+                }
+              }
+            },
+            [ref, setNodeRef],
+          );
+          const contextValue = useMemo<RowContextProps>(
+            () => ({ setActivatorNodeRef, listeners }),
+            [setActivatorNodeRef, listeners],
+          );
+          // 拖拽中行浮起；transform/transition 来自 dnd-kit，虚拟滚动下行渲染不受影响。
+          const style: React.CSSProperties = {
+            ...rest.style,
+            transform: CSS.Translate.toString(transform),
+            transition,
+            ...(isDragging ? { position: "relative", zIndex: 9999 } : {}),
+          };
+          return (
+            <RowContext.Provider value={contextValue}>
+              <tr
+                {...rest}
+                {...attributes}
+                ref={setRefs}
+                style={style}
+                role="row"
+                tabIndex={-1}
+              />
+            </RowContext.Provider>
+          );
         },
       ),
       (prev, next) =>
@@ -1050,108 +1188,123 @@ export function RegisterTable({
           {t("table.rowCount", { count: rows.length })}
         </span>
       </div>
-      <Dropdown
-        trigger={["contextMenu"]}
-        open={menuRowId !== null}
-        onOpenChange={(open) => {
-          if (!open) setMenuRowId(null);
-        }}
-        menu={{ items: rowMenuItems }}
+      <DndContext
+        modifiers={[restrictToVerticalAxis]}
+        onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
-        <div className="register-table__context">
-          <Table<RegisterRow>
-            size="small"
-            rowKey="rowId"
-            columns={columns}
-            dataSource={rows}
-            pagination={false}
-            bordered
-            virtual={rows.length > VIRTUAL_SCROLL_THRESHOLD}
-            {...(tableBodyHeight > 0
-              ? ({
-                  style: { flex: 1, minHeight: 0 },
-                  listItemHeight: ROW_HEIGHT,
-                } as RegisterTableVirtualProps)
-              : {})}
-            scroll={
-              tableBodyHeight > 0 ? { x: 900, y: tableBodyHeight } : { x: 900 }
-            }
-            rowSelection={{
-              selectedRowKeys: selectedRowIds,
-              onChange: (keys) =>
-                setSelectedRowIds(keys.map((k) => String(k)) as RowId[]),
-              selections: [
-                Table.SELECTION_ALL,
-                Table.SELECTION_INVERT,
-                Table.SELECTION_NONE,
-                {
-                  key: "odd",
-                  text: t("table.selectOddRows"),
-                  onSelect: (changeableRowKeys) =>
-                    setSelectedRowIds(
-                      changeableRowKeys
-                        .filter((_, index) => index % 2 === 0)
-                        .map((k) => String(k)) as RowId[],
-                    ),
-                },
-                {
-                  key: "even",
-                  text: t("table.selectEvenRows"),
-                  onSelect: (changeableRowKeys) =>
-                    setSelectedRowIds(
-                      changeableRowKeys
-                        .filter((_, index) => index % 2 !== 0)
-                        .map((k) => String(k)) as RowId[],
-                    ),
-                },
-              ],
-            }}
-            components={{
-              header: { cell: ResizableTitle },
-              body: { row: MemoRow },
-            }}
-            onRow={(
-              record,
-              index = 0,
-            ): MemoTableRowProps => ({
-              onContextMenu: (event) =>
-                rowHandlersRef.current.onRowContextMenu(record.rowId, event),
-              _record: record,
-              _index: index,
-              _selection: selectedRowIds,
-            })}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={
-                    <>
-                      <div>{t("table.emptySheet")}</div>
-                      <div
-                        style={{
-                          color: "var(--ant-color-text-tertiary)",
-                          fontSize: 12,
-                        }}
+        <Dropdown
+          trigger={["contextMenu"]}
+          open={menuRowId !== null}
+          onOpenChange={(open) => {
+            if (!open) setMenuRowId(null);
+          }}
+          menu={{ items: rowMenuItems }}
+        >
+          <div className="register-table__context">
+            <SortableContext
+              items={rows.map((r) => r.rowId)}
+              strategy={verticalListSortingStrategy}
+            >
+              <Table<RegisterRow>
+                size="small"
+                rowKey="rowId"
+                columns={columns}
+                dataSource={rows}
+                pagination={false}
+                bordered
+                virtual={rows.length > VIRTUAL_SCROLL_THRESHOLD}
+                {...(tableBodyHeight > 0
+                  ? ({
+                      style: { flex: 1, minHeight: 0 },
+                      listItemHeight: ROW_HEIGHT,
+                    } as RegisterTableVirtualProps)
+                  : {})}
+                scroll={
+                  tableBodyHeight > 0
+                    ? { x: 900, y: tableBodyHeight }
+                    : { x: 900 }
+                }
+                rowSelection={{
+                  // 固定复选框列宽（antd 内置能力）：不可拖拽调整。
+                  columnWidth: 32,
+                  selectedRowKeys: selectedRowIds,
+                  onChange: (keys) =>
+                    setSelectedRowIds(keys.map((k) => String(k)) as RowId[]),
+                  selections: [
+                    Table.SELECTION_ALL,
+                    Table.SELECTION_INVERT,
+                    Table.SELECTION_NONE,
+                    {
+                      key: "odd",
+                      text: t("table.selectOddRows"),
+                      onSelect: (changeableRowKeys) =>
+                        setSelectedRowIds(
+                          changeableRowKeys
+                            .filter((_, index) => index % 2 === 0)
+                            .map((k) => String(k)) as RowId[],
+                        ),
+                    },
+                    {
+                      key: "even",
+                      text: t("table.selectEvenRows"),
+                      onSelect: (changeableRowKeys) =>
+                        setSelectedRowIds(
+                          changeableRowKeys
+                            .filter((_, index) => index % 2 !== 0)
+                            .map((k) => String(k)) as RowId[],
+                        ),
+                    },
+                  ],
+                }}
+                components={{
+                  header: { cell: ResizableTitle },
+                  body: { row: MemoRow },
+                }}
+                onRow={(record, index = 0): MemoTableRowProps => ({
+                  // 行级右键冒泡拦截：非 drag 列 stopPropagation 保留系统右键菜单（见 handleRowContextMenuBubble）。
+                  onContextMenu: (event) =>
+                    rowHandlersRef.current.onRowContextMenuBubble(event),
+                  _record: record,
+                  _index: index,
+                  _selection: selectedRowIds,
+                })}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      description={
+                        <>
+                          <div>{t("table.emptySheet")}</div>
+                          <div
+                            style={{
+                              color: "var(--ant-color-text-tertiary)",
+                              fontSize: 12,
+                            }}
+                          >
+                            {t("table.emptySheetHint")}
+                          </div>
+                        </>
+                      }
+                    >
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={() => addRow(sheetId)}
                       >
-                        {t("table.emptySheetHint")}
-                      </div>
-                    </>
-                  }
-                >
-                  <Button
-                    size="small"
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => addRow(sheetId)}
-                  >
-                    {t("table.addRow")}
-                  </Button>
-                </Empty>
-              ),
-            }}
-          />
-        </div>
-      </Dropdown>
+                        {t("table.addRow")}
+                      </Button>
+                    </Empty>
+                  ),
+                }}
+              />
+            </SortableContext>
+          </div>
+        </Dropdown>
+      </DndContext>
     </Flex>
   );
 }
