@@ -26,7 +26,7 @@ export const en = {
     workspace: "Workspace",
     registerTables: "Register Tables",
     newTable: "New Register Table",
-    footer: "Mamep2026 · Browser Prototype",
+    footer: "Browser v{{version}}",
   },
   connection: {
     title: "Connection Settings",
@@ -283,7 +283,7 @@ export const zh: TranslationResources = {
     workspace: "工作区",
     registerTables: "寄存器表",
     newTable: "新建寄存器表",
-    footer: "Mamep2026 · 浏览器原型",
+    footer: "Browser v{{version}}",
   },
   connection: {
     title: "连接设置",

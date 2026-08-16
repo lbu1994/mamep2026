@@ -513,7 +513,9 @@ export function MamepApp(): React.ReactNode {
                   ),
                 }))}
               />
-              <div className="sheet-sidebar__footer">{t("sidebar.footer")}</div>
+              <div className="sheet-sidebar__footer">
+                {t("sidebar.footer", { version: host?.appVersion ?? "" })}
+              </div>
             </Layout.Sider>
             <Layout.Content className="mamep-body">
               <Splitter

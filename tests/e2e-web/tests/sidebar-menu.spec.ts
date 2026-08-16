@@ -32,7 +32,7 @@ test("sidebar shows workspace and register-table sections plus footer", async ({
   await expect(sider).toContainText("Workspace");
   await expect(sider).toContainText("Register Tables");
   await expect(sider).toContainText("Sheet 1");
-  await expect(sider).toContainText("Mamep2026 · Browser Prototype");
+  await expect(sider).toContainText("Browser v0.0.0");
 });
 
 test("top bar shows status chip, MOCK badge and Help", async ({ page }) => {

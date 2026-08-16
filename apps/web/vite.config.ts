@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -8,8 +9,18 @@ import electron from "vite-plugin-electron/simple";
 // 使用 `--mode electron`（pnpm dev:electron / pnpm build:electron）时才接入 Electron 主进程。
 export default defineConfig(({ mode }) => {
   const isElectron = mode === "electron";
+  // 应用版本号取自根 package.json（三端共用版本），经 __APP_VERSION__ 注入，dev/build 均生效。
+  const rootPkg = JSON.parse(
+    readFileSync(
+      path.resolve(import.meta.dirname, "../../package.json"),
+      "utf-8",
+    ),
+  ) as { version: string };
 
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(rootPkg.version),
+    },
     plugins: [
       react(),
       ...(isElectron

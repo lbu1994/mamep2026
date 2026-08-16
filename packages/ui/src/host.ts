@@ -48,6 +48,8 @@ export interface AppHost {
   readonly capabilities: PlatformCapabilities;
   readonly isMockMode: boolean;
   readonly pluginRegistry: PluginRegistry;
+  /** 应用版本号（根 package.json version，由平台侧 composition root 注入）。 */
+  readonly appVersion: string;
 
   loadWorkspace(): Promise<Result<Workspace>>;
   /** 清除全部持久化数据并返回全新默认工作区（§16.5.5 用户重置损坏工作区）。 */

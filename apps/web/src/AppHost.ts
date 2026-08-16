@@ -53,6 +53,7 @@ export interface AppHostOptions {
 
 export class BrowserAppHost implements AppHost {
   readonly capabilities: PlatformCapabilities;
+  readonly appVersion = __APP_VERSION__;
   readonly pluginRegistry = new PluginRegistry();
   readonly isMockMode: boolean;
   private readonly platform: PlatformHost | null;

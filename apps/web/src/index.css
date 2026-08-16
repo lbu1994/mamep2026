@@ -261,8 +261,17 @@ body {
   color: var(--ant-color-text-tertiary);
 }
 
+/* footer 贴底：让 sider 内容区成为 flex 列，footer 的 margin-top:auto 才生效 */
+.sheet-sidebar .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
 .sheet-sidebar__footer {
   margin-top: auto;
+  flex: none;
   padding: 6px 8px 8px;
   font-size: 11px;
   color: var(--ant-color-text-quaternary);
