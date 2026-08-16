@@ -849,7 +849,10 @@ export function RegisterTable({
             ? t("table.registerHex")
             : t("table.registerDec"),
         key: "address",
-        width: 112,
+        // 默认宽 130：112px 时等宽字体下表头 "Register[DEC]"（13 字符 ≈101px + padding 12px）
+        // 会换行（"]" 挤到第二行）；130px 单行完整显示，且与 Name(140)/Type(132) 视觉协调。
+        // 拖拽仍可自由调整（minWidth 80），此值仅默认宽度。
+        width: 130,
         align: "center",
         className: "register-table__cell--center",
         render: (_, row) => (
