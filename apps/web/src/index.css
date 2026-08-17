@@ -644,19 +644,28 @@ body {
    高度与 size="small" 输入框一致（24px = 22px 行高 + 上下 1px 边框），
    配合 td 内边距（2px 6px）保持行高 29px，不破坏虚拟滚动固定行高假设。 */
 .register-table__editable-cell-value-wrap {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 2px;
   box-sizing: border-box;
   width: 100%;
   height: 24px;
   padding: 0 7px;
   line-height: 22px;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   border: 1px solid transparent;
   border-radius: 4px;
   transition: border-color 0.15s ease-in-out;
+}
+
+/* 可编辑单元格值文本：flex 内撑满剩余空间，长文本省略（ellipsis 移到此处，
+   为 Data 列状态点 trailing 让位——状态点固定宽、不被省略）。 */
+.register-table__editable-cell-value-wrap__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .register-table__editable-cell-value-wrap:hover,
@@ -742,6 +751,29 @@ body {
 /* Data 空值占位「—」：区分「尚未读取/无值」与「有值」（辅助色） */
 .register-table__editable-cell-value-placeholder {
   color: var(--mamep-text-tertiary);
+}
+
+/* 寄存器行操作结果状态点（Data 列，三态：成功/失败/编辑完成）。
+   纯颜色区分（§25.5 配 Tooltip 文字与 aria-label，非纯颜色状态）；
+   编辑态不显示（由 EditableCellValue 控制 trailing 仅在非编辑态渲染）；
+   灰点（编辑完成）用 text-tertiary，与「无状态（不显示点）」保持可辨识。 */
+.register-table__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.register-table__status-dot--success {
+  background: var(--ant-color-success);
+}
+
+.register-table__status-dot--error {
+  background: var(--ant-color-error);
+}
+
+.register-table__status-dot--dirty {
+  background: var(--mamep-text-tertiary);
 }
 
 /* 寄存器表固定行高与单行不换行（虚拟滚动固定行高前提，表头 26px / 正文 29px）：

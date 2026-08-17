@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   createEmptyWorkspace,
+  createMamepError,
   defaultConfig,
+  fail,
+  ok,
   type RowId,
   type SheetId,
 } from "@mamep2026/domain";
@@ -632,5 +635,85 @@ describe("setConnectionSettings", () => {
     expect(
       useAppStore.getState().workspace.connectionProfiles[0]?.slaveAddress,
     ).toBe(1);
+  });
+});
+
+describe("row 状态点 actions", () => {
+  function timeoutResult() {
+    return fail(
+      createMamepError({
+        code: "REQUEST_TIMEOUT",
+        category: "timeout",
+        userMessageKey: "errors.requestTimeout",
+        technicalMessage: "timeout",
+      }),
+    );
+  }
+
+  it("recordManualResult：读取失败写失败态(detail=code)并清成功点", () => {
+    const store = useAppStore.getState();
+    store.recordManualResult("r1" as RowId, ok(1), "read");
+    expect(useAppStore.getState().rowSuccess["r1" as RowId]).toEqual({
+      kind: "read",
+    });
+    store.recordManualResult("r1" as RowId, timeoutResult(), "read");
+    const state = useAppStore.getState();
+    expect(state.rowResults["r1" as RowId]).toEqual({
+      messageKey: "errors.requestTimeout",
+      detail: "REQUEST_TIMEOUT",
+    });
+    expect(state.rowSuccess["r1" as RowId]).toBeUndefined();
+  });
+
+  it("recordManualResult：写入成功(no-verify)写成功点(kind=write)", () => {
+    const store = useAppStore.getState();
+    store.recordManualResult(
+      "r1" as RowId,
+      ok({ kind: "write-succeeded-no-verify" }),
+      "write",
+      { writeOutcome: { kind: "write-succeeded-no-verify" } },
+    );
+    expect(useAppStore.getState().rowSuccess["r1" as RowId]).toEqual({
+      kind: "write",
+    });
+  });
+
+  it("recordPollResult：轮询失败写失败态(detail=null)，幂等不触发状态更新", () => {
+    const store = useAppStore.getState();
+    store.recordPollResult("r1" as RowId, timeoutResult());
+    expect(useAppStore.getState().rowResults["r1" as RowId]).toEqual({
+      messageKey: "errors.requestTimeout",
+      detail: null,
+    });
+    // 同因子失败再次写入：rowResults 引用不变（zustand 零更新）。
+    const before = useAppStore.getState().rowResults;
+    store.recordPollResult("r1" as RowId, timeoutResult());
+    expect(useAppStore.getState().rowResults).toBe(before);
+  });
+
+  it("recordPollResult：轮询成功清除失败态与编辑完成态", () => {
+    const store = useAppStore.getState();
+    store.recordPollResult("r1" as RowId, timeoutResult());
+    store.recordRowEdit("r1" as RowId, "100", "200");
+    store.recordPollResult("r1" as RowId, ok(42));
+    const state = useAppStore.getState();
+    expect(state.rowResults["r1" as RowId]).toBeUndefined();
+    expect(state.rowDirty["r1" as RowId]).toBeUndefined();
+  });
+
+  it("recordRowEdit：值变化置编辑完成态并覆盖成功点", () => {
+    const store = useAppStore.getState();
+    store.recordManualResult("r1" as RowId, ok(1), "read");
+    store.recordRowEdit("r1" as RowId, "100", "200");
+    const state = useAppStore.getState();
+    expect(state.rowDirty["r1" as RowId]).toBe(true);
+    expect(state.rowSuccess["r1" as RowId]).toBeUndefined();
+  });
+
+  it("recordRowEdit：编辑回原值清除编辑完成态", () => {
+    const store = useAppStore.getState();
+    store.recordRowEdit("r1" as RowId, "100", "200");
+    store.recordRowEdit("r1" as RowId, "200", "200");
+    expect(useAppStore.getState().rowDirty["r1" as RowId]).toBeUndefined();
   });
 });

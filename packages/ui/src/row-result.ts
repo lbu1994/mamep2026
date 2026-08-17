@@ -1,0 +1,224 @@
+/**
+ * 寄存器行「操作结果三态状态点」纯函数（Data 列，docs/AGENTS.md §17/§18/§20）。
+ * - 失败态 rowResults：最近一次失败（messageKey + detail）；成功即清除；
+ * - 编辑完成态 rowDirty：Data 编辑提交且值变化（尚未同步到设备）；
+ * - 成功态 rowSuccess：手动读/写成功后（轮询成功不产生成功点，值更新即反馈）。
+ *
+ * 纯函数、无副作用、可独立单测；zustand 订阅靠「同态返回原引用」短路（幂等），
+ * 保证轮询/设备掉线等高频失败场景下 store 零更新（性能关键，见轮询设计）。
+ * 本模块不触碰 React、antd 或平台 API。
+ */
+import type { Result } from "@mamep2026/domain";
+import type { WriteOutcome } from "@mamep2026/communication";
+
+/** 失败态：messageKey 用于 i18n 渲染用户文案（§20），detail 为稳定错误码/详情。 */
+export interface RowFailure {
+  messageKey: string;
+  detail: string | null;
+}
+
+/** 行失败态映射（key = rowId）。undefined 表示该行无失败态。 */
+export type RowResults = Record<string, RowFailure | undefined>;
+
+export type RowSuccessKind = "read" | "write";
+
+/** 行成功态（仅手动操作产生）：kind 决定 Tooltip 文案「读取成功/写入成功」。 */
+export interface RowSuccess {
+  kind: RowSuccessKind;
+}
+
+export type RowSuccessMap = Record<string, RowSuccess | undefined>;
+
+/** 三态状态的完整切片（app-store 持有），纯函数整体操作、可整体单测。 */
+export interface RowStatusState {
+  rowResults: RowResults;
+  rowDirty: Record<string, boolean>;
+  rowSuccess: RowSuccessMap;
+}
+
+export function createEmptyRowStatusState(): RowStatusState {
+  return { rowResults: {}, rowDirty: {}, rowSuccess: {} };
+}
+
+/** §18.2 写后回读结果 → 三态（success/failure/none）。 */
+export type WriteResultStatus = "success" | "failure" | "none";
+
+// MVP 无 verify：写入成功即成功态。未来 WriteOutcome 扩展（§18.2）在此补全，
+// 由 Record<WriteOutcome["kind"], ...> 保证类型完整：
+//   write-failed                      -> failure
+//   write-succeeded-verify-matched    -> success
+//   write-succeeded-verify-mismatched -> failure
+//   write-succeeded-verify-failed     -> failure
+//   cancelled-before-verify           -> none（写入已成功仅回读取消，不显示失败态）
+const WRITE_OUTCOME_STATUS: Record<WriteOutcome["kind"], WriteResultStatus> = {
+  "write-succeeded-no-verify": "success",
+};
+
+export interface ApplyManualResultOptions {
+  /** 写入结果（ok 时按 kind 决定成功/失败/保持，§18.2）。 */
+  writeOutcome?: WriteOutcome;
+}
+
+/**
+ * 手动读/写结果：成功清除失败态/编辑完成态并写成功点；失败写失败态（带 detail）并清成功点。
+ * 写入失败不清编辑完成态（§18.1 保留用户输入；失败清除后若值仍未同步，恢复显示编辑完成态）。
+ */
+export function applyManualResult(
+  state: RowStatusState,
+  rowId: string,
+  result: Result<unknown>,
+  kind: RowSuccessKind,
+  options: ApplyManualResultOptions = {},
+): RowStatusState {
+  if (!result.ok) {
+    const rowResults = setFailure(state.rowResults, rowId, {
+      messageKey: result.error.userMessageKey,
+      detail: result.error.code,
+    });
+    const rowSuccess = removeSuccess(state.rowSuccess, rowId);
+    if (rowResults === state.rowResults && rowSuccess === state.rowSuccess) {
+      return state;
+    }
+    return { ...state, rowResults, rowSuccess };
+  }
+  const writeStatus =
+    options.writeOutcome !== undefined
+      ? WRITE_OUTCOME_STATUS[options.writeOutcome.kind]
+      : "success";
+  if (writeStatus === "none") {
+    // cancelled-before-verify：写入已成功仅回读被取消，保持原状态（§18.2 严格区分）。
+    return state;
+  }
+  const rowDirty = removeDirty(state.rowDirty, rowId);
+  const rowSuccess = setSuccess(state.rowSuccess, rowId, kind);
+  const rowResults =
+    writeStatus === "failure"
+      ? // 写入成功但回读不一致/回读失败：显示失败态（未来 WriteOutcome 扩展后可达）。
+        setFailure(state.rowResults, rowId, {
+          messageKey: "errors.writeVerifyMismatch",
+          detail: null,
+        })
+      : removeFailure(state.rowResults, rowId);
+  if (
+    rowResults === state.rowResults &&
+    rowDirty === state.rowDirty &&
+    rowSuccess === state.rowSuccess
+  ) {
+    return state;
+  }
+  return { ...state, rowResults, rowDirty, rowSuccess };
+}
+
+/**
+ * 轮询/全表读取逐行结果：成功清除失败态与编辑完成态（不产生成功点，值更新即反馈）；
+ * 失败幂等写失败态（detail=null 稳定，同态返回原引用 → zustand 零更新）。
+ */
+export function applyPollResultStatus(
+  state: RowStatusState,
+  rowId: string,
+  result: Result<unknown>,
+): RowStatusState {
+  if (!result.ok) {
+    const rowResults = setFailure(state.rowResults, rowId, {
+      messageKey: result.error.userMessageKey,
+      detail: null,
+    });
+    if (rowResults === state.rowResults) return state;
+    return { ...state, rowResults };
+  }
+  const rowResults = removeFailure(state.rowResults, rowId);
+  const rowDirty = removeDirty(state.rowDirty, rowId);
+  if (rowResults === state.rowResults && rowDirty === state.rowDirty) {
+    return state;
+  }
+  return { ...state, rowResults, rowDirty };
+}
+
+/**
+ * Data 编辑提交：编辑是用户主动的新操作，清除该行失败态（用户已接管值，红点不再压过
+ * 编辑完成态）；值变化置编辑完成态（并覆盖成功态）；编辑回原值（前后一致）清除编辑完成态。
+ */
+export function applyRowEdit(
+  state: RowStatusState,
+  rowId: string,
+  before: string,
+  after: string,
+): RowStatusState {
+  const rowResults = removeFailure(state.rowResults, rowId);
+  const rowDirty =
+    before === after
+      ? removeDirty(state.rowDirty, rowId)
+      : setDirty(state.rowDirty, rowId);
+  const rowSuccess = removeSuccess(state.rowSuccess, rowId);
+  if (
+    rowResults === state.rowResults &&
+    rowDirty === state.rowDirty &&
+    rowSuccess === state.rowSuccess
+  ) {
+    return state;
+  }
+  return { ...state, rowResults, rowDirty, rowSuccess };
+}
+
+// ---- 内部：幂等 set/remove（同态返回原引用，zustand 不触发订阅更新）----
+
+function setFailure(
+  current: RowResults,
+  rowId: string,
+  failure: RowFailure,
+): RowResults {
+  const existing = current[rowId];
+  if (
+    existing !== undefined &&
+    existing.messageKey === failure.messageKey &&
+    existing.detail === failure.detail
+  ) {
+    return current;
+  }
+  return { ...current, [rowId]: failure };
+}
+
+function removeFailure(current: RowResults, rowId: string): RowResults {
+  if (current[rowId] === undefined) return current;
+  const next = { ...current };
+  delete next[rowId];
+  return next;
+}
+
+function setDirty(
+  current: Record<string, boolean>,
+  rowId: string,
+): Record<string, boolean> {
+  if (current[rowId] === true) return current;
+  return { ...current, [rowId]: true };
+}
+
+function removeDirty(
+  current: Record<string, boolean>,
+  rowId: string,
+): Record<string, boolean> {
+  if (current[rowId] === undefined) return current;
+  const next = { ...current };
+  delete next[rowId];
+  return next;
+}
+
+function setSuccess(
+  current: RowSuccessMap,
+  rowId: string,
+  kind: RowSuccessKind,
+): RowSuccessMap {
+  const existing = current[rowId];
+  if (existing !== undefined && existing.kind === kind) return current;
+  return { ...current, [rowId]: { kind } };
+}
+
+function removeSuccess(
+  current: RowSuccessMap,
+  rowId: string,
+): RowSuccessMap {
+  if (current[rowId] === undefined) return current;
+  const next = { ...current };
+  delete next[rowId];
+  return next;
+}

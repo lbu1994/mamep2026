@@ -76,6 +76,8 @@ interface EditableCellValueProps {
   errorTip?: string;
   /** 值为空且非编辑态时的占位文本（辅助色，不进入编辑草稿）。 */
   emptyText?: string;
+  /** 非编辑态值右侧的附加节点（如 Data 列状态点）；编辑态不显示。 */
+  trailing?: React.ReactNode;
   /** 提交回调（Enter/失焦）：参数为最终草稿；草稿未变时不调用。 */
   onCommit: (value: string) => void;
 }
@@ -86,6 +88,7 @@ function EditableCellValue({
   error = false,
   errorTip,
   emptyText,
+  trailing,
   onCommit,
 }: EditableCellValueProps): React.ReactNode {
   const [editing, setEditing] = useState(false);
@@ -152,13 +155,16 @@ function EditableCellValue({
         }
       }}
     >
-      {value === "" && emptyText !== undefined ? (
-        <span className="register-table__editable-cell-value-placeholder">
-          {emptyText}
-        </span>
-      ) : (
-        value
-      )}
+      <span className="register-table__editable-cell-value-wrap__text">
+        {value === "" && emptyText !== undefined ? (
+          <span className="register-table__editable-cell-value-placeholder">
+            {emptyText}
+          </span>
+        ) : (
+          value
+        )}
+      </span>
+      {trailing}
     </div>
   );
   return error && errorTip !== undefined ? (
@@ -325,6 +331,7 @@ const ReadCell = memo(function ReadCell({
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   const updateRow = useAppStore((s) => s.updateRow);
+  const recordManualResult = useAppStore((s) => s.recordManualResult);
   const connected = useAppStore((s) => s.connectionState) === "connected";
   // 离线或未配置合法地址时禁用；无地址时提供 Tooltip 说明原因。
   const disabled = !connected || !hasAddress;
@@ -336,6 +343,8 @@ const ReadCell = memo(function ReadCell({
       .find((r) => r.rowId === rowId);
     if (row === undefined) return;
     const result = await host.readRow(row);
+    // 手动读结果 → 三态状态点（成功清失败态写成功点；失败写失败态并带错误码）。
+    recordManualResult(rowId, result, "read");
     if (result.ok) {
       updateRow(rowId, () => ({
         ...row,
@@ -343,7 +352,7 @@ const ReadCell = memo(function ReadCell({
         updatedAt: Date.now(),
       }));
     }
-    // 读取失败不改变 Data 单元格内容（§17/§25），错误经日志展示。
+    // 读取失败不改变 Data 单元格内容（§17/§25），失败原因经状态点 Tooltip 展示。
   };
   const button = (
     <Button size="small" disabled={disabled} onClick={() => void handleRead()}>
@@ -368,22 +377,78 @@ const DataCell = memo(function DataCell({
   cellText: string;
 }) {
   const updateRow = useAppStore((s) => s.updateRow);
+  const recordRowEdit = useAppStore((s) => s.recordRowEdit);
+  // 三态状态点选择器：返回原语/undefined，memo 只在该行状态变化时重渲染
+  // （轮询值更新只改 cellText，rowResults/rowDirty/rowSuccess 引用不变则跳过）。
+  const failure = useAppStore((s) => s.rowResults[rowId]);
+  const dirty = useAppStore((s) => s.rowDirty[rowId] ?? false);
+  const success = useAppStore((s) => s.rowSuccess[rowId]);
+  // 显示优先级：失败态 > 编辑完成态 > 成功态（§row-result）。
+  const dot =
+    failure !== undefined ? (
+      <RowStatusDot status="error" failure={failure} />
+    ) : dirty ? (
+      <RowStatusDot status="dirty" />
+    ) : success !== undefined ? (
+      <RowStatusDot status="success" kind={success.kind} />
+    ) : null;
   return (
     <EditableCellValue
       value={cellText}
       ariaLabel="Data"
       // 空值占位「—」：区分「尚未读取/无值」与「有值」，纯 UI 派生，不进入草稿。
       emptyText="—"
-      onCommit={(value) =>
+      trailing={dot}
+      onCommit={(value) => {
+        // 编辑提交：对比「编辑前显示值」设置/清除编辑完成态（§row-result）。
+        recordRowEdit(rowId, cellText, value);
         updateRow(rowId, (r) => ({
           ...r,
           cellText: value,
           updatedAt: Date.now(),
-        }))
-      }
+        }));
+      }}
     />
   );
 });
+
+/**
+ * 寄存器行操作结果状态点（Data 列，三态）。
+ * 纯颜色区分（§25.5 配 Tooltip 文字与 aria-label）；编辑态不显示（由 EditableCellValue 控制）。
+ */
+function RowStatusDot({
+  status,
+  kind,
+  failure,
+}: {
+  status: "success" | "dirty" | "error";
+  kind?: "read" | "write";
+  failure?: { messageKey: string; detail: string | null };
+}): React.ReactNode {
+  const { t, i18n } = useTranslation();
+  let tip: string;
+  if (status === "error") {
+    // 失败态：承载原因（§20 简短原因），messageKey 不存在时回退显示原文。
+    const key = failure?.messageKey ?? "";
+    tip = i18n.exists(key) ? t(key) : key;
+  } else if (status === "dirty") {
+    tip = t("rowStatus.dirty");
+  } else {
+    tip =
+      kind === "write"
+        ? t("rowStatus.writeSuccess")
+        : t("rowStatus.readSuccess");
+  }
+  return (
+    <Tooltip title={tip}>
+      <span
+        className={`register-table__status-dot register-table__status-dot--${status}`}
+        role="img"
+        aria-label={tip}
+      />
+    </Tooltip>
+  );
+}
 
 const WriteCell = memo(function WriteCell({
   rowId,
@@ -395,6 +460,7 @@ const WriteCell = memo(function WriteCell({
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   const appendMessage = useAppStore((s) => s.appendMessage);
+  const recordManualResult = useAppStore((s) => s.recordManualResult);
   const connected = useAppStore((s) => s.connectionState) === "connected";
   // 离线或未配置合法地址时禁用；无地址时提供 Tooltip 说明原因。
   const disabled = !connected || !hasAddress;
@@ -406,6 +472,13 @@ const WriteCell = memo(function WriteCell({
       .find((r) => r.rowId === rowId);
     if (row === undefined) return;
     const result = await host.writeRow(row);
+    // 手动写结果 → 三态状态点（writeOutcome 支持 §18.2 verify 结果映射）。
+    recordManualResult(
+      rowId,
+      result,
+      "write",
+      result.ok ? { writeOutcome: result.value } : undefined,
+    );
     if (result.ok) {
       appendMessage({
         timestamp: Date.now(),
@@ -718,6 +791,15 @@ export function RegisterTable({
             skipped: result.value.skippedCount,
           },
           detail: null,
+        });
+      } else {
+        // 批次整体失败（如未连接）：给出明确提示；逐行失败经轮询结果通道标记状态点。
+        appendMessage({
+          timestamp: Date.now(),
+          level: "error",
+          messageKey: "messages.readAllFailed",
+          params: { detail: result.error.code },
+          detail: result.error.code,
         });
       }
     } finally {

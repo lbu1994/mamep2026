@@ -43,6 +43,16 @@ import {
   type RowClipboardData,
 } from "@mamep2026/register-table";
 import { create } from "zustand";
+import {
+  applyManualResult,
+  applyPollResultStatus,
+  applyRowEdit,
+  createEmptyRowStatusState,
+  type ApplyManualResultOptions,
+  type RowFailure,
+  type RowSuccess,
+  type RowSuccessKind,
+} from "./row-result";
 import type { AppHost } from "./host";
 import {
   persistedSettingsSchema,
@@ -82,6 +92,10 @@ export interface AppStoreState {
   commLog: CommunicationLogEntry[];
   traceWindows: Record<string, TraceWindowModel>;
   pollingKeys: Record<string, string>;
+  /** 行操作结果三态状态点（纯 UI 会话状态，不持久化，§19.2 同 selectedRowIds）。 */
+  rowResults: Record<RowId, RowFailure | undefined>;
+  rowDirty: Record<RowId, boolean>;
+  rowSuccess: Record<RowId, RowSuccess | undefined>;
 
   setHost: (host: AppHost) => void;
   setWorkspace: (workspace: Workspace) => void;
@@ -153,6 +167,18 @@ export interface AppStoreState {
   appendCommLog: (entry: CommunicationLogEntry) => void;
   clearCommLog: () => void;
   setNotes: (notes: string) => void;
+
+  /** 手动读/写结果：更新失败态与成功点（成功点仅手动操作触发，§row-result）。 */
+  recordManualResult: (
+    rowId: RowId,
+    result: Result<unknown>,
+    kind: RowSuccessKind,
+    options?: ApplyManualResultOptions,
+  ) => void;
+  /** 轮询/全表读取逐行结果：成功清失败/编辑完成态；失败幂等写失败态（不产生成功点）。 */
+  recordPollResult: (rowId: RowId, result: Result<unknown>) => void;
+  /** Data 编辑提交：对比编辑前后值设置/清除编辑完成态；编辑覆盖成功态。 */
+  recordRowEdit: (rowId: RowId, before: string, after: string) => void;
 }
 
 export const useAppStore = create<AppStoreState>()((set, get) => ({
@@ -175,6 +201,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   pollingKeys: {},
   selectedRowIds: [],
   clipboardPayload: null,
+  ...createEmptyRowStatusState(),
 
   setHost: (host) => set({ host }),
   setWorkspace: (workspace) => {
@@ -821,4 +848,80 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     set((state) => ({
       workspace: { ...state.workspace, notes, updatedAt: Date.now() },
     })),
+
+  recordManualResult: (rowId, result, kind, options) =>
+    set((state) => {
+      const next = applyManualResult(
+        {
+          rowResults: state.rowResults,
+          rowDirty: state.rowDirty,
+          rowSuccess: state.rowSuccess,
+        },
+        rowId,
+        result,
+        kind,
+        options,
+      );
+      if (
+        next.rowResults === state.rowResults &&
+        next.rowDirty === state.rowDirty &&
+        next.rowSuccess === state.rowSuccess
+      ) {
+        return state;
+      }
+      return {
+        rowResults: next.rowResults,
+        rowDirty: next.rowDirty,
+        rowSuccess: next.rowSuccess,
+      };
+    }),
+  recordPollResult: (rowId, result) =>
+    set((state) => {
+      const next = applyPollResultStatus(
+        {
+          rowResults: state.rowResults,
+          rowDirty: state.rowDirty,
+          rowSuccess: state.rowSuccess,
+        },
+        rowId,
+        result,
+      );
+      if (
+        next.rowResults === state.rowResults &&
+        next.rowDirty === state.rowDirty &&
+        next.rowSuccess === state.rowSuccess
+      ) {
+        return state;
+      }
+      return {
+        rowResults: next.rowResults,
+        rowDirty: next.rowDirty,
+        rowSuccess: next.rowSuccess,
+      };
+    }),
+  recordRowEdit: (rowId, before, after) =>
+    set((state) => {
+      const next = applyRowEdit(
+        {
+          rowResults: state.rowResults,
+          rowDirty: state.rowDirty,
+          rowSuccess: state.rowSuccess,
+        },
+        rowId,
+        before,
+        after,
+      );
+      if (
+        next.rowResults === state.rowResults &&
+        next.rowDirty === state.rowDirty &&
+        next.rowSuccess === state.rowSuccess
+      ) {
+        return state;
+      }
+      return {
+        rowResults: next.rowResults,
+        rowDirty: next.rowDirty,
+        rowSuccess: next.rowSuccess,
+      };
+    }),
 }));

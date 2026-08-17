@@ -227,6 +227,7 @@ export const en = {
     deviceDisconnected: "Serial device disconnected.",
     writeSucceeded: "Write succeeded ({{address}}).",
     writeFailed: "Write failed: {{detail}}",
+    readAllFailed: "Read All failed: {{detail}}",
     clipboardWriteFailed: "System clipboard write failed: {{detail}}",
     pasteIssues: "{{count}} pasted row(s) contain invalid data.",
     saveFailed: "Workspace save failed.",
@@ -234,6 +235,11 @@ export const en = {
     resetFailed: "Workspace reset failed: {{detail}}",
     loadFailed: "Workspace restore failed: {{detail}}",
     pluginLoadFailed: "Plugin load error: {{detail}}",
+  },
+  rowStatus: {
+    readSuccess: "Read successful",
+    writeSuccess: "Write successful",
+    dirty: "Edited, not synced to device",
   },
   errors: {
     notConnected: "Not connected to a device.",
@@ -487,6 +493,7 @@ export const zh: TranslationResources = {
     deviceDisconnected: "串口设备已断开。",
     writeSucceeded: "写入成功（{{address}}）。",
     writeFailed: "写入失败：{{detail}}",
+    readAllFailed: "全表读取失败：{{detail}}",
     clipboardWriteFailed: "系统剪贴板写入失败：{{detail}}",
     pasteIssues: "{{count}} 行粘贴数据包含无效内容。",
     saveFailed: "工作区保存失败。",
@@ -494,6 +501,11 @@ export const zh: TranslationResources = {
     resetFailed: "工作区重置失败：{{detail}}",
     loadFailed: "工作区恢复失败：{{detail}}",
     pluginLoadFailed: "插件加载错误：{{detail}}",
+  },
+  rowStatus: {
+    readSuccess: "读取成功",
+    writeSuccess: "写入成功",
+    dirty: "已编辑，未同步到设备",
   },
   errors: {
     notConnected: "未连接设备。",

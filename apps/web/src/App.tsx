@@ -97,6 +97,9 @@ export default function App(): React.ReactNode {
     host.subscribeSaveStatus((status) => setSaveStatus(status));
     host.subscribeConnectionState((state) => setConnectionState(state));
     host.subscribePollResult((key, address, result) => {
+      // 轮询/全表读取逐行结果 → 三态状态点：成功清失败/编辑完成态（不产生成功点）；
+      // 失败幂等写失败态（同因子返回原引用，设备掉线时 store 零更新）。
+      useAppStore.getState().recordPollResult(key as RowId, result);
       if (!result.ok) return;
       const state = useAppStore.getState();
       const profile =
