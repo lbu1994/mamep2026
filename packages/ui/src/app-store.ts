@@ -44,6 +44,11 @@ import {
 } from "@mamep2026/register-table";
 import { create } from "zustand";
 import type { AppHost } from "./host";
+import {
+  persistedSettingsSchema,
+  type PersistedConnectionSettings,
+} from "./components/connection-settings-model";
+import { applyLanguage } from "./i18n";
 
 export type BufferSizeOption =
   "continue" | "100" | "500" | "1000" | "1500" | "2000" | "3000";
@@ -91,6 +96,10 @@ export interface AppStoreState {
     pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null,
   ) => void;
   setTheme: (theme: "light" | "dark") => void;
+  /** 记录界面语言选择到工作区偏好（随自动保存持久化；i18n 引擎切换由组件层调用）。 */
+  setLanguage: (language: "en-US" | "zh-CN") => void;
+  /** 更新活动连接配置的持久化设置（除串口/端口选择外的全部参数），随自动保存持久化。 */
+  setConnectionSettings: (settings: PersistedConnectionSettings) => void;
   setSaveStatus: (status: SaveStatus) => void;
   setActiveSheetId: (sheetId: SheetId) => void;
   /** 更新工作区面板布局（侧栏/底部面板折叠、高度、活动 tab），随自动保存持久化。 */
@@ -168,12 +177,15 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   clipboardPayload: null,
 
   setHost: (host) => set({ host }),
-  setWorkspace: (workspace) =>
-    set((state) => ({
+  setWorkspace: (workspace) => {
+    // 加载/重置工作区时恢复持久化的语言偏好（刷新后保持上次选择）。
+    applyLanguage(workspace.preferences.language);
+    return set((state) => ({
       workspace,
       // 加载工作区时回填持久化的主题，避免刷新后恒为浅色。
       theme: workspace.preferences.theme ?? state.theme,
-    })),
+    }));
+  },
   setLoaded: () => set({ loaded: true }),
   setConnectionState: (connectionState) => set({ connectionState }),
   setConnectionModalOpen: (connectionModalOpen) => set({ connectionModalOpen }),
@@ -191,6 +203,33 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         preferences: { ...state.workspace.preferences, theme },
       },
     })),
+  setLanguage: (language) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        preferences: { ...state.workspace.preferences, language },
+        updatedAt: Date.now(),
+      },
+    })),
+  setConnectionSettings: (settings) =>
+    set((state) => {
+      const current = state.workspace.connectionProfiles[0];
+      if (current === undefined) return {};
+      // 防御性校验：InputNumber 临时越界（如输入 999）时拒绝写入，避免污染持久化数据。
+      const validated = persistedSettingsSchema.safeParse(settings);
+      if (!validated.success) return {};
+      const connectionProfiles = [
+        { ...current, ...validated.data },
+        ...state.workspace.connectionProfiles.slice(1),
+      ];
+      return {
+        workspace: {
+          ...state.workspace,
+          connectionProfiles,
+          updatedAt: Date.now(),
+        },
+      };
+    }),
   setSaveStatus: (saveStatus) => set({ saveStatus }),
   setActiveSheetId: (activeSheetId) =>
     set((state) => ({

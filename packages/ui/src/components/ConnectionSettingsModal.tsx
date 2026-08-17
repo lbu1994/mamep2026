@@ -18,6 +18,7 @@ import { createDefaultRtuProfile } from "@mamep2026/domain";
 import type { SerialDeviceHandle } from "@mamep2026/platform-api";
 import { useAppStore } from "../app-store";
 import {
+  extractPersistedSettings,
   profileToValues,
   settingsSchema,
   toProfile,
@@ -28,6 +29,9 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.connectionModalOpen);
   const setOpen = useAppStore((s) => s.setConnectionModalOpen);
+  const setConnectionSettings = useAppStore(
+    (s) => s.setConnectionSettings,
+  );
   const host = useAppStore((s) => s.host);
   const workspace = useAppStore((s) => s.workspace);
   const connectionState = useAppStore((s) => s.connectionState);
@@ -37,10 +41,11 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const profile = workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
-  const { control, handleSubmit, reset } = useForm<ConnectionSettingsValues>({
-    resolver: zodResolver(settingsSchema),
-    defaultValues: profileToValues(profile),
-  });
+  const { control, handleSubmit, reset, getValues } =
+    useForm<ConnectionSettingsValues>({
+      resolver: zodResolver(settingsSchema),
+      defaultValues: profileToValues(profile),
+    });
 
   const supportsSerial = host?.supportsWebSerial() ?? false;
   const isMock = host?.isMockMode ?? false;
@@ -88,8 +93,13 @@ export function ConnectionSettingsModal(): React.ReactNode {
       onCancel={() => setOpen(false)}
       afterOpenChange={(nextOpen) => {
         if (nextOpen) {
+          // 每次打开：恢复上次持久化的连接设置（含端口参数）；串口/端口选择保持待选。
           reset(profileToValues(profile));
           setConnectError(null);
+        } else {
+          // 关闭（手动取消 / Connect 成功后自动关闭）时持久化连接设置（串口选择除外）。
+          const values = getValues();
+          setConnectionSettings(extractPersistedSettings(values));
         }
       }}
       footer={[

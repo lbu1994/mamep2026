@@ -6,4 +6,10 @@ export {
   type TraceWindowModel,
 } from "./app-store";
 export type { AppHost, CommProperties, TraceSampleEvent } from "./host";
-export { i18nResources, initI18n, type TranslationResources } from "./i18n";
+export {
+  applyLanguage,
+  i18nResources,
+  initI18n,
+  type AppLanguage,
+  type TranslationResources,
+} from "./i18n";

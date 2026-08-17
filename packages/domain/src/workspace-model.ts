@@ -128,6 +128,8 @@ export interface PanelLayout {
 
 export interface Preferences {
   theme: "light" | "dark";
+  /** 界面语言（用户偏好，随工作区持久化；默认 en-US）。 */
+  language: "en-US" | "zh-CN";
 }
 
 export interface PluginState {
@@ -285,7 +287,7 @@ export function createEmptyWorkspace(): Workspace {
       bottomPanelHeight: 200,
       activeBottomTab: "messages",
     },
-    preferences: { theme: "light" },
+    preferences: { theme: "light", language: "en-US" },
     notes: "",
     pluginStates: [],
     migrationHistory: [],

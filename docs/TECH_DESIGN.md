@@ -1770,6 +1770,13 @@ RTU 配置：
       addressAdjust      // OFF（默认）| ON（发送地址 = 用户地址 - 1）
       recentPortHint
 
+> **持久化边界（2026-08-17 确认）**：工作区持久化「除串口/端口选择外」的全部连接配置——
+> 端口参数（baudRate、dataBits、stopBits、parity、flowControl）与从站地址、requestTimeoutMs、
+> retryCount、interRequestDelayMs、addressAdjust 均随工作区保存。串口/端口选择本身是
+> 运行时会话状态（浏览器侧每次打开 Connection Settings 处于待选状态），不进入持久化；
+> recentPortHint 仅作端口提示（docs/AGENTS.md §19.3），不用于自动连接。旧数据格式兼容，
+> schemaVersion 不变。
+
 TCP 配置：
 
     TcpConnectionProfile

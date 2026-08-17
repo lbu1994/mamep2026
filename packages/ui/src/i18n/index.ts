@@ -531,6 +531,9 @@ export const i18nResources = {
   "zh-CN": { translation: zh },
 };
 
+/** 界面支持的语言（与 workspace.preferences.language 保持一致）。 */
+export type AppLanguage = "en-US" | "zh-CN";
+
 export function initI18n(): void {
   void i18next.use(initReactI18next).init({
     resources: i18nResources,
@@ -538,4 +541,10 @@ export function initI18n(): void {
     fallbackLng: "en-US",
     interpolation: { escapeValue: false },
   });
+}
+
+/** 应用界面语言（工作区加载/重置后恢复上次选择时调用）。 */
+export function applyLanguage(lng: AppLanguage): void {
+  if (i18next.language === lng) return;
+  void i18next.changeLanguage(lng);
 }

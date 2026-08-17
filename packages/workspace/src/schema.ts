@@ -4,6 +4,7 @@
  */
 import {
   createMamepError,
+  defaultConfig,
   RegisterAddress,
   RawRegisterValue,
   workspaceSchemaVersion,
@@ -61,21 +62,40 @@ const sheetSchema = z.object({
   updatedAt: z.number(),
 });
 
+/**
+ * RTU 连接配置完整持久化（2026-08-17 确认）：除串口/端口选择外，波特率、数据位、
+ * 停止位、校验位、流控等端口参数与从站地址、超时、重试、请求间隔、Address Adjust
+ * 均随工作区持久化。串口/端口选择本身是运行时会话状态，不进入持久化；
+ * recentPortHint 仅作端口提示（docs/AGENTS.md §19.3），不用于自动连接。
+ * 端口字段带默认值：兼容「端口参数未持久化」期间写入的旧数据（缺省回填默认值，无需迁移）。
+ */
 const rtuProfileSchema = z.object({
   id: z.string(),
   name: z.string(),
   protocol: z.literal("rtu"),
-  baudRate: z.number().int().positive(),
-  dataBits: z.union([z.literal(7), z.literal(8)]),
-  stopBits: z.union([z.literal(1), z.literal(2)]),
-  parity: z.enum(["none", "even", "odd"]),
-  flowControl: z.enum(["off", "rts-cts", "xon-xoff"]),
+  baudRate: z
+    .number()
+    .int()
+    .positive()
+    .default(defaultConfig.rtu.baudRate),
+  dataBits: z
+    .union([z.literal(7), z.literal(8)])
+    .default(defaultConfig.rtu.dataBits as 7 | 8),
+  stopBits: z
+    .union([z.literal(1), z.literal(2)])
+    .default(defaultConfig.rtu.stopBits as 1 | 2),
+  parity: z
+    .enum(["none", "even", "odd"])
+    .default(defaultConfig.rtu.parity as "none" | "even" | "odd"),
+  flowControl: z
+    .enum(["off", "rts-cts", "xon-xoff"])
+    .default(defaultConfig.rtu.flowControl as "off" | "rts-cts" | "xon-xoff"),
   slaveAddress: z.number().int().min(0).max(255),
   requestTimeoutMs: z.number().int().min(0),
   retryCount: z.number().int().min(0).max(10),
   interRequestDelayMs: z.number().int().min(0),
   addressAdjust: z.enum(["off", "on"]),
-  recentPortHint: z.string().nullable(),
+  recentPortHint: z.string().nullable().default(null),
 });
 
 const pluginStateSchema = z.object({
@@ -112,6 +132,8 @@ export const workspaceSchema = z.object({
   }),
   preferences: z.object({
     theme: z.enum(["light", "dark"]),
+    /** 界面语言：默认 en-US；老数据缺省时补默认值，无需迁移。 */
+    language: z.enum(["en-US", "zh-CN"]).default("en-US"),
   }),
   notes: z.string(),
   pluginStates: z.array(pluginStateSchema),

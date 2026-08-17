@@ -564,3 +564,73 @@ describe("updateRow 引用稳定性（性能：单行更新不重建其余表/�
     );
   });
 });
+
+describe("setLanguage", () => {
+  it("更新 workspace.preferences.language 以随自动保存持久化", () => {
+    expect(
+      useAppStore.getState().workspace.preferences.language,
+    ).toBe("en-US");
+    useAppStore.getState().setLanguage("zh-CN");
+    expect(useAppStore.getState().workspace.preferences.language).toBe(
+      "zh-CN",
+    );
+    useAppStore.getState().setLanguage("en-US");
+    expect(useAppStore.getState().workspace.preferences.language).toBe(
+      "en-US",
+    );
+  });
+});
+
+describe("setConnectionSettings", () => {
+  it("更新活动 profile 的全部持久化设置（端口参数 + 非端口参数），id 保持不变", () => {
+    const before = useAppStore.getState().workspace.connectionProfiles[0];
+    if (before === undefined) throw new Error("missing profile");
+
+    useAppStore.getState().setConnectionSettings({
+      baudRate: 115200,
+      dataBits: 7,
+      stopBits: 2,
+      parity: "even",
+      flowControl: "rts-cts",
+      slaveAddress: 6,
+      requestTimeoutMs: 1800,
+      retryCount: 4,
+      interRequestDelayMs: 90,
+      addressAdjust: "on",
+    });
+
+    const profile = useAppStore.getState().workspace.connectionProfiles[0];
+    // 端口参数被更新。
+    expect(profile?.baudRate).toBe(115200);
+    expect(profile?.dataBits).toBe(7);
+    expect(profile?.stopBits).toBe(2);
+    expect(profile?.parity).toBe("even");
+    expect(profile?.flowControl).toBe("rts-cts");
+    // 非端口参数被更新。
+    expect(profile?.slaveAddress).toBe(6);
+    expect(profile?.requestTimeoutMs).toBe(1800);
+    expect(profile?.retryCount).toBe(4);
+    expect(profile?.interRequestDelayMs).toBe(90);
+    expect(profile?.addressAdjust).toBe("on");
+    // id 保持不变。
+    expect(profile?.id).toBe(before.id);
+  });
+
+  it("越界等非法值被拒绝，不写入工作区", () => {
+    useAppStore.getState().setConnectionSettings({
+      baudRate: 115200,
+      dataBits: 7,
+      stopBits: 2,
+      parity: "even",
+      flowControl: "rts-cts",
+      slaveAddress: 999,
+      requestTimeoutMs: 1800,
+      retryCount: 4,
+      interRequestDelayMs: 90,
+      addressAdjust: "on",
+    });
+    expect(
+      useAppStore.getState().workspace.connectionProfiles[0]?.slaveAddress,
+    ).toBe(1);
+  });
+});

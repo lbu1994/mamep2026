@@ -99,6 +99,7 @@ export function MamepApp(): React.ReactNode {
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
+  const setLanguage = useAppStore((s) => s.setLanguage);
   const addSheet = useAppStore((s) => s.addSheet);
   const renameSheet = useAppStore((s) => s.renameSheet);
   // 只订阅追踪窗的键集合（useShallow 逐项比较）：TM 采样（appendTraceSample 重建整个
@@ -736,7 +737,12 @@ export function MamepApp(): React.ReactNode {
                 size="small"
                 value={i18n.language}
                 style={{ width: 100, marginLeft: 8 }}
-                onChange={(value) => void i18n.changeLanguage(value)}
+                onChange={(value) => {
+                  // 语言切换：立即生效 + 记入工作区偏好（随自动保存持久化）。
+                  const language = value as "en-US" | "zh-CN";
+                  setLanguage(language);
+                  void i18n.changeLanguage(language);
+                }}
                 options={[
                   { value: "en-US", label: "English" },
                   { value: "zh-CN", label: "中文" },
