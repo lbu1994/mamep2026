@@ -17,6 +17,8 @@ export interface ApplicationMessage {
 }
 
 export interface CommunicationLogEntry {
+  /** 会话内自增序号：作为 UI 虚拟列表（Listy）的稳定 rowKey，不持久化、不回绕。 */
+  seq: number;
   timestamp: number;
   direction: "request" | "response";
   bytesHex: string;
@@ -67,6 +69,7 @@ export class ApplicationMessageStore {
 
 export class CommunicationLogStore {
   private items: CommunicationLogEntry[] = [];
+  private nextSeq = 0;
   private readonly listeners = new Set<
     (entry: CommunicationLogEntry) => void
   >();
@@ -82,6 +85,7 @@ export class CommunicationLogStore {
 
   appendFromEvent(event: CommunicationLogEvent): void {
     this.append({
+      seq: this.nextSeq++,
       timestamp: event.timestamp,
       direction: event.direction,
       bytesHex: formatBytesHex(event.bytes),

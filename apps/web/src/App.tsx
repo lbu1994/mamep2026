@@ -23,8 +23,12 @@ function isMockMode(): boolean {
   );
 }
 
+// UI 层日志自增序号：作为 Listy 稳定 rowKey（与 logging store 的 seq 独立，各自领域内唯一）。
+let nextCommLogSeq = 0;
+
 function toCommLogEntry(event: CommunicationLogEvent) {
   return {
+    seq: nextCommLogSeq++,
     timestamp: event.timestamp,
     direction: event.direction,
     bytesHex: formatBytesHex(event.bytes),

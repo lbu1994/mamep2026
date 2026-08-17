@@ -88,19 +88,33 @@ test("comm log auto-scrolls to the bottom on new entries", async ({ page }) => {
     await readOnce(page);
   }
 
-  const list = page.locator(".comm-log__list");
+  // Listy 虚拟列表的实际滚动容器是 .ant-listy-holder（.comm-log__list root 不滚动）。
+  const list = page.locator(".comm-log .ant-listy-holder");
   await expect(list).toHaveCount(1);
-  // 贴底：剩余未滚动距离不超过阈值。
+  // 前置：容器确实可滚动（scrollHeight > clientHeight），避免假阳性。
   await expect
     .poll(
       () =>
         list.evaluate((el) => {
           const e = el as HTMLElement;
-          return e.scrollHeight - e.scrollTop - e.clientHeight;
+          return e.scrollHeight > e.clientHeight;
         }),
       { timeout: 5000 },
     )
-    .toBeLessThanOrEqual(16);
+    .toBe(true);
+  // 贴底：确实发生过滚动（scrollTop > 0）且剩余未滚动距离不超过阈值。
+  await expect
+    .poll(
+      () =>
+        list.evaluate((el) => {
+          const e = el as HTMLElement;
+          return (
+            e.scrollTop > 0 && e.scrollHeight - e.scrollTop - e.clientHeight <= 16
+          );
+        }),
+      { timeout: 5000 },
+    )
+    .toBe(true);
 });
 
 test("comm log stops following when the auto-scroll switch is off", async ({
@@ -114,20 +128,41 @@ test("comm log stops following when the auto-scroll switch is off", async ({
     await readOnce(page);
   }
 
+  // Listy 虚拟列表的实际滚动容器是 .ant-listy-holder。
+  const list = page.locator(".comm-log .ant-listy-holder");
+  // 前置：容器确实可滚动且已自动贴底（scrollTop > 0），确保后续断言针对真实滚动。
+  await expect
+    .poll(
+      () =>
+        list.evaluate((el) => {
+          const e = el as HTMLElement;
+          return e.scrollHeight > e.clientHeight && e.scrollTop > 0;
+        }),
+      { timeout: 5000 },
+    )
+    .toBe(true);
+
   // 关闭自动滚动开关。
   await page
     .getByRole("switch", { name: "Auto scroll" })
     .evaluate((el) => (el as HTMLElement).click());
 
-  const list = page.locator(".comm-log__list");
   const scrollTopBefore = await list.evaluate((el) => el.scrollTop);
 
-  // 继续产生日志，滚动位置不应变化。
+  // 继续产生日志，滚动位置不应变化（且新日志不再被跟随 → 贴底距离变大）。
   for (let i = 0; i < 5; i++) {
     await readOnce(page);
   }
   const scrollTopAfter = await list.evaluate((el) => el.scrollTop);
   expect(scrollTopAfter).toBe(scrollTopBefore);
+  const distanceAfter = await list.evaluate(
+    (el) =>
+      (el as HTMLElement).scrollHeight -
+      (el as HTMLElement).scrollTop -
+      (el as HTMLElement).clientHeight,
+  );
+  // 关闭开关后新日志追加但未跟随 → 未贴底。
+  expect(distanceAfter).toBeGreaterThan(16);
 });
 
 test("comm log pauses follow when the user scrolls up", async ({ page }) => {
@@ -139,7 +174,20 @@ test("comm log pauses follow when the user scrolls up", async ({ page }) => {
     await readOnce(page);
   }
 
-  const list = page.locator(".comm-log__list");
+  // Listy 虚拟列表的实际滚动容器是 .ant-listy-holder。
+  const list = page.locator(".comm-log .ant-listy-holder");
+  // 前置：容器确实可滚动（避免假阳性）。
+  await expect
+    .poll(
+      () =>
+        list.evaluate((el) => {
+          const e = el as HTMLElement;
+          return e.scrollHeight > e.clientHeight;
+        }),
+      { timeout: 5000 },
+    )
+    .toBe(true);
+
   // 用户手动上滚到顶部（离开底部区域 → 暂停跟随）。
   await list.evaluate((el) => {
     el.scrollTop = 0;

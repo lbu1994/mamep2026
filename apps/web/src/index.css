@@ -859,6 +859,12 @@ body {
   height: 100%;
 }
 
+/* antd v6 Tabs：body 需被 holder 高度约束（否则被内容撑开 → .comm-log 无限高、
+   内层 .comm-log__list 永不溢出滚动，Auto Scroll 失效）。与 register-table-tabs 同模式。 */
+.bottom-panel .ant-tabs-body {
+  height: 100%;
+}
+
 /* 底部面板页签可见键盘焦点 */
 .bottom-panel .ant-tabs-tab:focus-visible {
   outline: 2px solid var(--mamep-focus-ring);
@@ -882,10 +888,13 @@ body {
 
 .log-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  padding: 2px 0;
+  height: var(--mamep-log-row-height, 30px);
+  padding: 0 4px;
   border-bottom: 1px dashed var(--ant-color-split);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* 时间：固定宽度等宽数据列，保证日志扫描对齐 */
@@ -918,7 +927,9 @@ body {
 .log-row__text {
   flex: 1;
   min-width: 0;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ant-color-text);
 }
 
@@ -950,12 +961,18 @@ body {
   color: var(--ant-color-text-secondary);
 }
 
-.comm-log__list {
+/* Listy 虚拟列表所在区域：flex 占满 .comm-log 剩余高度，其实际高度经 ResizeObserver 同步给 Listy 的 height prop（面板高度可拖拽调节）。 */
+.comm-log__area {
   flex: 1;
   min-height: 0;
+}
+
+.comm-log__list {
   overflow-y: auto;
 }
 
-.bottom-panel .ant-tabs-tabpane {
+/* antd v6 无 v5 的 .ant-tabs-tabpane；活动面板元素是 .ant-tabs-content-active（即 content 本身）。
+   明确限定高度，保证面板内容（.comm-log）受 holder 约束、内层列表独立滚动。 */
+.bottom-panel .ant-tabs-content-active {
   height: 100%;
 }

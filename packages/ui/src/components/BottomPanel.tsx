@@ -1,4 +1,11 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   App,
@@ -6,13 +13,16 @@ import {
   Button,
   Descriptions,
   Input,
+  Listy,
   Space,
   Switch,
   Tabs,
   Tag,
+  theme,
   Tooltip,
   Typography,
 } from "antd";
+import type { ListyRef } from "antd";
 import { CopyOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
 import type { FlowControl } from "@mamep2026/domain";
 import type { CommunicationLogEntry } from "@mamep2026/logging";
@@ -50,6 +60,13 @@ CommLogRow.displayName = "CommLogRow";
 export function BottomPanel(): React.ReactNode {
   const { t, i18n } = useTranslation();
   const { message } = App.useApp();
+  const { token } = theme.useToken();
+  // 与 antd Listy 内部 itemHeight 同公式（listy 源码：fontHeight + itemPaddingBlock*2，
+  // fontHeight = round(lineHeight * fontSizeMD)，默认 fontSizeMD === fontSize），
+  // 通过 CSS 变量同步给 .log-row，保证虚拟列表行高与实测行高一致（滚动位置准确）。
+  const logRowHeight =
+    Math.round(token.lineHeight * token.fontSize) +
+    (token.Listy?.itemPaddingBlock ?? token.paddingSM) * 2;
   const messages = useAppStore((s) => s.messages);
   const commLog = useAppStore((s) => s.commLog);
   const clearCommLog = useAppStore((s) => s.clearCommLog);
@@ -95,21 +112,39 @@ export function BottomPanel(): React.ReactNode {
   // 通信日志：自动滚动开关（会话级，不持久化）+ 跟随状态。
   const [autoScroll, setAutoScroll] = useState(true);
   const stickToBottom = useRef(true);
-  const commListRef = useRef<HTMLDivElement | null>(null);
+  const listyRef = useRef<ListyRef | null>(null);
+  // Listy 的 height 是数字 prop，必须跟随面板内容区实际高度（面板高度可拖拽调节）。
+  const commLogAreaRef = useRef<HTMLDivElement | null>(null);
+  // 非零默认避免首次渲染退化为全量渲染；后续由渲染驱动测量修正。
+  const [commListHeight, setCommListHeight] = useState(120);
+
+  // 每次渲染后同步测量 .comm-log__area 高度 → Listy。渲染驱动天然跟随 Splitter 拖拽触发的
+  // 面板高度变化（拖拽 → MamepApp 重渲染 → 本组件重渲染 → 测量）。setState 相同值不触发
+  // 重渲染，开销可忽略。jsdom 下 clientHeight 为 0 → 保持默认 → Listy 非虚拟渲染全部（单测安全）。
+  // 注：故意不加依赖数组（须跟随每次渲染），eslint 无法静态证明无更新环，故禁用该规则。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    if (activeTab !== "commlog") return;
+    const el = commLogAreaRef.current;
+    if (el === null) return;
+    setCommListHeight(el.clientHeight);
+  });
 
   // 新日志到达时，若开关开启且用户未上滚离开底部，则自动滚动到底部。
-  // 性能优化：rAF 合并高频 append，避免每秒数十次同步写 scrollTop。
+  // 性能优化：rAF 合并高频 append，避免每次追加同步调用 scrollTo。
+  // 利用 antd Listy 官方命令式滚动 API：scrollTo({ key, align: "bottom" })；key 为末条日志的
+  // 稳定 seq（rowKey）。scrollTo 触发的滚动同样会触发 onScroll → isNearBottom，贴底判定一致。
   useEffect(() => {
-    if (!autoScroll || !stickToBottom.current) return;
-    const el = commListRef.current;
-    if (el === null) return;
+    if (!autoScroll || !stickToBottom.current || commLog.length === 0) return;
+    const lastSeq = commLog[commLog.length - 1]?.seq;
+    if (lastSeq === undefined) return;
     const handle = requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
+      listyRef.current?.scrollTo({ key: lastSeq, align: "bottom" });
     });
     return () => cancelAnimationFrame(handle);
-  }, [commLog.length, autoScroll]);
+  }, [commLog, autoScroll]);
 
-  const handleCommScroll = (e: React.UIEvent<HTMLDivElement>): void => {
+  const handleCommScroll = (e: React.UIEvent<HTMLElement>): void => {
     const el = e.currentTarget;
     stickToBottom.current = isNearBottom(
       el.scrollHeight,
@@ -179,7 +214,14 @@ export function BottomPanel(): React.ReactNode {
   );
 
   const commLogTab = (
-    <div className="comm-log">
+    <div
+      className="comm-log"
+      style={
+        {
+          "--mamep-log-row-height": `${logRowHeight}px`,
+        } as React.CSSProperties
+      }
+    >
       <div className="comm-log__toolbar">
         <Space size="small">
           <Tooltip title={t("panel.autoScroll")}>
@@ -206,17 +248,23 @@ export function BottomPanel(): React.ReactNode {
           </Button>
         </Space>
       </div>
-      <div
-        ref={commListRef}
-        className="log-list comm-log__list"
-        onScroll={handleCommScroll}
-      >
+      <div ref={commLogAreaRef} className="comm-log__area">
         {commLog.length === 0 ? (
           <Typography.Text type="secondary">—</Typography.Text>
         ) : (
-          commLog.map((entry, index) => (
-            <CommLogRow key={index} entry={entry} />
-          ))
+          <Listy<CommunicationLogEntry>
+            ref={listyRef}
+            virtual
+            items={commLog}
+            rowKey="seq"
+            height={commListHeight}
+            onScroll={handleCommScroll}
+            classNames={{ root: "comm-log__list log-list" }}
+            // antd Listy 的 item 默认带 itemPaddingBlock 纵向 padding，会叠加在 .log-row 高度上
+            // 造成实际行高 > itemHeight；覆盖为 0，使行高由 .log-row 决定（= logRowHeight ≈ itemHeight）。
+            styles={{ item: { padding: 0 } }}
+            itemRender={(entry) => <CommLogRow entry={entry} />}
+          />
         )}
       </div>
     </div>

@@ -161,9 +161,11 @@ describe("BottomPanel unseen error dot", () => {
 });
 
 describe("BottomPanel comm log", () => {
+  let nextSeq = 0;
   const commEntry = (
     overrides: Partial<CommunicationLogEntry> = {},
   ): CommunicationLogEntry => ({
+    seq: nextSeq++,
     timestamp: 1700000000000,
     direction: "request",
     bytesHex: "01 03 00 00 00 01 84 0A",

@@ -98,6 +98,12 @@ export function buildTheme(dark: boolean): ThemeConfig {
         contentFontSizeSM: 12,
         onlyIconSizeSM: 12,
       },
+      // Comm Log 日志列表（Listy 虚拟列表）：压缩 item 纵向 padding，使日志行更紧凑。
+      // Listy 内部 itemHeight = fontHeight + itemPaddingBlock*2，与 BottomPanel 的
+      // logRowHeight 用同一公式，保证虚拟滚动窗口与实际行高一致（滚动位置准确）。
+      Listy: {
+        itemPaddingBlock: 4,
+      },
     },
   };
 }
