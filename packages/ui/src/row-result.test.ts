@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import {
+  applyCellCommit,
   applyManualResult,
   applyPollResultStatus,
   applyRowEdit,
@@ -230,5 +231,82 @@ describe("applyRowEdit（Data 编辑提交）", () => {
     const next = applyRowEdit(state, "r1", "100", "100");
     expect(next.rowDirty["r1"]).toBeUndefined();
     expect(next.rowSuccess["r1"]).toBeUndefined();
+  });
+});
+
+describe("applyCellCommit（单元格提交校验，Data/地址）", () => {
+  function dataInvalidError(): ReturnType<typeof createMamepError> {
+    return createMamepError({
+      code: "DATA_INVALID_NUMBER",
+      category: "validation",
+      userMessageKey: "errors.dataInvalidNumber",
+      technicalMessage: "invalid integer input",
+    });
+  }
+
+  it("成功（值变化）：清除校验错误、置编辑完成态、清成功点", () => {
+    const state: RowStatusState = {
+      ...createEmptyRowStatusState(),
+      cellValidationErrors: {
+        "r1:data": {
+          messageKey: "errors.dataInvalidNumber",
+          detail: "DATA_INVALID_NUMBER",
+        },
+      },
+      rowSuccess: { r1: { kind: "read" } },
+    };
+    const next = applyCellCommit(state, "r1", "100", "200", ok(200));
+    expect(next.cellValidationErrors["r1:data"]).toBeUndefined();
+    expect(next.rowDirty["r1"]).toBe(true);
+    expect(next.rowSuccess["r1"]).toBeUndefined();
+  });
+
+  it("成功（回原值）：清除校验错误与编辑完成态", () => {
+    const state: RowStatusState = {
+      ...createEmptyRowStatusState(),
+      cellValidationErrors: {
+        "r1:data": {
+          messageKey: "errors.dataInvalidNumber",
+          detail: "DATA_INVALID_NUMBER",
+        },
+      },
+      rowDirty: { r1: true },
+    };
+    const next = applyCellCommit(state, "r1", "100", "100", ok(100));
+    expect(next.cellValidationErrors["r1:data"]).toBeUndefined();
+    expect(next.rowDirty["r1"]).toBeUndefined();
+  });
+
+  it("失败：记录校验错误、清设备失败态与成功点、保留编辑完成态（值仍未同步）", () => {
+    const state: RowStatusState = {
+      ...createEmptyRowStatusState(),
+      rowResults: {
+        r1: { messageKey: "errors.requestTimeout", detail: null },
+      },
+      rowDirty: { r1: true },
+      rowSuccess: { r1: { kind: "write" } },
+    };
+    const next = applyCellCommit(state, "r1", "100", "zz", fail(dataInvalidError()));
+    expect(next.cellValidationErrors["r1:data"]).toEqual({
+      messageKey: "errors.dataInvalidNumber",
+      detail: "DATA_INVALID_NUMBER",
+    });
+    expect(next.rowResults["r1"]).toBeUndefined();
+    expect(next.rowSuccess["r1"]).toBeUndefined();
+    expect(next.rowDirty["r1"]).toBe(true);
+  });
+
+  it("失败幂等：同因子校验失败重复返回原引用", () => {
+    const state: RowStatusState = {
+      ...createEmptyRowStatusState(),
+      cellValidationErrors: {
+        "r1:data": {
+          messageKey: "errors.dataInvalidNumber",
+          detail: "DATA_INVALID_NUMBER",
+        },
+      },
+    };
+    const next = applyCellCommit(state, "r1", "100", "zz", fail(dataInvalidError()));
+    expect(next).toBe(state);
   });
 });

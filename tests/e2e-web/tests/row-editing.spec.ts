@@ -152,3 +152,54 @@ test("keyboard Delete removes selected rows and clears selection", async ({
   );
   await expect(page.locator(".table-toolbar")).not.toContainText("selected");
 });
+
+test("Data column validation: invalid input shows red error and keeps input; valid input clears it", async ({
+  page,
+}) => {
+  await openApp(page);
+  const base = await rowCount(page);
+  await addRows(page, 1);
+  // 新行 dataType 默认 hex：非法输入 zz。
+  const target = row(page, base);
+  const dataCell = target.getByLabel("Data").first();
+  await dataCell.click();
+  const dataInput = target.getByRole("textbox", { name: "Data" });
+  await dataInput.fill("zz");
+  await dataInput.press("Enter");
+  // 非编辑态红框（error 样式）+ 输入保留（§23 不清空用户输入）。
+  await expect(
+    target.locator(".register-table__editable-cell-value-wrap--error"),
+  ).toBeVisible();
+  await expect(target.getByLabel("Data").first()).toHaveText("zz");
+  // 合法值提交后红框消失。
+  await target.getByLabel("Data").first().click();
+  await target.getByRole("textbox", { name: "Data" }).fill("1F");
+  await target.getByRole("textbox", { name: "Data" }).press("Enter");
+  await expect(
+    target.locator(".register-table__editable-cell-value-wrap--error"),
+  ).toHaveCount(0);
+});
+
+test("Register column keeps showing validation error after a valid address exists", async ({
+  page,
+}) => {
+  await openApp(page);
+  const base = await rowCount(page);
+  await addRows(page, 1);
+  // 新表默认 radix=dec：先提交合法地址。
+  const target = row(page, base);
+  const regCell = target.getByLabel("Register").first();
+  await regCell.click();
+  const regInput = target.getByRole("textbox", { name: "Register" });
+  await regInput.fill("100");
+  await regInput.press("Enter");
+  await expect(target.getByLabel("Register").first()).toHaveText("100");
+  // 已有合法地址后输入非法值（dec 含非法字符）：回归 addressValue 非空时校验红字丢失。
+  await regCell.click();
+  await regInput.fill("xyz");
+  await regInput.press("Enter");
+  await expect(
+    target.locator(".register-table__editable-cell-value-wrap--error"),
+  ).toBeVisible();
+  await expect(target.getByLabel("Register").first()).toHaveText("xyz");
+});

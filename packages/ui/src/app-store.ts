@@ -27,6 +27,7 @@ import type { Result } from "@mamep2026/domain";
 import {
   addRowAfter,
   commitAddress,
+  commitCellText as commitCellTextUseCase,
   copyRowsToClipboard,
   cutRowsFromSheet,
   decodeClipboardCsv,
@@ -44,6 +45,8 @@ import {
 } from "@mamep2026/register-table";
 import { create } from "zustand";
 import {
+  applyCellCommit,
+  applyCellValidation,
   applyManualResult,
   applyPollResultStatus,
   applyRowEdit,
@@ -96,6 +99,8 @@ export interface AppStoreState {
   rowResults: Record<RowId, RowFailure | undefined>;
   rowDirty: Record<RowId, boolean>;
   rowSuccess: Record<RowId, RowSuccess | undefined>;
+  /** Data/地址列编辑校验错误（纯 UI 会话状态，不持久化；键=`${rowId}:data|address`）。 */
+  cellValidationErrors: Record<string, RowFailure | undefined>;
 
   setHost: (host: AppHost) => void;
   setWorkspace: (workspace: Workspace) => void;
@@ -121,6 +126,8 @@ export interface AppStoreState {
 
   updateRow: (rowId: RowId, updater: (row: RegisterRow) => RegisterRow) => void;
   commitRowAddress: (rowId: RowId, draft: string) => Result<RegisterRow>;
+  /** 提交 Data 单元格文本：按 Type 校验；失败保留输入并记录校验错误（§17/§23）。 */
+  commitCellText: (rowId: RowId, text: string) => Result<RegisterRow>;
   addRow: (sheetId: SheetId) => void;
   deleteRow: (sheetId: SheetId, rowId: RowId) => void;
   moveRow: (sheetId: SheetId, rowId: RowId, direction: "up" | "down") => void;
@@ -328,9 +335,79 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     }
     const result = commitAddress(row, draft, sheet.registerRadix);
-    if (result.ok) {
-      get().updateRow(rowId, () => result.value);
+    // §23 校验失败保留用户输入：draft 回写；成功时由 result.value 更新（归一化后的 draft）。
+    get().updateRow(rowId, (r) =>
+      result.ok
+        ? result.value
+        : { ...r, addressDraft: draft, updatedAt: Date.now() },
+    );
+    // 地址校验错误状态：失败记录（红框+Tooltip）、成功清除；不触碰三态状态点。
+    set((state) => {
+      const next = applyCellValidation(
+        {
+          rowResults: state.rowResults,
+          rowDirty: state.rowDirty,
+          rowSuccess: state.rowSuccess,
+          cellValidationErrors: state.cellValidationErrors,
+        },
+        rowId,
+        result,
+      );
+      return {
+        rowResults: next.rowResults,
+        rowDirty: next.rowDirty,
+        rowSuccess: next.rowSuccess,
+        cellValidationErrors: next.cellValidationErrors,
+      };
+    });
+    return result;
+  },
+
+  commitCellText: (rowId, text) => {
+    const sheets = get().workspace.sheets;
+    const sheet = sheets.find((s) => s.rows.some((r) => r.rowId === rowId));
+    const row = sheet?.rows.find((r) => r.rowId === rowId);
+    if (row === undefined || sheet === undefined) {
+      return {
+        ok: false as const,
+        error: {
+          code: "ROW_NOT_FOUND",
+          category: "validation" as const,
+          severity: "error" as const,
+          retryable: false,
+          userMessageKey: "errors.rowNotFound",
+          technicalMessage: "row not found",
+        },
+      };
     }
+    const result = commitCellTextUseCase(row, text);
+    // §23 校验失败保留用户输入：cellText 回写；成功时由 result.value 更新（原引用短路零更新）。
+    get().updateRow(rowId, (r) =>
+      result.ok
+        ? result.value
+        : { ...r, cellText: text, updatedAt: Date.now() },
+    );
+    // 校验结果 → 行状态：成功清校验错误并置编辑完成态；失败记录校验错误、清设备失败/成功态。
+    set((state) => {
+      const next = applyCellCommit(
+        {
+          rowResults: state.rowResults,
+          rowDirty: state.rowDirty,
+          rowSuccess: state.rowSuccess,
+          cellValidationErrors: state.cellValidationErrors,
+        },
+        rowId,
+        row.cellText,
+        text,
+        result,
+      );
+      return {
+        rowResults: next.rowResults,
+        rowDirty: next.rowDirty,
+        rowSuccess: next.rowSuccess,
+        cellValidationErrors: next.cellValidationErrors,
+      };
+    });
     return result;
   },
 
@@ -892,6 +969,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           rowResults: state.rowResults,
           rowDirty: state.rowDirty,
           rowSuccess: state.rowSuccess,
+          cellValidationErrors: state.cellValidationErrors,
         },
         rowId,
         result,
@@ -918,6 +996,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           rowResults: state.rowResults,
           rowDirty: state.rowDirty,
           rowSuccess: state.rowSuccess,
+          cellValidationErrors: state.cellValidationErrors,
         },
         rowId,
         result,
@@ -942,6 +1021,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           rowResults: state.rowResults,
           rowDirty: state.rowDirty,
           rowSuccess: state.rowSuccess,
+          cellValidationErrors: state.cellValidationErrors,
         },
         rowId,
         before,

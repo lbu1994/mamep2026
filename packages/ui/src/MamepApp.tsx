@@ -22,6 +22,7 @@ import {
 } from "antd";
 import {
   ApiOutlined,
+  AppstoreOutlined,
   DisconnectOutlined,
   LeftOutlined,
   MoreOutlined,
@@ -127,8 +128,8 @@ export function MamepApp(): React.ReactNode {
   const closeOtherSheets = useAppStore((s) => s.closeOtherSheets);
   const closeSheetsToRight = useAppStore((s) => s.closeSheetsToRight);
   const [helpOpen, setHelpOpen] = useState(false);
-  // 窄窗口（≤1100px）将顶栏次要操作（Plugin Manager/Settings/Help/主题）收入 More 下拉；
-  // 连接区（Connection/状态/Disconnect）始终可见。
+  // 窄窗口（≤1100px）将顶栏次要操作（Plugin Manager/Settings/Help）收入 More 下拉；
+  // Connection 入口与连接状态/Disconnect 始终可见（不收进 More）。
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1100px)");
@@ -331,16 +332,10 @@ export function MamepApp(): React.ReactNode {
               vertical
               style={{ height: 20, marginInline: 2, flex: "none" }}
             />
-            {/* 连接区：左侧「Connection 入口 + 只读状态摘要」与右侧「Connect/Disconnect 操作」明确分组 */}
+            {/* 连接区：左侧「只读状态摘要」+ 右侧 Connect/Disconnect 操作；
+                Connection 入口已移至右侧操作组（Plugin Manager 左侧），窄窗口也不收进 More */}
             <div className="connection-cluster">
               <div className="connection-cluster__primary">
-                <Button
-                  size="small"
-                  icon={<ApiOutlined />}
-                  onClick={() => setConnectionModalOpen(true)}
-                >
-                  {t("topbar.connectionSettings")}
-                </Button>
                 <span className="status-badge">
                   <span
                     className="status-badge__dot"
@@ -370,6 +365,14 @@ export function MamepApp(): React.ReactNode {
             </div>
             <span className="mamep-header__spacer" />
             <div className="mamep-header__group">
+              {/* Connection 入口始终可见（不收进 More），置于 Plugin Manager 左侧 */}
+              <Button
+                size="small"
+                icon={<ApiOutlined />}
+                onClick={() => setConnectionModalOpen(true)}
+              >
+                {t("topbar.connectionSettings")}
+              </Button>
               {narrow ? (
                 <Dropdown
                   menu={{ items: secondaryMenuItems }}
@@ -385,7 +388,11 @@ export function MamepApp(): React.ReactNode {
                 </Dropdown>
               ) : (
                 <>
-                  <Button size="small" onClick={() => setPluginModalOpen(true)}>
+                  <Button
+                    size="small"
+                    icon={<AppstoreOutlined />}
+                    onClick={() => setPluginModalOpen(true)}
+                  >
                     {t("topbar.pluginManager")}
                   </Button>
                   <Button

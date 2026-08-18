@@ -182,15 +182,13 @@ body {
 }
 
 /* 连接控制区：左侧「Connection 入口 + 只读状态摘要」+ 弱分隔 + 右侧 Connect/Disconnect 操作，
-   作为完整逻辑单元；操作与状态明确分组，避免 Disconnect 与状态摘要语义混淆。 */
+   作为完整逻辑单元；操作与状态明确分组，避免 Disconnect 与状态摘要语义混淆。
+   无外框无底色（融入页面背景），状态区分交由内部 status-badge 柔和 chip 表达。 */
 .connection-cluster {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 2px 4px;
-  border: 1px solid var(--ant-color-split);
-  border-radius: 6px;
-  background: var(--ant-color-bg-container);
 }
 
 .connection-cluster__primary {
@@ -395,7 +393,6 @@ body {
   margin-top: auto;
   flex: none;
   padding: 6px 8px 8px;
-  border-top: 1px solid var(--mamep-border-subtle);
   font-size: 11px;
   color: var(--mamep-text-tertiary);
   white-space: nowrap;

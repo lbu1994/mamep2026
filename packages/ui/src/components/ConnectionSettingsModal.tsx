@@ -12,6 +12,12 @@ import {
   Space,
   Typography,
 } from "antd";
+import {
+  ApiOutlined,
+  CloseOutlined,
+  DisconnectOutlined,
+  UsbOutlined,
+} from "@ant-design/icons";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
@@ -122,7 +128,11 @@ export function ConnectionSettingsModal(): React.ReactNode {
         }
       }}
       footer={[
-        <Button key="cancel" onClick={() => setOpen(false)}>
+        <Button
+          key="cancel"
+          icon={<CloseOutlined />}
+          onClick={() => setOpen(false)}
+        >
           {t("connection.cancel")}
         </Button>,
         <Button
@@ -130,6 +140,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
           type={connected ? "default" : "primary"}
           danger={connected}
           loading={connecting || disconnecting}
+          icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
           onClick={() => {
             if (connected) {
               void onDisconnect();
@@ -160,7 +171,10 @@ export function ConnectionSettingsModal(): React.ReactNode {
                 </Typography.Text>
               ) : (
                 <Space>
-                  <Button onClick={() => void selectPort()}>
+                  <Button
+                    icon={<UsbOutlined />}
+                    onClick={() => void selectPort()}
+                  >
                     {t("connection.portSelect")}
                   </Button>
                   <Typography.Text>

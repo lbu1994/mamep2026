@@ -21,11 +21,27 @@ const SCALE_DIGITS: Partial<Record<DataType, number>> = {
   "signed-0.0001": 4,
 };
 
+/**
+ * 错误码 → i18n userMessageKey（packages/ui/src/i18n 驼峰 key，en-US 主 + zh-CN）。
+ * 必须与 i18n 文案 key 一致（回归：曾机械生成全小写 code，导致错误文案断链）。
+ */
+const DATA_ERROR_MESSAGE_KEY: Record<string, string> = {
+  DATA_EMPTY: "errors.dataEmpty",
+  DATA_HEX_INVALID: "errors.dataInvalidNumber",
+  DATA_HEX_TOO_LONG: "errors.dataOutOfRange",
+  DATA_BINARY_INVALID: "errors.dataInvalidNumber",
+  DATA_BINARY_TOO_LONG: "errors.dataOutOfRange",
+  DATA_INVALID_NUMBER: "errors.dataInvalidNumber",
+  DATA_TOO_MANY_DECIMALS: "errors.dataTooManyDecimals",
+  DATA_OUT_OF_RANGE: "errors.dataOutOfRange",
+  DATA_UNSUPPORTED_TYPE: "errors.internal",
+};
+
 function dataError(code: string, technicalMessage: string) {
   return createMamepError({
     code,
     category: "validation",
-    userMessageKey: `errors.${code.toLowerCase().replaceAll("_", "")}`,
+    userMessageKey: DATA_ERROR_MESSAGE_KEY[code] ?? "errors.internal",
     technicalMessage,
   });
 }

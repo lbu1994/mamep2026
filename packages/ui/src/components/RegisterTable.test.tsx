@@ -8,7 +8,11 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { RowId, SheetId } from "@mamep2026/domain";
+import {
+  createEmptyWorkspace,
+  type RowId,
+  type SheetId,
+} from "@mamep2026/domain";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import { RegisterTable } from "./RegisterTable";
@@ -162,5 +166,94 @@ describe("RegisterTable 三态状态点", () => {
       expect(document.querySelector(".register-table__status-dot--error")).toBeNull();
       expect(document.querySelector('input[aria-label="Data"]')).toBeTruthy();
     });
+  });
+});
+
+describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）", () => {
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({
+      host: null,
+      // 重置 workspace：避免前一个测试改过的 cellText/addressDraft 残留导致
+      // 编辑草稿与显示值相同而短路（draft === value 不触发提交）。
+      workspace: createEmptyWorkspace(),
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  /** 编辑第 index 行 Data 列提交指定值。 */
+  async function commitDataCell(index: number, value: string): Promise<void> {
+    const cell = screen.getAllByLabelText("Data")[index];
+    if (cell === undefined) throw new Error("missing data cell");
+    fireEvent.click(cell);
+    const input = screen.getAllByLabelText("Data")[index];
+    if (input === undefined) throw new Error("missing data input");
+    fireEvent.change(input, { target: { value } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  it("Data 列提交非法值：非编辑态出现 error 样式（红框+Tooltip），输入被保留", async () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+    // 默认 dataType=hex；"zz" 非法（DATA_HEX_INVALID）。
+    await commitDataCell(0, "zz");
+    await waitFor(() => {
+      expect(
+        document.querySelector(
+          ".register-table__editable-cell-value-wrap--error",
+        ),
+      ).toBeTruthy();
+    });
+    // 输入被保留（§23 校验失败不清空用户输入）。
+    expect(screen.getAllByLabelText("Data")[0]?.textContent).toBe("zz");
+    // 非法值不产生编辑完成态（灰点）。
+    expect(
+      document.querySelector(".register-table__status-dot--dirty"),
+    ).toBeNull();
+  });
+
+  it("Data 列提交非法值后再次合法提交：error 样式消失", async () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+    await commitDataCell(0, "zz");
+    await waitFor(() => {
+      expect(
+        document.querySelector(
+          ".register-table__editable-cell-value-wrap--error",
+        ),
+      ).toBeTruthy();
+    });
+    await commitDataCell(0, "1F");
+    await waitFor(() => {
+      expect(
+        document.querySelector(
+          ".register-table__editable-cell-value-wrap--error",
+        ),
+      ).toBeNull();
+    });
+  });
+
+  it("地址列已有合法地址后提交非法值：同样出现 error 样式（回归：addressValue 非空时校验红字丢失）", async () => {
+    // 先给第一行提交合法地址（默认表 radix=dec，"100" 合法）。
+    useAppStore.getState().commitRowAddress(firstRowId(), "100");
+    render(<RegisterTable sheetId={sheetId()} />);
+    const cell = screen.getAllByLabelText("Register")[0];
+    if (cell === undefined) throw new Error("missing register cell");
+    fireEvent.click(cell);
+    const input = screen.getAllByLabelText("Register")[0];
+    if (input === undefined) throw new Error("missing register input");
+    fireEvent.change(input, { target: { value: "xyz" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => {
+      expect(
+        document.querySelector(
+          ".register-table__editable-cell-value-wrap--error",
+        ),
+      ).toBeTruthy();
+    });
+    // 非法输入被保留。
+    expect(screen.getAllByLabelText("Register")[0]?.textContent).toBe("xyz");
   });
 });

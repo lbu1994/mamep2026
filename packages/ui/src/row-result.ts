@@ -34,10 +34,18 @@ export interface RowStatusState {
   rowResults: RowResults;
   rowDirty: Record<string, boolean>;
   rowSuccess: RowSuccessMap;
+  /** 单元格提交校验错误（纯 UI 会话状态，不持久化）：Data/地址列编辑提交非法值时记录，成功提交清除。
+   *  键 = `${rowId}:data`（Data 列）或 `${rowId}:address`（地址列），两列独立不串显。 */
+  cellValidationErrors: Record<string, RowFailure | undefined>;
 }
 
 export function createEmptyRowStatusState(): RowStatusState {
-  return { rowResults: {}, rowDirty: {}, rowSuccess: {} };
+  return {
+    rowResults: {},
+    rowDirty: {},
+    rowSuccess: {},
+    cellValidationErrors: {},
+  };
 }
 
 /** §18.2 写后回读结果 → 三态（success/failure/none）。 */
@@ -160,6 +168,72 @@ export function applyRowEdit(
   return { ...state, rowResults, rowDirty, rowSuccess };
 }
 
+/**
+ * 单元格提交（Data 列 / 地址列）校验结果 → 状态：
+ * - 成功：清除校验错误，复用 applyRowEdit 语义（值变化置编辑完成态并清成功点、回原值清编辑完成态）；
+ * - 失败：记录校验错误（cellValidationErrors，驱动单元格红框+Tooltip），清除设备失败态与成功点
+ *   （用户已接管值），保留编辑完成态（值仍未同步）；不清空输入（输入由 store 回写，§23）。
+ */
+export function applyCellCommit(
+  state: RowStatusState,
+  rowId: string,
+  before: string,
+  after: string,
+  result: Result<unknown>,
+): RowStatusState {
+  const key = `${rowId}:data`;
+  if (!result.ok) {
+    const cellValidationErrors = setValidationError(
+      state.cellValidationErrors,
+      key,
+      {
+        messageKey: result.error.userMessageKey,
+        detail: result.error.code,
+      },
+    );
+    const rowResults = removeFailure(state.rowResults, rowId);
+    const rowSuccess = removeSuccess(state.rowSuccess, rowId);
+    if (
+      cellValidationErrors === state.cellValidationErrors &&
+      rowResults === state.rowResults &&
+      rowSuccess === state.rowSuccess
+    ) {
+      return state;
+    }
+    return { ...state, cellValidationErrors, rowResults, rowSuccess };
+  }
+  const edit = applyRowEdit(state, rowId, before, after);
+  const cellValidationErrors = removeValidationError(
+    state.cellValidationErrors,
+    key,
+  );
+  if (edit === state && cellValidationErrors === state.cellValidationErrors) {
+    return state;
+  }
+  return { ...edit, cellValidationErrors };
+}
+
+/**
+ * 地址列校验错误状态：失败记录、成功清除；不触碰三态状态点
+ * （地址列无编辑完成态/成功点，§17.2 仅红框+Tooltip 反馈）。
+ * 键 = `${rowId}:address`，与 Data 列（rowId:data）独立不串显。
+ */
+export function applyCellValidation(
+  state: RowStatusState,
+  rowId: string,
+  result: Result<unknown>,
+): RowStatusState {
+  const key = `${rowId}:address`;
+  const cellValidationErrors = result.ok
+    ? removeValidationError(state.cellValidationErrors, key)
+    : setValidationError(state.cellValidationErrors, key, {
+        messageKey: result.error.userMessageKey,
+        detail: result.error.code,
+      });
+  if (cellValidationErrors === state.cellValidationErrors) return state;
+  return { ...state, cellValidationErrors };
+}
+
 // ---- 内部：幂等 set/remove（同态返回原引用，zustand 不触发订阅更新）----
 
 function setFailure(
@@ -217,6 +291,32 @@ function removeSuccess(
   current: RowSuccessMap,
   rowId: string,
 ): RowSuccessMap {
+  if (current[rowId] === undefined) return current;
+  const next = { ...current };
+  delete next[rowId];
+  return next;
+}
+
+function setValidationError(
+  current: Record<string, RowFailure | undefined>,
+  rowId: string,
+  failure: RowFailure,
+): Record<string, RowFailure | undefined> {
+  const existing = current[rowId];
+  if (
+    existing !== undefined &&
+    existing.messageKey === failure.messageKey &&
+    existing.detail === failure.detail
+  ) {
+    return current;
+  }
+  return { ...current, [rowId]: failure };
+}
+
+function removeValidationError(
+  current: Record<string, RowFailure | undefined>,
+  rowId: string,
+): Record<string, RowFailure | undefined> {
   if (current[rowId] === undefined) return current;
   const next = { ...current };
   delete next[rowId];

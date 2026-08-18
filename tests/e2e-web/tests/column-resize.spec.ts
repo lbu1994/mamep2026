@@ -157,3 +157,30 @@ test("column widths are independent per tab (不共享)", async ({ page }) => {
   const tab1Again = await columnWidth(page, "Name");
   expect(tab1Again).toBeGreaterThanOrEqual(tab1Width - 5);
 });
+
+/** 读取当前业务列顺序（过滤 selection 列等无文本 th）。 */
+async function columnHeadersOrder(page: Page): Promise<string[]> {
+  return tableHeader(page)
+    .locator("th")
+    .evaluateAll((ths) =>
+      ths
+        .map((th) => (th.textContent ?? "").trim())
+        .filter((text) => text !== ""),
+    );
+}
+
+test("resizing does not trigger column sorting (大幅调宽不拖走列)", async ({
+  page,
+}) => {
+  const errors = await openApp(page);
+  const before = await columnHeadersOrder(page);
+  const beforeWidth = await columnWidth(page, "Name");
+  // 大幅拖动 Name 列手柄（向右 +200px）：只应调宽，不得触发列排序把列拖走。
+  await dragHeaderHandle(page, "Name", 200);
+  await expect
+    .poll(async () => columnWidth(page, "Name"), { timeout: 3000 })
+    .toBeGreaterThan(beforeWidth + 150);
+  // 列顺序保持不变（列宽拖拽与列排序完全隔离）。
+  expect(await columnHeadersOrder(page)).toEqual(before);
+  expect(errors).toEqual([]);
+});

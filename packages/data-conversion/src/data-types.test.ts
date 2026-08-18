@@ -14,6 +14,61 @@ function expectParseFail(text: string, type: DataType, code: string): void {
   if (!result.ok) expect(result.error.code).toBe(code);
 }
 
+/** 校验失败必须携带与 i18n（packages/ui/src/i18n）一致的驼峰 userMessageKey（回归：曾生成全小写 code 断链）。 */
+function expectParseFailMessageKey(
+  text: string,
+  type: DataType,
+  key: string,
+): void {
+  const result = parseCellText(text, type);
+  expect(result.ok, `type=${type} text=${text}`).toBe(false);
+  if (!result.ok) expect(result.error.userMessageKey).toBe(key);
+}
+
+describe("data error userMessageKey（i18n 断链回归）", () => {
+  it("hex 非法字符映射 errors.dataInvalidNumber", () => {
+    expectParseFailMessageKey("zz", "hex", "errors.dataInvalidNumber");
+  });
+
+  it("hex 超过 4 位映射 errors.dataOutOfRange", () => {
+    expectParseFailMessageKey("ABCDE", "hex", "errors.dataOutOfRange");
+  });
+
+  it("binary 非法字符映射 errors.dataInvalidNumber", () => {
+    expectParseFailMessageKey("0b101", "binary", "errors.dataInvalidNumber");
+  });
+
+  it("binary 超过 16 位映射 errors.dataOutOfRange", () => {
+    expectParseFailMessageKey(
+      "11111111111111111",
+      "binary",
+      "errors.dataOutOfRange",
+    );
+  });
+
+  it("空输入映射 errors.dataEmpty", () => {
+    expectParseFailMessageKey("", "hex", "errors.dataEmpty");
+  });
+
+  it("数字格式非法映射 errors.dataInvalidNumber", () => {
+    expectParseFailMessageKey("1.5", "unsigned", "errors.dataInvalidNumber");
+    expectParseFailMessageKey("1e3", "unsigned", "errors.dataInvalidNumber");
+  });
+
+  it("越界映射 errors.dataOutOfRange", () => {
+    expectParseFailMessageKey("65536", "unsigned", "errors.dataOutOfRange");
+    expectParseFailMessageKey("-1", "unsigned", "errors.dataOutOfRange");
+  });
+
+  it("小数位超精度映射 errors.dataTooManyDecimals", () => {
+    expectParseFailMessageKey(
+      "12.34",
+      "unsigned-0.1",
+      "errors.dataTooManyDecimals",
+    );
+  });
+});
+
 describe("HEX type", () => {
   it("formats as fixed 4 uppercase hex digits without 0x prefix", () => {
     expect(formatRawValue(0x00ab, "hex")).toBe("00AB");

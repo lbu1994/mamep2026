@@ -23,7 +23,22 @@ import {
   Typography,
 } from "antd";
 import type { ListyRef } from "antd";
-import { CopyOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
+import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  CheckCircleOutlined,
+  ClearOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
+  CopyOutlined,
+  DownOutlined,
+  InfoCircleOutlined,
+  StopOutlined,
+  SyncOutlined,
+  UpOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
+import type { ConnectionState } from "@mamep2026/communication";
 import type { FlowControl } from "@mamep2026/domain";
 import type { CommunicationLogEntry } from "@mamep2026/logging";
 import { useAppStore } from "../app-store";
@@ -44,7 +59,16 @@ const CommLogRow = memo(function CommLogRow({
       <span className="log-row__time">
         {new Date(entry.timestamp).toLocaleTimeString()}
       </span>
-      <Tag color={entry.direction === "request" ? "blue" : "green"}>
+      <Tag
+        color={entry.direction === "request" ? "blue" : "green"}
+        icon={
+          entry.direction === "request" ? (
+            <ArrowUpOutlined />
+          ) : (
+            <ArrowDownOutlined />
+          )
+        }
+      >
         {entry.direction === "request"
           ? t("panel.request")
           : t("panel.response")}
@@ -56,6 +80,19 @@ const CommLogRow = memo(function CommLogRow({
   );
 });
 CommLogRow.displayName = "CommLogRow";
+
+/** 连接状态图标（与 MamepApp 顶栏 STATE_DOT_COLOR 语义对齐）。 */
+const STATE_ICON: Record<ConnectionState, React.ReactNode> = {
+  disconnected: <StopOutlined />,
+  "selecting-device": <SyncOutlined />,
+  connecting: <SyncOutlined />,
+  connected: <CheckCircleOutlined />,
+  disconnecting: <SyncOutlined />,
+  "reconnect-waiting": <ClockCircleOutlined />,
+  reconnecting: <SyncOutlined />,
+  interrupted: <ClockCircleOutlined />,
+  failed: <CloseCircleOutlined />,
+};
 
 export function BottomPanel(): React.ReactNode {
   const { t, i18n } = useTranslation();
@@ -108,6 +145,14 @@ export function BottomPanel(): React.ReactNode {
 
   const levelColor = (level: string): string =>
     level === "error" ? "red" : level === "warning" ? "orange" : "blue";
+  const levelIcon = (level: string): React.ReactNode =>
+    level === "error" ? (
+      <CloseCircleOutlined />
+    ) : level === "warning" ? (
+      <WarningOutlined />
+    ) : (
+      <InfoCircleOutlined />
+    );
 
   // 通信日志：自动滚动开关（会话级，不持久化）+ 跟随状态。
   const [autoScroll, setAutoScroll] = useState(true);
@@ -192,7 +237,11 @@ export function BottomPanel(): React.ReactNode {
             <span className="log-row__time">
               {new Date(message.timestamp).toLocaleTimeString()}
             </span>
-            <Tag className="log-row__level" color={levelColor(message.level)}>
+            <Tag
+              className="log-row__level"
+              color={levelColor(message.level)}
+              icon={levelIcon(message.level)}
+            >
               {message.level}
             </Tag>
             <span className="log-row__text">
@@ -243,7 +292,7 @@ export function BottomPanel(): React.ReactNode {
           >
             {t("panel.copy")}
           </Button>
-          <Button size="small" onClick={clearCommLog}>
+          <Button size="small" icon={<ClearOutlined />} onClick={clearCommLog}>
             {t("panel.clear")}
           </Button>
         </Space>
@@ -313,7 +362,10 @@ export function BottomPanel(): React.ReactNode {
           {properties.addressAdjust.toUpperCase()}
         </Descriptions.Item>
         <Descriptions.Item label={t("panel.status")}>
-          <Tag color={connectionState === "connected" ? "green" : "default"}>
+          <Tag
+            color={connectionState === "connected" ? "green" : "default"}
+            icon={STATE_ICON[connectionState]}
+          >
             {t(`state.${connectionState}`)}
           </Tag>
         </Descriptions.Item>

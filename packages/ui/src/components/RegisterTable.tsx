@@ -24,7 +24,11 @@ import {
   Tooltip,
 } from "antd";
 import type { InputRef } from "antd";
-import { HolderOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  HolderOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
 import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/core";
 import {
   closestCenter,
@@ -52,6 +56,7 @@ import { dataTypes } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { applyColumnOrder } from "@mamep2026/register-table";
 import { useAppStore } from "../app-store";
+import type { RowFailure } from "../row-result";
 import { clampColumnWidth } from "./column-resize";
 import { buildRowMenuItems, type RowMenuActions } from "./RegisterRowMenu";
 
@@ -253,33 +258,30 @@ const NameCell = memo(function NameCell({
 const RegisterCell = memo(function RegisterCell({
   rowId,
   addressDraft,
-  hasError,
+  error,
 }: {
   rowId: RowId;
   addressDraft: string;
-  hasError: boolean;
+  /** 地址校验错误（store 记录）：有值时红框 + Tooltip 显示具体原因。 */
+  error?: RowFailure | undefined;
 }) {
-  const { t } = useTranslation();
-  const updateRow = useAppStore((s) => s.updateRow);
+  const { t, i18n } = useTranslation();
   const commitRowAddress = useAppStore((s) => s.commitRowAddress);
+  const errorTip =
+    error !== undefined
+      ? i18n.exists(error.messageKey)
+        ? t(error.messageKey)
+        : error.messageKey
+      : undefined;
   return (
     <EditableCellValue
       value={addressDraft}
       ariaLabel="Register"
-      error={hasError}
-      errorTip={t("table.addressError")}
+      error={error !== undefined}
+      {...(errorTip !== undefined ? { errorTip } : {})}
       onCommit={(value) => {
-        const result = commitRowAddress(rowId, value);
-        // 校验失败：草稿写回 store 以保留用户输入（register-table 包与 §23 约定
-        // 「校验失败不得清空用户输入」）。旧实现靠编辑时实时写 addressDraft 保留；
-        // 现在草稿在本地，提交失败时必须显式回写，否则非编辑态会回退到旧值、丢失非法输入。
-        if (!result.ok) {
-          updateRow(rowId, (r) => ({
-            ...r,
-            addressDraft: value,
-            updatedAt: Date.now(),
-          }));
-        }
+        // 校验、输入保留（§23）、校验错误记录/清除统一由 store 的 commitRowAddress 处理。
+        commitRowAddress(rowId, value);
       }}
     />
   );
@@ -367,7 +369,12 @@ const ReadCell = memo(function ReadCell({
     // 读取失败不改变 Data 单元格内容（§17/§25），失败原因经状态点 Tooltip 展示。
   };
   const button = (
-    <Button size="small" disabled={disabled} onClick={() => void handleRead()}>
+    <Button
+      size="small"
+      type="primary"
+      disabled={disabled}
+      onClick={() => void handleRead()}
+    >
       {t("table.read")}
     </Button>
   );
@@ -384,12 +391,15 @@ const ReadCell = memo(function ReadCell({
 const DataCell = memo(function DataCell({
   rowId,
   cellText,
+  error,
 }: {
   rowId: RowId;
   cellText: string;
+  /** Data 校验错误（store 记录）：有值时红框 + Tooltip 显示具体原因。 */
+  error?: RowFailure | undefined;
 }) {
-  const updateRow = useAppStore((s) => s.updateRow);
-  const recordRowEdit = useAppStore((s) => s.recordRowEdit);
+  const { t, i18n } = useTranslation();
+  const commitCellText = useAppStore((s) => s.commitCellText);
   // 三态状态点选择器：返回原语/undefined，memo 只在该行状态变化时重渲染
   // （轮询值更新只改 cellText，rowResults/rowDirty/rowSuccess 引用不变则跳过）。
   const failure = useAppStore((s) => s.rowResults[rowId]);
@@ -404,21 +414,24 @@ const DataCell = memo(function DataCell({
     ) : success !== undefined ? (
       <RowStatusDot status="success" kind={success.kind} />
     ) : null;
+  const errorTip =
+    error !== undefined
+      ? i18n.exists(error.messageKey)
+        ? t(error.messageKey)
+        : error.messageKey
+      : undefined;
   return (
     <EditableCellValue
       value={cellText}
       ariaLabel="Data"
       // 空值占位「—」：区分「尚未读取/无值」与「有值」，纯 UI 派生，不进入草稿。
       emptyText="—"
+      error={error !== undefined}
+      {...(errorTip !== undefined ? { errorTip } : {})}
       trailing={dot}
       onCommit={(value) => {
-        // 编辑提交：对比「编辑前显示值」设置/清除编辑完成态（§row-result）。
-        recordRowEdit(rowId, cellText, value);
-        updateRow(rowId, (r) => ({
-          ...r,
-          cellText: value,
-          updatedAt: Date.now(),
-        }));
+        // 校验、输入保留（§23）、编辑完成态/校验错误统一由 store 的 commitCellText 处理。
+        commitCellText(rowId, value);
       }}
     />
   );
@@ -510,7 +523,12 @@ const WriteCell = memo(function WriteCell({
     }
   };
   const button = (
-    <Button size="small" disabled={disabled} onClick={() => void handleWrite()}>
+    <Button
+      size="small"
+      type="primary"
+      disabled={disabled}
+      onClick={() => void handleWrite()}
+    >
       {t("table.write")}
     </Button>
   );
@@ -550,6 +568,8 @@ const TypeCell = memo(function TypeCell({
       style={{ width: "100%" }}
       value={dataType}
       aria-label="Type"
+      placement="bottomLeft"
+      variant="borderless"
       onChange={(value: DataType) => setRowDataType(rowId, value)}
       options={options}
     />
@@ -756,6 +776,10 @@ function HeaderCell(props: ResizeHeaderCellProps): React.ReactNode {
         <span
           className="react-resizable-handle"
           onMouseDown={handleMouseDown}
+          // 关键：dnd-kit PointerSensor 的激活监听 pointerdown（绑在 th 上），
+          // 只阻止 mousedown 会让手柄按下+大幅移动时把「列拖拽」也触发（列被误拖走）。
+          // 手柄必须同时阻止 pointerdown 冒泡，列宽拖拽才与列排序完全隔离。
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         />
       ) : null}
@@ -790,6 +814,8 @@ interface RegisterTableProps {
 const ROW_HEIGHT = 29;
 /** 虚拟滚动启用阈值：行数超过该值启用 antd Table virtual（避免小表无谓开销）。 */
 const VIRTUAL_SCROLL_THRESHOLD = 500;
+/** 虚拟表在隐藏/未测量时的兜底表体高度（px）：scroll.y 必须为数字，显示后由 ResizeObserver 校正。 */
+const FALLBACK_VIRTUAL_HEIGHT = 480;
 
 /** antd Table 未在公开类型暴露但 virtual 模式运行时透传的 props（见 InternalTable virtualProps）。 */
 interface RegisterTableVirtualProps {
@@ -806,6 +832,7 @@ export const RegisterTable = memo(function RegisterTable({
 }: RegisterTableProps): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
+  const cellValidationErrors = useAppStore((s) => s.cellValidationErrors);
   const rows = useAppStore(
     (s) => s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.rows ?? [],
   );
@@ -1223,9 +1250,9 @@ export const RegisterTable = memo(function RegisterTable({
           <RegisterCell
             rowId={row.rowId}
             addressDraft={row.addressDraft}
-            hasError={
-              row.addressDraft.trim() !== "" && row.addressValue === null
-            }
+            {...(cellValidationErrors[`${row.rowId}:address`] !== undefined
+              ? { error: cellValidationErrors[`${row.rowId}:address`] }
+              : {})}
           />
         ),
       },
@@ -1260,7 +1287,13 @@ export const RegisterTable = memo(function RegisterTable({
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
         render: (_, row) => (
-          <DataCell rowId={row.rowId} cellText={row.cellText} />
+          <DataCell
+            rowId={row.rowId}
+            cellText={row.cellText}
+            {...(cellValidationErrors[`${row.rowId}:data`] !== undefined
+              ? { error: cellValidationErrors[`${row.rowId}:data`] }
+              : {})}
+          />
         ),
       },
       {
@@ -1307,7 +1340,7 @@ export const RegisterTable = memo(function RegisterTable({
         render: () => <DragHandle ariaLabel={t("table.dragHandle")} />,
       },
     ],
-    [t, registerRadix],
+    [t, registerRadix, cellValidationErrors],
   );
 
   // 合并拖拽列宽、按持久化列顺序重排，并挂载 onHeaderCell（供 HeaderCell 接收 id/width/onResize）。
@@ -1496,6 +1529,7 @@ export const RegisterTable = memo(function RegisterTable({
             size="small"
             type="primary"
             loading={readAllRunning}
+            icon={<ReloadOutlined />}
             onClick={() => void handleReadAll()}
           >
             {t("topbar.readAll")}
@@ -1567,17 +1601,27 @@ export const RegisterTable = memo(function RegisterTable({
                     pagination={false}
                     bordered
                     virtual={rows.length > VIRTUAL_SCROLL_THRESHOLD}
-                    {...(tableBodyHeight > 0
+                    {...(tableBodyHeight > 0 ||
+                    rows.length > VIRTUAL_SCROLL_THRESHOLD
                       ? ({
                           style: { flex: 1, minHeight: 0 },
                           listItemHeight: ROW_HEIGHT,
                         } as RegisterTableVirtualProps)
                       : {})}
-                    scroll={
-                      tableBodyHeight > 0
-                        ? { x: 920, y: tableBodyHeight }
-                        : { x: 920 }
-                    }
+                    scroll={{
+                      x: 920,
+                      // 虚拟表 scroll.y 必须为数字：隐藏未测量表（tableBodyHeight=0）用兜底高度，
+                      // 显示后由 ResizeObserver 校正。否则 rc-table 虚拟渲染失败（0 行 + 报错，2026-08-18 复现）。
+                      ...(tableBodyHeight > 0 ||
+                      rows.length > VIRTUAL_SCROLL_THRESHOLD
+                        ? {
+                            y:
+                              tableBodyHeight > 0
+                                ? tableBodyHeight
+                                : FALLBACK_VIRTUAL_HEIGHT,
+                          }
+                        : {}),
+                    }}
                     rowSelection={{
                       // 固定复选框列宽（antd 内置能力）：不可拖拽调整。
                       columnWidth: 32,

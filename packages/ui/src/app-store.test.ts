@@ -772,3 +772,94 @@ describe("row 状态点 actions", () => {
     expect(useAppStore.getState().rowDirty["r1" as RowId]).toBeUndefined();
   });
 });
+
+describe("commitCellText（Data 单元格提交校验）", () => {
+  function resetRowStatus(): void {
+    useAppStore.setState({
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  }
+
+  function addFirstRow() {
+    const id = firstSheetId();
+    useAppStore.getState().addRow(id);
+    const sheet = useAppStore
+      .getState()
+      .workspace.sheets.find((s) => s.sheetId === id);
+    const row = sheet?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    // createEmptyRow 默认 dataType=hex；校验断言用 unsigned 的 DATA_INVALID_NUMBER。
+    useAppStore
+      .getState()
+      .updateRow(row.rowId, (r) => ({ ...r, dataType: "unsigned" }));
+    const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    if (updated === undefined) throw new Error("missing updated row");
+    return updated;
+  }
+
+  it("提交合法值：写 cellText、置编辑完成态、返回 ok", () => {
+    resetRowStatus();
+    const row = addFirstRow();
+    const result = useAppStore.getState().commitCellText(row.rowId, "42");
+    expect(result.ok).toBe(true);
+    const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    expect(updated?.cellText).toBe("42");
+    expect(useAppStore.getState().rowDirty[row.rowId]).toBe(true);
+    expect(
+      useAppStore.getState().cellValidationErrors[`${row.rowId}:data`],
+    ).toBeUndefined();
+  });
+
+  it("提交非法值：保留用户输入、记录校验错误、不置编辑完成态、返回失败", () => {
+    resetRowStatus();
+    const row = addFirstRow();
+    const result = useAppStore.getState().commitCellText(row.rowId, "zz");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("DATA_INVALID_NUMBER");
+    const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    // §23：校验失败保留用户输入。
+    expect(updated?.cellText).toBe("zz");
+    expect(useAppStore.getState().cellValidationErrors[`${row.rowId}:data`]).toEqual({
+      messageKey: "errors.dataInvalidNumber",
+      detail: "DATA_INVALID_NUMBER",
+    });
+    expect(useAppStore.getState().rowDirty[row.rowId]).toBeUndefined();
+  });
+
+  it("非法提交后再次合法提交：清除校验错误并置编辑完成态", () => {
+    resetRowStatus();
+    const row = addFirstRow();
+    useAppStore.getState().commitCellText(row.rowId, "zz");
+    const result = useAppStore.getState().commitCellText(row.rowId, "42");
+    expect(result.ok).toBe(true);
+    expect(
+      useAppStore.getState().cellValidationErrors[`${row.rowId}:data`],
+    ).toBeUndefined();
+    expect(useAppStore.getState().rowDirty[row.rowId]).toBe(true);
+  });
+
+  it("编辑清除校验错误同时清除既有设备失败态（用户已接管值）", () => {
+    resetRowStatus();
+    const row = addFirstRow();
+    useAppStore.getState().recordManualResult(
+      row.rowId,
+      fail(
+        createMamepError({
+          code: "REQUEST_TIMEOUT",
+          category: "timeout",
+          userMessageKey: "errors.requestTimeout",
+          technicalMessage: "timeout",
+        }),
+      ),
+      "read",
+    );
+    useAppStore.getState().commitCellText(row.rowId, "zz");
+    expect(useAppStore.getState().rowResults[row.rowId]).toBeUndefined();
+    expect(
+      useAppStore.getState().cellValidationErrors[`${row.rowId}:data`],
+    ).toBeTruthy();
+  });
+});
