@@ -103,6 +103,8 @@ export interface RegisterSheet {
   rows: RegisterRow[];
   /** Register 地址列进制：默认 DEC（每表独立，ADR-014） */
   registerRadix: RegisterRadix;
+  /** 各列拖拽宽度（每表独立，随工作区持久化；只含用户拖拽过的列，未记录列用默认宽，2026-08-18） */
+  columnWidths: Record<string, number>;
   createdAt: number;
   updatedAt: number;
 }
@@ -256,6 +258,7 @@ export function createRegisterSheet(
     order,
     rows: createDefaultSheetRows(defaultConfig.registerTable.defaultRowCount),
     registerRadix: defaultConfig.registerTable.addressRadix,
+    columnWidths: {},
     createdAt: now,
     updatedAt: now,
   };

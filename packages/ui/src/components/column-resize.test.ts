@@ -15,6 +15,12 @@ describe("clampColumnWidth", () => {
     expect(clampColumnWidth("actions", 50)).toBe(COLUMN_MIN_WIDTHS["actions"]);
   });
 
+  it("type column default width (72) sits at its min width and is not clamped away", () => {
+    expect(COLUMN_MIN_WIDTHS["type"]).toBe(72);
+    expect(clampColumnWidth("type", 72)).toBe(72);
+    expect(clampColumnWidth("type", 10)).toBe(72);
+  });
+
   it("uses the fallback minimum for unknown column keys", () => {
     expect(clampColumnWidth("unknown", 10)).toBe(40);
     expect(clampColumnWidth("unknown", 120)).toBe(120);

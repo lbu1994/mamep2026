@@ -5,7 +5,8 @@
 
 /**
  * 各列可拖拽的最小宽度（px）。
- * 窄功能列（No/TM/WP/READ/WRITE）40；数据列（Name/Register/Data/Type/Comment）80；
+ * 窄功能列（No/TM/WP/READ/WRITE）40；数据列（Name/Register/Data/Comment）80；
+ * Type 72（其默认宽已减半为 72，minWidth 同步为 72 保证默认宽不被钳制）；
  * 操作列（Actions）96，避免操作按钮换行。
  */
 export const COLUMN_MIN_WIDTHS: Record<string, number> = {
@@ -17,7 +18,7 @@ export const COLUMN_MIN_WIDTHS: Record<string, number> = {
   read: 40,
   write: 40,
   data: 80,
-  type: 80,
+  type: 72,
   comment: 80,
   actions: 96,
 };

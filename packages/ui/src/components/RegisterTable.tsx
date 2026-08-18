@@ -626,10 +626,13 @@ interface ResizeHeaderCellProps extends React.ThHTMLAttributes<HTMLTableCellElem
   width?: number;
   /** 拖拽回调：由 onHeaderCell 透传（非 antd 标准 ColumnType 属性，仅自定义 header cell 消费）。 */
   onResize?: (event: MouseEvent, data: ResizeCallbackData) => void;
+  /** 拖拽结束回调（mouseup）：一次性提交最终列宽（持久化），避免拖拽帧级写 store。 */
+  onResizeEnd?: () => void;
 }
 
 function ResizableTitle(props: ResizeHeaderCellProps): React.ReactNode {
-  const { onResize, width, children, className, ...restProps } = props;
+  const { onResize, onResizeEnd, width, children, className, ...restProps } =
+    props;
   const thRef = useRef<HTMLTableCellElement>(null);
 
   const handleMouseDown = (event: React.MouseEvent<HTMLSpanElement>): void => {
@@ -650,6 +653,8 @@ function ResizableTitle(props: ResizeHeaderCellProps): React.ReactNode {
     const handleMouseUp = (): void => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      // 拖拽结束提交最终列宽（持久化一次；本地 state 已在最后一次 mousemove 镜像到 ref）。
+      onResizeEnd?.();
     };
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
@@ -713,7 +718,9 @@ interface RegisterTableVirtualProps {
   style?: React.CSSProperties;
 }
 
-export function RegisterTable({
+// memo：多标签页下仅当本表自身 props（sheetId）/订阅数据变化才重渲染，
+// 避免切换页签时所有已挂载表随父组件（MamepApp）整体重渲染（Tab 切换卡顿根因）。
+export const RegisterTable = memo(function RegisterTable({
   sheetId,
 }: RegisterTableProps): React.ReactNode {
   const { t } = useTranslation();
@@ -724,12 +731,22 @@ export function RegisterTable({
   const addRow = useAppStore((s) => s.addRow);
   const appendMessage = useAppStore((s) => s.appendMessage);
   const setSheetRegisterRadix = useAppStore((s) => s.setSheetRegisterRadix);
+  const setSheetColumnWidths = useAppStore((s) => s.setSheetColumnWidths);
+  const persistedColWidths = useAppStore(
+    (s) =>
+      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.columnWidths ??
+      {},
+  );
   const [readAllRunning, setReadAllRunning] = useState(false);
   const [menuRowId, setMenuRowId] = useState<RowId | null>(null);
-  // 拖拽列宽（纯 UI 状态，会话内有效，不持久化）：仅记录用户拖拽过的列，未拖的列用默认宽。
-  const [colWidths, setColWidths] = useState<Partial<Record<string, number>>>(
-    {},
+  // 拖拽列宽（每表独立，随 workspace 持久化，IndexedDB 自动保存）：初始化取本表已保存宽度。
+  // 拖拽过程仅改本地 state（拖拽帧级渲染只在本表内），mouseup 时一次性提交 store（触发自动保存）。
+  // 不逐帧写 store：避免拖拽帧级 workspace 变更引发订阅者重渲染与调度器/保存副作用。
+  const [colWidths, setColWidths] = useState<Record<string, number>>(
+    persistedColWidths,
   );
+  // 最新列宽镜像：拖拽事件内同步更新（不经渲染），保证 mouseup 提交时拿到完整最终值。
+  const colWidthsRef = useRef(colWidths);
   const flexRef = useRef<HTMLDivElement | null>(null);
   const [tableBodyHeight, setTableBodyHeight] = useState(0);
   // 虚拟滚动需要确定的可视高度：表格可视区 = Flex 高度 − 工具栏高度；
@@ -740,7 +757,13 @@ export function RegisterTable({
     const measure = (): void => {
       const toolbar = flexEl.querySelector<HTMLElement>(".table-toolbar");
       const toolbarHeight = toolbar?.offsetHeight ?? 0;
-      setTableBodyHeight(Math.max(flexEl.clientHeight - toolbarHeight, 0));
+      const next = flexEl.clientHeight - toolbarHeight;
+      // 面板隐藏（display:none）时 clientHeight 为 0：保持上次有效高度不重置，避免
+      // scroll.y 在 0↔实际高 间切换导致 rc-table 重建全部行（含 dnd-kit useSortable，
+      // 每次 Tab 切换重建 50 行 ≈ 1s 卡顿根因，2026-08-18 实测）。显示时高度不变 → React 跳过重渲染。
+      // 已知限制：挂载即隐藏的表首显会补测一次（每表每会话一次 ~1s，根因是 useSortable 每行成本）。
+      if (next <= 0) return;
+      setTableBodyHeight(Math.max(next, 0));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -748,9 +771,6 @@ export function RegisterTable({
     return () => ro.disconnect();
   }, []);
 
-  const activeSheetId = useAppStore(
-    (s) => s.activeSheetId ?? s.workspace.activeSheetId,
-  );
   const selectedRowIds = useAppStore((s) => s.selectedRowIds);
   const setSelectedRowIds = useAppStore((s) => s.setSelectedRowIds);
   const insertRowAfter = useAppStore((s) => s.insertRowAfter);
@@ -928,7 +948,12 @@ export function RegisterTable({
    * 且仅作用于当前活动表（多标签页只响应一张表）。
    */
   const handleGlobalKeyDown = (event: KeyboardEvent): void => {
-    if (sheetId !== activeSheetId) return;
+    // 活动表在事件回调时实时读取（不经响应式订阅）：多标签页下避免全部表因
+    // activeSheetId 变化而重渲染（Tab 切换卡顿根因之一）。
+    const store = useAppStore.getState();
+    if (sheetId !== (store.activeSheetId ?? store.workspace.activeSheetId)) {
+      return;
+    }
     const target = event.target;
     // 仅忽略文本类编辑控件（单元格输入/备注/下拉/可编辑单元格非编辑态按钮），避免与编辑冲突；
     // 复选框/开关/按钮等选择控件不拦截快捷键（选中后可直接 Delete/Ctrl+C 等）。
@@ -1025,17 +1050,30 @@ export function RegisterTable({
           rowMenuActions,
         );
 
-  /** 拖拽列宽回调：钳制到该列 minWidth 后写入 colWidths（每次拖拽更新 state，实时生效）。 */
+  /** 拖拽列宽回调：钳制到该列 minWidth 后写入本地 colWidths（拖拽过程实时生效）。 */
   const handleResize = useCallback(
     (key: React.Key) =>
       (_event: MouseEvent, data: ResizeCallbackData): void => {
         const columnKey = String(key);
-        setColWidths((prev) => ({
-          ...prev,
+        const next = {
+          ...colWidthsRef.current,
           [columnKey]: clampColumnWidth(columnKey, data.size.width),
-        }));
+        };
+        colWidthsRef.current = next;
+        setColWidths(next);
       },
     [],
+  );
+
+  /** 拖拽结束（mouseup）一次性提交到 store：workspace 变更 → 自动保存（IndexedDB）。
+   *  提交 ref 镜像值，避免 setState 异步时序丢最后一段宽度；本表列宽只由本组件写入。
+   *  工厂形式（与 handleResize 同款）：返回的回调在事件中才读 ref，避免 react-hooks/refs
+   *  把「读 ref 的函数」当作 render 期直传（经 onHeaderCell 透传会被静态规则误报）。 */
+  const makeCommitColWidths = useCallback(
+    () => () => {
+      setSheetColumnWidths(sheetId, colWidthsRef.current);
+    },
+    [setSheetColumnWidths, sheetId],
   );
 
   const baseColumns = useMemo<ColumnType<RegisterRow>[]>(
@@ -1070,8 +1108,8 @@ export function RegisterTable({
             ? t("table.registerHex")
             : t("table.registerDec"),
         key: "address",
-        // 默认宽 144：等宽字体下表头 "Register[DEC]" 单行完整显示，且与 Name(150)/Type(144)
-        // 视觉协调。拖拽仍可自由调整（minWidth 80），此值仅默认宽度。
+        // 默认宽 144：等宽字体下表头 "Register[DEC]" 单行完整显示，且与 Name(150) 视觉协调。
+        // 拖拽仍可自由调整（minWidth 80），此值仅默认宽度。
         width: 144,
         align: "center",
         className: "register-table__cell--center register-table__cell--mono",
@@ -1133,7 +1171,9 @@ export function RegisterTable({
       {
         title: t("table.type"),
         key: "type",
-        width: 144,
+        // 默认宽 72：为原默认宽（144）的一半（用户需求）。Type 下拉在窄列下省略显示；
+        // 拖拽仍可自由调整（COLUMN_MIN_WIDTHS.type 已同步下调为 72，保证默认宽不被钳制）。
+        width: 72,
         align: "center",
         className: "register-table__cell--center",
         render: (_, row) => (
@@ -1175,10 +1215,13 @@ export function RegisterTable({
       baseColumns.map((col) => {
         const fixed =
           col.key !== undefined && FIXED_WIDTH_COLUMNS.has(String(col.key));
-        // 固定列忽略会话内 colWidths 覆盖（防御：残留 state 不得改变固定列宽）。
-        const width = fixed
-          ? col.width
-          : (colWidths[String(col.key)] ?? col.width);
+        // 仅「有默认宽且非固定宽」的可调列接受 colWidths 覆盖：固定列忽略（防御：残留 state
+        // 不得改变固定列宽）；弹性列（Comment 无 width）绝不接受覆盖，防止持久化残留数据
+        // 破坏弹性列设计（table-layout:fixed 下需保留至少一列无宽弹性列）。
+        const width =
+          fixed || col.width === undefined
+            ? col.width
+            : (colWidths[String(col.key)] ?? col.width);
         return {
           ...col,
           ...(width !== undefined ? { width } : {}),
@@ -1196,13 +1239,14 @@ export function RegisterTable({
                   return {
                     ...(cellWidth !== undefined ? { width: cellWidth } : {}),
                     ...(onResize !== undefined ? { onResize } : {}),
+                    onResizeEnd: makeCommitColWidths(),
                   };
                 },
               }
             : {}),
         };
       }),
-    [baseColumns, colWidths, handleResize],
+    [baseColumns, colWidths, handleResize, makeCommitColWidths],
   );
 
   // 行级 memo（性能优化）：rc-table 的 BodyRow 通过 immutable mark 随表根重渲染，
@@ -1464,4 +1508,4 @@ export function RegisterTable({
       </DndContext>
     </Flex>
   );
-}
+});

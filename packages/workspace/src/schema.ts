@@ -58,6 +58,10 @@ const sheetSchema = z.object({
   rows: z.array(rowSchema),
   /** Register 地址列进制：默认 DEC（ADR-014）；老数据缺省时补默认值，无需迁移 */
   registerRadix: z.enum(["dec", "hex"]).default("dec"),
+  /** 各列拖拽宽度（随表持久化，2026-08-18）；老数据缺省补默认 {}，无需迁移 */
+  columnWidths: z
+    .record(z.string(), z.number().finite().positive())
+    .default({}),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

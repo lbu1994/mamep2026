@@ -351,15 +351,33 @@ describe("commitRowAddress radix", () => {
   });
 });
 
+describe("setSheetColumnWidths", () => {
+  it("只修改目标表的 columnWidths，不影响其他表（每表独立不共享）", () => {
+    const store = useAppStore.getState();
+    store.addSheet(); // Sheet 2
+    const first = firstSheetId();
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (second === undefined) throw new Error("missing second sheet");
+    useAppStore.getState().setSheetColumnWidths(first, { name: 210 });
+    const after = useAppStore.getState().workspace.sheets;
+    expect(after[0]?.columnWidths).toEqual({ name: 210 });
+    expect(after[1]?.columnWidths).toEqual({});
+    expect(after.find((s) => s.sheetId === second)?.columnWidths).toEqual({});
+  });
+});
+
 describe("duplicateSheet radix inheritance", () => {
-  it("副本继承源表的 registerRadix", () => {
+  it("副本继承源表的 registerRadix 与 columnWidths", () => {
     const store = useAppStore.getState();
     const sourceId = firstSheetId();
     store.setSheetRegisterRadix(sourceId, "hex");
+    store.setSheetColumnWidths(sourceId, { name: 210 });
     store.duplicateSheet(sourceId);
     const after = useAppStore.getState();
     expect(after.workspace.sheets[0]?.registerRadix).toBe("hex");
     expect(after.workspace.sheets[1]?.registerRadix).toBe("hex");
+    expect(after.workspace.sheets[0]?.columnWidths).toEqual({ name: 210 });
+    expect(after.workspace.sheets[1]?.columnWidths).toEqual({ name: 210 });
   });
 });
 

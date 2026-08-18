@@ -247,4 +247,31 @@ describe("workspace schema round-trip", () => {
     if (!parsed.ok) return;
     expect(parsed.value.sheets[0]?.registerRadix).toBe("hex");
   });
+
+  it("defaults sheet columnWidths to {} for legacy data without the field", () => {
+    const legacy = JSON.parse(serializeWorkspace(createEmptyWorkspace()));
+    // 模拟老版本数据：sheet 无 columnWidths 字段。
+    for (const sheet of legacy.sheets) {
+      delete sheet.columnWidths;
+    }
+    const parsed = parseWorkspace(legacy);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.columnWidths).toEqual({});
+  });
+
+  it("preserves per-sheet columnWidths across a round-trip", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      const sheet = w.sheets[0];
+      if (sheet === undefined) return;
+      sheet.columnWidths = { name: 210, type: 90 };
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.columnWidths).toEqual({
+      name: 210,
+      type: 90,
+    });
+  });
 });

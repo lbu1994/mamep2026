@@ -100,3 +100,60 @@ test("dragging far left clamps the column to its min width", async ({
   expect(await columnWidth(page, "Name")).toBeGreaterThanOrEqual(75);
   expect(errors).toEqual([]);
 });
+
+test("Type column defaults to half of the previous width (72px)", async ({
+  page,
+}) => {
+  await openApp(page);
+  // 默认宽 72：antd 单元格 border-box，offsetWidth ≈ 72（与 Name 钳制测试同款容差 ±5）。
+  const width = await columnWidth(page, "Type");
+  expect(width).toBeGreaterThanOrEqual(67);
+  expect(width).toBeLessThanOrEqual(77);
+});
+
+test("resized column widths persist across a page reload", async ({ page }) => {
+  await openApp(page);
+  await dragHeaderHandle(page, "Name", 60);
+  const before = await columnWidth(page, "Name");
+  // 拖后应明显大于默认 150。
+  expect(before).toBeGreaterThan(170);
+  // 等待 IndexedDB 自动保存落盘（AppHost 防抖 500ms + 异步写入），避免刷新竞态。
+  await page.waitForTimeout(1000);
+  await page.reload();
+  // Mock 模式刷新后自动重连，就绪信号与 openApp 一致。
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+    timeout: 15000,
+  });
+  // 刷新后列宽保持（workspace 恢复），不回默认宽。
+  const after = await columnWidth(page, "Name");
+  expect(after).toBeGreaterThanOrEqual(before - 5);
+});
+
+test("column widths are independent per tab (不共享)", async ({ page }) => {
+  await openApp(page);
+  // 表 1：拖宽 Name。
+  await dragHeaderHandle(page, "Name", 60);
+  const tab1Width = await columnWidth(page, "Name");
+  expect(tab1Width).toBeGreaterThan(170);
+  // 新建表 2（addSheet 自动激活）。
+  await page
+    .locator(".register-table-tabs .ant-tabs-nav-list .ant-tabs-nav-add")
+    .click();
+  await expect(
+    page.locator(".register-table-tabs .ant-tabs-content-active"),
+  ).toContainText("Name");
+  // 表 2 的 Name 为默认宽（与表 1 不共享）。
+  const tab2Width = await columnWidth(page, "Name");
+  expect(tab2Width).toBeGreaterThanOrEqual(145);
+  expect(tab2Width).toBeLessThanOrEqual(155);
+  // 切回表 1：仍保持拖宽值。
+  await page
+    .locator(".register-table-tabs div[role=tab]")
+    .filter({ hasText: "Sheet 1" })
+    .click();
+  await expect(
+    page.locator(".register-table-tabs .ant-tabs-content-active"),
+  ).toContainText("Name");
+  const tab1Again = await columnWidth(page, "Name");
+  expect(tab1Again).toBeGreaterThanOrEqual(tab1Width - 5);
+});

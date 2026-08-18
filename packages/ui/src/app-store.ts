@@ -151,6 +151,11 @@ export interface AppStoreState {
   setRowDataType: (rowId: RowId, dataType: DataType) => void;
   /** 设置某张表的 Register 地址列进制（DEC/HEX），随自动保存持久化（ADR-014）。 */
   setSheetRegisterRadix: (sheetId: SheetId, radix: RegisterRadix) => void;
+  /** 设置某张表的列宽（每表独立，随表持久化，IndexedDB 自动保存）。 */
+  setSheetColumnWidths: (
+    sheetId: SheetId,
+    widths: Record<string, number>,
+  ) => void;
 
   openTraceWindow: (rowId: RowId) => void;
   closeTraceWindow: (rowId: RowId) => void;
@@ -672,8 +677,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       const source = state.workspace.sheets[sourceIndex];
       if (source === undefined) return state;
       const copy = createRegisterSheet(`${source.name} Copy`, sourceIndex + 1);
-      // 副本继承源表的 Register 地址进制（结构偏好随复制保留）。
+      // 副本继承源表的 Register 地址进制与列宽（结构偏好随复制保留）。
       copy.registerRadix = source.registerRadix;
+      copy.columnWidths = { ...source.columnWidths };
       copy.rows = source.rows.map((row) => ({
         ...row,
         rowId: newRowId(),
@@ -735,6 +741,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         sheets: state.workspace.sheets.map((sheet) =>
           sheet.sheetId === sheetId
             ? { ...sheet, registerRadix: radix, updatedAt: Date.now() }
+            : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
+    })),
+
+  setSheetColumnWidths: (sheetId, widths) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId
+            ? { ...sheet, columnWidths: widths, updatedAt: Date.now() }
             : sheet,
         ),
         updatedAt: Date.now(),

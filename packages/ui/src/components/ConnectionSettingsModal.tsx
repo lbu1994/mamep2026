@@ -35,9 +35,12 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const host = useAppStore((s) => s.host);
   const workspace = useAppStore((s) => s.workspace);
   const connectionState = useAppStore((s) => s.connectionState);
+  // 已连接判定语义与顶栏 connection-cluster 一致（仅 connected 视为已连接）。
+  const connected = connectionState === "connected";
   const [selectedHandle, setSelectedHandle] =
     useState<SerialDeviceHandle | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const profile = workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
@@ -85,6 +88,22 @@ export function ConnectionSettingsModal(): React.ReactNode {
     }
   });
 
+  const onDisconnect = async (): Promise<void> => {
+    if (host === null || host === undefined) return;
+    setConnectError(null);
+    setDisconnecting(true);
+    try {
+      const result = await host.disconnect();
+      if (!result.ok) {
+        setConnectError(
+          `${t(result.error.userMessageKey)} (${result.error.technicalMessage})`,
+        );
+      }
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   return (
     <Modal
       title={t("connection.title")}
@@ -108,11 +127,18 @@ export function ConnectionSettingsModal(): React.ReactNode {
         </Button>,
         <Button
           key="connect"
-          type="primary"
-          loading={connecting}
-          onClick={() => void onSubmit()}
+          type={connected ? "default" : "primary"}
+          danger={connected}
+          loading={connecting || disconnecting}
+          onClick={() => {
+            if (connected) {
+              void onDisconnect();
+            } else {
+              void onSubmit();
+            }
+          }}
         >
-          {t("connection.connect")}
+          {connected ? t("connection.disconnect") : t("connection.connect")}
         </Button>,
       ]}
     >
