@@ -80,12 +80,12 @@ test("narrow viewport moves secondary header actions into a More menu", async ({
   const moreBtn = page.getByRole("button", { name: "More", exact: true });
   await expect(moreBtn).toBeVisible();
 
-  // More 菜单包含 Settings / Help / Theme。
+  // More 菜单包含 Settings / Help（主题仅能在 Settings 中修改，顶栏无直达入口）。
   await moreBtn.click();
   const menu = page.locator(".ant-dropdown-menu:visible");
   await expect(menu.getByText("Settings", { exact: true })).toBeVisible();
   await expect(menu.getByText("Help", { exact: true })).toBeVisible();
-  await expect(menu.getByText("Theme", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Theme", { exact: true })).toHaveCount(0);
 
   // 连接状态始终可见。
   await expect(page.locator(".status-badge")).toContainText("Online");

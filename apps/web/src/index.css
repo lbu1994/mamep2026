@@ -719,6 +719,14 @@ body {
   font-family: var(--mamep-font-mono);
 }
 
+/* 表头回退普通字体：antd 列级 className 会同时作用于表头 th 与正文 td，
+   此规则仅把 Register/Data 的表头（th）恢复为 UI 字体，与其余表头一致；
+   优先级 (0,3,1) 高于上方 --mono 规则 (0,2,0)，正文 td 与编辑态 Input 的
+   等宽字体不受影响（正文仍由上方规则匹配）。 */
+.register-table-tabs .ant-table-thead th.register-table__cell--mono {
+  font-family: var(--mamep-font-ui);
+}
+
 /* WP 开关 + 轮询指示：无合法地址时禁用；开启且在线时显示品牌色脉冲点
    （非纯颜色状态，配 Tooltip 与 aria-label 表达「正在轮询」）。 */
 .register-table__wp {

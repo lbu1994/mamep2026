@@ -755,10 +755,27 @@ export const RegisterTable = memo(function RegisterTable({
     const flexEl = flexRef.current;
     if (flexEl === null) return;
     const measure = (): void => {
+      // 表体可视高度 = 容器底部 − 表头底部。antd Table 的 scroll.y 指「表体滚动区」高度
+      // （表头固定在其上方），旧算法只减工具栏、未减表头（≈26px）与表格边框，导致 scroll.y 偏大
+      // → 表体超出可视区，行数超一屏时最后一行被 .register-table-wrap 的 overflow:hidden 截断。
+      // 这里直接测「表头底 → 容器底」间距，自动计入工具栏高度/表头高度/边框，无需硬编码。
+      // 表头在非滚动模式下位于 .ant-table-content 内（.ant-table-thead），滚动模式下位于
+      // .ant-table-header 内；两者底部一致，均可用。
+      const header = flexEl.querySelector<HTMLElement>(
+        ".ant-table-header, .ant-table-thead",
+      );
       const toolbar = flexEl.querySelector<HTMLElement>(".table-toolbar");
       const toolbarHeight = toolbar?.offsetHeight ?? 0;
-      const next = flexEl.clientHeight - toolbarHeight;
-      // 面板隐藏（display:none）时 clientHeight 为 0：保持上次有效高度不重置，避免
+      let next: number;
+      if (header !== null && header !== undefined) {
+        const flexRect = flexEl.getBoundingClientRect();
+        const headerBottom = header.getBoundingClientRect().bottom;
+        next = Math.round(flexRect.top + flexEl.clientHeight - headerBottom);
+      } else {
+        // 表头尚未渲染（防御）：退回旧算法（只减工具栏）。
+        next = flexEl.clientHeight - toolbarHeight;
+      }
+      // 面板隐藏（display:none）时所有尺寸为 0：保持上次有效高度不重置，避免
       // scroll.y 在 0↔实际高 间切换导致 rc-table 重建全部行（含 dnd-kit useSortable，
       // 每次 Tab 切换重建 50 行 ≈ 1s 卡顿根因，2026-08-18 实测）。显示时高度不变 → React 跳过重渲染。
       // 已知限制：挂载即隐藏的表首显会补测一次（每表每会话一次 ~1s，根因是 useSortable 每行成本）。

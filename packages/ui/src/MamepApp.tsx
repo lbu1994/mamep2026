@@ -22,11 +22,8 @@ import {
 } from "antd";
 import {
   ApiOutlined,
-  BulbOutlined,
   DisconnectOutlined,
   LeftOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   MoreOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
@@ -296,11 +293,6 @@ export function MamepApp(): React.ReactNode {
       onDelete: handleDeleteSheet,
     });
 
-  const toggleTheme = (): void => {
-    const next = theme === "light" ? "dark" : "light";
-    setTheme(next);
-  };
-
   // 顶栏次要操作：窄窗口收入 More 下拉（与展开态按钮共享动作）。
   const secondaryMenuItems: NonNullable<MenuProps["items"]> = [
     {
@@ -318,11 +310,6 @@ export function MamepApp(): React.ReactNode {
       label: t("topbar.help"),
       onClick: () => setHelpOpen(true),
     },
-    {
-      key: "theme",
-      label: t("topbar.theme"),
-      onClick: toggleTheme,
-    },
   ];
 
   return (
@@ -330,23 +317,6 @@ export function MamepApp(): React.ReactNode {
       <AntApp>
         <Layout style={{ height: "100vh" }}>
           <Layout.Header className="mamep-header">
-            <Tooltip title={t("topbar.toggleSidebar")}>
-              <Button
-                type="text"
-                size="small"
-                aria-label={t("topbar.toggleSidebar")}
-                icon={
-                  sidebarCollapsed ? (
-                    <MenuUnfoldOutlined />
-                  ) : (
-                    <MenuFoldOutlined />
-                  )
-                }
-                onClick={() =>
-                  setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
-                }
-              />
-            </Tooltip>
             <div className="mamep-header__brand">
               <Typography.Text className="mamep-header__brand-title">
                 {t("app.title")}
@@ -432,14 +402,6 @@ export function MamepApp(): React.ReactNode {
                   >
                     {t("topbar.help")}
                   </Button>
-                  <Tooltip title={t("topbar.theme")}>
-                    <Button
-                      size="small"
-                      icon={<BulbOutlined />}
-                      aria-label={t("topbar.theme")}
-                      onClick={toggleTheme}
-                    />
-                  </Tooltip>
                 </>
               )}
             </div>
