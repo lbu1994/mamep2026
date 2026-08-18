@@ -55,7 +55,10 @@ describe("connection profile persistence", () => {
     // 模拟「端口参数未持久化」期间写入的数据（profile 只含非端口字段）。
     const workspace = createEmptyWorkspace();
     const legacy = JSON.parse(serializeWorkspace(workspace));
-    const storedProfile = legacy.connectionProfiles[0] as Record<string, unknown>;
+    const storedProfile = legacy.connectionProfiles[0] as Record<
+      string,
+      unknown
+    >;
     for (const key of [
       "baudRate",
       "dataBits",
@@ -273,5 +276,29 @@ describe("workspace schema round-trip", () => {
       name: 210,
       type: 90,
     });
+  });
+
+  it("defaults sheet columnOrder to null for legacy data without the field", () => {
+    const legacy = JSON.parse(serializeWorkspace(createEmptyWorkspace()));
+    // 模拟老版本数据：sheet 无 columnOrder 字段。
+    for (const sheet of legacy.sheets) {
+      delete sheet.columnOrder;
+    }
+    const parsed = parseWorkspace(legacy);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.columnOrder).toBeNull();
+  });
+
+  it("preserves per-sheet columnOrder across a round-trip", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      const sheet = w.sheets[0];
+      if (sheet === undefined) return;
+      sheet.columnOrder = ["data", "name", "no"];
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.columnOrder).toEqual(["data", "name", "no"]);
   });
 });

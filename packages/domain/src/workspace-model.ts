@@ -105,6 +105,8 @@ export interface RegisterSheet {
   registerRadix: RegisterRadix;
   /** 各列拖拽宽度（每表独立，随工作区持久化；只含用户拖拽过的列，未记录列用默认宽，2026-08-18） */
   columnWidths: Record<string, number>;
+  /** 各列拖拽后的排列顺序（每表独立，随工作区持久化；null=未拖拽过，使用默认顺序，2026-08-18） */
+  columnOrder: string[] | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -259,6 +261,7 @@ export function createRegisterSheet(
     rows: createDefaultSheetRows(defaultConfig.registerTable.defaultRowCount),
     registerRadix: defaultConfig.registerTable.addressRadix,
     columnWidths: {},
+    columnOrder: null,
     createdAt: now,
     updatedAt: now,
   };

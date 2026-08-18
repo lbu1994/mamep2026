@@ -33,6 +33,8 @@ function makeSheet(name: string, rows: RegisterRow[]): RegisterSheet {
     order: 0,
     rows,
     registerRadix: "dec",
+    columnWidths: {},
+    columnOrder: null,
     createdAt: 0,
     updatedAt: 0,
   };

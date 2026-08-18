@@ -51,6 +51,11 @@ describe("createRegisterSheet 默认行（新建表默认填充 defaultRowCount 
     const sheet = createRegisterSheet("S", 0);
     expect(sheet.columnWidths).toEqual({});
   });
+
+  it("columnOrder 初始为 null（未拖拽过任何列，使用默认顺序）", () => {
+    const sheet = createRegisterSheet("S", 0);
+    expect(sheet.columnOrder).toBeNull();
+  });
 });
 
 describe("createEmptyWorkspace 初始表", () => {

@@ -156,6 +156,8 @@ export interface AppStoreState {
     sheetId: SheetId,
     widths: Record<string, number>,
   ) => void;
+  /** 设置某张表的列排列顺序（每表独立，随表持久化；null=恢复默认顺序）。 */
+  setSheetColumnOrder: (sheetId: SheetId, order: string[] | null) => void;
 
   openTraceWindow: (rowId: RowId) => void;
   closeTraceWindow: (rowId: RowId) => void;
@@ -677,9 +679,11 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       const source = state.workspace.sheets[sourceIndex];
       if (source === undefined) return state;
       const copy = createRegisterSheet(`${source.name} Copy`, sourceIndex + 1);
-      // 副本继承源表的 Register 地址进制与列宽（结构偏好随复制保留）。
+      // 副本继承源表的 Register 地址进制、列宽与列顺序（结构偏好随复制保留）。
       copy.registerRadix = source.registerRadix;
       copy.columnWidths = { ...source.columnWidths };
+      copy.columnOrder =
+        source.columnOrder === null ? null : [...source.columnOrder];
       copy.rows = source.rows.map((row) => ({
         ...row,
         rowId: newRowId(),
@@ -754,6 +758,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         sheets: state.workspace.sheets.map((sheet) =>
           sheet.sheetId === sheetId
             ? { ...sheet, columnWidths: widths, updatedAt: Date.now() }
+            : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
+    })),
+
+  setSheetColumnOrder: (sheetId, order) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId
+            ? { ...sheet, columnOrder: order, updatedAt: Date.now() }
             : sheet,
         ),
         updatedAt: Date.now(),

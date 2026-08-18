@@ -366,6 +366,29 @@ describe("setSheetColumnWidths", () => {
   });
 });
 
+describe("setSheetColumnOrder", () => {
+  it("只修改目标表的 columnOrder，不影响其他表（每表独立不共享）", () => {
+    const store = useAppStore.getState();
+    store.addSheet(); // Sheet 2
+    const first = firstSheetId();
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (second === undefined) throw new Error("missing second sheet");
+    useAppStore.getState().setSheetColumnOrder(first, ["data", "name"]);
+    const after = useAppStore.getState().workspace.sheets;
+    expect(after[0]?.columnOrder).toEqual(["data", "name"]);
+    expect(after[1]?.columnOrder).toBeNull();
+    expect(after.find((s) => s.sheetId === second)?.columnOrder).toBeNull();
+  });
+
+  it("可重置为 null（回到默认顺序）", () => {
+    const store = useAppStore.getState();
+    const first = firstSheetId();
+    store.setSheetColumnOrder(first, ["data", "name"]);
+    store.setSheetColumnOrder(first, null);
+    expect(useAppStore.getState().workspace.sheets[0]?.columnOrder).toBeNull();
+  });
+});
+
 describe("duplicateSheet radix inheritance", () => {
   it("副本继承源表的 registerRadix 与 columnWidths", () => {
     const store = useAppStore.getState();
@@ -378,6 +401,24 @@ describe("duplicateSheet radix inheritance", () => {
     expect(after.workspace.sheets[1]?.registerRadix).toBe("hex");
     expect(after.workspace.sheets[0]?.columnWidths).toEqual({ name: 210 });
     expect(after.workspace.sheets[1]?.columnWidths).toEqual({ name: 210 });
+  });
+
+  it("副本继承源表的 columnOrder", () => {
+    const store = useAppStore.getState();
+    const sourceId = firstSheetId();
+    store.setSheetColumnOrder(sourceId, ["data", "name", "no"]);
+    store.duplicateSheet(sourceId);
+    const after = useAppStore.getState();
+    expect(after.workspace.sheets[0]?.columnOrder).toEqual([
+      "data",
+      "name",
+      "no",
+    ]);
+    expect(after.workspace.sheets[1]?.columnOrder).toEqual([
+      "data",
+      "name",
+      "no",
+    ]);
   });
 });
 
@@ -530,7 +571,8 @@ describe("updateRow 引用稳定性（性能：单行更新不重建其余表/�
       throw new Error("missing sheets");
     const row1 = sheet1.rows[0];
     const row2 = sheet1.rows[1];
-    if (row1 === undefined || row2 === undefined) throw new Error("missing rows");
+    if (row1 === undefined || row2 === undefined)
+      throw new Error("missing rows");
 
     useAppStore.getState().updateRow(row1.rowId, (r) => ({
       ...r,
@@ -569,7 +611,8 @@ describe("updateRow 引用稳定性（性能：单行更新不重建其余表/�
     const before = useAppStore.getState();
     const sheet = before.workspace.sheets[0];
     const row = sheet?.rows[0];
-    if (sheet === undefined || row === undefined) throw new Error("missing row");
+    if (sheet === undefined || row === undefined)
+      throw new Error("missing row");
     // updater 返回同一引用：整条链（rows/sheet/workspace 重建、自动保存、轮询目标重建）短路。
     useAppStore.getState().updateRow(row.rowId, (r) => r);
     expect(useAppStore.getState().workspace).toBe(before.workspace);
@@ -588,17 +631,11 @@ describe("updateRow 引用稳定性（性能：单行更新不重建其余表/�
 
 describe("setLanguage", () => {
   it("更新 workspace.preferences.language 以随自动保存持久化", () => {
-    expect(
-      useAppStore.getState().workspace.preferences.language,
-    ).toBe("en-US");
+    expect(useAppStore.getState().workspace.preferences.language).toBe("en-US");
     useAppStore.getState().setLanguage("zh-CN");
-    expect(useAppStore.getState().workspace.preferences.language).toBe(
-      "zh-CN",
-    );
+    expect(useAppStore.getState().workspace.preferences.language).toBe("zh-CN");
     useAppStore.getState().setLanguage("en-US");
-    expect(useAppStore.getState().workspace.preferences.language).toBe(
-      "en-US",
-    );
+    expect(useAppStore.getState().workspace.preferences.language).toBe("en-US");
   });
 });
 

@@ -62,6 +62,8 @@ const sheetSchema = z.object({
   columnWidths: z
     .record(z.string(), z.number().finite().positive())
     .default({}),
+  /** 各列拖拽后的排列顺序（随表持久化，2026-08-18）；老数据缺省补 null（默认顺序），无需迁移 */
+  columnOrder: z.array(z.string()).nullable().default(null),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -77,11 +79,7 @@ const rtuProfileSchema = z.object({
   id: z.string(),
   name: z.string(),
   protocol: z.literal("rtu"),
-  baudRate: z
-    .number()
-    .int()
-    .positive()
-    .default(defaultConfig.rtu.baudRate),
+  baudRate: z.number().int().positive().default(defaultConfig.rtu.baudRate),
   dataBits: z
     .union([z.literal(7), z.literal(8)])
     .default(defaultConfig.rtu.dataBits as 7 | 8),
