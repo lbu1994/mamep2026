@@ -31,9 +31,10 @@ import {
   RightOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import type { ConnectionState } from "@mamep2026/communication";
 import type { RowId, SheetId } from "@mamep2026/domain";
+import { defaultConfig } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
+import { STATE_DOT_COLOR } from "./connection-state";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
 import { BottomPanel } from "./components/BottomPanel";
@@ -42,19 +43,6 @@ import { PluginManagerModal } from "./components/PluginManagerModal";
 import { RegisterTable } from "./components/RegisterTable";
 import { buildSheetMenuItems } from "./components/SheetMenu";
 import { TraceWindow } from "./components/TraceWindow";
-
-/** 状态圆点颜色（形状 + 文字之外的颜色提示，取 antd 语义 token）。 */
-const STATE_DOT_COLOR: Record<ConnectionState, string> = {
-  disconnected: "var(--ant-color-text-quaternary)",
-  "selecting-device": "var(--ant-color-primary)",
-  connecting: "var(--ant-color-primary)",
-  connected: "var(--ant-color-success)",
-  disconnecting: "var(--ant-color-primary)",
-  "reconnect-waiting": "var(--ant-color-warning)",
-  reconnecting: "var(--ant-color-primary)",
-  interrupted: "var(--ant-color-warning)",
-  failed: "var(--ant-color-error)",
-};
 
 /** 折叠时底部面板仅保留标签栏的高度（px）。 */
 const COLLAPSED_BOTTOM_PANEL_HEIGHT = 40;
@@ -72,9 +60,6 @@ export function MamepApp(): React.ReactNode {
   const sheetNames = useAppStore(
     useShallow((s) => s.workspace.sheets.map((sh) => sh.name)),
   );
-  const slaveAddress = useAppStore(
-    (s) => s.workspace.connectionProfiles[0]?.slaveAddress ?? 1,
-  );
   const sheetMeta = useMemo(
     () =>
       sheetIds.map((sheetId, index) => ({
@@ -82,6 +67,14 @@ export function MamepApp(): React.ReactNode {
         name: sheetNames[index] ?? "",
       })),
     [sheetIds, sheetNames],
+  );
+  // 当前活动表的 Slave Address（每表独立，2026-08-19）：切换表/修改当前表值时
+  // 同步到 host（会话请求使用当前表的值）。原语订阅不触发级联重渲染。
+  const activeSheetSlaveAddress = useAppStore(
+    (s) =>
+      s.workspace.sheets.find(
+        (sh) => sh.sheetId === (s.activeSheetId ?? s.workspace.activeSheetId),
+      )?.slaveAddress ?? defaultConfig.registerTable.slaveAddress,
   );
   const connectionState = useAppStore((s) => s.connectionState);
   const setConnectionState = useAppStore((s) => s.setConnectionState);
@@ -162,6 +155,12 @@ export function MamepApp(): React.ReactNode {
     );
     return unsubscribe;
   }, [host, setConnectionState]);
+
+  // 活动表 Slave Address -> 会话：切换表或修改当前表从站地址时，后续请求使用新值。
+  useEffect(() => {
+    if (host === null || host === undefined) return;
+    host.setSlaveAddress(activeSheetSlaveAddress);
+  }, [host, activeSheetSlaveAddress]);
 
   // 主题同步到 <html data-mamep-theme>：index.css 的 --mamep-* 暗色令牌依赖该属性，
   // 与 antd ConfigProvider 的暗色算法一起切换（组件内不得散落主题判断）。
@@ -336,18 +335,15 @@ export function MamepApp(): React.ReactNode {
                 Connection 入口已移至右侧操作组（Plugin Manager 左侧），窄窗口也不收进 More */}
             <div className="connection-cluster">
               <div className="connection-cluster__primary">
-                <span className="status-badge">
+                {/* data-conn-state：纯展示钩子，供 CSS 按连接态着色状态胶囊（不改任何行为/契约） */}
+                <span className="status-badge" data-conn-state={connectionState}>
                   <span
                     className="status-badge__dot"
                     style={{
                       backgroundColor: STATE_DOT_COLOR[connectionState],
                     }}
                   />
-                  <span>
-                    {t(`state.${connectionState}`)}
-                    {" · "}
-                    {t("topbar.rtuSlave", { address: slaveAddress })}
-                  </span>
+                  <span>{t(`state.${connectionState}`)}</span>
                 </span>
               </div>
               <span className="connection-cluster__sep" aria-hidden="true" />

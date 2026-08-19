@@ -59,6 +59,11 @@
   --mamep-spacing-sm: 8px;
   --mamep-spacing-md: 12px;
   --mamep-spacing-lg: 16px;
+
+  /* 滚动条（Light）：细窄、低饱和、悬停加深，融入工具感 */
+  --mamep-scrollbar-thumb: rgba(0, 0, 0, 0.22);
+  --mamep-scrollbar-thumb-hover: rgba(0, 0, 0, 0.38);
+  --mamep-scrollbar-track: transparent;
 }
 
 /* 暗黑模式：独立设计，不简单反色。四级深灰背景（应用/导航/面板/浮层）+ 低饱和选中 + 亮化文字 */
@@ -88,6 +93,11 @@
   --mamep-status-danger-action: #dc4446;
 
   --mamep-focus-ring: #6ba1ff;
+
+  /* 滚动条（Dark）：亮化、低饱和，深底上可辨识 */
+  --mamep-scrollbar-thumb: rgba(255, 255, 255, 0.24);
+  --mamep-scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
+  --mamep-scrollbar-track: transparent;
 }
 
 html,
@@ -101,17 +111,6 @@ body,
 body {
   background: var(--mamep-bg-app);
   font-family: var(--mamep-font-ui);
-}
-
-.connection-settings-group {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.45));
-  border-bottom: 1px solid var(--ant-color-split, rgba(5, 5, 5, 0.06));
-  padding-bottom: 6px;
-  margin-bottom: 8px;
 }
 
 /* ---------------- 布局骨架 ---------------- */
@@ -584,6 +583,18 @@ body {
   white-space: nowrap;
 }
 
+.table-toolbar__slave {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.table-toolbar__slave-label {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  white-space: nowrap;
+}
+
 /* 行操作：平时淡出，悬停行 / 行内键盘聚焦时显现，降低视觉噪声 */
 .row-actions {
   opacity: 0;
@@ -800,12 +811,32 @@ body {
   background: var(--ant-color-fill-secondary);
 }
 
-/* 行选中：品牌浅底 + 复选框（不只依赖复选框；与侧栏/页签选中语义一致） */
+/* 斑马纹：交替行浅底色（antd colorFillQuaternary 官方语义即斑马纹用色，浅/深主题
+   自动适配）。类由 RegisterTable 的 rowClassName 按行号奇偶注入。
+   单元格统一用 .ant-table-cell（普通模式为 td、虚拟滚动模式下为 div，二者都有该类），
+   并用后代选择器覆盖虚拟滚动容器结构。规则顺序保证状态优先级：斑马纹 < hover < 选中。 */
 .register-table-tabs
   .ant-table-wrapper
   .ant-table-tbody
-  > tr.ant-table-row-selected
-  > td {
+  tr.register-table__row--striped
+  .ant-table-cell {
+  background: var(--ant-color-fill-quaternary);
+}
+
+/* 行 hover 覆盖斑马纹：使用 antd 行悬停同款 token（--ant-table-row-hover-bg，
+   与 antd 默认悬停色一致，深浅主题自适应）。置于选中规则之前，避免悬停时
+   覆盖选中行的品牌浅底。 */
+.register-table-tabs .ant-table-wrapper .ant-table-tbody tr:hover .ant-table-cell {
+  background: var(--ant-table-row-hover-bg);
+}
+
+/* 行选中：品牌浅底 + 复选框（不只依赖复选框；与侧栏/页签选中语义一致）；
+   置于 hover 规则之后，选中优先级最高（含选中行悬停保持品牌浅底）。 */
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  tr.ant-table-row-selected
+  .ant-table-cell {
   background: var(--ant-color-primary-bg);
 }
 
@@ -958,6 +989,40 @@ body {
   margin-bottom: 4px;
 }
 
+/* Comm Log 工具栏（2026-08-19 精修）：与主表 toolbar 同源——透明无底，
+   仅保留分组 + 1px 竖分隔（Auto scroll 视图开关 | Copy/Clear 操作），融入面板背景。 */
+.comm-log__toolbar {
+  gap: 6px;
+}
+
+/* 布局：视图开关（Auto scroll）居左，操作组（Copy/Clear）靠右（margin-left:auto 推动） */
+.comm-log__toolbar-sep {
+  margin-left: auto;
+}
+
+/* Auto scroll 开关标签：次级强调排版，与面板标签语言一致 */
+.comm-log__autoscroll .ant-typography {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ant-color-text-secondary);
+  user-select: none;
+}
+
+.comm-log__toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.comm-log__toolbar-sep {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  background: var(--mamep-border-subtle);
+}
+
 .comm-log__autoscroll {
   display: inline-flex;
   align-items: center;
@@ -980,4 +1045,557 @@ body {
    明确限定高度，保证面板内容（.comm-log）受 holder 约束、内层列表独立滚动。 */
 .bottom-panel .ant-tabs-content-active {
   height: 100%;
+}
+
+/* =========================================================
+   Memory Trace 追踪窗口
+   现代化、紧凑、与主寄存器表 / 底部面板同源的调试浮窗。
+   只作用于 .trace-window 作用域，不影响其他界面；
+   取色全部走 --mamep-* / --ant-* 令牌，深浅主题自动适配。
+   ========================================================= */
+
+.trace-window {
+  border: 1px solid var(--mamep-border-subtle);
+  border-radius: var(--mamep-radius-panel);
+  background: var(--mamep-bg-elevated);
+  box-shadow: var(--mamep-shadow-overlay);
+}
+
+.trace-window .ant-card-head {
+  min-height: 32px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--mamep-border-subtle);
+}
+
+.trace-window .ant-card-body {
+  padding: var(--mamep-spacing-sm);
+}
+
+.trace-window__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mamep-text-primary);
+  line-height: 32px;
+}
+
+.trace-window__title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 运行状态点：采样中品牌色脉冲（与主表 WP 轮询指示同语言），
+   停止时中性灰；白色描边让点与标题栏层次分明、语义明确 */
+.trace-window__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--mamep-text-disabled);
+  box-shadow: 0 0 0 2px var(--mamep-bg-elevated);
+  transition: background 0.2s ease;
+}
+
+.trace-window__status-dot--live {
+  background: var(--mamep-brand-primary);
+  animation: mamep-pulse 1.6s ease-in-out infinite;
+}
+
+/* 关闭按钮：稍大点击区 + hover 危险色反馈（可发现、防误触） */
+.trace-window .ant-card-extra .ant-btn {
+  width: 24px;
+  height: 24px;
+  color: var(--mamep-text-tertiary);
+}
+
+.trace-window .ant-card-extra .ant-btn:hover {
+  color: var(--mamep-status-error);
+  background: var(--mamep-bg-hover);
+}
+
+/* 分组：非首组以细分隔线上缘分层 */
+.trace-window__group + .trace-window__group {
+  border-top: 1px solid var(--mamep-border-subtle);
+  padding-top: var(--mamep-spacing-md);
+}
+
+/* 字段小标签（辅助色，12px） */
+.trace-window__label {
+  flex: none;
+  font-size: 12px;
+  color: var(--mamep-text-tertiary);
+  white-space: nowrap;
+}
+
+/* 寄存器信息组：标签统一最小宽度，Name/Address/Type 输入起点对齐；
+   输入框统一为 24px 小控件高度 */
+.trace-window__group--fields .trace-window__label {
+  min-width: 56px;
+}
+
+.trace-window__group--fields .ant-input {
+  height: 24px;
+}
+
+/* 数据等宽角色：Address/Type 与 No./Data 正文 */
+.trace-window__mono,
+.trace-window .ant-table-wrapper .ant-table-tbody > tr > td {
+  font-family: var(--mamep-font-mono);
+}
+
+/* 数据表与主寄存器表同源：26px 表头 fill-secondary、紧凑行高；
+   无 bordered 网格，以表头下缘分隔 + 行 hover 反馈替代，避免"网格纸"压迫感。
+   表头居中由全局规则 .ant-table-wrapper .ant-table-thead .ant-table-cell 负责。 */
+.trace-window .ant-table-wrapper .ant-table-thead > tr > th {
+  height: 26px;
+  background: var(--ant-color-fill-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.trace-window .ant-table-wrapper .ant-table-tbody > tr > td {
+  height: 26px;
+  padding-block: 0;
+}
+
+.trace-window .ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: var(--mamep-bg-hover);
+}
+
+/* 按钮行：采样控制（Play/Stop）与导出（Save）分组，spacer 让 Save 靠右 */
+.trace-window__btn-spacer {
+  flex: 1;
+}
+
+/* 采样运行中：Stop 以危险色强调当前可停止（视觉提示，不改交互逻辑） */
+.trace-window__btn-stop--active {
+  border-color: var(--mamep-status-danger-action);
+  color: var(--mamep-status-danger-action);
+}
+
+/* Speed 滑杆：轨道/手柄颜色与品牌、主题令牌一致（尺寸沿用 antd 默认） */
+.trace-window .ant-slider {
+  margin: 6px 0;
+}
+
+.trace-window .ant-slider-rail {
+  background-color: var(--ant-color-fill-secondary);
+}
+
+.trace-window .ant-slider-track {
+  background-color: var(--mamep-brand-primary);
+}
+
+.trace-window .ant-slider-handle::after {
+  background-color: var(--mamep-bg-elevated);
+  box-shadow: 0 0 0 2px var(--mamep-brand-primary);
+}
+
+.trace-window .ant-slider-handle:hover::after {
+  box-shadow: 0 0 0 2px var(--mamep-brand-primary);
+}
+
+/* Average 读数：独立容器 + 等宽大数字右对齐（仪器读数感），
+   以容器底色与上方数据表形成分区 */
+.trace-window__average-box {
+  display: flex;
+  align-items: center;
+  gap: var(--mamep-spacing-sm);
+  padding: 4px var(--mamep-spacing-sm);
+  background: var(--ant-color-fill-secondary);
+  border-radius: var(--mamep-radius-control);
+}
+
+.trace-window__average {
+  height: 28px;
+  font-family: var(--mamep-font-mono);
+}
+
+.trace-window__average .ant-input {
+  height: 28px;
+  font-family: var(--mamep-font-mono);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: right;
+}
+
+/* =========================================================
+   2026-08-19 视觉精修（ui-ux-pro-max：Data-Dense 工程工具方向）
+   纯界面打磨：不改变任何行为/契约，取色全部走既有令牌。
+   新增展示钩子：status-badge[data-conn-state]（仅 CSS 消费）。
+   ========================================================= */
+
+/* ---------------- 0. 全局：滚动条 / 选区 / 焦点过渡 ---------------- */
+
+/* 统一滚动条（浅/深主题经 --mamep-scrollbar-* 令牌自动适配） */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mamep-scrollbar-thumb) var(--mamep-scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--mamep-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--mamep-scrollbar-thumb);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--mamep-scrollbar-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 文本选区：品牌浅底 + 主文字（非 .ant 作用域，用 --mamep-* 令牌） */
+::selection {
+  background: var(--mamep-bg-selected);
+  color: var(--mamep-text-primary);
+}
+
+/* 统一可见焦点环过渡 */
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  transition:
+    outline-color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+/* ---------------- 1. Header ---------------- */
+
+/* 品牌标记：标题前品牌色小方块（纯 CSS 装饰，不动 DOM 结构） */
+.mamep-header__brand-title::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: linear-gradient(
+    135deg,
+    var(--ant-color-primary),
+    var(--ant-color-primary-active)
+  );
+  box-shadow: 0 0 0 1px var(--ant-color-primary-border);
+  vertical-align: 0;
+}
+
+/* 连接状态摘要胶囊：加边框与状态着色（连接中/成功/告警/失败 各自柔和浅底） */
+.status-badge {
+  border: 1px solid var(--ant-color-split);
+}
+
+.status-badge[data-conn-state="connected"],
+.comm-props__status[data-conn-state="connected"] {
+  background: var(--ant-color-success-bg);
+  border-color: var(--ant-color-success-border);
+}
+
+.status-badge[data-conn-state="connecting"],
+.status-badge[data-conn-state="selecting-device"],
+.status-badge[data-conn-state="disconnecting"],
+.status-badge[data-conn-state="reconnecting"],
+.comm-props__status[data-conn-state="connecting"],
+.comm-props__status[data-conn-state="selecting-device"],
+.comm-props__status[data-conn-state="disconnecting"],
+.comm-props__status[data-conn-state="reconnecting"] {
+  background: var(--ant-color-primary-bg);
+  border-color: var(--ant-color-primary-border);
+}
+
+.status-badge[data-conn-state="reconnect-waiting"],
+.status-badge[data-conn-state="interrupted"],
+.comm-props__status[data-conn-state="reconnect-waiting"],
+.comm-props__status[data-conn-state="interrupted"] {
+  background: var(--ant-color-warning-bg);
+  border-color: var(--ant-color-warning-border);
+}
+
+.status-badge[data-conn-state="failed"],
+.comm-props__status[data-conn-state="failed"] {
+  background: var(--ant-color-error-bg);
+  border-color: var(--ant-color-error-border);
+}
+
+/* 活跃过渡态（连接中/选择设备/断开中/重连）：状态点呼吸提示（尊重 reduced-motion） */
+.status-badge[data-conn-state="connecting"] .status-badge__dot,
+.status-badge[data-conn-state="selecting-device"] .status-badge__dot,
+.status-badge[data-conn-state="disconnecting"] .status-badge__dot,
+.status-badge[data-conn-state="reconnecting"] .status-badge__dot,
+.comm-props__status[data-conn-state="connecting"] .comm-props__status-dot,
+.comm-props__status[data-conn-state="selecting-device"] .comm-props__status-dot,
+.comm-props__status[data-conn-state="disconnecting"] .comm-props__status-dot,
+.comm-props__status[data-conn-state="reconnecting"] .comm-props__status-dot {
+  animation: mamep-pulse 1.6s ease-in-out infinite;
+}
+
+/* 顶栏留白与按钮反馈：轻微呼吸空间 + 统一 hover 过渡
+   （需与基础规则同级/更高特异性：.mamep-header.ant-layout-header） */
+.mamep-header.ant-layout-header {
+  gap: 10px;
+  padding-inline: 12px;
+}
+
+.mamep-header .ant-btn {
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+/* ---------------- 2. Sheet 侧边栏 ---------------- */
+
+/* 分区标题：左侧 2px 品牌指示条，强化分组层级（仅装饰；留出指示条空间避免压字） */
+.sheet-sidebar__title,
+.sheet-sidebar__section-title {
+  position: relative;
+  padding-left: 8px;
+}
+
+.sheet-sidebar__title::before,
+.sheet-sidebar__section-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--ant-color-primary);
+  opacity: 0.85;
+}
+
+/* 菜单项 hover/选中过渡平滑 */
+.sheet-sidebar__menu .ant-menu-item {
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+/* 侧栏 footer：顶部分隔线，版本信息更清晰 */
+.sheet-sidebar__footer {
+  border-top: 1px solid var(--mamep-border-subtle);
+  padding-top: 8px;
+  letter-spacing: 0.02em;
+}
+
+/* ---------------- 3. 寄存器表 ---------------- */
+
+/* 工具栏：数字信息用 tabular-nums，避免宽度跳动 */
+.table-toolbar__info {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 表头：背景分层 + 底部强调线，与正文形成清晰分界 */
+.register-table-tabs .ant-table-wrapper .ant-table-thead > tr > th {
+  border-bottom: 1px solid var(--ant-color-split);
+}
+
+.register-table-tabs .ant-table-wrapper .ant-table-thead > tr > th:hover {
+  background: var(--ant-color-fill);
+}
+
+/* 正文行：hover/选中背景平滑过渡 */
+.register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td {
+  transition: background-color 0.12s ease;
+}
+
+/* 空态：紧凑、居中、引导清晰 */
+.register-table-tabs .ant-empty {
+  margin-block: 24px;
+}
+
+.register-table-tabs .ant-empty-image {
+  height: 48px;
+  margin-bottom: 8px;
+}
+
+.register-table-tabs .ant-empty-description {
+  color: var(--ant-color-text-secondary);
+}
+
+/* 行操作/选中复选框列：列宽稳定 */
+.register-table-tabs .ant-table-selection-column {
+  width: 34px;
+  min-width: 34px;
+}
+
+/* ---------------- 4. 底部面板 ---------------- */
+
+/* 页签：与主表页签同源（悬停反馈 + 选中加粗）。横向 padding 给足，hover 才是完整胶囊。
+   antd 对 .ant-tabs-tab 的 padding 由 .ant-tabs-small > .ant-tabs-nav .ant-tabs-tab 设置
+   （横向为 0），必须用更高特异性选择器覆盖；hover 背景也随之覆盖整个胶囊。 */
+.bottom-panel .ant-tabs .ant-tabs-nav .ant-tabs-tab {
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.bottom-panel .ant-tabs-tab:hover {
+  background: var(--ant-color-fill-secondary);
+}
+
+.bottom-panel .ant-tabs-tab-active .ant-tabs-tab-btn {
+  font-weight: 600;
+}
+
+/* 日志行：hover 高亮 + 时间列等宽数字稳定 */
+.log-row {
+  transition: background-color 0.12s ease;
+}
+
+.log-row:hover {
+  background: var(--ant-color-fill-secondary);
+}
+
+.log-row__time {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Comm Log / Messages 日志内容精修（2026-08-19）：
+   方向/级别 Tag 统一为软胶囊（antd 语义态 token，浅/深自适应） */
+.log-row .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 500;
+  padding-inline: 7px;
+}
+
+/* 方向/级别 Tag：软胶囊（antd 语义态 token）。antd filled 规则为
+   .ant-tag.ant-tag-{c}:not(.ant-tag-disabled).ant-tag-filled（(0,4,0)），
+   用相同 :not 复合把特异性提到 (0,5,0) 覆盖其背景/颜色。 */
+.log-row .ant-tag.ant-tag-filled.ant-tag-blue:not(.ant-tag-disabled) {
+  color: var(--ant-color-primary-text);
+  background: var(--ant-color-primary-bg);
+  border-color: var(--ant-color-primary-border);
+}
+
+.log-row .ant-tag.ant-tag-filled.ant-tag-green:not(.ant-tag-disabled) {
+  color: var(--ant-color-success-text);
+  background: var(--ant-color-success-bg);
+  border-color: var(--ant-color-success-border);
+}
+
+.log-row .ant-tag.ant-tag-filled.ant-tag-orange:not(.ant-tag-disabled) {
+  color: var(--ant-color-warning-text);
+  background: var(--ant-color-warning-bg);
+  border-color: var(--ant-color-warning-border);
+}
+
+.log-row .ant-tag.ant-tag-filled.ant-tag-red:not(.ant-tag-disabled) {
+  color: var(--ant-color-error-text);
+  background: var(--ant-color-error-bg);
+  border-color: var(--ant-color-error-border);
+}
+
+/* Hex 原始报文：等宽 + 字距 + 柔和数据块（日志核心数据突出，与读数/数据列字体同源） */
+.log-row .log-row__text code {
+  font-family: var(--mamep-font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-secondary);
+  border: 1px solid var(--ant-color-split);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+
+/* 通信属性：等宽数值列对齐 */
+.bottom-panel .ant-descriptions-item-content {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Comm Properties 读数面板：容器 + 小写大写字幕标签 + 统一值字体（浅/深自动适配） */
+.comm-props {
+  padding: 2px 8px 8px;
+  background: var(--mamep-bg-elevated);
+  border: 1px solid var(--mamep-border-subtle);
+  border-radius: var(--mamep-radius-panel);
+}
+
+.comm-props .ant-descriptions-item {
+  padding-block: 2px;
+}
+
+/* 标签与值同字号 13px（同 line-height），保证冒号前后文字高度/基线完全对齐；
+   层级靠大写 + 次级色 + 字重 + 字距区分，而非字号差。 */
+.comm-props .ant-descriptions-item-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ant-color-text-secondary);
+  white-space: nowrap;
+  padding-inline-end: 8px;
+}
+
+.comm-props .ant-descriptions-item-content {
+  font-size: 13px;
+  color: var(--ant-color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-inline-end: 20px;
+}
+
+/* Status 读数：与顶栏状态胶囊同语义（柔和浅底 + 圆点 + 边框），
+   data-conn-state 按连接态着色（与 .status-badge 共用同一组状态色规则） */
+.comm-props__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  font-size: 12px;
+  line-height: 18px;
+  border-radius: 999px;
+  background: var(--ant-color-fill-secondary);
+  border: 1px solid var(--ant-color-split);
+  white-space: nowrap;
+}
+
+.comm-props__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* ---------------- 5. 动效与无障碍 ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .status-badge[data-conn-state] .status-badge__dot,
+  .comm-props__status[data-conn-state] .comm-props__status-dot {
+    animation: none !important;
+  }
+
+  .mamep-header .ant-btn,
+  .sheet-sidebar__menu .ant-menu-item,
+  .register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td,
+  .bottom-panel .ant-tabs-tab,
+  .log-row {
+    transition: none;
+  }
 }

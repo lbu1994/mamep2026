@@ -14,7 +14,6 @@ describe("connection-settings-model persistence mapping", () => {
       stopBits: 2,
       parity: "even",
       flowControl: "rts-cts",
-      slaveAddress: 5,
       rxDelay: 120,
       timeout: 2000,
       retry: 3,
@@ -26,7 +25,6 @@ describe("connection-settings-model persistence mapping", () => {
       stopBits: 2,
       parity: "even",
       flowControl: "rts-cts",
-      slaveAddress: 5,
       requestTimeoutMs: 2000,
       retryCount: 3,
       interRequestDelayMs: 120,
@@ -41,7 +39,6 @@ describe("connection-settings-model persistence mapping", () => {
     profile.stopBits = 2;
     profile.parity = "even";
     profile.flowControl = "rts-cts";
-    profile.slaveAddress = 7;
     profile.requestTimeoutMs = 2500;
     profile.retryCount = 2;
     profile.interRequestDelayMs = 150;
@@ -53,7 +50,6 @@ describe("connection-settings-model persistence mapping", () => {
       stopBits: 2,
       parity: "even",
       flowControl: "rts-cts",
-      slaveAddress: 7,
       rxDelay: 150,
       timeout: 2500,
       retry: 2,

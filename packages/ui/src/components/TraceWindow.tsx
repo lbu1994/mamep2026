@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Button,
   Card,
+  Flex,
   Input,
   Select,
   Slider,
@@ -11,12 +12,22 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import {
+  CloseOutlined,
+  DownloadOutlined,
+  PauseOutlined,
+  PlayCircleOutlined,
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { RegisterRow, RowId } from "@mamep2026/domain";
 import { useAppStore, type BufferSizeOption } from "../app-store";
 
 const TRACE_SPEED_MIN = 100;
 const TRACE_SPEED_MAX = 2000;
+const TRACE_WINDOW_WIDTH = 360;
+const TRACE_WINDOW_TOP = 80;
+const TRACE_WINDOW_RIGHT_MARGIN = 24;
+const DRAG_MIN_MOVE_PX = 3;
 
 function speedToInterval(speed: number): number {
   // speed 高 = Quick（间隔小）。
@@ -58,6 +69,70 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
     return () => host?.traceStop(rowId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowModel?.playing, windowModel?.speed, row?.addressValue?.value]);
+
+  // 窗口位置（拖动标题栏移动）；默认右上角，重新打开后回到默认位置。
+  const [position, setPosition] = useState(() => ({
+    x: Math.max(
+      0,
+      window.innerWidth - TRACE_WINDOW_WIDTH - TRACE_WINDOW_RIGHT_MARGIN,
+    ),
+    y: TRACE_WINDOW_TOP,
+  }));
+  const [dragging, setDragging] = useState(false);
+  const dragState = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+
+  // 拖动期间禁用文本选择，避免选中窗口内文本。
+  useEffect(() => {
+    if (!dragging) return;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    return () => {
+      document.body.style.userSelect = prevSelect;
+    };
+  }, [dragging]);
+
+  const onTitlePointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ): void => {
+    if (event.button !== 0) return;
+    dragState.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: position.x,
+      originY: position.y,
+    };
+    setDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onTitlePointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ): void => {
+    const drag = dragState.current;
+    if (drag === null || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.abs(dx) < DRAG_MIN_MOVE_PX && Math.abs(dy) < DRAG_MIN_MOVE_PX) {
+      return;
+    }
+    setPosition({ x: drag.originX + dx, y: drag.originY + dy });
+  };
+
+  const endTitleDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (dragState.current?.pointerId !== event.pointerId) return;
+    dragState.current = null;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   if (windowModel === undefined || row === undefined) return null;
 
@@ -109,8 +184,8 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   };
 
   const columns: ColumnsType<{ no: number; value: string }> = [
-    { title: t("trace.no"), dataIndex: "no", width: 70 },
-    { title: t("trace.data"), dataIndex: "value" },
+    { title: t("trace.no"), dataIndex: "no", width: 70, align: "center" },
+    { title: t("trace.data"), dataIndex: "value", align: "center" },
   ];
 
   return (
@@ -119,119 +194,184 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
       className="trace-window"
       style={{
         position: "fixed",
-        right: 24,
-        top: 80,
-        width: 360,
+        left: position.x,
+        top: position.y,
+        width: TRACE_WINDOW_WIDTH,
         zIndex: 1000,
       }}
-      title={t("trace.title")}
+      title={
+        <div
+          className="trace-window__title"
+          style={{ userSelect: "none", cursor: "move" }}
+          onPointerDown={onTitlePointerDown}
+          onPointerMove={onTitlePointerMove}
+          onPointerUp={endTitleDrag}
+          onPointerCancel={endTitleDrag}
+        >
+          <span
+            aria-hidden="true"
+            className={
+              windowModel.playing
+                ? "trace-window__status-dot trace-window__status-dot--live"
+                : "trace-window__status-dot"
+            }
+          />
+          <span className="trace-window__title-text">{t("trace.title")}</span>
+        </div>
+      }
       extra={
         <Tooltip title={t("trace.close")}>
           <Button
             size="small"
             type="text"
             aria-label={t("trace.close")}
+            icon={<CloseOutlined />}
             onClick={() => closeTraceWindow(rowId)}
-          >
-            ✕
-          </Button>
+          />
         </Tooltip>
       }
     >
-      <Space orientation="vertical" style={{ width: "100%" }} size={4}>
-        <Space>
-          <Typography.Text type="secondary">{t("trace.name")}</Typography.Text>
-          <Input
+      <Flex vertical gap={12}>
+        {/* 寄存器信息 */}
+        <div className="trace-window__group trace-window__group--fields">
+          <Flex vertical gap={6}>
+            <Flex align="center" gap={6}>
+              <Typography.Text className="trace-window__label">
+                {t("trace.name")}
+              </Typography.Text>
+              <Input
+                size="small"
+                style={{ flex: 1, minWidth: 0 }}
+                value={row.name}
+                onChange={(e) =>
+                  updateRow(row.rowId, (current: RegisterRow) => ({
+                    ...current,
+                    name: e.target.value,
+                    updatedAt: Date.now(),
+                  }))
+                }
+              />
+            </Flex>
+            <Flex align="center" gap={6}>
+              <Typography.Text className="trace-window__label">
+                {t("trace.address")}
+              </Typography.Text>
+              <Input
+                size="small"
+                className="trace-window__mono"
+                style={{ flex: 1, minWidth: 0 }}
+                value={row.addressDraft}
+                readOnly
+              />
+              <Typography.Text className="trace-window__label">
+                {t("trace.type")}
+              </Typography.Text>
+              <Input
+                size="small"
+                className="trace-window__mono"
+                style={{ flex: 1, minWidth: 0 }}
+                value={row.dataType}
+                readOnly
+              />
+            </Flex>
+          </Flex>
+        </div>
+
+        {/* 采样控制 */}
+        <div className="trace-window__group">
+          <Flex vertical gap={6}>
+            <Flex align="center" gap={8}>
+              <Space size={6}>
+                <Button
+                  size="small"
+                  type={windowModel.playing ? "default" : "primary"}
+                  icon={<PlayCircleOutlined />}
+                  onClick={() => setTracePlaying(rowId, true)}
+                >
+                  {t("trace.play")}
+                </Button>
+                <Button
+                  size="small"
+                  className={
+                    windowModel.playing
+                      ? "trace-window__btn-stop trace-window__btn-stop--active"
+                      : "trace-window__btn-stop"
+                  }
+                  icon={<PauseOutlined />}
+                  onClick={stopAndAverage}
+                >
+                  {t("trace.stop")}
+                </Button>
+              </Space>
+              <span className="trace-window__btn-spacer" />
+              <Button
+                size="small"
+                icon={<DownloadOutlined />}
+                onClick={saveTrace}
+              >
+                {t("trace.save")}
+              </Button>
+            </Flex>
+            <Flex align="center" gap={6}>
+              <Typography.Text className="trace-window__label">
+                {t("trace.bufferSize")}
+              </Typography.Text>
+              <Select
+                size="small"
+                style={{ width: 110 }}
+                value={windowModel.bufferSize}
+                onChange={(v: BufferSizeOption) => setTraceBufferSize(rowId, v)}
+                options={bufferOptions}
+              />
+            </Flex>
+            <Flex align="center" gap={8} style={{ width: "100%" }}>
+              <Typography.Text className="trace-window__label">
+                {t("trace.speed")}
+              </Typography.Text>
+              <Typography.Text className="trace-window__label">
+                {t("trace.quick")}
+              </Typography.Text>
+              <Slider
+                style={{ flex: 1, minWidth: 0 }}
+                min={0}
+                max={100}
+                value={windowModel.speed}
+                onChange={(v) => setTraceSpeed(rowId, v)}
+              />
+              <Typography.Text className="trace-window__label">
+                {t("trace.slow")}
+              </Typography.Text>
+            </Flex>
+          </Flex>
+        </div>
+
+        {/* 采样数据列表 */}
+        <div className="trace-window__group">
+          <Table
             size="small"
-            style={{ width: 140 }}
-            value={row.name}
-            onChange={(e) =>
-              updateRow(row.rowId, (current: RegisterRow) => ({
-                ...current,
-                name: e.target.value,
-                updatedAt: Date.now(),
-              }))
-            }
+            rowKey="no"
+            columns={columns}
+            dataSource={windowModel.samples}
+            pagination={false}
+            scroll={{ y: 200 }}
           />
-          <Typography.Text type="secondary">
-            {t("trace.address")}
-          </Typography.Text>
-          <Input
-            size="small"
-            style={{ width: 80 }}
-            value={row.addressDraft}
-            readOnly
-          />
-        </Space>
-        <Space>
-          <Typography.Text type="secondary">{t("trace.type")}</Typography.Text>
-          <Input
-            size="small"
-            style={{ width: 120 }}
-            value={row.dataType}
-            readOnly
-          />
-        </Space>
-        <Space>
-          <Button
-            size="small"
-            type={windowModel.playing ? "default" : "primary"}
-            onClick={() => setTracePlaying(rowId, true)}
-          >
-            ▶ {t("trace.play")}
-          </Button>
-          <Button size="small" onClick={stopAndAverage}>
-            ⏹ {t("trace.stop")}
-          </Button>
-          <Button size="small" onClick={saveTrace}>
-            💾 {t("trace.save")}
-          </Button>
-        </Space>
-        <Space>
-          <Typography.Text type="secondary">
-            {t("trace.bufferSize")}
-          </Typography.Text>
-          <Select
-            size="small"
-            style={{ width: 110 }}
-            value={windowModel.bufferSize}
-            onChange={(v: BufferSizeOption) => setTraceBufferSize(rowId, v)}
-            options={bufferOptions}
-          />
-        </Space>
-        <Space style={{ width: "100%" }}>
-          <Typography.Text type="secondary">{t("trace.speed")}</Typography.Text>
-          <Typography.Text type="secondary">{t("trace.quick")}</Typography.Text>
-          <Slider
-            style={{ flex: 1, margin: "0 4px" }}
-            min={0}
-            max={100}
-            value={windowModel.speed}
-            onChange={(v) => setTraceSpeed(rowId, v)}
-          />
-          <Typography.Text type="secondary">{t("trace.slow")}</Typography.Text>
-        </Space>
-        <Table
-          size="small"
-          rowKey="no"
-          columns={columns}
-          dataSource={windowModel.samples}
-          pagination={false}
-          scroll={{ y: 200 }}
-        />
-        <Space>
-          <Typography.Text type="secondary">
+        </div>
+
+        {/* 统计读数 */}
+        <div className="trace-window__average-box">
+          <Typography.Text className="trace-window__label">
             {t("trace.average")}
           </Typography.Text>
           <Input
             size="small"
-            style={{ width: 100 }}
+            variant="borderless"
+            className="trace-window__average"
             aria-label="Average"
             value={windowModel.average ?? ""}
             readOnly
           />
-        </Space>
-      </Space>
+        </div>
+      </Flex>
     </Card>
   );
 }

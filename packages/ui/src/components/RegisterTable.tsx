@@ -17,6 +17,7 @@ import {
   Empty,
   Flex,
   Input,
+  InputNumber,
   Segmented,
   Select,
   Switch,
@@ -25,6 +26,7 @@ import {
 } from "antd";
 import type { InputRef } from "antd";
 import {
+  ColumnWidthOutlined,
   HolderOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -52,7 +54,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { ColumnType, ColumnsType } from "antd/es/table";
 import type { DataType, RegisterRow, RowId, SheetId } from "@mamep2026/domain";
-import { dataTypes } from "@mamep2026/domain";
+import { dataTypes, defaultConfig } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { applyColumnOrder } from "@mamep2026/register-table";
 import { useAppStore } from "../app-store";
@@ -211,11 +213,19 @@ const TmCell = memo(function TmCell({
   const openTraceWindow = useAppStore((s) => s.openTraceWindow);
   const closeTraceWindow = useAppStore((s) => s.closeTraceWindow);
   const host = useAppStore((s) => s.host);
+  // 窗口打开期间 Checkbox 保持勾选，禁止通过取消勾选关闭窗口（单向同步）。
+  const traceWindowOpen = useAppStore(
+    (s) => s.traceWindows[rowId] !== undefined,
+  );
   return (
     <Checkbox
       checked={traceEnabled}
       aria-label="TM"
       onChange={(e) => {
+        if (!e.target.checked && traceWindowOpen) {
+          // 窗口打开时取消勾选无效：不更新状态、不关闭窗口，保持勾选。
+          return;
+        }
         updateRow(rowId, (r) => ({
           ...r,
           traceEnabled: e.target.checked,
@@ -840,6 +850,7 @@ export const RegisterTable = memo(function RegisterTable({
   const appendMessage = useAppStore((s) => s.appendMessage);
   const setSheetRegisterRadix = useAppStore((s) => s.setSheetRegisterRadix);
   const setSheetColumnWidths = useAppStore((s) => s.setSheetColumnWidths);
+  const setSheetColumnOrder = useAppStore((s) => s.setSheetColumnOrder);
   const persistedColWidths = useAppStore(
     (s) =>
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.columnWidths ??
@@ -918,6 +929,14 @@ export const RegisterTable = memo(function RegisterTable({
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.registerRadix ??
       "dec",
   );
+  // 本表的 Slave Address（每表独立，随表持久化）：受控组件直接读 store、
+  // onChange 提交 store（无本地 state 同步问题，区别于列宽拖拽的本地态）。
+  const slaveAddress = useAppStore(
+    (s) =>
+      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.slaveAddress ??
+      defaultConfig.registerTable.slaveAddress,
+  );
+  const setSheetSlaveAddress = useAppStore((s) => s.setSheetSlaveAddress);
 
   const handleReadAll = async (): Promise<void> => {
     if (host === null || host === undefined) return;
@@ -1205,6 +1224,22 @@ export const RegisterTable = memo(function RegisterTable({
     },
     [setSheetColumnWidths, sheetId],
   );
+
+  /** 一键恢复本表列布局（列宽 + 列排序）为默认。
+   *  colWidths 是本地拖拽 state（初值来自 store、不自动跟随 store 更新），恢复必须同时：
+   *  清本地 state + 清镜像 ref（防止后续拖拽 handleResize / mouseup 提交读到旧值）+ 提交 store 持久化；
+   *  列排序直接走 store（columnOrder 传 null 即回到默认顺序）。 */
+  const handleRestoreColumnLayout = useCallback((): void => {
+    setColWidths({});
+    colWidthsRef.current = {};
+    setSheetColumnWidths(sheetId, {});
+    setSheetColumnOrder(sheetId, null);
+  }, [setSheetColumnWidths, setSheetColumnOrder, sheetId]);
+
+  // 本表是否存在自定义列布局（拖拽中的列宽或列序偏离默认）——决定恢复按钮禁用态。
+  // 用本地 colWidths（而非仅 store 值）判断，可反映拖拽中的实时状态。
+  const hasCustomColumnLayout =
+    Object.keys(colWidths).length > 0 || columnOrder !== null;
 
   const baseColumns = useMemo<ColumnType<RegisterRow>[]>(
     () => [
@@ -1616,6 +1651,32 @@ export const RegisterTable = memo(function RegisterTable({
               />
             </span>
           </Tooltip>
+          <Tooltip title={t("table.slaveAddressHint")}>
+            <span className="table-toolbar__slave">
+              <span className="table-toolbar__slave-label">
+                {t("table.slaveAddress")}
+              </span>
+              <InputNumber
+                size="small"
+                aria-label={t("table.slaveAddress")}
+                min={0}
+                max={255}
+                value={slaveAddress}
+                onChange={(v) => setSheetSlaveAddress(sheetId, v ?? 1)}
+                style={{ width: 64 }}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title={t("table.restoreColumnLayoutHint")}>
+            <Button
+              size="small"
+              icon={<ColumnWidthOutlined />}
+              disabled={!hasCustomColumnLayout}
+              onClick={handleRestoreColumnLayout}
+            >
+              {t("table.restoreColumnLayout")}
+            </Button>
+          </Tooltip>
           <span className="table-toolbar__info">
             {t("table.rowCount", { count: rows.length })}
           </span>
@@ -1641,6 +1702,10 @@ export const RegisterTable = memo(function RegisterTable({
               items={rows.map((r) => r.rowId)}
               strategy={verticalListSortingStrategy}
             >
+              {/* 斑马纹：按行号奇偶交替打类（antd Table 内置能力 rowClassName）。
+                  该类经 rc-table 作为 className 传入自定义行组件 MemoRow（...rest 透传），
+                  MemoRow 的 memo 比较器已按字符串值比较 className，不会破坏行级性能优化。
+                  样式见 apps/web/src/index.css 的 register-table__row--striped 规则。 */}
               <Table<RegisterRow>
                 size="small"
                 rowKey="rowId"
@@ -1648,6 +1713,9 @@ export const RegisterTable = memo(function RegisterTable({
                 dataSource={rows}
                 pagination={false}
                 bordered
+                rowClassName={(_record, index) =>
+                  index % 2 === 1 ? "register-table__row--striped" : ""
+                }
                 virtual={rows.length > VIRTUAL_SCROLL_THRESHOLD}
                 {...(tableBodyHeight > 0 ||
                 rows.length > VIRTUAL_SCROLL_THRESHOLD

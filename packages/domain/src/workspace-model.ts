@@ -61,8 +61,6 @@ export interface RtuConnectionProfile {
   stopBits: 1 | 2;
   parity: Parity;
   flowControl: FlowControl;
-  /** 0~255，默认 1；0 不触发广播写入 */
-  slaveAddress: number;
   requestTimeoutMs: number;
   retryCount: number;
   /** Rx Delay：请求间隔，兼作 WP 轮询间隔，默认 50 ms */
@@ -103,6 +101,8 @@ export interface RegisterSheet {
   rows: RegisterRow[];
   /** Register 地址列进制：默认 DEC（每表独立，ADR-014） */
   registerRadix: RegisterRadix;
+  /** Slave Address（从站地址）：每表独立设置，默认 1；请求使用当前表的值（2026-08-19） */
+  slaveAddress: number;
   /** 各列拖拽宽度（每表独立，随工作区持久化；只含用户拖拽过的列，未记录列用默认宽，2026-08-18） */
   columnWidths: Record<string, number>;
   /** 各列拖拽后的排列顺序（每表独立，随工作区持久化；null=未拖拽过，使用默认顺序，2026-08-18） */
@@ -209,7 +209,6 @@ export function createDefaultRtuProfile(name = "RTU"): RtuConnectionProfile {
     stopBits: c.stopBits,
     parity: c.parity,
     flowControl: c.flowControl,
-    slaveAddress: c.slaveAddress,
     requestTimeoutMs: c.requestTimeoutMs,
     retryCount: c.retryCount,
     interRequestDelayMs: c.interRequestDelayMs,
@@ -260,6 +259,7 @@ export function createRegisterSheet(
     order,
     rows: createDefaultSheetRows(defaultConfig.registerTable.defaultRowCount),
     registerRadix: defaultConfig.registerTable.addressRadix,
+    slaveAddress: defaultConfig.registerTable.slaveAddress,
     columnWidths: {},
     columnOrder: null,
     createdAt: now,

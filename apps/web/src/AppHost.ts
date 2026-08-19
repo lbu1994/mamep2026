@@ -73,6 +73,8 @@ export class BrowserAppHost implements AppHost {
   private polling: PollingCoordinator | null = null;
   private trace: TraceCoordinator | null = null;
   private currentProfile: RtuConnectionProfile | null = null;
+  /** 当前会话从站地址（每表独立，2026-08-19）：UI 切换表/修改值时同步，连接时作为初始值。 */
+  private currentSlaveAddress = 1;
   private portLabel: string | null = null;
   private pollingTargets: Array<{ key: string; address: number }> = [];
   private readonly activeTraces = new Map<
@@ -289,6 +291,8 @@ export class BrowserAppHost implements AppHost {
       transport,
       clock: this.clock,
       config: profile,
+      // 初始从站地址：连接后可由 UI 按活动表动态更新（setSlaveAddress）。
+      slaveAddress: this.currentSlaveAddress,
       onLog: (event) => {
         this.commLogStore.appendFromEvent(event);
         for (const listener of this.commLogListeners) listener(event);
@@ -384,13 +388,18 @@ export class BrowserAppHost implements AppHost {
       stopBits: profile?.stopBits ?? 1,
       parity: profile?.parity ?? "none",
       flowControl: profile?.flowControl ?? "off",
-      slaveAddress: profile?.slaveAddress ?? 1,
       timeoutMs: profile?.requestTimeoutMs ?? 1000,
       retryCount: profile?.retryCount ?? 1,
       rxDelayMs: profile?.interRequestDelayMs ?? 50,
       addressAdjust: profile?.addressAdjust ?? "off",
       connectionState: this.getConnectionState(),
     };
+  }
+
+  /** 更新当前会话从站地址（每表独立）：对后续所有请求（读/写/轮询/追踪）生效。 */
+  setSlaveAddress(slave: number): void {
+    this.currentSlaveAddress = slave;
+    this.session?.setSlaveAddress(slave);
   }
 
   async readRow(row: RegisterRow): Promise<Result<number>> {

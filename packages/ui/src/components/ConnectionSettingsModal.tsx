@@ -2,14 +2,17 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Alert,
+  Badge,
   Button,
   Col,
+  Divider,
+  Flex,
   Form,
   InputNumber,
   Modal,
   Row,
   Select,
-  Space,
+  Tag,
   Typography,
 } from "antd";
 import {
@@ -21,6 +24,7 @@ import {
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
+import type { ConnectionState } from "@mamep2026/communication";
 import type { SerialDeviceHandle } from "@mamep2026/platform-api";
 import { useAppStore } from "../app-store";
 import {
@@ -30,6 +34,26 @@ import {
   toProfile,
   type ConnectionSettingsValues,
 } from "./connection-settings-model";
+
+/**
+ * 连接状态 → Badge 语义色。
+ * 模态框在 portal 中渲染，antd 组件自身 token 可靠；不沿用顶栏 STATE_DOT_COLOR
+ * 的 var(--ant-*) 内联样式，避免 portal 内 CSS 变量解析失效。
+ */
+const STATE_BADGE_STATUS: Record<
+  ConnectionState,
+  "success" | "processing" | "warning" | "error" | "default"
+> = {
+  disconnected: "default",
+  "selecting-device": "processing",
+  connecting: "processing",
+  connected: "success",
+  disconnecting: "processing",
+  "reconnect-waiting": "processing",
+  reconnecting: "processing",
+  interrupted: "warning",
+  failed: "error",
+};
 
 export function ConnectionSettingsModal(): React.ReactNode {
   const { t } = useTranslation();
@@ -159,31 +183,34 @@ export function ConnectionSettingsModal(): React.ReactNode {
         </Typography.Paragraph>
       ) : null}
       <Form layout="vertical" size="small">
+        <Divider
+          titlePlacement="left"
+          plain
+          style={{ marginTop: 0, marginBottom: 8 }}
+        >
+          {t("connection.groupCommunication")}
+        </Divider>
         <Row gutter={16}>
           <Col span={12}>
-            <div className="connection-settings-group">
-              {t("connection.groupCommunication")}
-            </div>
             <Form.Item label={t("connection.port")}>
               {isMock ? (
-                <Typography.Text strong>
-                  {t("connection.portMock")}
-                </Typography.Text>
+                <Tag>{t("connection.portMock")}</Tag>
               ) : (
-                <Space>
+                <Flex gap={8} align="center">
                   <Button
                     icon={<UsbOutlined />}
                     onClick={() => void selectPort()}
                   >
                     {t("connection.portSelect")}
                   </Button>
-                  <Typography.Text>
-                    {selectedHandle?.label ?? ""}
-                  </Typography.Text>
-                </Space>
+                  {selectedHandle !== null ? (
+                    <Tag style={{ marginInlineEnd: 0 }}>
+                      {selectedHandle.label}
+                    </Tag>
+                  ) : null}
+                </Flex>
               )}
             </Form.Item>
-
             <Controller
               name="baudRate"
               control={control}
@@ -217,6 +244,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
                 </Form.Item>
               )}
             />
+          </Col>
+          <Col span={12}>
             <Controller
               name="stopBits"
               control={control}
@@ -270,25 +299,16 @@ export function ConnectionSettingsModal(): React.ReactNode {
               )}
             />
           </Col>
+        </Row>
+        <Divider
+          titlePlacement="left"
+          plain
+          style={{ marginTop: 16, marginBottom: 8 }}
+        >
+          {t("connection.groupOption")}
+        </Divider>
+        <Row gutter={16}>
           <Col span={12}>
-            <div className="connection-settings-group">
-              {t("connection.groupOption")}
-            </div>
-            <Controller
-              name="slaveAddress"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.slaveAddress")}>
-                  <InputNumber
-                    style={{ width: "100%" }}
-                    min={0}
-                    max={255}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v ?? 1)}
-                  />
-                </Form.Item>
-              )}
-            />
             <Controller
               name="rxDelay"
               control={control}
@@ -319,6 +339,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
                 </Form.Item>
               )}
             />
+          </Col>
+          <Col span={12}>
             <Controller
               name="retry"
               control={control}
@@ -357,9 +379,12 @@ export function ConnectionSettingsModal(): React.ReactNode {
           </Col>
         </Row>
         {connectionState !== "disconnected" && connectionState !== "failed" ? (
-          <Typography.Text type="secondary">
-            {t(`state.${connectionState}`)}
-          </Typography.Text>
+          <div style={{ marginTop: 8 }}>
+            <Badge
+              status={STATE_BADGE_STATUS[connectionState]}
+              text={t(`state.${connectionState}`)}
+            />
+          </div>
         ) : null}
         {connectError !== null ? (
           <Alert

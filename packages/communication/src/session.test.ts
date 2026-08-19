@@ -104,6 +104,22 @@ describe("CommunicationSession readRegister", () => {
     if (result.ok) expect(result.value).toBe(0x1234);
   });
 
+  it("uses the dynamically updated slave address for subsequent requests", async () => {
+    const { session, transport, clock } = makeSession();
+    await session.connect();
+
+    // 默认从站地址 1；动态更新为 5 后，后续请求帧首字节为 0x05。
+    session.setSlaveAddress(5);
+    const promise = session.readRegister(0x0001, { source: "manual-read" });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    expect(Array.from(transport.sentFrames[0] ?? [])[0]).toBe(0x05);
+
+    transport.simulateData(readResponse(5, 0x1234));
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(0x1234);
+  });
+
   it("logs request and response bytes", async () => {
     const logs: CommunicationLogEvent[] = [];
     const { session, transport, clock } = makeSession({

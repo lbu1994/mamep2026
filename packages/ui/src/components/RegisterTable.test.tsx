@@ -257,3 +257,33 @@ describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）
     expect(screen.getAllByLabelText("Register")[0]?.textContent).toBe("xyz");
   });
 });
+
+describe("RegisterTable 斑马纹（rowClassName 按行号奇偶交替）", () => {
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({
+      host: null,
+      workspace: createEmptyWorkspace(),
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  it("奇数行带 register-table__row--striped、偶数行不带", () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+    // 只取真实数据行（排除 ant-table-measure-row / ant-table-placeholder）。
+    // 注意：隔离渲染没有上层 Tabs 的 .register-table-tabs 祖先类，选择器不加该前缀。
+    const rows = Array.from(
+      document.querySelectorAll(".ant-table-tbody > tr.ant-table-row"),
+    );
+    expect(rows.length).toBeGreaterThanOrEqual(4);
+    rows.forEach((row, index) => {
+      expect(row.classList.contains("register-table__row--striped")).toBe(
+        index % 2 === 1,
+      );
+    });
+  });
+});

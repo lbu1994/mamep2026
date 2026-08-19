@@ -42,7 +42,9 @@ test("top bar shows status chip, MOCK badge and Help", async ({ page }) => {
   const header = page.locator(".ant-layout-header");
   // 新建入口只在侧栏 REGISTER TABLES 分区，顶栏不放。
   await expect(header).not.toContainText("New Register Table");
-  await expect(header).toContainText("Online · RTU · Slave 1");
+  // 从站地址已迁移为每表独立设置（2026-08-19），Header 不再显示 Slave。
+  await expect(header).toContainText("Online");
+  await expect(header).not.toContainText("Slave");
   await expect(header).toContainText("MOCK");
   await expect(header).toContainText("Help");
 

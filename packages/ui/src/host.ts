@@ -36,7 +36,6 @@ export interface CommProperties {
   stopBits: number;
   parity: string;
   flowControl: FlowControl;
-  slaveAddress: number;
   timeoutMs: number;
   retryCount: number;
   rxDelayMs: number;
@@ -68,6 +67,8 @@ export interface AppHost {
   disconnect(): Promise<Result<void>>;
   getConnectionState(): ConnectionState;
   getCommProperties(): CommProperties;
+  /** 更新当前会话的从站地址（每表独立，2026-08-19）：对后续所有请求生效。 */
+  setSlaveAddress(slave: number): void;
   subscribeConnectionState(
     listener: (state: ConnectionState) => void,
   ): () => void;

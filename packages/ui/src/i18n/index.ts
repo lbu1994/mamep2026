@@ -19,7 +19,6 @@ export const en = {
     more: "More",
     readAll: "Read All",
     toggleSidebar: "Toggle sidebar",
-    rtuSlave: "RTU · Slave {{address}}",
     mock: "MOCK",
   },
   sidebar: {
@@ -40,7 +39,6 @@ export const en = {
     stopBits: "Stop Bit",
     parity: "Parity Bit",
     flowControl: "Flow Control",
-    slaveAddress: "Slave Address",
     rxDelay: "Rx Delay (ms)",
     timeout: "Timeout (ms)",
     retry: "Retry Counter",
@@ -135,6 +133,12 @@ export const en = {
     emptySheet: "Add registers to start monitoring.",
     emptySheetHint: "Define a register, then read or write it from the device.",
     rowCount: "{{count}} rows",
+    restoreColumnLayout: "Reset layout",
+    restoreColumnLayoutHint:
+      "Reset column widths and order to default for this table.",
+    slaveAddress: "Slave Address",
+    slaveAddressHint:
+      "Slave address used for this table's read/write requests.",
     batchSummary:
       "Read All: {{success}} succeeded, {{failure}} failed, {{skipped}} skipped",
   },
@@ -174,7 +178,6 @@ export const en = {
     response: "Response",
     serialPort: "Serial Port",
     baud: "Baud Rate",
-    slave: "Slave",
     status: "Status",
     notesPlaceholder: "Device model, firmware version, test notes…",
   },
@@ -290,7 +293,6 @@ export const zh: TranslationResources = {
     more: "更多",
     readAll: "读取全表",
     toggleSidebar: "切换侧栏",
-    rtuSlave: "RTU · 从站 {{address}}",
     mock: "MOCK",
   },
   sidebar: {
@@ -311,7 +313,6 @@ export const zh: TranslationResources = {
     stopBits: "停止位",
     parity: "校验位",
     flowControl: "流控",
-    slaveAddress: "从站地址",
     rxDelay: "Rx Delay（毫秒）",
     timeout: "超时（毫秒）",
     retry: "重试次数",
@@ -402,6 +403,10 @@ export const zh: TranslationResources = {
     emptySheet: "添加寄存器开始监控。",
     emptySheetHint: "定义寄存器后，即可从设备读取或写入。",
     rowCount: "{{count}} 行",
+    restoreColumnLayout: "恢复列布局",
+    restoreColumnLayoutHint: "将本表列宽与列排序恢复为默认。",
+    slaveAddress: "从站地址",
+    slaveAddressHint: "本表读写请求使用的从站地址。",
     batchSummary:
       "全表读取：成功 {{success}}，失败 {{failure}}，跳过 {{skipped}}",
   },
@@ -441,7 +446,6 @@ export const zh: TranslationResources = {
     response: "响应",
     serialPort: "串口",
     baud: "波特率",
-    slave: "从站",
     status: "状态",
     notesPlaceholder: "设备型号、固件版本、测试记录…",
   },

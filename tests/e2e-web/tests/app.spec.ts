@@ -69,8 +69,9 @@ test("non-mock startup opens Connection Settings modal with RTU defaults", async
 
   const modal = page.locator(".ant-modal-container:visible");
   await expect(modal).toContainText("Connection Settings");
-  // Defaults: Slave Address=1, Rx Delay=50, Address Adjust=OFF, Timeout=1000, Retry=1.
-  await expect(modal).toContainText("Slave Address");
+  // Defaults: Rx Delay=50, Address Adjust=OFF, Timeout=1000, Retry=1.
+  // 从站地址已迁移为每表独立设置（2026-08-19），不再属于连接设置。
+  await expect(modal).not.toContainText("Slave Address");
   await expect(modal).toContainText("Address Adjust");
   await expect(modal).toContainText("OFF");
   // No Modbus TCP entry in the browser.
@@ -302,8 +303,23 @@ test("TM opens a Memory Trace window and collects samples", async ({
   await expect(traceWindow).toContainText("Speed");
   await expect(traceWindow).toContainText("Average");
 
-  // Sampled value (hex 1234) appears in the No./Data list.
+  // 打开窗口不自动开始采样：等待片刻确认无采样数据出现。
+  await page.waitForTimeout(1500);
+  await expect(traceWindow).not.toContainText("1234");
+
+  // 手动点击 Play 才开始采样；采样值（hex 1234）出现在 No./Data 列表。
+  await traceWindow
+    .getByRole("button", { name: /Play/ })
+    .evaluate((el) => (el as HTMLElement).click());
   await expect(traceWindow).toContainText("1234", { timeout: 10000 });
+
+  // 窗口打开期间无法通过取消勾选 TM 关闭窗口（Checkbox 保持勾选）。
+  await page
+    .getByLabel("TM")
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
+  await expect(traceWindow).toBeVisible();
+  await expect(page.getByLabel("TM").first()).toBeChecked();
 
   // Stop shows the Average value.
   await traceWindow
@@ -312,6 +328,13 @@ test("TM opens a Memory Trace window and collects samples", async ({
   await expect
     .poll(async () => page.getByLabel("Average").first().inputValue())
     .not.toBe("");
+
+  // 关闭窗口（✕）后窗口消失，TM Checkbox 自动取消勾选。
+  await traceWindow
+    .getByRole("button", { name: "Close" })
+    .evaluate((el) => (el as HTMLElement).click());
+  await expect(traceWindow).toBeHidden();
+  await expect(page.getByLabel("TM").first()).not.toBeChecked();
 });
 
 test("sheets can be added and the workspace survives a reload", async ({

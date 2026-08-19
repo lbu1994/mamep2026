@@ -10,8 +10,8 @@ describe("defaultConfig (docs/AGENTS.md §42 集中默认值)", () => {
     expect(defaultConfig.rtu.flowControl).toBe("off");
   });
 
-  it("uses slave address default 1 within range 0..255", () => {
-    expect(defaultConfig.rtu.slaveAddress).toBe(1);
+  it("uses slave address default 1 within range 0..255 (per-table setting)", () => {
+    expect(defaultConfig.registerTable.slaveAddress).toBe(1);
   });
 
   it("uses Rx Delay default 50 ms which also drives WP polling interval", () => {

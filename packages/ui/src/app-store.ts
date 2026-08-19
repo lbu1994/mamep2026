@@ -158,6 +158,8 @@ export interface AppStoreState {
   setRowDataType: (rowId: RowId, dataType: DataType) => void;
   /** 设置某张表的 Register 地址列进制（DEC/HEX），随自动保存持久化（ADR-014）。 */
   setSheetRegisterRadix: (sheetId: SheetId, radix: RegisterRadix) => void;
+  /** 设置某张表的 Slave Address（每表独立，随表持久化，IndexedDB 自动保存，2026-08-19）。 */
+  setSheetSlaveAddress: (sheetId: SheetId, slave: number) => void;
   /** 设置某张表的列宽（每表独立，随表持久化，IndexedDB 自动保存）。 */
   setSheetColumnWidths: (
     sheetId: SheetId,
@@ -828,6 +830,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       },
     })),
 
+  setSheetSlaveAddress: (sheetId, slave) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId
+            ? { ...sheet, slaveAddress: slave, updatedAt: Date.now() }
+            : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
+    })),
+
   setSheetColumnWidths: (sheetId, widths) =>
     set((state) => ({
       workspace: {
@@ -862,7 +877,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           rowId,
           bufferSize: "continue",
           speed: 60,
-          playing: true,
+          // 打开窗口不自动开始采样，等待用户手动点击 Play。
+          playing: false,
           samples: [],
           average: null,
         },
@@ -872,7 +888,27 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     set((state) => {
       const windows = { ...state.traceWindows };
       delete windows[rowId];
-      return { traceWindows: windows };
+      // 关闭窗口后同步复位对应行的 TM 勾选（traceEnabled），保持 Checkbox 与窗口单向同步。
+      let found = false;
+      const sheets = state.workspace.sheets.map((sheet) => {
+        let changed = false;
+        const rows = sheet.rows.map((row) => {
+          if (row.rowId !== rowId) return row;
+          found = true;
+          changed = true;
+          return { ...row, traceEnabled: false, updatedAt: Date.now() };
+        });
+        return changed ? { ...sheet, rows, updatedAt: Date.now() } : sheet;
+      });
+      if (!found) return { traceWindows: windows };
+      return {
+        traceWindows: windows,
+        workspace: {
+          ...state.workspace,
+          sheets,
+          updatedAt: Date.now(),
+        },
+      };
     }),
   setTracePlaying: (rowId, playing) =>
     set((state) => {

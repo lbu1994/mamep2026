@@ -64,14 +64,17 @@ const sheetSchema = z.object({
     .default({}),
   /** 各列拖拽后的排列顺序（随表持久化，2026-08-18）；老数据缺省补 null（默认顺序），无需迁移 */
   columnOrder: z.array(z.string()).nullable().default(null),
+  /** Slave Address（每表独立，随表持久化，2026-08-19）；老数据缺省补默认 1，无需迁移 */
+  slaveAddress: z.number().int().min(0).max(255).default(1),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
 
 /**
  * RTU 连接配置完整持久化（2026-08-17 确认）：除串口/端口选择外，波特率、数据位、
- * 停止位、校验位、流控等端口参数与从站地址、超时、重试、请求间隔、Address Adjust
- * 均随工作区持久化。串口/端口选择本身是运行时会话状态，不进入持久化；
+ * 停止位、校验位、流控等端口参数与超时、重试、请求间隔、Address Adjust
+ * 均随工作区持久化（从站地址已按表独立设置，2026-08-19，见 sheetSchema.slaveAddress）。
+ * 串口/端口选择本身是运行时会话状态，不进入持久化；
  * recentPortHint 仅作端口提示（docs/AGENTS.md §19.3），不用于自动连接。
  * 端口字段带默认值：兼容「端口参数未持久化」期间写入的旧数据（缺省回填默认值，无需迁移）。
  */
@@ -92,7 +95,6 @@ const rtuProfileSchema = z.object({
   flowControl: z
     .enum(["off", "rts-cts", "xon-xoff"])
     .default(defaultConfig.rtu.flowControl as "off" | "rts-cts" | "xon-xoff"),
-  slaveAddress: z.number().int().min(0).max(255),
   requestTimeoutMs: z.number().int().min(0),
   retryCount: z.number().int().min(0).max(10),
   interRequestDelayMs: z.number().int().min(0),

@@ -14,7 +14,6 @@ import {
   Descriptions,
   Input,
   Listy,
-  Space,
   Switch,
   Tabs,
   Tag,
@@ -26,22 +25,18 @@ import type { ListyRef } from "antd";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
-  CheckCircleOutlined,
   ClearOutlined,
-  ClockCircleOutlined,
   CloseCircleOutlined,
   CopyOutlined,
   DownOutlined,
   InfoCircleOutlined,
-  StopOutlined,
-  SyncOutlined,
   UpOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import type { ConnectionState } from "@mamep2026/communication";
 import type { FlowControl } from "@mamep2026/domain";
 import type { CommunicationLogEntry } from "@mamep2026/logging";
 import { useAppStore } from "../app-store";
+import { STATE_DOT_COLOR } from "../connection-state";
 import { isNearBottom } from "../log-scroll";
 
 /**
@@ -80,19 +75,6 @@ const CommLogRow = memo(function CommLogRow({
   );
 });
 CommLogRow.displayName = "CommLogRow";
-
-/** 连接状态图标（与 MamepApp 顶栏 STATE_DOT_COLOR 语义对齐）。 */
-const STATE_ICON: Record<ConnectionState, React.ReactNode> = {
-  disconnected: <StopOutlined />,
-  "selecting-device": <SyncOutlined />,
-  connecting: <SyncOutlined />,
-  connected: <CheckCircleOutlined />,
-  disconnecting: <SyncOutlined />,
-  "reconnect-waiting": <ClockCircleOutlined />,
-  reconnecting: <SyncOutlined />,
-  interrupted: <ClockCircleOutlined />,
-  failed: <CloseCircleOutlined />,
-};
 
 export function BottomPanel(): React.ReactNode {
   const { t, i18n } = useTranslation();
@@ -272,7 +254,8 @@ export function BottomPanel(): React.ReactNode {
       }
     >
       <div className="comm-log__toolbar">
-        <Space size="small">
+        {/* 视图开关组（Auto scroll）与操作组（Copy/Clear）分组 + 竖分隔，与主表工具栏同语言 */}
+        <span className="comm-log__toolbar-group">
           <Tooltip title={t("panel.autoScroll")}>
             <span className="comm-log__autoscroll">
               <Switch
@@ -284,8 +267,14 @@ export function BottomPanel(): React.ReactNode {
               <Typography.Text>{t("panel.autoScroll")}</Typography.Text>
             </span>
           </Tooltip>
+        </span>
+        <span className="comm-log__toolbar-sep" aria-hidden="true" />
+        <span className="comm-log__toolbar-group">
+          {/* Copy 为主操作：antd 原生 primary outlined（品牌描边，hover 自动填充强调） */}
           <Button
             size="small"
+            color="primary"
+            variant="outlined"
             icon={<CopyOutlined />}
             disabled={commLog.length === 0 || host === null}
             onClick={() => void handleCopy()}
@@ -295,7 +284,7 @@ export function BottomPanel(): React.ReactNode {
           <Button size="small" icon={<ClearOutlined />} onClick={clearCommLog}>
             {t("panel.clear")}
           </Button>
-        </Space>
+        </span>
       </div>
       <div ref={commLogAreaRef} className="comm-log__area">
         {commLog.length === 0 ? (
@@ -327,49 +316,62 @@ export function BottomPanel(): React.ReactNode {
 
   const propertiesTab =
     properties === null ? null : (
-      <Descriptions size="small" column={3}>
-        <Descriptions.Item label={t("panel.serialPort")}>
-          {properties.portLabel ?? "-"}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("panel.baud")}>
-          {properties.baudRate}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("connection.dataBits")}>
-          {properties.dataBits}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("connection.stopBits")}>
-          {properties.stopBits}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("connection.parity")}>
-          {properties.parity}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("connection.flowControl")}>
-          {flowControlLabels[properties.flowControl]}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("panel.slave")}>
-          {properties.slaveAddress}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("connection.timeout")}>
-          {properties.timeoutMs}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("connection.retry")}>
-          {properties.retryCount}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("connection.rxDelay")}>
-          {properties.rxDelayMs}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("connection.addressAdjust")}>
-          {properties.addressAdjust.toUpperCase()}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("panel.status")}>
-          <Tag
-            color={connectionState === "connected" ? "green" : "default"}
-            icon={STATE_ICON[connectionState]}
-          >
-            {t(`state.${connectionState}`)}
-          </Tag>
-        </Descriptions.Item>
-      </Descriptions>
+      /* 通信属性读数面板（2026-08-19 精修）：容器 + 小写大写字幕标签 + 统一值字体，
+         取色走令牌，浅/深主题自动适配。 */
+      <div className="comm-props">
+        <Descriptions
+          size="small"
+          column={3}
+          classNames={{
+            label: "comm-props__label",
+            content: "comm-props__content",
+          }}
+        >
+          <Descriptions.Item label={t("panel.serialPort")}>
+            {properties.portLabel ?? "-"}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("panel.baud")}>
+            {properties.baudRate}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("connection.dataBits")}>
+            {properties.dataBits}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("connection.stopBits")}>
+            {properties.stopBits}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("connection.parity")}>
+            {properties.parity}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("connection.flowControl")}>
+            {flowControlLabels[properties.flowControl]}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("connection.timeout")}>
+            {properties.timeoutMs}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("connection.retry")}>
+            {properties.retryCount}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("connection.rxDelay")}>
+            {properties.rxDelayMs}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("connection.addressAdjust")}>
+            {properties.addressAdjust.toUpperCase()}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("panel.status")}>
+            {/* 与顶栏状态胶囊同语义：圆点 + 文字，data-conn-state 供 CSS 按连接态着色 */}
+            <span
+              className="comm-props__status"
+              data-conn-state={connectionState}
+            >
+              <span
+                className="comm-props__status-dot"
+                style={{ backgroundColor: STATE_DOT_COLOR[connectionState] }}
+              />
+              {t(`state.${connectionState}`)}
+            </span>
+          </Descriptions.Item>
+        </Descriptions>
+      </div>
     );
 
   const notesTab = (

@@ -28,7 +28,8 @@ describe("IndexedDBWorkspaceRepository", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.sheets).toHaveLength(1);
-      expect(result.value.connectionProfiles[0]?.slaveAddress).toBe(1);
+      // 从站地址为表级字段：默认 1。
+      expect(result.value.sheets[0]?.slaveAddress).toBe(1);
     }
   });
 

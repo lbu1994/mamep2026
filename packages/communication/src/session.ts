@@ -34,15 +34,7 @@ import type { CommunicationLogEvent, RequestSource } from "./log-event";
 import { RequestScheduler, type RequestPriority } from "./request-scheduler";
 import type { TransportPort } from "./transport-port";
 
-export interface SessionOptions {
-  transport: TransportPort;
-  clock: Clock;
-  /** 连接配置快照；从站地址、超时、重试、Rx Delay 的修改对后续请求生效。 */
-  config: RtuConnectionProfile;
-  onLog?: (event: CommunicationLogEvent) => void;
-  onStateChange?: (state: ConnectionState) => void;
-  fairnessThresholdMs?: number;
-}
+
 
 export type WriteOutcome = { kind: "write-succeeded-no-verify" };
 
@@ -175,14 +167,29 @@ class RtuFrameParser {
   }
 }
 
+export interface SessionOptions {
+  transport: TransportPort;
+  clock: Clock;
+  /** 连接配置快照；超时、重试、Rx Delay 的修改对后续请求生效。 */
+  config: RtuConnectionProfile;
+  /** 初始从站地址（默认 1）；连接后可经 setSlaveAddress 动态更新（2026-08-19）。 */
+  slaveAddress?: number;
+  onLog?: (event: CommunicationLogEvent) => void;
+  onStateChange?: (state: ConnectionState) => void;
+  fairnessThresholdMs?: number;
+}
+
 export class CommunicationSession {
   readonly stateMachine = new ConnectionStateMachine();
   private readonly options: SessionOptions;
   private readonly scheduler: RequestScheduler;
   private pendingExchange: PendingExchange | null = null;
+  /** 当前从站地址：连接后可动态更新（每表独立设置，2026-08-19）。 */
+  private slaveAddress: number;
 
   constructor(options: SessionOptions) {
     this.options = options;
+    this.slaveAddress = options.slaveAddress ?? 1;
     this.scheduler = new RequestScheduler(options.clock, {
       fairnessThresholdMs: options.fairnessThresholdMs ?? 2000,
       getInterRequestDelayMs: () => this.options.config.interRequestDelayMs,
@@ -241,7 +248,7 @@ export class CommunicationSession {
       direction: "response",
       bytes: new Uint8Array(0),
       protocol: "rtu",
-      slaveAddress: this.options.config.slaveAddress,
+      slaveAddress: this.slaveAddress,
       functionCode: null,
       userAddress: null,
       sentAddress: null,
@@ -269,6 +276,11 @@ export class CommunicationSession {
 
   getState(): ConnectionState {
     return this.stateMachine.getState();
+  }
+
+  /** 动态更新当前从站地址：对后续所有请求（读/写/轮询/追踪）生效（2026-08-19）。 */
+  setSlaveAddress(slave: number): void {
+    this.slaveAddress = slave;
   }
 
   getConfig(): RtuConnectionProfile {
@@ -352,14 +364,14 @@ export class CommunicationSession {
   ): Promise<Result<number>> {
     const expect: ExpectedResponse = {
       kind: "read-holding",
-      slaveAddress: this.options.config.slaveAddress,
+      slaveAddress: this.slaveAddress,
       startAddress: sentAddress,
       quantity: 1,
     };
     const decoded = await this.executeExchange(
       () =>
         encodeReadHoldingRegistersRequest({
-          slaveAddress: this.options.config.slaveAddress,
+          slaveAddress: this.slaveAddress,
           startAddress: sentAddress,
           quantity: 1,
         }),
@@ -398,14 +410,14 @@ export class CommunicationSession {
   ): Promise<Result<WriteOutcome>> {
     const expect: ExpectedResponse = {
       kind: "write-single",
-      slaveAddress: this.options.config.slaveAddress,
+      slaveAddress: this.slaveAddress,
       address: sentAddress,
       quantity: 1,
     };
     const decoded = await this.executeExchange(
       () =>
         encodeWriteSingleRegisterRequest({
-          slaveAddress: this.options.config.slaveAddress,
+          slaveAddress: this.slaveAddress,
           address: sentAddress,
           rawValue,
         }),
@@ -612,7 +624,7 @@ export class CommunicationSession {
       direction: "response",
       bytes,
       protocol: "rtu",
-      slaveAddress: this.options.config.slaveAddress,
+      slaveAddress: this.slaveAddress,
       functionCode: meta.functionCode,
       userAddress: meta.userAddress,
       sentAddress: meta.sentAddress,

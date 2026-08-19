@@ -7,7 +7,6 @@ export const settingsSchema = z.object({
   stopBits: z.union([z.literal(1), z.literal(2)]),
   parity: z.enum(["none", "even", "odd"]),
   flowControl: z.enum(["off", "rts-cts"]),
-  slaveAddress: z.number().int().min(0).max(255),
   rxDelay: z.number().int().min(0).max(5000),
   timeout: z.number().int().min(50).max(60000),
   retry: z.number().int().min(0).max(10),
@@ -18,8 +17,9 @@ export type ConnectionSettingsValues = z.infer<typeof settingsSchema>;
 
 /**
  * 随工作区持久化的连接设置子集（2026-08-17 确认）：除「串口/端口选择」外的全部
- * 可配置参数（波特率/数据位/停止位/校验位/流控 + Slave Address/超时/重试/Rx Delay/
- * Address Adjust）。串口/端口选择是运行时会话状态，不进入该集合。
+ * 可配置参数（波特率/数据位/停止位/校验位/流控 + 超时/重试/Rx Delay/Address
+ * Adjust）。串口/端口选择是运行时会话状态，不进入该集合。
+ * 从站地址已按表独立设置（2026-08-19），不再属于全局连接设置。
  */
 export const persistedSettingsSchema = z.object({
   baudRate: z.number().int().positive(),
@@ -27,7 +27,6 @@ export const persistedSettingsSchema = z.object({
   stopBits: z.union([z.literal(1), z.literal(2)]),
   parity: z.enum(["none", "even", "odd"]),
   flowControl: z.enum(["off", "rts-cts"]),
-  slaveAddress: z.number().int().min(0).max(255),
   requestTimeoutMs: z.number().int().min(50).max(60000),
   retryCount: z.number().int().min(0).max(10),
   interRequestDelayMs: z.number().int().min(0).max(5000),
@@ -55,7 +54,6 @@ export function profileToValues(
     parity: profile.parity,
     flowControl:
       profile.flowControl === "xon-xoff" ? "off" : profile.flowControl,
-    slaveAddress: profile.slaveAddress,
     rxDelay: profile.interRequestDelayMs,
     timeout: profile.requestTimeoutMs,
     retry: profile.retryCount,
@@ -73,7 +71,6 @@ export function extractPersistedSettings(
     stopBits: values.stopBits,
     parity: values.parity,
     flowControl: values.flowControl,
-    slaveAddress: values.slaveAddress,
     requestTimeoutMs: values.timeout,
     retryCount: values.retry,
     interRequestDelayMs: values.rxDelay,

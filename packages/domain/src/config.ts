@@ -9,7 +9,6 @@ export const defaultConfig = {
     stopBits: 1,
     parity: "none",
     flowControl: "off",
-    slaveAddress: 1,
     requestTimeoutMs: 1000,
     retryCount: 1,
     /** Rx Delay：请求间隔，兼作 WP 轮询间隔（ADR-013） */
@@ -20,6 +19,8 @@ export const defaultConfig = {
   registerTable: {
     /** Register 地址列进制：默认 DEC（按表独立，ADR-014） */
     addressRadix: "dec",
+    /** Slave Address 默认值：1（按表独立设置，2026-08-19） */
+    slaveAddress: 1,
     /** 新建寄存器表默认填充的行数（2026-08-15） */
     defaultRowCount: 50,
   },

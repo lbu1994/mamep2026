@@ -364,6 +364,22 @@ describe("setSheetColumnWidths", () => {
     expect(after[1]?.columnWidths).toEqual({});
     expect(after.find((s) => s.sheetId === second)?.columnWidths).toEqual({});
   });
+
+  it("可重置为 {}（回到默认列宽，仅影响本表）", () => {
+    const store = useAppStore.getState();
+    store.addSheet(); // Sheet 2
+    const first = firstSheetId();
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (second === undefined) throw new Error("missing second sheet");
+    useAppStore.getState().setSheetColumnWidths(first, {
+      name: 210,
+      data: 300,
+    });
+    useAppStore.getState().setSheetColumnWidths(first, {});
+    const after = useAppStore.getState().workspace.sheets;
+    expect(after[0]?.columnWidths).toEqual({});
+    expect(after.find((s) => s.sheetId === second)?.columnWidths).toEqual({});
+  });
 });
 
 describe("setSheetColumnOrder", () => {
@@ -650,7 +666,6 @@ describe("setConnectionSettings", () => {
       stopBits: 2,
       parity: "even",
       flowControl: "rts-cts",
-      slaveAddress: 6,
       requestTimeoutMs: 1800,
       retryCount: 4,
       interRequestDelayMs: 90,
@@ -665,7 +680,6 @@ describe("setConnectionSettings", () => {
     expect(profile?.parity).toBe("even");
     expect(profile?.flowControl).toBe("rts-cts");
     // 非端口参数被更新。
-    expect(profile?.slaveAddress).toBe(6);
     expect(profile?.requestTimeoutMs).toBe(1800);
     expect(profile?.retryCount).toBe(4);
     expect(profile?.interRequestDelayMs).toBe(90);
@@ -681,15 +695,36 @@ describe("setConnectionSettings", () => {
       stopBits: 2,
       parity: "even",
       flowControl: "rts-cts",
-      slaveAddress: 999,
-      requestTimeoutMs: 1800,
+      requestTimeoutMs: 999999,
       retryCount: 4,
       interRequestDelayMs: 90,
       addressAdjust: "on",
     });
+    // 越界 requestTimeoutMs（>60000）使持久化 schema 校验失败，整个写入被拒绝。
     expect(
-      useAppStore.getState().workspace.connectionProfiles[0]?.slaveAddress,
-    ).toBe(1);
+      useAppStore.getState().workspace.connectionProfiles[0]
+        ?.requestTimeoutMs,
+    ).toBe(1000);
+  });
+});
+
+describe("setSheetSlaveAddress", () => {
+  it("sets the sheet-level slave address independently per sheet", () => {
+    const firstId = useAppStore.getState().workspace.sheets[0]?.sheetId;
+    if (firstId === undefined) throw new Error("missing first sheet");
+    expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(1);
+
+    useAppStore.getState().setSheetSlaveAddress(firstId, 7);
+    expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(7);
+
+    // 新建表默认 1，且每表独立互不影响。
+    useAppStore.getState().addSheet();
+    const secondId = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (secondId === undefined) throw new Error("missing second sheet");
+    expect(useAppStore.getState().workspace.sheets[1]?.slaveAddress).toBe(1);
+    useAppStore.getState().setSheetSlaveAddress(secondId, 9);
+    expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(7);
+    expect(useAppStore.getState().workspace.sheets[1]?.slaveAddress).toBe(9);
   });
 });
 
@@ -861,5 +896,55 @@ describe("commitCellText（Data 单元格提交校验）", () => {
     expect(
       useAppStore.getState().cellValidationErrors[`${row.rowId}:data`],
     ).toBeTruthy();
+  });
+});
+
+describe("traceWindows（TM 追踪窗口）", () => {
+  function addFirstRowForTrace() {
+    clearAllSheetRows();
+    const id = firstSheetId();
+    useAppStore.getState().addRow(id);
+    const sheet = useAppStore
+      .getState()
+      .workspace.sheets.find((s) => s.sheetId === id);
+    const row = sheet?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    return row;
+  }
+
+  it("openTraceWindow 打开窗口但初始不自动开始采样（playing=false）", () => {
+    const row = addFirstRowForTrace();
+    useAppStore.getState().openTraceWindow(row.rowId);
+    const model = useAppStore.getState().traceWindows[row.rowId];
+    expect(model).toBeDefined();
+    expect(model?.playing).toBe(false);
+    expect(model?.samples).toEqual([]);
+  });
+
+  it("closeTraceWindow 删除窗口并复位对应行 traceEnabled", () => {
+    const row = addFirstRowForTrace();
+    useAppStore.getState().updateRow(row.rowId, (r) => ({
+      ...r,
+      traceEnabled: true,
+      updatedAt: Date.now(),
+    }));
+    useAppStore.getState().openTraceWindow(row.rowId);
+    expect(useAppStore.getState().traceWindows[row.rowId]).toBeDefined();
+    useAppStore.getState().closeTraceWindow(row.rowId);
+    const after = useAppStore.getState();
+    expect(after.traceWindows[row.rowId]).toBeUndefined();
+    const updatedRow = after.workspace.sheets
+      .flatMap((s) => s.rows)
+      .find((r) => r.rowId === row.rowId);
+    expect(updatedRow?.traceEnabled).toBe(false);
+  });
+
+  it("closeTraceWindow 找不到行时仅删除窗口，不重建 workspace", () => {
+    const before = useAppStore.getState().workspace;
+    useAppStore.getState().openTraceWindow("missing" as RowId);
+    useAppStore.getState().closeTraceWindow("missing" as RowId);
+    const after = useAppStore.getState();
+    expect(after.traceWindows["missing"]).toBeUndefined();
+    expect(after.workspace).toBe(before);
   });
 });

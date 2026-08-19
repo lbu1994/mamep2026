@@ -20,11 +20,13 @@ describe("connection profile persistence", () => {
       profile.flowControl = "rts-cts";
       profile.recentPortHint = "COM10";
       // 非端口连接参数（持久化）
-      profile.slaveAddress = 5;
       profile.requestTimeoutMs = 2000;
       profile.retryCount = 3;
       profile.interRequestDelayMs = 120;
       profile.addressAdjust = "on";
+      // 从站地址为表级字段（持久化）
+      const sheet = w.sheets[0];
+      if (sheet !== undefined) sheet.slaveAddress = 5;
     });
 
     const serialized = serializeWorkspace(workspace);
@@ -44,11 +46,12 @@ describe("connection profile persistence", () => {
     expect(profile?.flowControl).toBe("rts-cts");
     expect(profile?.recentPortHint).toBe("COM10");
     // 非端口参数恢复。
-    expect(profile?.slaveAddress).toBe(5);
     expect(profile?.requestTimeoutMs).toBe(2000);
     expect(profile?.retryCount).toBe(3);
     expect(profile?.interRequestDelayMs).toBe(120);
     expect(profile?.addressAdjust).toBe("on");
+    // 每表独立从站地址恢复。
+    expect(parsed.value.sheets[0]?.slaveAddress).toBe(5);
   });
 
   it("parses profiles written without port fields by backfilling defaults", () => {
@@ -81,9 +84,8 @@ describe("connection profile persistence", () => {
     expect(restored?.parity).toBe("none");
     expect(restored?.flowControl).toBe("off");
     expect(restored?.recentPortHint).toBeNull();
-    expect(restored?.slaveAddress).toBe(
-      workspace.connectionProfiles[0]?.slaveAddress,
-    );
+    // 从站地址已迁移为表级字段：profile 不再含该字段。
+    expect("slaveAddress" in (restored ?? {})).toBe(false);
   });
 
   it("parses legacy persisted profiles (round-trip shape unchanged)", () => {
@@ -97,6 +99,7 @@ describe("connection profile persistence", () => {
       parity: "odd",
       flowControl: "rts-cts",
       recentPortHint: "COM10",
+      // 旧全局 profile 中的 slaveAddress：解析时被剥离（不再持久化）。
       slaveAddress: 9,
       requestTimeoutMs: 3000,
       retryCount: 4,
@@ -111,9 +114,31 @@ describe("connection profile persistence", () => {
     expect(profile?.baudRate).toBe(57600);
     expect(profile?.parity).toBe("odd");
     expect(profile?.recentPortHint).toBe("COM10");
-    expect(profile?.slaveAddress).toBe(9);
     expect(profile?.interRequestDelayMs).toBe(200);
     expect(profile?.requestTimeoutMs).toBe(3000);
+    // 旧 profile 中的 slaveAddress 被剥离，不再进入领域对象。
+    expect("slaveAddress" in (profile ?? {})).toBe(false);
+    // 从站地址以表级默认 1 回退（sheet 缺省补默认）。
+    expect(parsed.value.sheets[0]?.slaveAddress).toBe(1);
+  });
+
+  it("persists per-sheet slave address and backfills default 1 for legacy sheets", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      const sheet = w.sheets[0];
+      if (sheet !== undefined) sheet.slaveAddress = 42;
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.slaveAddress).toBe(42);
+
+    // 老数据缺省：无 slaveAddress 字段时补默认 1，无需迁移。
+    const legacy = JSON.parse(serializeWorkspace(workspace));
+    delete legacy.sheets[0].slaveAddress;
+    const parsedLegacy = parseWorkspace(legacy);
+    expect(parsedLegacy.ok).toBe(true);
+    if (!parsedLegacy.ok) return;
+    expect(parsedLegacy.value.sheets[0]?.slaveAddress).toBe(1);
   });
 });
 
@@ -151,7 +176,8 @@ describe("workspace schema round-trip", () => {
     expect(value.connectionProfiles).toHaveLength(1);
     expect(value.connectionProfiles[0]?.interRequestDelayMs).toBe(50);
     expect(value.connectionProfiles[0]?.addressAdjust).toBe("off");
-    expect(value.connectionProfiles[0]?.slaveAddress).toBe(1);
+    // 从站地址为表级字段：默认 1。
+    expect(value.sheets[0]?.slaveAddress).toBe(1);
   });
 
   it("preserves comment, polling and trace flags per row", () => {
