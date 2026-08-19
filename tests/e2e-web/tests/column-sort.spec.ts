@@ -16,6 +16,63 @@ const DEFAULT_ORDER = [
   "Comment",
 ];
 
+/** 语义同 dnd-kit arrayMove：移除 from 处元素并插入到 to 处（其余元素相应移位）。 */
+function arrayMove<T>(items: readonly T[], from: number, to: number): T[] {
+  const copy = [...items];
+  const [moved] = copy.splice(from, 1);
+  if (moved === undefined) return copy;
+  copy.splice(to, 0, moved);
+  return copy;
+}
+
+/** 表头文本 → 列 key（供 body 行同步断言映射）。 */
+const HEADER_TO_KEY: Record<string, string> = {
+  No: "no",
+  TM: "tm",
+  Name: "name",
+  "Register[DEC]": "address",
+  WP: "wp",
+  Read: "read",
+  Data: "data",
+  Write: "write",
+  Type: "type",
+  Comment: "comment",
+};
+
+/** body 首行各列 cell 的定位标识（与 firstRowCellLabels 提取规则一致：优先 [aria-label]，否则文本）。 */
+const BODY_LABEL_BY_COLUMN: Record<string, string> = {
+  no: "1",
+  tm: "TM",
+  name: "Name",
+  address: "Register",
+  wp: "WP",
+  read: "Read",
+  data: "Data",
+  write: "Write",
+  type: "Type",
+  comment: "Comment",
+  drag: "Drag to reorder",
+};
+
+/** 连续拖拽序列（2026-08-19 曾稳定复现「多次拖拽后列序错乱」的用例序列）。 */
+const DRAG_SEQUENCE: ReadonlyArray<readonly [string, string]> = [
+  ["Name", "No"],
+  ["Comment", "Data"],
+  ["Type", "Write"],
+  ["Register[DEC]", "TM"],
+  ["Data", "WP"],
+  ["Write", "Read"],
+  ["Comment", "No"],
+  ["Type", "Name"],
+  ["Read", "Data"],
+  ["WP", "Type"],
+  ["Name", "Comment"],
+  ["Data", "No"],
+  ["Write", "Register[DEC]"],
+  ["Comment", "TM"],
+  ["Type", "Read"],
+];
+
 async function openApp(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
@@ -249,4 +306,36 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
     "Type",
     "Comment",
   ]);
+});
+
+test("repeated column drags (15×) keep the exact order and sync body rows", async ({
+  page,
+}) => {
+  const errors = await openApp(page);
+  let expected = [...DEFAULT_ORDER];
+  for (const [from, to] of DRAG_SEQUENCE) {
+    await dragColumnTo(page, from, to);
+    // 每次拖拽后按 arrayMove 语义推进预期顺序（与领域层 moveRowToIndex 同款语义）。
+    const fromIndex = expected.indexOf(from);
+    const toIndex = expected.indexOf(to);
+    if (fromIndex >= 0 && toIndex >= 0) {
+      expected = arrayMove(expected, fromIndex, toIndex);
+    }
+    // 表头列序必须精确等于预期：被拖列落对位、未拖列位置不变（多次拖拽不得累积漂移）。
+    expect(await columnHeaders(page)).toEqual(expected);
+  }
+  // 最终 body 数据行列顺序与表头同步（不允许表头/数据错位）。
+  // 注意：body 首行首列为 rowSelection 复选框（antd 生成 aria-label="Select row 1"），
+  // 最右为 drag 列手柄（label="Drag to reorder"），本序列未拖它、恒在末尾。
+  const bodyLabels = await firstRowCellLabels(page);
+  expect(bodyLabels).toEqual([
+    "Select row 1",
+    ...expected.map((header) => {
+      const key = HEADER_TO_KEY[header];
+      return key === undefined ? "" : (BODY_LABEL_BY_COLUMN[key] ?? "");
+    }),
+    "Drag to reorder",
+  ]);
+  // 拖拽全程无 console 错误。
+  expect(errors).toEqual([]);
 });

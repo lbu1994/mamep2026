@@ -47,14 +47,14 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 
 ## 测试约定
 
-- 非界面变更走 TDD / ATDD（先写失败测试再实现）；界面开发不要求测试先行。
+- **测试执行时机由用户决定（2026-08-19）**：不要求每次变更后都跑测试（尤其耗时较长的 e2e / acceptance）；用户未要求时 AI 不得擅自长时间跑测试，也不得谎报已执行。用户要求测试先行时遵循 TDD / ATDD；要求执行某类测试时按 [docs/AGENTS.md](docs/AGENTS.md) §27 的覆盖要求准备用例。
 - 包内单测用 vitest（每包 `pnpm test`）；调度测试用 Virtual Clock + FakeTransport（packages/test-kit）。
 - 浏览器端 E2E：Playwright 使用系统 Edge（`channel: "msedge"`），配置在 `tests/e2e-web/playwright.config.ts`；以 `?mockTransport=1` 启用 dev 内置模拟 Modbus RTU 传输（生产构建不启用）。工作流见 [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md)。
 - dev server 是后台长驻进程，会话中可能被系统清理；测试前先确认 5173 端口，停了就重启 `pnpm dev`。
 
 ## 关键红线（详见 docs/AGENTS.md §32「AI 禁止行为」）
 
-不擅自扩展产品范围；浏览器端不实现 Modbus TCP；UI 不直接访问串口/TCP/文件系统；所有设备请求进入统一调度器；厂商私有规则只进插件不进核心；不得关闭类型检查或用 `any`/断言蒙混；不得谎报未执行的命令或测试。
+不擅自扩展产品范围；浏览器端不实现 Modbus TCP；UI 不直接访问串口/TCP/文件系统；所有设备请求进入统一调度器；厂商私有规则只进插件不进核心；不得关闭类型检查或用 `any`/断言蒙混；不得谎报未执行的命令或测试；使用第三方库前先经工具/MCP/插件查官方文档，不得修改库未公开的内部属性或方法（详见 docs/AGENTS.md §30.1、§32）。
 
 ## 文档地图
 

@@ -845,7 +845,6 @@ export const RegisterTable = memo(function RegisterTable({
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.columnWidths ??
       {},
   );
-  const setSheetColumnOrder = useAppStore((s) => s.setSheetColumnOrder);
   // 本表列排列顺序（每表独立，随 workspace 持久化，IndexedDB 自动保存）；null=默认顺序。
   const columnOrder = useAppStore(
     (s) =>
@@ -1400,21 +1399,80 @@ export const RegisterTable = memo(function RegisterTable({
     }),
   );
 
-  /** 列拖拽结束：arrayMove 语义——把活动列移动到 over 列所在索引（只在这 11 个业务列间排序）。 */
-  const handleColumnDragEnd = ({ active, over }: DragEndEvent): void => {
-    const overId = over?.id;
-    if (overId === undefined || active.id === overId) return;
-    // 当前顺序：优先已持久化顺序，否则默认（baseColumns 顺序）；selection 列不在其中（永不参与）。
-    const currentOrder =
-      columnOrder ?? baseColumns.map((col) => String(col.key));
-    const activeIndex = currentOrder.findIndex((key) => key === active.id);
-    const overIndex = currentOrder.findIndex((key) => key === overId);
-    if (activeIndex === -1 || overIndex === -1) return;
-    setSheetColumnOrder(
-      sheetId,
-      arrayMove(currentOrder, activeIndex, overIndex),
-    );
-  };
+  // 列默认顺序的 key（columnOrder 为 null 时使用；列集合固定，仅标题随 radix/语言变化，故首渲染后稳定）。
+  const defaultColumnKeysRef = useRef<string[] | null>(null);
+  if (defaultColumnKeysRef.current === null) {
+    defaultColumnKeysRef.current = baseColumns.map((col) => String(col.key));
+  }
+
+  /**
+   * 列拖拽结束：arrayMove 语义——把活动列移动到 over 列所在索引（只在这 11 个业务列间排序）。
+   * 事件期从 store 实时读取当前列序（useAppStore.getState() 恒为最新），避免基于陈旧顺序计算
+   * arrayMove——2026-08-19 实测：连续拖拽后「被拖列落错位 + 未拖列被连带移动」的根因正是
+   * 闭包/ref 滞后一帧（每次都基于上一次拖拽前的顺序重排，覆盖掉前面的结果）。
+   */
+  const handleColumnDragEnd = useCallback(
+    ({ active, over }: DragEndEvent): void => {
+      const overId = over?.id;
+      if (overId === undefined || active.id === overId) return;
+      const state = useAppStore.getState();
+      const sheet = state.workspace.sheets.find((sh) => sh.sheetId === sheetId);
+      const currentOrder =
+        sheet?.columnOrder ?? defaultColumnKeysRef.current ?? [];
+      const activeIndex = currentOrder.findIndex((key) => key === active.id);
+      const overIndex = currentOrder.findIndex((key) => key === overId);
+      if (activeIndex === -1 || overIndex === -1) return;
+      state.setSheetColumnOrder(
+        sheetId,
+        arrayMove(currentOrder, activeIndex, overIndex),
+      );
+    },
+    [sheetId],
+  );
+
+  // ---- 列拖拽上下文归属（2026-08-19 修复嵌套 DndContext 吞行拖拽 + 滞后一帧）----
+  // 1) 嵌套修复：原实现把「列拖拽 DndContext」包在整个 Table 外层；dnd-kit 的 useSortable 读取
+  //    「最近」的 DndContext，导致行级 MemoRow 的 useSortable 也绑到列拖拽 context：行拖拽被
+  //    restrictToHorizontalAxis 钳制、SortableContext items 是列 key（行 id 不在其中）、
+  //    handleColumnDragEnd 找不到行 id → 行拖拽失效。修复：把列拖拽 DndContext + SortableContext(列)
+  //    移入 components.header.wrapper（只包表头 thead），行级 MemoRow 读到外层行拖拽 context。
+  // 2) 滞后修复（本次）：wrapper 组件必须保持引用稳定（避免 thead 重挂载），但不能再经
+  //    「渲染期读 ref + 渲染后 useEffect 更新」的间接层传递数据（会滞后一帧、顺序错乱）。
+  //    改为：SortableContext items 渲染期从 store 实时读取；onDragEnd 用稳定的 useCallback
+  //    （仅依赖 sheetId）在事件期从 store 读取——两者永远拿到最新列序。
+  // 列拖拽 DndContext 位于 <table> 内（包 thead），其无障碍元素（HiddenText/LiveRegion 两个 div）
+  // 若内联渲染会成为 <table> 的直接子元素（非法 HTML + React 嵌套警告，破坏 e2e「无 console 错误」）。
+  // 故经 accessibility.container 用 portal 渲染到 table 外的容器（document.body 常驻、无需创建/清理）。
+  /** 表头列拖拽包装（仅包 thead）：列拖拽 DndContext + SortableContext 的唯一归属处。 */
+  const ColumnDragHeader = useMemo(() => {
+    const HeaderWrapper = (
+      props: React.ThHTMLAttributes<HTMLTableSectionElement>,
+    ): React.ReactNode => {
+      // 渲染期实时读取 store（zustand getState 恒为最新已提交状态），与当前渲染列序保持一致。
+      const state = useAppStore.getState();
+      const sheet = state.workspace.sheets.find((sh) => sh.sheetId === sheetId);
+      const columnKeys =
+        sheet?.columnOrder ?? defaultColumnKeysRef.current ?? [];
+      return (
+        <DndContext
+          sensors={columnSensors}
+          modifiers={[restrictToHorizontalAxis]}
+          onDragEnd={handleColumnDragEnd}
+          collisionDetection={closestCenter}
+          accessibility={{ container: document.body }}
+        >
+          <SortableContext
+            items={columnKeys}
+            strategy={horizontalListSortingStrategy}
+          >
+            <thead {...props} />
+          </SortableContext>
+        </DndContext>
+      );
+    };
+    HeaderWrapper.displayName = "RegisterTableColumnDragHeader";
+    return HeaderWrapper;
+  }, [sheetId, columnSensors, handleColumnDragEnd]);
 
   // 当前列 key 顺序签名：仅随「列顺序」变化（列宽拖拽不变），驱动数据行在排序后同步重渲染。
   const columnOrderSignature = columns.map((col) => String(col.key)).join(",");
@@ -1583,124 +1641,113 @@ export const RegisterTable = memo(function RegisterTable({
               items={rows.map((r) => r.rowId)}
               strategy={verticalListSortingStrategy}
             >
-              <DndContext
-                sensors={columnSensors}
-                modifiers={[restrictToHorizontalAxis]}
-                onDragEnd={handleColumnDragEnd}
-                collisionDetection={closestCenter}
-              >
-                <SortableContext
-                  items={columns.map((col) => String(col.key))}
-                  strategy={horizontalListSortingStrategy}
-                >
-                  <Table<RegisterRow>
-                    size="small"
-                    rowKey="rowId"
-                    columns={columns}
-                    dataSource={rows}
-                    pagination={false}
-                    bordered
-                    virtual={rows.length > VIRTUAL_SCROLL_THRESHOLD}
-                    {...(tableBodyHeight > 0 ||
-                    rows.length > VIRTUAL_SCROLL_THRESHOLD
-                      ? ({
-                          style: { flex: 1, minHeight: 0 },
-                          listItemHeight: ROW_HEIGHT,
-                        } as RegisterTableVirtualProps)
-                      : {})}
-                    scroll={{
-                      x: 920,
-                      // 虚拟表 scroll.y 必须为数字：隐藏未测量表（tableBodyHeight=0）用兜底高度，
-                      // 显示后由 ResizeObserver 校正。否则 rc-table 虚拟渲染失败（0 行 + 报错，2026-08-18 复现）。
-                      ...(tableBodyHeight > 0 ||
-                      rows.length > VIRTUAL_SCROLL_THRESHOLD
-                        ? {
-                            y:
-                              tableBodyHeight > 0
-                                ? tableBodyHeight
-                                : FALLBACK_VIRTUAL_HEIGHT,
-                          }
-                        : {}),
-                    }}
-                    rowSelection={{
-                      // 固定复选框列宽（antd 内置能力）：不可拖拽调整。
-                      columnWidth: 32,
-                      selectedRowKeys: selectedRowIds,
-                      onChange: (keys) =>
+              <Table<RegisterRow>
+                size="small"
+                rowKey="rowId"
+                columns={columns}
+                dataSource={rows}
+                pagination={false}
+                bordered
+                virtual={rows.length > VIRTUAL_SCROLL_THRESHOLD}
+                {...(tableBodyHeight > 0 ||
+                rows.length > VIRTUAL_SCROLL_THRESHOLD
+                  ? ({
+                      style: { flex: 1, minHeight: 0 },
+                      listItemHeight: ROW_HEIGHT,
+                    } as RegisterTableVirtualProps)
+                  : {})}
+                scroll={{
+                  x: 920,
+                  // 虚拟表 scroll.y 必须为数字：隐藏未测量表（tableBodyHeight=0）用兜底高度，
+                  // 显示后由 ResizeObserver 校正。否则 rc-table 虚拟渲染失败（0 行 + 报错，2026-08-18 复现）。
+                  ...(tableBodyHeight > 0 ||
+                  rows.length > VIRTUAL_SCROLL_THRESHOLD
+                    ? {
+                        y:
+                          tableBodyHeight > 0
+                            ? tableBodyHeight
+                            : FALLBACK_VIRTUAL_HEIGHT,
+                      }
+                    : {}),
+                }}
+                rowSelection={{
+                  // 固定复选框列宽（antd 内置能力）：不可拖拽调整。
+                  columnWidth: 32,
+                  selectedRowKeys: selectedRowIds,
+                  onChange: (keys) =>
+                    setSelectedRowIds(keys.map((k) => String(k)) as RowId[]),
+                  selections: [
+                    Table.SELECTION_ALL,
+                    Table.SELECTION_INVERT,
+                    Table.SELECTION_NONE,
+                    {
+                      key: "odd",
+                      text: t("table.selectOddRows"),
+                      onSelect: (changeableRowKeys) =>
                         setSelectedRowIds(
-                          keys.map((k) => String(k)) as RowId[],
+                          changeableRowKeys
+                            .filter((_, index) => index % 2 === 0)
+                            .map((k) => String(k)) as RowId[],
                         ),
-                      selections: [
-                        Table.SELECTION_ALL,
-                        Table.SELECTION_INVERT,
-                        Table.SELECTION_NONE,
-                        {
-                          key: "odd",
-                          text: t("table.selectOddRows"),
-                          onSelect: (changeableRowKeys) =>
-                            setSelectedRowIds(
-                              changeableRowKeys
-                                .filter((_, index) => index % 2 === 0)
-                                .map((k) => String(k)) as RowId[],
-                            ),
-                        },
-                        {
-                          key: "even",
-                          text: t("table.selectEvenRows"),
-                          onSelect: (changeableRowKeys) =>
-                            setSelectedRowIds(
-                              changeableRowKeys
-                                .filter((_, index) => index % 2 !== 0)
-                                .map((k) => String(k)) as RowId[],
-                            ),
-                        },
-                      ],
-                    }}
-                    components={{
-                      header: { cell: HeaderCell },
-                      body: { row: MemoRow },
-                    }}
-                    onRow={(record, index = 0): MemoTableRowProps => ({
-                      // 行级右键冒泡拦截：非 drag 列 stopPropagation 保留系统右键菜单（见 handleRowContextMenuBubble）。
-                      onContextMenu: (event) =>
-                        rowHandlersRef.current.onRowContextMenuBubble(event),
-                      _record: record,
-                      _index: index,
-                      _selection: selectedRowIds,
-                      _colOrder: columnOrderSignature,
-                    })}
-                    locale={{
-                      emptyText: (
-                        <Empty
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          description={
-                            <>
-                              <div>{t("table.emptySheet")}</div>
-                              <div
-                                style={{
-                                  color: "var(--ant-color-text-tertiary)",
-                                  fontSize: 12,
-                                }}
-                              >
-                                {t("table.emptySheetHint")}
-                              </div>
-                            </>
-                          }
-                        >
-                          <Button
-                            size="small"
-                            type="primary"
-                            icon={<PlusOutlined />}
-                            onClick={() => addRow(sheetId)}
+                    },
+                    {
+                      key: "even",
+                      text: t("table.selectEvenRows"),
+                      onSelect: (changeableRowKeys) =>
+                        setSelectedRowIds(
+                          changeableRowKeys
+                            .filter((_, index) => index % 2 !== 0)
+                            .map((k) => String(k)) as RowId[],
+                        ),
+                    },
+                  ],
+                }}
+                components={{
+                  header: {
+                    wrapper: ColumnDragHeader,
+                    cell: HeaderCell,
+                  },
+                  body: { row: MemoRow },
+                }}
+                onRow={(record, index = 0): MemoTableRowProps => ({
+                  // 行级右键冒泡拦截：非 drag 列 stopPropagation 保留系统右键菜单（见 handleRowContextMenuBubble）。
+                  onContextMenu: (event) =>
+                    rowHandlersRef.current.onRowContextMenuBubble(event),
+                  _record: record,
+                  _index: index,
+                  _selection: selectedRowIds,
+                  _colOrder: columnOrderSignature,
+                })}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      description={
+                        <>
+                          <div>{t("table.emptySheet")}</div>
+                          <div
+                            style={{
+                              color: "var(--ant-color-text-tertiary)",
+                              fontSize: 12,
+                            }}
                           >
-                            {t("table.addRow")}
-                          </Button>
-                        </Empty>
-                      ),
-                    }}
-                  />
-                </SortableContext>
-              </DndContext>
+                            {t("table.emptySheetHint")}
+                          </div>
+                        </>
+                      }
+                    >
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={() => addRow(sheetId)}
+                      >
+                        {t("table.addRow")}
+                      </Button>
+                    </Empty>
+                  ),
+                }}
+              />
             </SortableContext>
           </div>
         </Dropdown>
