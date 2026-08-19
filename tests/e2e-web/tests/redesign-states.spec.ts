@@ -15,8 +15,11 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
 }) => {
   await openApp(page);
 
-  // 全新上下文：默认表 50 行均为空地址，第一行即可验证。
-  const row = page.locator(".ant-table-tbody tr[data-row-key]").first();
+  // mock 模式默认表已预填分类寄存器（前 N 行有地址）；新增一行保证为空地址行。
+  await page
+    .getByRole("button", { name: "Add Row" })
+    .evaluate((el) => (el as HTMLElement).click());
+  const row = page.locator(".ant-table-tbody tr[data-row-key]").last();
   const readBtn = row.getByRole("button", { name: "Read", exact: true });
   const writeBtn = row.getByRole("button", { name: "Write", exact: true });
   await expect(readBtn).toBeDisabled();
@@ -34,7 +37,7 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
   ).toBeVisible();
 
   // 填写合法地址后控件恢复可用。
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = row.getByLabel("Register", { exact: true });
   await addressInput.click();
   await addressInput.fill("0005");
   await addressInput.press("Enter");

@@ -13,6 +13,7 @@ import {
   browserCapabilities,
   createEmptyWorkspace,
   createMamepError,
+  defaultConfig,
   fail,
   ok,
 } from "@mamep2026/domain";
@@ -42,7 +43,11 @@ import { RegisterTableService } from "@mamep2026/register-table";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { AutoSaveCoordinator } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
-import { installMockHooks, MockTransport } from "@mamep2026/platform-web";
+import {
+  createMockScenarioRows,
+  installMockHooks,
+  MockTransport,
+} from "@mamep2026/platform-web";
 
 export interface AppHostOptions {
   capabilities?: PlatformCapabilities;
@@ -129,16 +134,58 @@ export class BrowserAppHost implements AppHost {
   }
 
   async loadWorkspace(): Promise<Result<Workspace>> {
-    return this.repository.load();
+    const result = await this.repository.load();
+    if (result.ok) return ok(this.seedMockDefaultSheet(result.value));
+    return result;
   }
 
   async resetWorkspace(): Promise<Result<Workspace>> {
     const cleared = await this.repository.clear();
     if (!cleared.ok) return cleared;
-    const fresh = createEmptyWorkspace();
+    const fresh = this.createFreshWorkspace();
     // 立即持久化空工作区，避免刷新后残留旧数据。
     this.autoSave.scheduleSave(fresh);
     return ok(fresh);
+  }
+
+  /** mock 模式下创建预填分类寄存器的全新工作区；非 mock 返回普通空工作区。 */
+  createFreshWorkspace(): Workspace {
+    return this.seedMockDefaultSheet(createEmptyWorkspace());
+  }
+
+  /**
+   * mock 模式下，仅当默认表仍是「未编辑的 defaultRowCount 个空行」时预填分类寄存器
+   * （供 E2E/手动测试直接使用 Name/Comment 定位成功/失败场景）。
+   * 已编辑、已删除行或非 mock 的工作区保持原样，不做覆盖。
+   */
+  private seedMockDefaultSheet(workspace: Workspace): Workspace {
+    if (!this.isMockMode) return workspace;
+    const sheet = workspace.sheets[0];
+    if (sheet === undefined) return workspace;
+    const expectedRowCount = defaultConfig.registerTable.defaultRowCount;
+    if (sheet.rows.length !== expectedRowCount) return workspace;
+    const pristine = sheet.rows.every(
+      (row) =>
+        row.name === "" &&
+        row.comment === "" &&
+        row.addressDraft === "" &&
+        row.addressValue === null,
+    );
+    if (!pristine) return workspace;
+    const seeded = createMockScenarioRows();
+    return {
+      ...workspace,
+      sheets: workspace.sheets.map((s, index) =>
+        index === 0
+          ? {
+              ...s,
+              // 预填行（order 1..N）+ 保留的空白行（order N+1..defaultRowCount）。
+              rows: [...seeded, ...s.rows.slice(seeded.length)],
+              updatedAt: s.updatedAt,
+            }
+          : s,
+      ),
+    };
   }
 
   scheduleSave(workspace: Workspace): void {

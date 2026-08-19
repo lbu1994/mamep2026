@@ -134,6 +134,10 @@ export default function App(): React.ReactNode {
             params: { detail: result.error.code },
             detail: result.error.code,
           });
+          if (host.isMockMode) {
+            // mock 模式：恢复失败同样预填分类寄存器，保证测试环境一致。
+            setWorkspace(host.createFreshWorkspace());
+          }
         }
         setLoaded();
         appendMessage({

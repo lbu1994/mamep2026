@@ -1,21 +1,38 @@
 /**
  * 模拟 Modbus RTU 设备传输（dev-only，生产构建不启用）。
  * 用途：浏览器端 E2E 与验收自动化（TECH_DESIGN §26.7 的 Host API 模拟模式）。
- * 行为：接收 FC03 读帧返回寄存器值；接收 FC0x10 写帧更新寄存器值；其他功能码回异常。
+ * 行为：按「地址区间 → 读写行为」规则（默认见 ./mock-scenarios.ts）区分成功/失败场景——
+ * 正常读/写返回成功；只读/只写/不存在/非法值/不支持功能回对应 Modbus 异常；
+ * 无响应区间不回任何帧（触发请求超时/重试路径）；其他功能码回异常。
+ * 未配置地址回退为正常行为。
  */
 import type { MamepError, Result } from "@mamep2026/domain";
 import { createMamepError } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import type { TransportPort } from "@mamep2026/communication";
-import { appendCrc, crc16Modbus } from "@mamep2026/protocol-modbus";
+import {
+  appendCrc,
+  crc16Modbus,
+  EXCEPTION_ILLEGAL_DATA_VALUE,
+} from "@mamep2026/protocol-modbus";
+import {
+  DEFAULT_MOCK_RULES,
+  matchMockRule,
+  type MockRangeRule,
+} from "./mock-scenarios";
 
 export class MockTransport implements TransportPort {
   readonly kind = "mock" as const;
   private openFlag = false;
   private readonly registers = new Map<number, number>();
+  private readonly rules: readonly MockRangeRule[];
   private readonly dataListeners = new Set<(chunk: Uint8Array) => void>();
   private readonly errorListeners = new Set<(error: MamepError) => void>();
   private readonly closeListeners = new Set<() => void>();
+
+  constructor(rules: readonly MockRangeRule[] = DEFAULT_MOCK_RULES) {
+    this.rules = rules;
+  }
 
   onData(listener: (chunk: Uint8Array) => void): () => void {
     this.dataListeners.add(listener);
@@ -84,8 +101,18 @@ export class MockTransport implements TransportPort {
     const slave = bytes[0] ?? 0;
     const functionCode = bytes[1] ?? 0;
     const address = ((bytes[2] ?? 0) << 8) | (bytes[3] ?? 0);
+    const rule = matchMockRule(this.rules, address);
 
     if (functionCode === 0x03) {
+      const behavior = rule?.read ?? { kind: "normal" };
+      if (behavior.kind === "no-response") return;
+      if (behavior.kind === "exception") {
+        this.respond(
+          this.exceptionFrame(slave, 0x03, behavior.exceptionCode),
+        );
+        return;
+      }
+      // normal / write-value-gate（读按正常处理）：返回当前寄存器值。
       const value = this.registers.get(address) ?? 0;
       this.respond(
         Uint8Array.from([slave, 0x03, 0x02, (value >> 8) & 0xff, value & 0xff]),
@@ -93,7 +120,21 @@ export class MockTransport implements TransportPort {
       return;
     }
     if (functionCode === 0x10) {
+      const behavior = rule?.write ?? { kind: "normal" };
       const value = ((bytes[7] ?? 0) << 8) | (bytes[8] ?? 0);
+      if (behavior.kind === "no-response") return;
+      if (behavior.kind === "exception") {
+        this.respond(
+          this.exceptionFrame(slave, 0x10, behavior.exceptionCode),
+        );
+        return;
+      }
+      if (behavior.kind === "write-value-gate" && value > behavior.maxValue) {
+        this.respond(
+          this.exceptionFrame(slave, 0x10, EXCEPTION_ILLEGAL_DATA_VALUE),
+        );
+        return;
+      }
       this.registers.set(address, value);
       this.respond(
         Uint8Array.from([
@@ -109,6 +150,15 @@ export class MockTransport implements TransportPort {
     }
     // 不支持的功能码：回异常响应。
     this.respond(Uint8Array.from([slave, functionCode | 0x80, 0x01]));
+  }
+
+  /** 构造异常响应体（slave + fc|0x80 + exceptionCode；CRC 由 respond 追加，共 5 字节）。 */
+  private exceptionFrame(
+    slave: number,
+    functionCode: number,
+    exceptionCode: number,
+  ): Uint8Array {
+    return Uint8Array.from([slave, functionCode | 0x80, exceptionCode]);
   }
 
   private respond(body: Uint8Array): void {
