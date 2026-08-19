@@ -42,8 +42,12 @@ function writeResponse(slave: number, address: number): Uint8Array {
   );
 }
 
-function exceptionResponse(slave: number, code: number): Uint8Array {
-  return appendCrc(Uint8Array.from([slave, 0x83, code]));
+function exceptionResponse(
+  slave: number,
+  functionCode: number,
+  code: number,
+): Uint8Array {
+  return appendCrc(Uint8Array.from([slave, functionCode | 0x80, code]));
 }
 
 describe("CommunicationSession connect/disconnect", () => {
@@ -167,7 +171,7 @@ describe("CommunicationSession readRegister", () => {
 
     const promise = session.readRegister(0x0001, { source: "manual-read" });
     await advanceUntil(clock, () => transport.sentFrames.length === 1);
-    transport.simulateData(exceptionResponse(1, 0x02));
+    transport.simulateData(exceptionResponse(1, 0x03, 0x02));
     const result = await promise;
 
     expect(result.ok).toBe(false);
@@ -242,6 +246,29 @@ describe("CommunicationSession writeRegister", () => {
     const result = await promise;
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.kind).toBe("write-succeeded-no-verify");
+  });
+
+  it("returns a Modbus exception failure and does not retry on exception response", async () => {
+    const { session, transport, clock } = makeSession();
+    await session.connect();
+
+    const promise = session.writeRegister(0x0001, 0x1234, {
+      source: "manual-write",
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    // 写入异常响应：功能码 0x10|0x80 = 0x90，异常码 0x02（Illegal Data Address）。
+    transport.simulateData(exceptionResponse(1, 0x10, 0x02));
+    const result = await promise;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("MODBUS_EXCEPTION_02");
+      expect(result.error.category).toBe("modbus-exception");
+      expect(result.error.userMessageKey).toBe("errors.modbusException");
+      expect(result.error.retryable).toBe(false);
+    }
+    // 异常响应不重试（§13.2）。
+    expect(transport.sentFrames).toHaveLength(1);
   });
 });
 

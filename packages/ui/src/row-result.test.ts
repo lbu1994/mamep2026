@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
+import type { WriteOutcome } from "@mamep2026/communication";
 import {
   applyCellCommit,
   applyManualResult,
@@ -125,6 +126,30 @@ describe("applyManualResult（手动读/写结果）", () => {
     });
     expect(next.rowResults).toBe(state.rowResults);
     expect(next.rowSuccess["r1"]).toEqual({ kind: "write" });
+  });
+
+  it("防御：写入成功但未提供 writeOutcome（调用方契约破坏）不产生成功点，保持原状态", () => {
+    const state: RowStatusState = createEmptyRowStatusState();
+    const next = applyManualResult(state, "r1", ok(1), "write");
+    // 写路径无 outcome 即结果未知：绝不新增成功点（绝不允许「失败却绿点」）。
+    expect(next).toBe(state);
+    expect(next.rowSuccess["r1"]).toBeUndefined();
+    expect(next.rowResults["r1"]).toBeUndefined();
+  });
+
+  it("防御：writeOutcome.kind 未被 WRITE_OUTCOME_STATUS 覆盖（未来扩展遗漏）不产生成功点，保持原状态", () => {
+    const state: RowStatusState = createEmptyRowStatusState();
+    // 模拟未来 WriteOutcome 扩展但映射未同步的运行时情形（§18.2 注释列举的候选 kind）。
+    const unknownOutcome = {
+      kind: "write-succeeded-verify-mismatched",
+    } as unknown as WriteOutcome;
+    const next = applyManualResult(state, "r1", ok(unknownOutcome), "write", {
+      writeOutcome: unknownOutcome,
+    });
+    // 未知结果不判定成功也不判定失败：保持原状态，绝不 setSuccess。
+    expect(next).toBe(state);
+    expect(next.rowSuccess["r1"]).toBeUndefined();
+    expect(next.rowResults["r1"]).toBeUndefined();
   });
 });
 

@@ -340,16 +340,10 @@ export class CommunicationSession {
     if (this.stateMachine.getState() !== "connected") {
       return Promise.resolve(fail(notConnectedError()));
     }
-    return this.scheduler
-      .enqueue(() => this.executeWrite(sentAddress, rawValue, meta), {
-        priority: "manual-write",
-      })
-      .then((result) => {
-        if (!result.ok) return result;
-        if (result.value.kind === "write-single")
-          return ok({ kind: "write-succeeded-no-verify" as const });
-        return result as never;
-      });
+    return this.scheduler.enqueue(
+      () => this.executeWrite(sentAddress, rawValue, meta),
+      { priority: "manual-write" },
+    );
   }
 
   private async executeRead(
@@ -401,14 +395,14 @@ export class CommunicationSession {
     sentAddress: number,
     rawValue: number,
     meta: { source: RequestSource; userAddress?: number },
-  ): Promise<Result<DecodedRtuResponse>> {
+  ): Promise<Result<WriteOutcome>> {
     const expect: ExpectedResponse = {
       kind: "write-single",
       slaveAddress: this.options.config.slaveAddress,
       address: sentAddress,
       quantity: 1,
     };
-    return this.executeExchange(
+    const decoded = await this.executeExchange(
       () =>
         encodeWriteSingleRegisterRequest({
           slaveAddress: this.options.config.slaveAddress,
@@ -423,6 +417,24 @@ export class CommunicationSession {
         functionCode: FUNCTION_WRITE_MULTIPLE,
         quantity: 1,
       },
+    );
+    if (!decoded.ok) return decoded;
+    // 写入异常响应（功能码 0x10|0x80）：转失败，与 executeRead 一致；异常不重试（§13.2）。
+    if (decoded.value.kind === "exception") {
+      return fail(modbusExceptionError(decoded.value.exceptionCode));
+    }
+    if (decoded.value.kind === "write-single") {
+      return ok({ kind: "write-succeeded-no-verify" });
+    }
+    return fail(
+      createMamepError({
+        code: "UNEXPECTED_RESPONSE_KIND",
+        category: "protocol",
+        severity: "error",
+        retryable: false,
+        userMessageKey: "errors.unexpectedResponse",
+        technicalMessage: `unexpected response kind for write: ${String(decoded.value)}`,
+      }),
     );
   }
 

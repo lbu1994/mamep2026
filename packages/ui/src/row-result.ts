@@ -89,24 +89,31 @@ export function applyManualResult(
     }
     return { ...state, rowResults, rowSuccess };
   }
-  const writeStatus =
-    options.writeOutcome !== undefined
-      ? WRITE_OUTCOME_STATUS[options.writeOutcome.kind]
-      : "success";
-  if (writeStatus === "none") {
-    // cancelled-before-verify：写入已成功仅回读被取消，保持原状态（§18.2 严格区分）。
+  const writeOutcome = options.writeOutcome;
+  const writeStatus: WriteResultStatus | undefined =
+    writeOutcome !== undefined ? WRITE_OUTCOME_STATUS[writeOutcome.kind] : undefined;
+  // 写路径结果未知（缺 outcome 或 kind 未映射）或回读取消（cancelled-before-verify）：
+  // 保持原状态，绝不产生成功点（§18.2 防御，杜绝「失败却绿点」）。
+  if (
+    kind === "write" &&
+    (writeOutcome === undefined ||
+      (writeStatus !== "success" && writeStatus !== "failure"))
+  ) {
     return state;
   }
+  const isSuccess = kind === "read" || writeStatus === "success";
+  const isFailure = writeStatus === "failure";
   const rowDirty = removeDirty(state.rowDirty, rowId);
-  const rowSuccess = setSuccess(state.rowSuccess, rowId, kind);
-  const rowResults =
-    writeStatus === "failure"
-      ? // 写入成功但回读不一致/回读失败：显示失败态（未来 WriteOutcome 扩展后可达）。
-        setFailure(state.rowResults, rowId, {
-          messageKey: "errors.writeVerifyMismatch",
-          detail: null,
-        })
-      : removeFailure(state.rowResults, rowId);
+  const rowSuccess = isSuccess
+    ? setSuccess(state.rowSuccess, rowId, kind)
+    : removeSuccess(state.rowSuccess, rowId);
+  const rowResults = isFailure
+    ? // 写入成功但回读不一致/回读失败：显示失败态（未来 WriteOutcome 扩展后可达）。
+      setFailure(state.rowResults, rowId, {
+        messageKey: "errors.writeVerifyMismatch",
+        detail: null,
+      })
+    : removeFailure(state.rowResults, rowId);
   if (
     rowResults === state.rowResults &&
     rowDirty === state.rowDirty &&
