@@ -38,7 +38,9 @@ function firstRowId(): RowId {
 }
 
 /** 构造当前第一行的成功点对象（Record key 需显式 RowId 类型，避免字面量推断为 string）。 */
-function buildRowSuccess(kind: "read" | "write"): Record<RowId, { kind: "read" | "write" } | undefined> {
+function buildRowSuccess(
+  kind: "read" | "write",
+): Record<RowId, { kind: "read" | "write" } | undefined> {
   return { [firstRowId()]: { kind } };
 }
 
@@ -79,9 +81,7 @@ describe("RegisterTable 三态状态点", () => {
     expect(
       document.querySelector(".register-table__status-dot--dirty"),
     ).toBeTruthy();
-    expect(
-      screen.getByLabelText("Edited, not synced to device"),
-    ).toBeTruthy();
+    expect(screen.getByLabelText("Edited, not synced to device")).toBeTruthy();
   });
 
   it("成功态：Data 列渲染绿点与「Read successful」", () => {
@@ -163,7 +163,9 @@ describe("RegisterTable 三态状态点", () => {
     fireEvent.click(cell);
     await waitFor(() => {
       // 编辑态：Input 出现，状态点消失（trailing 仅非编辑态渲染）。
-      expect(document.querySelector(".register-table__status-dot--error")).toBeNull();
+      expect(
+        document.querySelector(".register-table__status-dot--error"),
+      ).toBeNull();
       expect(document.querySelector('input[aria-label="Data"]')).toBeTruthy();
     });
   });

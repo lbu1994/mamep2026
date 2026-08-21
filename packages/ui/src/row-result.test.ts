@@ -65,9 +65,15 @@ describe("applyManualResult（手动读/写结果）", () => {
       ...createEmptyRowStatusState(),
       rowResults: { r1: { messageKey: "errors.requestTimeout", detail: null } },
     };
-    const next = applyManualResult(state, "r1", ok({ kind: "write-succeeded-no-verify" as const }), "write", {
-      writeOutcome: { kind: "write-succeeded-no-verify" },
-    });
+    const next = applyManualResult(
+      state,
+      "r1",
+      ok({ kind: "write-succeeded-no-verify" as const }),
+      "write",
+      {
+        writeOutcome: { kind: "write-succeeded-no-verify" },
+      },
+    );
     expect(next.rowResults["r1"]).toBeUndefined();
     expect(next.rowSuccess["r1"]).toEqual({ kind: "write" });
   });
@@ -91,7 +97,9 @@ describe("applyManualResult（手动读/写结果）", () => {
   it("幂等：同因子失败重复写入返回原引用（zustand 零更新）", () => {
     const state: RowStatusState = {
       ...createEmptyRowStatusState(),
-      rowResults: { r1: { messageKey: "errors.requestTimeout", detail: "REQUEST_TIMEOUT" } },
+      rowResults: {
+        r1: { messageKey: "errors.requestTimeout", detail: "REQUEST_TIMEOUT" },
+      },
     };
     const next = applyManualResult(state, "r1", fail(timeoutError()), "read");
     expect(next).toBe(state);
@@ -100,7 +108,9 @@ describe("applyManualResult（手动读/写结果）", () => {
   it("幂等：不同因子失败更新为新失败态", () => {
     const state: RowStatusState = {
       ...createEmptyRowStatusState(),
-      rowResults: { r1: { messageKey: "errors.requestTimeout", detail: "REQUEST_TIMEOUT" } },
+      rowResults: {
+        r1: { messageKey: "errors.requestTimeout", detail: "REQUEST_TIMEOUT" },
+      },
     };
     const next = applyManualResult(state, "r1", fail(modbusError()), "read");
     expect(next).not.toBe(state);
@@ -121,9 +131,15 @@ describe("applyManualResult（手动读/写结果）", () => {
 
   it("写入成功且已无失败态时，rowResults 引用保持不变（remove 幂等）", () => {
     const state = createEmptyRowStatusState();
-    const next = applyManualResult(state, "r1", ok({ kind: "write-succeeded-no-verify" as const }), "write", {
-      writeOutcome: { kind: "write-succeeded-no-verify" },
-    });
+    const next = applyManualResult(
+      state,
+      "r1",
+      ok({ kind: "write-succeeded-no-verify" as const }),
+      "write",
+      {
+        writeOutcome: { kind: "write-succeeded-no-verify" },
+      },
+    );
     expect(next.rowResults).toBe(state.rowResults);
     expect(next.rowSuccess["r1"]).toEqual({ kind: "write" });
   });
@@ -311,7 +327,13 @@ describe("applyCellCommit（单元格提交校验，Data/地址）", () => {
       rowDirty: { r1: true },
       rowSuccess: { r1: { kind: "write" } },
     };
-    const next = applyCellCommit(state, "r1", "100", "zz", fail(dataInvalidError()));
+    const next = applyCellCommit(
+      state,
+      "r1",
+      "100",
+      "zz",
+      fail(dataInvalidError()),
+    );
     expect(next.cellValidationErrors["r1:data"]).toEqual({
       messageKey: "errors.dataInvalidNumber",
       detail: "DATA_INVALID_NUMBER",
@@ -331,7 +353,13 @@ describe("applyCellCommit（单元格提交校验，Data/地址）", () => {
         },
       },
     };
-    const next = applyCellCommit(state, "r1", "100", "zz", fail(dataInvalidError()));
+    const next = applyCellCommit(
+      state,
+      "r1",
+      "100",
+      "zz",
+      fail(dataInvalidError()),
+    );
     expect(next).toBe(state);
   });
 });

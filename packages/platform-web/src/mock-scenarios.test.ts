@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  defaultConfig,
-  RegisterAddress,
-} from "@mamep2026/domain";
+import { defaultConfig, RegisterAddress } from "@mamep2026/domain";
 import {
   createMockScenarioRows,
   DEFAULT_MOCK_RULES,
@@ -13,7 +10,9 @@ import {
 
 describe("DEFAULT_MOCK_SCENARIOS 默认场景定义", () => {
   it("各场景地址区间互不重叠且按序递增", () => {
-    const sorted = [...DEFAULT_MOCK_SCENARIOS].sort((a, b) => a.start - b.start);
+    const sorted = [...DEFAULT_MOCK_SCENARIOS].sort(
+      (a, b) => a.start - b.start,
+    );
     for (let i = 1; i < sorted.length; i += 1) {
       const prev = sorted[i - 1];
       const cur = sorted[i];
@@ -56,8 +55,18 @@ describe("DEFAULT_MOCK_SCENARIOS 默认场景定义", () => {
 
 describe("matchMockRule", () => {
   const rules: readonly MockRangeRule[] = [
-    { start: 0x0100, end: 0x0100, read: { kind: "exception", exceptionCode: 0x02 }, write: { kind: "normal" } },
-    { start: 0x0200, end: 0x020f, read: { kind: "normal" }, write: { kind: "normal" } },
+    {
+      start: 0x0100,
+      end: 0x0100,
+      read: { kind: "exception", exceptionCode: 0x02 },
+      write: { kind: "normal" },
+    },
+    {
+      start: 0x0200,
+      end: 0x020f,
+      read: { kind: "normal" },
+      write: { kind: "normal" },
+    },
   ];
 
   it("命中精确地址（start === end）", () => {
@@ -78,8 +87,18 @@ describe("matchMockRule", () => {
 
   it("顺序匹配，第一条命中的规则生效", () => {
     const overlapping: readonly MockRangeRule[] = [
-      { start: 0x0000, end: 0x00ff, read: { kind: "exception", exceptionCode: 0x01 }, write: { kind: "normal" } },
-      { start: 0x0000, end: 0x00ff, read: { kind: "exception", exceptionCode: 0x02 }, write: { kind: "normal" } },
+      {
+        start: 0x0000,
+        end: 0x00ff,
+        read: { kind: "exception", exceptionCode: 0x01 },
+        write: { kind: "normal" },
+      },
+      {
+        start: 0x0000,
+        end: 0x00ff,
+        read: { kind: "exception", exceptionCode: 0x02 },
+        write: { kind: "normal" },
+      },
     ];
     expect(matchMockRule(overlapping, 0x0050)?.read).toEqual({
       kind: "exception",

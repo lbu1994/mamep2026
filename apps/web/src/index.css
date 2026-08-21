@@ -846,7 +846,11 @@ body {
 /* 行 hover 覆盖斑马纹：使用 antd 行悬停同款 token（--ant-table-row-hover-bg，
    与 antd 默认悬停色一致，深浅主题自适应）。置于选中规则之前，避免悬停时
    覆盖选中行的品牌浅底。 */
-.register-table-tabs .ant-table-wrapper .ant-table-tbody tr:hover .ant-table-cell {
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  tr:hover
+  .ant-table-cell {
   background: var(--ant-table-row-hover-bg);
 }
 
@@ -1469,7 +1473,9 @@ textarea:focus-visible {
 .bottom-panel .ant-tabs .ant-tabs-nav .ant-tabs-tab {
   padding: 4px 10px;
   border-radius: 4px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .bottom-panel .ant-tabs-tab:hover {

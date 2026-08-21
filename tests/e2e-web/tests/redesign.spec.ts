@@ -98,8 +98,12 @@ test("bottom panel height can be dragged and persists after reload", async ({
       Math.round((el as HTMLElement).getBoundingClientRect().height),
     );
 
-  const box =
-    (await handle.boundingBox()) ?? { x: 0, y: 0, width: 100, height: 6 };
+  const box = (await handle.boundingBox()) ?? {
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 6,
+  };
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2, box.y - 80, { steps: 5 });

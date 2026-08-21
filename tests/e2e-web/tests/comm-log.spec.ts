@@ -13,7 +13,10 @@ async function openApp(page: Page): Promise<void> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
-  expect(errors, `console/page errors during startup: ${errors.join(" | ")}`).toEqual([]);
+  expect(
+    errors,
+    `console/page errors during startup: ${errors.join(" | ")}`,
+  ).toEqual([]);
 }
 
 async function addEligibleRow(page: Page): Promise<void> {
@@ -109,7 +112,8 @@ test("comm log auto-scrolls to the bottom on new entries", async ({ page }) => {
         list.evaluate((el) => {
           const e = el as HTMLElement;
           return (
-            e.scrollTop > 0 && e.scrollHeight - e.scrollTop - e.clientHeight <= 16
+            e.scrollTop > 0 &&
+            e.scrollHeight - e.scrollTop - e.clientHeight <= 16
           );
         }),
       { timeout: 5000 },
@@ -223,15 +227,14 @@ test("comm log copy writes formatted hex to the clipboard", async ({
     .poll(() =>
       page.evaluate(
         () =>
-          (window as unknown as { __commCopyWrites: string[] })
-            .__commCopyWrites.length,
+          (window as unknown as { __commCopyWrites: string[] }).__commCopyWrites
+            .length,
       ),
     )
     .toBeGreaterThan(0);
   const text = await page.evaluate(
     () =>
-      (window as unknown as { __commCopyWrites: string[] })
-        .__commCopyWrites[0],
+      (window as unknown as { __commCopyWrites: string[] }).__commCopyWrites[0],
   );
   expect(text).toContain("01 03 00 01 00 01");
   expect(text).toContain("Request");

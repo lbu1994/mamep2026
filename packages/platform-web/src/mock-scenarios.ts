@@ -93,7 +93,8 @@ export const DEFAULT_MOCK_SCENARIOS: readonly MockScenario[] = [
     read: { kind: "normal" },
     write: { kind: "write-value-gate", maxValue: 0x7fff },
     namePrefix: "BadValue",
-    comment: "非法数据值：读成功；写入值须 ≤ 32767（0x7FFF），超出返回异常 0x03",
+    comment:
+      "非法数据值：读成功；写入值须 ≤ 32767（0x7FFF），超出返回异常 0x03",
     seedRows: 3,
   },
   {

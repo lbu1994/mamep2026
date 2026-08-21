@@ -91,7 +91,9 @@ export function applyManualResult(
   }
   const writeOutcome = options.writeOutcome;
   const writeStatus: WriteResultStatus | undefined =
-    writeOutcome !== undefined ? WRITE_OUTCOME_STATUS[writeOutcome.kind] : undefined;
+    writeOutcome !== undefined
+      ? WRITE_OUTCOME_STATUS[writeOutcome.kind]
+      : undefined;
   // 写路径结果未知（缺 outcome 或 kind 未映射）或回读取消（cancelled-before-verify）：
   // 保持原状态，绝不产生成功点（§18.2 防御，杜绝「失败却绿点」）。
   if (
@@ -294,10 +296,7 @@ function setSuccess(
   return { ...current, [rowId]: { kind } };
 }
 
-function removeSuccess(
-  current: RowSuccessMap,
-  rowId: string,
-): RowSuccessMap {
+function removeSuccess(current: RowSuccessMap, rowId: string): RowSuccessMap {
   if (current[rowId] === undefined) return current;
   const next = { ...current };
   delete next[rowId];

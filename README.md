@@ -23,18 +23,18 @@
 
 ## 常用命令
 
-| 命令 | 作用 |
-| --- | --- |
-| `pnpm dev` | 网页端 Vite dev server（http://localhost:5173），不启动 Electron |
-| `pnpm dev:electron` | Electron 开发模式 |
-| `pnpm build` / `pnpm build:electron` | 构建网页端 / Electron |
-| `pnpm build:vscode` | 编译 `vscode-extension/` |
-| `pnpm preview` | 本地预览网页端构建产物（apps/web，`vite preview`） |
-| `pnpm lint` | ESLint（全仓） |
-| `pnpm typecheck` | turbo 全包类型检查 |
-| `pnpm test` | turbo 全包 vitest |
-| `pnpm test:acceptance` / `pnpm test:e2e:web` | 单独跑对应测试包 |
-| `pnpm format` / `pnpm format:check` | Prettier |
+| 命令                                         | 作用                                                             |
+| -------------------------------------------- | ---------------------------------------------------------------- |
+| `pnpm dev`                                   | 网页端 Vite dev server（http://localhost:5173），不启动 Electron |
+| `pnpm dev:electron`                          | Electron 开发模式                                                |
+| `pnpm build` / `pnpm build:electron`         | 构建网页端 / Electron                                            |
+| `pnpm build:vscode`                          | 编译 `vscode-extension/`                                         |
+| `pnpm preview`                               | 本地预览网页端构建产物（apps/web，`vite preview`）               |
+| `pnpm lint`                                  | ESLint（全仓）                                                   |
+| `pnpm typecheck`                             | turbo 全包类型检查                                               |
+| `pnpm test`                                  | turbo 全包 vitest                                                |
+| `pnpm test:acceptance` / `pnpm test:e2e:web` | 单独跑对应测试包                                                 |
+| `pnpm format` / `pnpm format:check`          | Prettier                                                         |
 
 ## 快速开始
 

@@ -566,9 +566,7 @@ export function MamepApp(): React.ReactNode {
                             onCancel={() => setSidebarRenamingSheetId(null)}
                           />
                         ) : (
-                          <span className="sheet-item__name">
-                            {sheet.name}
-                          </span>
+                          <span className="sheet-item__name">{sheet.name}</span>
                         )}
                         <Dropdown
                           menu={{

@@ -20,7 +20,11 @@ function luminance(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
   if (!m) throw new Error(`invalid color: ${hex}`);
   const [r, g, b] = [m[1], m[2], m[3]].map((x) => parseInt(x, 16));
-  return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
+  return (
+    0.2126 * srgbToLinear(r) +
+    0.7152 * srgbToLinear(g) +
+    0.0722 * srgbToLinear(b)
+  );
 }
 
 function contrast(fg, bg) {
@@ -76,21 +80,111 @@ const DARK = {
 /* ---------- 检查项 ---------- */
 
 const REQUIREMENTS = (p) => [
-  { name: "正文 / 应用背景", fg: p.textPrimary, bg: p.bgApp, min: 4.5, note: "正文" },
-  { name: "正文 / 导航背景", fg: p.textPrimary, bg: p.bgNav, min: 4.5, note: "正文" },
-  { name: "正文 / 面板背景", fg: p.textPrimary, bg: p.bgPanel, min: 4.5, note: "正文" },
-  { name: "正文 / 浮层背景", fg: p.textPrimary, bg: p.bgElevated, min: 4.5, note: "正文" },
-  { name: "次要文字 / 面板背景", fg: p.textSecondary, bg: p.bgPanel, min: 4.5, note: "正文" },
-  { name: "辅助文字 / 面板背景", fg: p.textTertiary, bg: p.bgPanel, min: 4.5, note: "小字(11-12px)" },
-  { name: "辅助文字 / 导航背景", fg: p.textTertiary, bg: p.bgNav, min: 4.5, note: "小字(11-12px)" },
-  { name: "禁用文字 / 面板背景", fg: p.textDisabled, bg: p.bgPanel, min: 3.0, note: "Disabled(豁免,可读性目标)" },
-  { name: "主按钮白字 / 品牌色", fg: "#ffffff", bg: p.brandPrimary, min: 4.5, note: "Primary 按钮" },
-  { name: "品牌文字 / 面板背景", fg: p.link, bg: p.bgPanel, min: 4.5, note: "链接/强调(colorLink)" },
-  { name: "选中态文字 / 选中背景", fg: p.brandOnBrandBg, bg: p.brandBg, min: 4.5, note: "侧栏选中/页签" },
-  { name: "焦点环 / 面板背景", fg: p.focusRing, bg: p.bgPanel, min: 3.0, note: "Focus ring(非文字)" },
-  { name: "成功 / 面板背景", fg: p.success, bg: p.bgPanel, min: 3.0, note: "状态(配合文字/图标)" },
-  { name: "警告 / 面板背景", fg: p.warning, bg: p.bgPanel, min: 3.0, note: "状态(配合文字/图标)" },
-  { name: "错误 / 面板背景", fg: p.error, bg: p.bgPanel, min: 3.0, note: "状态(配合文字/图标)" },
+  {
+    name: "正文 / 应用背景",
+    fg: p.textPrimary,
+    bg: p.bgApp,
+    min: 4.5,
+    note: "正文",
+  },
+  {
+    name: "正文 / 导航背景",
+    fg: p.textPrimary,
+    bg: p.bgNav,
+    min: 4.5,
+    note: "正文",
+  },
+  {
+    name: "正文 / 面板背景",
+    fg: p.textPrimary,
+    bg: p.bgPanel,
+    min: 4.5,
+    note: "正文",
+  },
+  {
+    name: "正文 / 浮层背景",
+    fg: p.textPrimary,
+    bg: p.bgElevated,
+    min: 4.5,
+    note: "正文",
+  },
+  {
+    name: "次要文字 / 面板背景",
+    fg: p.textSecondary,
+    bg: p.bgPanel,
+    min: 4.5,
+    note: "正文",
+  },
+  {
+    name: "辅助文字 / 面板背景",
+    fg: p.textTertiary,
+    bg: p.bgPanel,
+    min: 4.5,
+    note: "小字(11-12px)",
+  },
+  {
+    name: "辅助文字 / 导航背景",
+    fg: p.textTertiary,
+    bg: p.bgNav,
+    min: 4.5,
+    note: "小字(11-12px)",
+  },
+  {
+    name: "禁用文字 / 面板背景",
+    fg: p.textDisabled,
+    bg: p.bgPanel,
+    min: 3.0,
+    note: "Disabled(豁免,可读性目标)",
+  },
+  {
+    name: "主按钮白字 / 品牌色",
+    fg: "#ffffff",
+    bg: p.brandPrimary,
+    min: 4.5,
+    note: "Primary 按钮",
+  },
+  {
+    name: "品牌文字 / 面板背景",
+    fg: p.link,
+    bg: p.bgPanel,
+    min: 4.5,
+    note: "链接/强调(colorLink)",
+  },
+  {
+    name: "选中态文字 / 选中背景",
+    fg: p.brandOnBrandBg,
+    bg: p.brandBg,
+    min: 4.5,
+    note: "侧栏选中/页签",
+  },
+  {
+    name: "焦点环 / 面板背景",
+    fg: p.focusRing,
+    bg: p.bgPanel,
+    min: 3.0,
+    note: "Focus ring(非文字)",
+  },
+  {
+    name: "成功 / 面板背景",
+    fg: p.success,
+    bg: p.bgPanel,
+    min: 3.0,
+    note: "状态(配合文字/图标)",
+  },
+  {
+    name: "警告 / 面板背景",
+    fg: p.warning,
+    bg: p.bgPanel,
+    min: 3.0,
+    note: "状态(配合文字/图标)",
+  },
+  {
+    name: "错误 / 面板背景",
+    fg: p.error,
+    bg: p.bgPanel,
+    min: 3.0,
+    note: "状态(配合文字/图标)",
+  },
 ];
 
 /* ---------- 主流程 ---------- */

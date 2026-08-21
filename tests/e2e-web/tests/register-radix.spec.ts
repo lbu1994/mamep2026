@@ -91,7 +91,9 @@ test("HEX mode rejects the 0x prefix and keeps the draft", async ({ page }) => {
   await clickAndFill(input, "0x12");
   await input.press("Enter");
   await expect(input).toHaveText("0x12");
-  await expect(input).toHaveClass(/register-table__editable-cell-value-wrap--error/);
+  await expect(input).toHaveClass(
+    /register-table__editable-cell-value-wrap--error/,
+  );
 });
 
 test("DEC mode rejects hex letters and out-of-range values", async ({
@@ -103,18 +105,24 @@ test("DEC mode rejects hex letters and out-of-range values", async ({
   await clickAndFill(input, "1F");
   await input.press("Enter");
   await expect(input).toHaveText("1F");
-  await expect(input).toHaveClass(/register-table__editable-cell-value-wrap--error/);
+  await expect(input).toHaveClass(
+    /register-table__editable-cell-value-wrap--error/,
+  );
 
   await clickAndFill(input, "70000");
   await input.press("Enter");
   await expect(input).toHaveText("70000");
-  await expect(input).toHaveClass(/register-table__editable-cell-value-wrap--error/);
+  await expect(input).toHaveClass(
+    /register-table__editable-cell-value-wrap--error/,
+  );
 
   // 合法十进制提交成功，无错误态。
   await clickAndFill(input, "31");
   await input.press("Enter");
   await expect(input).toHaveText("31");
-  await expect(input).not.toHaveClass(/register-table__editable-cell-value-wrap--error/);
+  await expect(input).not.toHaveClass(
+    /register-table__editable-cell-value-wrap--error/,
+  );
 });
 
 test("switching mode does not reformat already committed addresses", async ({

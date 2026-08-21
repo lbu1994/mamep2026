@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
 import type { Serial, SerialOptions, SerialPort } from "./web-serial";
-import {
-  BrowserPlatformHost,
-  type WebSerialHandle,
-} from "./web-serial-host";
+import { BrowserPlatformHost, type WebSerialHandle } from "./web-serial-host";
 
 function createFakePort(
   onOpen?: (options: SerialOptions) => void,

@@ -59,9 +59,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.connectionModalOpen);
   const setOpen = useAppStore((s) => s.setConnectionModalOpen);
-  const setConnectionSettings = useAppStore(
-    (s) => s.setConnectionSettings,
-  );
+  const setConnectionSettings = useAppStore((s) => s.setConnectionSettings);
   const host = useAppStore((s) => s.host);
   const workspace = useAppStore((s) => s.workspace);
   const connectionState = useAppStore((s) => s.connectionState);

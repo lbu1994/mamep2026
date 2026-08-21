@@ -10,7 +10,10 @@ import {
   createIdbKeyValueStore,
   IndexedDBWorkspaceRepository,
 } from "@mamep2026/platform-web";
-import { applyPollResult, buildPollingTargets } from "@mamep2026/register-table";
+import {
+  applyPollResult,
+  buildPollingTargets,
+} from "@mamep2026/register-table";
 import { MamepApp, useAppStore } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
 

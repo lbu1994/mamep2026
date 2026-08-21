@@ -107,9 +107,7 @@ export class MockTransport implements TransportPort {
       const behavior = rule?.read ?? { kind: "normal" };
       if (behavior.kind === "no-response") return;
       if (behavior.kind === "exception") {
-        this.respond(
-          this.exceptionFrame(slave, 0x03, behavior.exceptionCode),
-        );
+        this.respond(this.exceptionFrame(slave, 0x03, behavior.exceptionCode));
         return;
       }
       // normal / write-value-gate（读按正常处理）：返回当前寄存器值。
@@ -124,9 +122,7 @@ export class MockTransport implements TransportPort {
       const value = ((bytes[7] ?? 0) << 8) | (bytes[8] ?? 0);
       if (behavior.kind === "no-response") return;
       if (behavior.kind === "exception") {
-        this.respond(
-          this.exceptionFrame(slave, 0x10, behavior.exceptionCode),
-        );
+        this.respond(this.exceptionFrame(slave, 0x10, behavior.exceptionCode));
         return;
       }
       if (behavior.kind === "write-value-gate" && value > behavior.maxValue) {

@@ -34,8 +34,6 @@ import type { CommunicationLogEvent, RequestSource } from "./log-event";
 import { RequestScheduler, type RequestPriority } from "./request-scheduler";
 import type { TransportPort } from "./transport-port";
 
-
-
 export type WriteOutcome = { kind: "write-succeeded-no-verify" };
 
 interface ExchangeMeta {

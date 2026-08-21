@@ -203,7 +203,10 @@ describe("BottomPanel comm log", () => {
   it("renders time, direction and raw bytes without function-code fields", () => {
     useAppStore.setState({
       commLog: [
-        commEntry({ direction: "request", bytesHex: "01 03 00 00 00 01 84 0A" }),
+        commEntry({
+          direction: "request",
+          bytesHex: "01 03 00 00 00 01 84 0A",
+        }),
         commEntry({ direction: "response", bytesHex: "01 03 02 12 34 84 7B" }),
       ],
     });
@@ -313,7 +316,9 @@ describe("BottomPanel properties", () => {
     expect(items).toHaveLength(11);
     expect(rows).toHaveLength(4);
     rows.forEach((row) => {
-      expect(row.querySelectorAll(".ant-descriptions-item").length).toBeLessThanOrEqual(3);
+      expect(
+        row.querySelectorAll(".ant-descriptions-item").length,
+      ).toBeLessThanOrEqual(3);
     });
     // 末行 2 项（11 = 3×3 + 2）。
     expect(rows[3]?.querySelectorAll(".ant-descriptions-item")).toHaveLength(2);

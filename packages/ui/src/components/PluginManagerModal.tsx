@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Empty, Flex, Listy, Modal, Space, Switch, Tag, Tooltip, Typography } from "antd";
+import {
+  Empty,
+  Flex,
+  Listy,
+  Modal,
+  Space,
+  Switch,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
 import { useAppStore } from "../app-store";
 
 /** 权限 → i18n 标签键映射；未登记的权限回退显示原始字符串。 */
@@ -8,7 +18,10 @@ const PERMISSION_LABEL_KEYS: Readonly<Record<string, string>> = {
   "ui.panel": "plugins.permission.uiPanel",
 };
 
-function permissionLabel(t: (key: string) => string, permission: string): string {
+function permissionLabel(
+  t: (key: string) => string,
+  permission: string,
+): string {
   const labelKey = PERMISSION_LABEL_KEYS[permission];
   return labelKey !== undefined ? t(labelKey) : permission;
 }
@@ -52,10 +65,7 @@ export function PluginManagerModal(): React.ReactNode {
                   {plugin.description}
                 </Typography.Text>
                 <Space size={[8, 4]} wrap style={{ marginTop: 4 }}>
-                  <Typography.Text
-                    type="secondary"
-                    style={{ fontSize: 12 }}
-                  >
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     {t("plugins.author")}: {plugin.author ?? "—"}
                   </Typography.Text>
                   <Tooltip title={t("plugins.platformWebTooltip")}>

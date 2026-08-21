@@ -30,9 +30,7 @@ test("write failure shows a red status dot with tooltip; success keeps the green
   await roData.click();
   await roData.fill("0001");
   await roData.press("Enter");
-  await readOnlyRow
-    .getByRole("button", { name: "Write", exact: true })
-    .click();
+  await readOnlyRow.getByRole("button", { name: "Write", exact: true }).click();
 
   await expect(
     readOnlyRow.locator(".register-table__status-dot--error"),
@@ -40,10 +38,9 @@ test("write failure shows a red status dot with tooltip; success keeps the green
   await expect(
     readOnlyRow.locator(".register-table__status-dot--success"),
   ).toHaveCount(0);
-  await expect(readOnlyRow.locator(".register-table__status-dot")).toHaveAttribute(
-    "aria-label",
-    "The device returned a Modbus exception.",
-  );
+  await expect(
+    readOnlyRow.locator(".register-table__status-dot"),
+  ).toHaveAttribute("aria-label", "The device returned a Modbus exception.");
 
   // Tooltip 悬停显示失败原因。
   await readOnlyRow.locator(".register-table__status-dot").hover();
@@ -59,9 +56,7 @@ test("write failure shows a red status dot with tooltip; success keeps the green
   await nData.click();
   await nData.fill("0001");
   await nData.press("Enter");
-  await normalRow
-    .getByRole("button", { name: "Write", exact: true })
-    .click();
+  await normalRow.getByRole("button", { name: "Write", exact: true }).click();
 
   await expect(
     normalRow.locator(".register-table__status-dot--success"),
@@ -69,8 +64,7 @@ test("write failure shows a red status dot with tooltip; success keeps the green
   await expect(
     normalRow.locator(".register-table__status-dot--error"),
   ).toHaveCount(0);
-  await expect(normalRow.locator(".register-table__status-dot")).toHaveAttribute(
-    "aria-label",
-    "Write successful",
-  );
+  await expect(
+    normalRow.locator(".register-table__status-dot"),
+  ).toHaveAttribute("aria-label", "Write successful");
 });

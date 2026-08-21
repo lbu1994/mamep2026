@@ -341,7 +341,9 @@ describe("CommunicationSession transport close/error", () => {
     expect(session.getState()).toBe("interrupted");
     expect(
       logs.some(
-        (l) => l.status === "failure" && l.errorCode === "SERIAL_DEVICE_DISCONNECTED",
+        (l) =>
+          l.status === "failure" &&
+          l.errorCode === "SERIAL_DEVICE_DISCONNECTED",
       ),
     ).toBe(true);
   });

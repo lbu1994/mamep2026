@@ -261,7 +261,8 @@ describe("MockTransport 成功/失败场景（按地址区间规则）", () => {
     const bodyLength = (frame?.length ?? 0) - 2;
     const expected = crc16Modbus(frame ?? new Uint8Array(), 0, bodyLength);
     const actual =
-      ((frame?.[bodyLength] ?? 0) | ((frame?.[bodyLength + 1] ?? 0) << 8)) >>> 0;
+      ((frame?.[bodyLength] ?? 0) | ((frame?.[bodyLength + 1] ?? 0) << 8)) >>>
+      0;
     expect(actual).toBe(expected);
   });
 });
