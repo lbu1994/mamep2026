@@ -1,0 +1,21 @@
+{
+  "name": "@mamep2026/electron",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@mamep2026/communication": "workspace:*",
+    "@mamep2026/domain": "workspace:*",
+    "@mamep2026/platform-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "electron": "^43.4.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

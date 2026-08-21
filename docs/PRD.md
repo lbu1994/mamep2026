@@ -369,6 +369,7 @@ Mamep2026 同时支持 Modbus RTU 和 Modbus TCP，并根据不同运行环境�
 > - 第 7 条由 `WebSerialTransport.mapSerialError()` 映射：`NotFoundError→SERIAL_DEVICE_DISCONNECTED`、`InvalidStateError→SERIAL_PORT_IN_USE`、`SecurityError→SERIAL_PERMISSION_DENIED`；
 > - 第 8、9 条：`recentPortHint` 仅提示不自动连接，串口不存在不阻塞启动；
 > - `navigator.serial.getPorts()` 只能返回已授权端口、无法枚举未授权设备（Web Serial 隐私模型），当前已声明但未调用。
+> - MVP 阶段 Electron 端与浏览器一致：串口选择经 Web Serial 授权 picker 承担（ADR-017），同样不提供自定义串口列表与刷新按钮；后续版本替换为 Node 串口库后实现系统串口枚举与刷新。
 
 ### 6.3.2 波特率
 
@@ -1103,7 +1104,7 @@ MVP 应具备插件架构基础，但不要求提供完整插件市场。
 
 - Modbus RTU；
 - Modbus TCP；
-- 系统串口枚举；
+- 系统串口枚举（MVP 经 Web Serial 授权 picker 承担，后续版本提供全量枚举，ADR-017）；
 - COM10 及以上；
 - 完整日志；
 - 本地状态恢复；
@@ -1185,7 +1186,7 @@ MVP 目标是完成可实际使用的核心调试闭环，而不是复刻 M@MEp2
 - 重试；
 - 串口刷新；
 - COM10 及以上支持；
-- 浏览器串口授权。
+- 浏览器串口授权（Electron MVP 与浏览器一致经 Web Serial，ADR-017）。
 
 #### Modbus TCP
 
@@ -1550,7 +1551,8 @@ Enter ROM 和 Enter RAM 不出现在核心工具栏中。插件启用后，可�
 ### 串口能力
 
 - 浏览器端使用 Web Serial 能力；
-- Electron 和 VSCode 使用 Node.js 生态中成熟的串口方案。
+- Electron MVP 与浏览器一致使用 Web Serial 能力（ADR-017），后续版本替换为 Node.js 生态中成熟的串口方案；
+- VSCode 使用 Node.js 生态中成熟的串口方案。
 
 ### TCP 能力
 
@@ -2415,7 +2417,7 @@ Mamep2026 不需要等待原软件细节确认，可按照现代标签页通用�
 
 - 操作系统串口能力；
 - 浏览器 Web Serial 能力；
-- Node.js 串口和 TCP 能力；
+- Node.js 串口（后续版本，MVP Electron 用 Web Serial，ADR-017）和 TCP 能力；
 - VSCode 扩展运行环境；
 - Electron 运行环境；
 - 用户设备的 Modbus 实现；

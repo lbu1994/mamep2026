@@ -19,7 +19,10 @@ import type {
 } from "@mamep2026/communication";
 import type { SaveStatus } from "@mamep2026/workspace";
 import type { PluginRegistry } from "@mamep2026/plugin-api";
-import type { SerialDeviceHandle } from "@mamep2026/platform-api";
+import type {
+  SerialDeviceHandle,
+  SerialPortOption,
+} from "@mamep2026/platform-api";
 import type { ApplicationMessage } from "@mamep2026/logging";
 
 export interface TraceSampleEvent {
@@ -58,7 +61,19 @@ export interface AppHost {
   subscribeSaveStatus(listener: (status: SaveStatus) => void): () => void;
 
   supportsWebSerial(): boolean;
-  selectSerialPort(): Promise<Result<SerialDeviceHandle | null>>;
+  /**
+   * 枚举可用串口（serialPorts === "enumerated" 时调用，如 Electron）：
+   * 返回下拉框可展示的端口列表；不支持枚举的平台返回 fail（浏览器端不用该方法）。
+   */
+  enumerateSerialPorts(): Promise<Result<SerialPortOption[]>>;
+  /**
+   * 选择串口：
+   * - 浏览器（browser-picker）：忽略参数，弹系统原生选择框；
+   * - Electron（enumerated）：portId 指定要选的端口，null/空串 = 取消当前选择会话。
+   */
+  selectSerialPort(
+    portId?: string | null,
+  ): Promise<Result<SerialDeviceHandle | null>>;
 
   connect(
     profile: RtuConnectionProfile,

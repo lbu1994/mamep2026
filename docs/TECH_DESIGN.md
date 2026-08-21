@@ -89,7 +89,8 @@
 | 样式                 | Ant Design ConfigProvider 主题令牌与主题适配层                        |
 | 图标                 | @ant-design/icons                                                     |
 | 浏览器 RTU           | Web Serial API 适配器                                                 |
-| Electron RTU         | Node.js 串口适配器                                                    |
+| Electron RTU（MVP）  | Web Serial API 适配器（与浏览器复用，ADR-017）                        |
+| Electron RTU（后续） | Node.js 串口适配器（替换 Web Serial）                                 |
 | VSCode RTU           | 扩展宿主中的 Node.js 串口适配器                                       |
 | Electron、VSCode TCP | Node.js net 模块适配器                                                |
 | Modbus 核心          | 项目内实现所需的最小协议核心，不把业务行为绑定到第三方 Modbus 客户端  |
@@ -315,7 +316,7 @@ MVP 不建设远程后端服务，也不引入服务端数据库。
 各端的本地后端职责如下：
 
 - 浏览器端：Web API、Web Serial 和 IndexedDB；
-- Electron 端：Electron 主进程负责串口、TCP、插件和文件持久化；
+- Electron 端：MVP 阶段串口经 Renderer 的 Web Serial API 承担（与浏览器一致，ADR-017），主进程负责 TCP、插件和文件持久化；后续版本串口改由主进程经 Node 串口库接管；
 - VSCode 端：扩展宿主负责串口、TCP、插件和工作区持久化。
 
 不采用 SQLite 作为 MVP 默认存储，原因：
@@ -416,8 +417,8 @@ Ports 只定义核心需要什么，不暴露具体平台实现细节。
 
 分别实现：
 
-- Web Serial Adapter；
-- Node Serial Adapter；
+- Web Serial Adapter（浏览器 + Electron MVP，ADR-017）；
+- Node Serial Adapter（后续版本替换 Electron Web Serial；VSCode 自始使用）；
 - Node TCP Adapter；
 - IndexedDB Workspace Adapter；
 - Electron File Workspace Adapter；
@@ -463,7 +464,7 @@ Host 负责装配具体适配器，不实现领域规则。
 4. register-table 依赖 application service，而非具体协议字节流；
 5. workspace 只保存领域状态，不保存运行时 Promise、Timer 或连接句柄；
 6. plugin-api 只暴露稳定的能力接口和数据契约；
-7. Electron Renderer 不直接导入 Node.js 串口或 net；
+7. Electron Renderer 不直接导入 Node.js 串口或 net（MVP 经 Web Serial API，非 Node 串口库，ADR-017）；
 8. VSCode Webview 不直接调用 VSCode Extension API；
 9. 浏览器端不得包含 Electron 或 VSCode 条件分支；
 10. 平台能力由 Capability Matrix 明确声明。
@@ -472,7 +473,7 @@ Host 负责装配具体适配器，不实现领域规则。
 
 # 6. 项目结构
 
-> 本节为规划目标结构。当前实际（2026-08，浏览器 MVP）：`apps/` 仅 `web/`；Electron 主进程在根 `electron/main.ts`、VSCode 插件在根 `vscode-extension/`（均不在 `apps/` 下）；`packages/` 现有 domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit（尚未创建 platform-node、platform-electron、platform-vscode、ui-theme、schemas、shared-utils）；`tooling/` 仅 typescript-config；`tests/` 仅 acceptance 与 e2e-web；尚无 `plugins/` 目录。详细现状见 docs/AGENTS.md §7。
+> 本节为规划目标结构。当前实际（2026-08）：`apps/` 有 `web/` 与 `electron/`（2026-08-21 迁移，ADR-016；`apps/electron/src/main/main.ts` + `apps/electron/src/preload/preload.ts`）；VSCode 插件仍在根 `vscode-extension/`；`packages/` 现有 domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit（尚未创建 platform-node、platform-electron、platform-vscode、ui-theme、schemas、shared-utils）；`tooling/` 仅 typescript-config；`tests/` 含 acceptance、e2e-web、e2e-electron（2026-08-21）；尚无 `plugins/` 目录。详细现状见 docs/AGENTS.md §7。
 
 建议项目结构如下：
 
@@ -544,7 +545,7 @@ Host 负责装配具体适配器，不实现领域规则。
 
 - 装配浏览器平台能力；
 - 渲染共享 React UI；
-- 使用 Web Serial；
+- 使用 Web Serial（同时服务 Electron MVP 串口，ADR-017）；
 - 使用 IndexedDB；
 - 执行浏览器能力检测；
 - 注册浏览器生命周期事件；
@@ -560,14 +561,14 @@ Host 负责装配具体适配器，不实现领域规则。
 
 ## 6.2 apps/electron
 
-> 当前状态（2026-08）：Electron 主进程位于根目录 `electron/main.ts`（单文件，无 preload/IPC，保持 `contextIsolation: true`、`nodeIntegration: false`）；dev 用 `VITE_DEV_SERVER_URL` 加载网页，生产 `loadFile` 指向 `apps/web/dist/index.html`。本节 main/preload/renderer 三层结构为设计目标，当前仅保证编译与路径引用不破坏（不在浏览器 MVP 实现与测试范围）。
+> 当前状态（2026-08-21，ADR-016/017）：Electron 已迁移到 `apps/electron/`——主进程 `src/main/main.ts`、preload `src/preload/preload.ts`，Main/Preload/Renderer 三层落地（Renderer 即 apps/web 共享 UI，dev 用 `VITE_DEV_SERVER_URL`，生产 `loadFile` 指向 `apps/web/dist-electron/index.html`，渲染器独立产物目录避免与浏览器构建互相覆盖）；安全 IPC 采用 HostMessage v1 版本化 Envelope + Zod 校验 + kind 白名单（`packages/platform-api/src/host-message.ts`），`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`（preload 为 CJS 输出）。MVP 串口已落地（ADR-017，2026-08-21 扩展为下拉框选择）：与浏览器一致复用 Web Serial API——主进程新增可测 `serial-permissions.ts`（`select-serial-port` 最小授权，仅本应用 origin 放行；不再自动选第一个端口，而是把端口列表经 `serial-ports-available` 事件转发给渲染进程、由用户在 antd Select 下拉框选择，选择结果经 `select-serial-port` invoke 回传后调用 callback；设置 `selectPort` 策略可回到自动选择模式），Renderer `ElectronAppHost` 为薄门面，连接/读写/轮询/Trace/日志/工作区全部委托复用浏览器路径（`BrowserAppHost` + `BrowserPlatformHost({serial: navigator.serial})`，含 IndexedDB 自动保存），能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`（含刷新/取消/空态）；TCP/文件持久化仍未实现；`debug:get-state` 为 dev 探针（打包后禁用）。后续版本再替换为 Node Serial/TCP Adapter 并由本节 main 职责接管。
 
 ### main
 
 职责：
 
 - 创建和管理窗口；
-- 串口枚举和连接；
+- 串口枚举和连接（后续版本；MVP 由 Renderer 经 Web Serial 承担，ADR-017）；
 - TCP 连接；
 - 工作区文件读写；
 - 插件发现与加载；
@@ -805,7 +806,7 @@ Host 负责装配具体适配器，不实现领域规则。
 | ------------ | ---------------------------: | -------: | -------------: |
 | Modbus RTU   |                         支持 |     支持 |           支持 |
 | Modbus TCP   |                       不支持 |     支持 |           支持 |
-| 串口枚举     | 授权 picker 承担，无全量枚举 |     支持 |           支持 |
+| 串口枚举     | 授权 picker 承担，无全量枚举 | 授权 picker（MVP，同浏览器） |     支持 |
 | COM10 及以上 |     由浏览器设备选择机制处理 |     支持 |           支持 |
 | 本地文件系统 |                         受限 |     支持 |           支持 |
 | 工作区文件   |           可通过导入导出实现 |     支持 |           支持 |
@@ -816,7 +817,7 @@ Host 负责装配具体适配器，不实现领域规则。
 | 系统通知     |                   浏览器能力 |     支持 |    VSCode 通知 |
 | 自动更新     |                       不适用 | 后续支持 | 由 VSCode 管理 |
 
-> 实现状态（2026-08-15）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron 与 VSCode 列（含 Modbus TCP、Node 串口、文件持久化）为规划目标，当前未实现/未验证。
+> 实现状态（2026-08-21）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（2026-08-21，ADR-017 扩展：与浏览器一致经 Web Serial——主进程 `select-serial-port` 最小授权 + 端口列表转发、渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`；IndexedDB 自动保存/会话恢复随共享 UI 一并启用；TCP/文件持久化仍未实现，能力如实声明；`debug:get-state` dev 探针可用）；VSCode 列（含 Modbus TCP、Node 串口、文件持久化）为规划目标，当前未实现/未验证。
 
 能力矩阵通过 PlatformCapabilities 对象注入 UI。
 
@@ -1045,11 +1046,22 @@ RTU 和 TCP 可以使用不同的 Transport 配置，但应向 CommunicationSess
 
 浏览器端不能依赖传统 COM 端口字符串作为设备唯一标识。
 
-浏览器端（BrowserPlatformHost）不实现自定义串口枚举列表，以授权 picker 替代：
+浏览器端（BrowserPlatformHost）不实现自定义串口枚举列表，以授权 picker 替代；**Electron MVP 复用同一 Web Serial Adapter，但主进程 `select-serial-port` 不再自动选择/依赖系统 picker，而是把端口列表转发给渲染进程、由用户在 antd Select 下拉框中选择（ADR-017 扩展，`serialPorts: "enumerated"`）；后续版本替换为 Node Serial Adapter 后再由主进程系统枚举**：
 
-- `requestPort()` 打开系统原生设备选择器，每次打开即实时枚举系统可用设备（等同「自动枚举 + 刷新」），用户取消返回 null；
+- `requestPort()` 浏览器端打开系统原生设备选择器，每次打开即实时枚举系统可用设备（等同「自动枚举 + 刷新」），用户取消返回 null；Electron 端则触发主进程 `select-serial-port`（列表经事件转发，选择经 invoke 回传）；
 - `getPorts()` 只返回已授权端口，无法枚举未授权设备（Web Serial 隐私模型）；当前实现已声明该类型但从未调用；
-- 因此浏览器端无串口列表/刷新按钮/`listSerialPorts` 能力，能力矩阵声明为 `serialPorts: "browser-picker"`。
+- 因此浏览器端无串口列表/刷新按钮/`listSerialPorts` 能力，能力矩阵声明为 `serialPorts: "browser-picker"`；Electron 端为 `serialPorts: "enumerated"`（下拉框 + 刷新 + 取消/空态）。
+
+**Electron 串口获取机制（ADR-017 扩展，2026-08-22 真机验证）**——完整链路如下：
+
+1. **用户手势触发枚举**：`navigator.serial.requestPort()` 必须在用户手势中调用（下拉框 `onOpenChange` / 点击刷新按钮），否则抛 `SecurityError: Must be handling a user gesture`（在弹窗打开 / effect 里自动枚举会被吞掉，下拉框恒空）。下拉框仅注册事件、不在 `afterOpenChange` 自动枚举。
+2. **主进程拦截选择**：`requestPort()` 触发 session 的 `select-serial-port` 事件，主进程 `event.preventDefault()` 后默认「延迟选择」——把 `portList`（含 `portId`/`portName`/`displayName`）经 `serial-ports-available` 事件转发给渲染进程，挂起 callback 等待用户选择；设置 `selectPort` 策略则自动选择（测试/无人值守）。
+3. **权限放行**：`setPermissionCheckHandler` / `setDevicePermissionHandler` 仅对本应用 origin 放行 `serial`。**origin 必须归一化（`normalizeOrigin`）**：dev 下 `details.securityOrigin` 报告为 `http://localhost:5173/`（尾斜杠），而 allowlist 由 `new URL().origin` 生成（无斜杠），精确匹配会失败 → 设备被拒 → `requestPort` reject `NotFoundError: No port selected by the user`（"刷不出来串口"的根因）。`normalizeOrigin` 对 http(s) 用 `new URL(origin).origin` 归一化，`file://` 原样保留（URL API 会把它归一化成 `"null"`）。
+4. **下拉框展示**：渲染进程 `ElectronAppHost` 把事件转成的 `SerialPortOption[]`（label 优先级 `portName → displayName → portId`）喂给 antd Select；空列表显示 "No serial ports found" + 刷新按钮。
+5. **回传选择**：用户选中 → `select-serial-port` invoke（HostMessage v1，payload `{portId}`，空串 = 取消）→ 主进程 `resolvePendingSelection` 调用挂起 callback → `requestPort()` settle → 渲染进程拿到 `SerialPort` 构建 `WebSerialHandle`；用户取消 → callback("") → `requestPort` reject `NotFoundError` → 视为 ok(null)。
+6. **幂等/清理**：重枚举前先取消旧挂起会话（`cancelPendingPicker`，调 `selectSerialPort("")` 并吞掉 rejection），避免多个 `requestPort` 同时挂起。
+
+> 经验：fake `navigator.serial` 的 e2e 走不到真实权限/手势路径，单测/e2e 全绿 ≠ 真机可用；串口权限类问题必须真机验证（详见仓库 memory `electron-serial-debug-2026-08-22`）。
 
 浏览器持久化时只保存：
 
@@ -1059,9 +1071,9 @@ RTU 和 TCP 可以使用不同的 Transport 配置，但应向 CommunicationSess
 
 ## 9.3 Node Serial Adapter
 
-> 实现状态（2026-08）：本 Adapter 为 Electron/VSCode 共用设计，当前未实现（浏览器 MVP 不含 Node 串口路径）。
+> 实现状态（2026-08-21，ADR-017）：本 Adapter 为 Electron/VSCode 共用设计，当前未实现。MVP 阶段 Electron 与浏览器一致使用 Web Serial API（Renderer `navigator.serial`，ADR-017），Node Serial Adapter 为后续版本替换方案；VSCode 端自始使用本 Adapter。
 
-Electron 和 VSCode 共用 Node Serial Adapter。
+Electron（后续版本替换 Web Serial）和 VSCode 共用 Node Serial Adapter。
 
 职责：
 
@@ -2199,7 +2211,7 @@ UI 不通过字符串匹配判断错误类型。
 主要能力：
 
 - getCapabilities；
-- listSerialPorts（仅 Electron/VSCode 枚举实现；Browser Host 不实现，由授权 picker 承担）；
+- listSerialPorts（后续版本 Electron/VSCode 枚举实现；MVP 阶段 Browser 与 Electron 均由授权 picker 承担，不实现，ADR-017）；
 - requestSerialPort；
 - connect；
 - disconnect；
@@ -2731,6 +2743,8 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 - 插件加载失败隔离；
 - Renderer 无直接 Node.js 权限。
 
+> 实现状态（2026-08-21，ADR-016/017 扩展）：已建立 `tests/e2e-electron/`（Playwright + Electron，`pnpm test:e2e:electron` 自动先 `build:electron`）——已覆盖：启动加载同一共享 UI、Main/Renderer IPC（HostMessage v1 校验）、preload 白名单桥、能力矩阵（RTU 支持 / enumerated 下拉选择）、`debug:get-state` 探针、剪贴板、Renderer 无直接 Node.js 权限、无 console 错误、关窗退出，以及串口下拉选择 + RTU 读写闭环（`serial-rtu-loop.spec.ts`：注入自包含可控 fake `navigator.serial` + 内联 CRC16 RTU responder，覆盖下拉空态/取消、下拉选择、FC03 读/FC10 写；主进程 `select-serial-port` 转发与 `resolvePendingSelection` 逻辑由 `apps/electron` 单测覆盖）。未覆盖（待后续版本落地）：COM10+ 真实设备、TCP 连接、文件持久化、窗口重启恢复、断开释放、插件加载失败隔离。
+
 ## 26.9 VSCode 集成测试
 
 覆盖：
@@ -2820,6 +2834,8 @@ VSCode：
 - 平台相关原生依赖按发布策略处理。
 
 ## 27.2 原生串口依赖
+
+> 本节针对后续版本 Node 串口库替换阶段（ADR-017）；Electron MVP 使用 Web Serial API，不涉及原生串口模块。
 
 串口库可能包含原生模块，需要处理：
 
@@ -3017,7 +3033,7 @@ MVP 不接入默认云端遥测。
 难点：
 
 - 浏览器使用授权式 Web Serial；
-- Electron 和 VSCode 使用 Node.js 串口；
+- MVP 阶段 Electron 与浏览器一致使用 Web Serial（ADR-017），后续版本 Electron 与 VSCode 改用 Node.js 串口；
 - 串口参数支持程度不同；
 - 设备标识方式不同。
 
@@ -3030,6 +3046,8 @@ MVP 不接入默认云端遥测。
 - 建立三端共享的串口契约测试。
 
 ## 30.2 Electron 与 VSCode 原生模块兼容
+
+> 本节针对后续版本 Node 串口库替换阶段（ADR-017）；Electron MVP 使用 Web Serial，不涉及原生模块。
 
 难点：
 
@@ -3283,7 +3301,7 @@ MVP 不接入默认云端遥测。
 实现：
 
 - Main、Preload 和 Renderer；
-- Node Serial；
+- 串口（MVP 复用 Web Serial API，ADR-017；后续替换为 Node Serial）；
 - Node TCP；
 - 文件持久化；
 - IPC；
@@ -3359,6 +3377,8 @@ Electron 成为完整参考客户端。
 - 后台标签页行为。
 
 ## 34.3 Node 串口原型
+
+> 适用范围（ADR-017）：本原型服务于后续版本 Node 串口库替换阶段（Electron 替换 Web Serial、VSCode 自始使用），进入该阶段前完成。Electron MVP 串口走 Web Serial（§34.2 原型已覆盖浏览器路径，Electron 复用）。
 
 目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、COM10 以上端口、原生模块兼容、资源释放及异常处理能力。
 
@@ -3994,6 +4014,8 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 以下事项需要在原型验证或产品决策完成后确定，不应在实现中自行假设。
 
 ## 35.1 串口库最终选型
+
+> 该选型服务于后续版本 Node 串口库替换阶段（ADR-017）；Electron MVP 使用 Web Serial，不依赖此选型。
 
 需要验证候选 Node.js 串口库的：
 
@@ -4790,7 +4812,7 @@ AGENTS.md 说明 AI 代理如何在该工程中安全执行开发任务。
 1. PRD 中影响架构的待确认事项已得到处理，或已被明确标记为可替换策略；
 2. Monorepo、模块和依赖方向已确认；
 3. 三端 Host 和 Adapter 边界已确认；
-4. 串口库完成原型验证；
+4. 串口库完成原型验证（后续版本替换阶段，ADR-017；MVP Electron 使用 Web Serial）；
 5. COM10 以上完成技术验证；
 6. Web Serial 能力边界完成验证；
 7. 表格方案完成 1000 行原型验证；

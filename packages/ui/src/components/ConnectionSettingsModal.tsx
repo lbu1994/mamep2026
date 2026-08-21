@@ -19,13 +19,17 @@ import {
   ApiOutlined,
   CloseOutlined,
   DisconnectOutlined,
+  ReloadOutlined,
   UsbOutlined,
 } from "@ant-design/icons";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
-import type { SerialDeviceHandle } from "@mamep2026/platform-api";
+import type {
+  SerialDeviceHandle,
+  SerialPortOption,
+} from "@mamep2026/platform-api";
 import { useAppStore } from "../app-store";
 import {
   extractPersistedSettings,
@@ -70,6 +74,10 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
+  // enumerated 模式（Electron）：端口下拉框状态。
+  const [portOptions, setPortOptions] = useState<SerialPortOption[]>([]);
+  const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
+  const [enumerating, setEnumerating] = useState(false);
 
   const profile = workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
   const { control, handleSubmit, reset, getValues } =
@@ -80,13 +88,39 @@ export function ConnectionSettingsModal(): React.ReactNode {
 
   const supportsSerial = host?.supportsWebSerial() ?? false;
   const isMock = host?.isMockMode ?? false;
+  const serialPorts = host?.capabilities.serialPorts ?? "unsupported";
+  const isEnumerated = serialPorts === "enumerated";
 
-  const selectPort = async (): Promise<void> => {
+  /** enumerated：枚举可用串口（打开弹窗 / 点击刷新时调用）。 */
+  const enumeratePorts = async (): Promise<void> => {
     if (host === null || host === undefined) return;
-    const result = await host.selectSerialPort();
+    setEnumerating(true);
+    try {
+      const result = await host.enumerateSerialPorts();
+      if (result.ok) {
+        setPortOptions(result.value);
+        setConnectError(null);
+      }
+    } finally {
+      setEnumerating(false);
+    }
+  };
+
+  const selectPort = async (portId?: string | null): Promise<void> => {
+    if (host === null || host === undefined) return;
+    const result = await host.selectSerialPort(portId ?? null);
     if (result.ok && result.value !== null) {
       setSelectedHandle(result.value);
+      setSelectedPortId(portId ?? null);
       setConnectError(null);
+    } else if (result.ok) {
+      // 用户取消/未选择：清空当前选择。
+      setSelectedHandle(null);
+      setSelectedPortId(null);
+    } else {
+      setConnectError(
+        `${t(result.error.userMessageKey)} (${result.error.technicalMessage})`,
+      );
     }
   };
 
@@ -141,12 +175,18 @@ export function ConnectionSettingsModal(): React.ReactNode {
       afterOpenChange={(nextOpen) => {
         if (nextOpen) {
           // 每次打开：恢复上次持久化的连接设置（含端口参数）；串口/端口选择保持待选。
+          // 注意：不在弹窗打开时自动枚举——navigator.serial.requestPort() 必须在用户
+          // 手势（点击下拉框/刷新按钮）中调用，否则抛 SecurityError（刷不出串口）。
           reset(profileToValues(profile));
           setConnectError(null);
         } else {
           // 关闭（手动取消 / Connect 成功后自动关闭）时持久化连接设置（串口选择除外）。
           const values = getValues();
           setConnectionSettings(extractPersistedSettings(values));
+          // enumerated：未完成选择就关闭 → 取消挂起的选择会话（避免 requestPort 悬挂）。
+          if (isEnumerated && selectedPortId === null) {
+            void host?.selectSerialPort(null).catch(() => undefined);
+          }
         }
       }}
       footer={[
@@ -193,6 +233,49 @@ export function ConnectionSettingsModal(): React.ReactNode {
             <Form.Item label={t("connection.port")}>
               {isMock ? (
                 <Tag>{t("connection.portMock")}</Tag>
+              ) : isEnumerated ? (
+                <Flex gap={8} align="center">
+                  <Select
+                    style={{ flex: 1 }}
+                    placeholder={t("connection.portSelectPlaceholder")}
+                    loading={enumerating}
+                    value={selectedPortId ?? undefined}
+                    // 用户点开下拉框即枚举（用户手势，满足 requestPort 的权限要求）。
+                    // 注：antd v6 用 onOpenChange（onDropdownVisibleChange 已弃用）。
+                    onOpenChange={(open) => {
+                      if (open) void enumeratePorts();
+                    }}
+                    notFoundContent={
+                      <Flex
+                        vertical
+                        align="center"
+                        gap={4}
+                        style={{ padding: "8px 0" }}
+                      >
+                        <Typography.Text type="secondary">
+                          {t("connection.portEmpty")}
+                        </Typography.Text>
+                        <Button
+                          size="small"
+                          icon={<ReloadOutlined />}
+                          onClick={() => void enumeratePorts()}
+                        >
+                          {t("connection.portRefresh")}
+                        </Button>
+                      </Flex>
+                    }
+                    options={portOptions.map((p) => ({
+                      value: p.portId,
+                      label: p.label,
+                    }))}
+                    onChange={(portId) => void selectPort(portId)}
+                  />
+                  <Button
+                    icon={<ReloadOutlined />}
+                    onClick={() => void enumeratePorts()}
+                    title={t("connection.portRefresh")}
+                  />
+                </Flex>
               ) : (
                 <Flex gap={8} align="center">
                   <Button

@@ -12,11 +12,16 @@ import { fail, ok } from "@mamep2026/domain";
 import type { Clock, TransportPort } from "@mamep2026/communication";
 import type { PlatformHost, SerialDeviceHandle } from "@mamep2026/platform-api";
 import { browserClock } from "./real-clock";
-import type { Serial, SerialPort } from "./web-serial";
+import type { Serial, SerialPort, SerialPortInfo } from "./web-serial";
 import { WebSerialTransport } from "./web-serial-transport";
 
 export interface WebSerialHandle extends SerialDeviceHandle {
   port: SerialPort;
+}
+
+/** 由 SerialPort.getInfo() 派生显示标签（USB vendor:product 十六进制）。 */
+export function usbDeviceLabel(info: SerialPortInfo): string {
+  return `USB ${info.usbVendorId?.toString(16) ?? "unknown"}:${info.usbProductId?.toString(16) ?? "unknown"}`;
 }
 
 export interface BrowserHostOptions {
@@ -54,8 +59,7 @@ export class BrowserPlatformHost implements PlatformHost {
     }
     try {
       const port = await serial.requestPort();
-      const info = port.getInfo();
-      const label = `USB ${info.usbVendorId?.toString(16) ?? "unknown"}:${info.usbProductId?.toString(16) ?? "unknown"}`;
+      const label = usbDeviceLabel(port.getInfo());
       return ok({ id: label, label, port } satisfies WebSerialHandle);
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "NotFoundError") {

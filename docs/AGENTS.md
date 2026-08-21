@@ -117,7 +117,7 @@ Mamep2026 是一款面向设备开发人员和嵌入式开发人员的轻量化�
 | Electron |       支持 |       支持 |
 | VSCode   |       支持 |       支持 |
 
-> 实现状态（2026-08-15）：上表为三端产品规划。当前浏览器侧 MVP 已落地（Web Serial RTU，能力矩阵 `serialPorts: "browser-picker"`）；Electron 与 VSCode 侧（含 Modbus TCP）为规划目标，当前仅保证编译与路径引用不破坏（见 §7 与根 [AGENTS.md](../AGENTS.md)）。
+> 实现状态（2026-08-21）：上表为三端产品规划。浏览器侧 MVP 已落地（Web Serial RTU，能力矩阵 `serialPorts: "browser-picker"`）；Electron MVP 串口已落地（2026-08-21，ADR-017 扩展：与浏览器一致复用 Web Serial API——Renderer `navigator.serial` 走既有路径，主进程 `select-serial-port` 最小授权并把端口列表转发给渲染进程、由用户在 antd Select 下拉框中选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`；TCP/文件持久化仍未实现）；VSCode 侧（含 Modbus TCP）为规划目标，当前仅保证编译与路径引用不破坏（见 §7 与根 [AGENTS.md](../AGENTS.md)）。
 
 核心产品价值：
 
@@ -144,7 +144,7 @@ MVP 交付形态为三端运行骨架加核心调试闭环：
 - 三端功能完整度按 PRD 优先级逐步补齐，骨架阶段不要求串口、TCP 等能力生效；
 - 三端骨架必须符合各自安全边界：Electron 为 Main、Preload、Renderer 隔离，VSCode 为 Extension Host 与 Webview 隔离。
 
-> 当前状态（2026-08-15）：浏览器侧 MVP（P0）已实现并验收；Electron 与 VSCode 骨架尚未在本轮实现/验证（仅保证编译与路径引用不破坏）。
+> 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 骨架尚未实现/验证（仅保证编译与路径引用不破坏）。
 
 ### 5.1 当前核心协议范围
 
@@ -218,7 +218,7 @@ Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置
 - Ant Design 主题令牌（ConfigProvider）
 - @ant-design/icons
 - IndexedDB
-- Node.js 串口适配器
+- Node.js 串口适配器（后续版本，MVP Electron 用 Web Serial，ADR-017）
 - Node.js net
 - Vitest
 - React Testing Library
@@ -288,7 +288,7 @@ Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置
 
 实际目录尚未创建或与上述结构存在合理差异时，应以当前已确认的工程结构和 ADR 为准，不得为了匹配示意结构进行无关的大规模移动。
 
-当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`electron/main.ts` 与 `vscode-extension/` 保持不变（不在浏览器 MVP 实现与测试范围）。注：对应目标结构中的 `apps/electron`、`apps/vscode-extension`，目前均位于仓库根目录而非 `apps/` 下；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
+当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`vscode-extension/` 保持不变（不在本轮实现与测试范围）。注：对应目标结构中的 `apps/vscode-extension` 目前位于仓库根目录而非 `apps/` 下；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
 
 ### 7.1 模块责任
 
@@ -339,6 +339,8 @@ Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置
 - platform-node 依赖 Electron 或 VSCode
 - 插件依赖核心未公开的内部模块
 - 包之间形成循环依赖
+
+注：MVP 阶段 Electron Renderer 通过 Web Serial API（`navigator.serial`）连接串口（ADR-017），不属于上述「依赖串口库」禁止项；Node 串口库替换阶段由 Main / Node Serial Adapter 承载。
 
 出现双向依赖时，必须重新划分契约或将共享类型下沉，禁止用循环导入临时解决。
 
@@ -1506,14 +1508,13 @@ UI 必须：
 
 项目初始化完成后，根级 package.json 应提供稳定的统一脚本。AI 必须优先使用仓库已经存在的脚本，不得假设脚本名称。
 
-当前实际脚本（2026-08-15，根 package.json）：`pnpm dev`（仅网页端 Vite，不启动 Electron）、`pnpm dev:electron`、`pnpm build`、`pnpm build:electron`、`pnpm build:vscode`、`pnpm lint`、`pnpm typecheck`（turbo 全包 `tsc --noEmit`）、`pnpm test`（turbo 全包 vitest）、`pnpm test:acceptance`、`pnpm test:e2e:web`（Playwright 系统 Edge）、`pnpm preview`、`pnpm format`、`pnpm format:check`。以根 package.json 实际脚本为准，不得声称执行过不存在的命令。
+当前实际脚本（2026-08-21，根 package.json）：`pnpm dev`（仅网页端 Vite，不启动 Electron）、`pnpm dev:electron`、`pnpm start:electron`（`electron .` 启动窗口）、`pnpm build`、`pnpm build:electron`、`pnpm build:vscode`、`pnpm lint`、`pnpm typecheck`（turbo 全包 `tsc --noEmit`）、`pnpm test`（turbo 全包 vitest）、`pnpm test:acceptance`、`pnpm test:e2e:web`（Playwright 系统 Edge）、`pnpm test:e2e:electron`（Playwright + Electron，自动先 `build:electron`）、`pnpm preview`、`pnpm format`、`pnpm format:check`。以根 package.json 实际脚本为准，不得声称执行过不存在的命令。
 
 以下脚本尚未建立，属建议而非断言，不得假设其存在：
 
     pnpm install
     pnpm test:unit
     pnpm test:integration
-    pnpm test:e2e:electron
     pnpm test:e2e:vscode
     pnpm build:web
 
@@ -1644,7 +1645,7 @@ UI 必须：
 - 工作区存储格式变化
 - Modbus 协议实现策略变化
 - 表格技术替换
-- 串口库最终选型
+- 串口库最终选型（后续版本替换阶段，ADR-017；MVP Electron 用 Web Serial）
 - 插件隔离或权限模型变化
 - Electron 进程边界变化
 - VSCode Webview RPC 变化
@@ -1767,7 +1768,7 @@ AI 代理不得：
 
 - 是否彻底禁止广播写入（从站地址 0 允许配置，按标准无应答，MVP 不实现广播写入）
 - TCP Unit ID 的最终范围
-- Node.js 串口库最终选型
+- Node.js 串口库最终选型（后续版本替换阶段，ADR-017；MVP Electron 使用 Web Serial）
 - 三端对 1.5 位停止位的支持
 - XON/XOFF 和 RTS/CTS 的实际能力矩阵
 - 工作区公开交换格式

@@ -14,8 +14,9 @@ import {
   applyPollResult,
   buildPollingTargets,
 } from "@mamep2026/register-table";
-import { MamepApp, useAppStore } from "@mamep2026/ui";
+import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
+import { ElectronAppHost } from "./electron-app-host";
 
 const MOCK_FLAG = "mockTransport";
 
@@ -67,7 +68,7 @@ function registerExamplePlugin(registry: PluginRegistry): void {
 }
 
 export default function App(): React.ReactNode {
-  const hostRef = useRef<BrowserAppHost | null>(null);
+  const hostRef = useRef<AppHost | null>(null);
   const setHost = useAppStore((s) => s.setHost);
   const setWorkspace = useAppStore((s) => s.setWorkspace);
   const setLoaded = useAppStore((s) => s.setLoaded);
@@ -80,18 +81,27 @@ export default function App(): React.ReactNode {
 
   const mockTransport = useMemo(() => isMockMode(), []);
 
-  // 启动装配（一次）。
+  // 启动装配（一次）。Electron renderer 由 preload 暴露 window.mamepHost（白名单桥），
+  // 走共享 AppHost 契约的 ElectronAppHost；否则按浏览器 Host 装配（Web Serial + IndexedDB）。
   useEffect(() => {
-    const serial = navigator.serial;
-    const platformHost =
-      serial !== undefined
-        ? new BrowserPlatformHost({ serial })
-        : new BrowserPlatformHost({});
-    const host = new BrowserAppHost({
-      platform: platformHost,
-      repository: new IndexedDBWorkspaceRepository(createIdbKeyValueStore()),
-      mockTransport,
-    });
+    const bridge = window.mamepHost;
+    const host: AppHost =
+      bridge !== undefined
+        ? new ElectronAppHost(bridge)
+        : (() => {
+            const serial = navigator.serial;
+            const platformHost =
+              serial !== undefined
+                ? new BrowserPlatformHost({ serial })
+                : new BrowserPlatformHost({});
+            return new BrowserAppHost({
+              platform: platformHost,
+              repository: new IndexedDBWorkspaceRepository(
+                createIdbKeyValueStore(),
+              ),
+              mockTransport,
+            });
+          })();
     hostRef.current = host;
     registerExamplePlugin(host.pluginRegistry);
     setHost(host);
@@ -137,7 +147,7 @@ export default function App(): React.ReactNode {
             params: { detail: result.error.code },
             detail: result.error.code,
           });
-          if (host.isMockMode) {
+          if (host.isMockMode && host instanceof BrowserAppHost) {
             // mock 模式：恢复失败同样预填分类寄存器，保证测试环境一致。
             setWorkspace(host.createFreshWorkspace());
           }

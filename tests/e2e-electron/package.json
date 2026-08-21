@@ -1,0 +1,18 @@
+{
+  "name": "@mamep2026/e2e-electron",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "pretest": "pnpm --filter @mamep2026/web build:electron",
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "@playwright/test": "catalog:",
+    "electron": "^43.4.0",
+    "typescript": "catalog:"
+  }
+}

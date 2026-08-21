@@ -37,7 +37,11 @@ import {
   ApplicationMessageStore,
   CommunicationLogStore,
 } from "@mamep2026/logging";
-import type { SerialDeviceHandle, PlatformHost } from "@mamep2026/platform-api";
+import type {
+  SerialDeviceHandle,
+  SerialPortOption,
+  PlatformHost,
+} from "@mamep2026/platform-api";
 import { PluginRegistry } from "@mamep2026/plugin-api";
 import { RegisterTableService } from "@mamep2026/register-table";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
@@ -209,7 +213,23 @@ export class BrowserAppHost implements AppHost {
     return serial !== undefined;
   }
 
-  async selectSerialPort(): Promise<Result<SerialDeviceHandle | null>> {
+  async enumerateSerialPorts(): Promise<Result<SerialPortOption[]>> {
+    // 浏览器走系统原生 picker（browser-picker），不支持自定义枚举列表。
+    return fail(
+      createMamepError({
+        code: "SERIAL_ENUMERATION_UNSUPPORTED",
+        category: "capability",
+        userMessageKey: "errors.serialEnumerationUnsupported",
+        technicalMessage:
+          "serial port enumeration is only supported on the Electron platform",
+      }),
+    );
+  }
+
+  async selectSerialPort(
+    _portId?: string | null,
+  ): Promise<Result<SerialDeviceHandle | null>> {
+    // 浏览器端忽略 portId 参数：始终弹系统原生选择框（Web Serial 授权 picker）。
     if (this.isMockMode) return { ok: true, value: null };
     if (this.platform === null) {
       return {

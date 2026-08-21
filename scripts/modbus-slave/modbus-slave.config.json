@@ -1,0 +1,21 @@
+{
+  "port": "COM5",
+  "baudRate": 9600,
+  "dataBits": 8,
+  "stopBits": 1,
+  "parity": "none",
+  "slaveAddress": 1,
+  "responseDelayMs": 0,
+  "logLevel": "info",
+  "logFrames": true,
+  "registers": { "0": 1234, "1": 0 },
+  "rules": [
+    { "start": 0, "end": 15, "read": "normal", "write": "normal" },
+    { "start": 256, "end": 271, "read": "normal", "write": { "exception": 2 } },
+    { "start": 512, "end": 527, "read": { "exception": 2 }, "write": "normal" },
+    { "start": 768, "end": 783, "read": { "exception": 2 }, "write": { "exception": 2 } },
+    { "start": 1024, "end": 1039, "read": "normal", "write": { "writeValueGate": 32767 } },
+    { "start": 1280, "end": 1295, "read": { "exception": 1 }, "write": { "exception": 1 } },
+    { "start": 1536, "end": 1551, "read": "no-response", "write": "no-response" }
+  ]
+}
