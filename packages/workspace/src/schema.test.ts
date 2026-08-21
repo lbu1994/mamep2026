@@ -327,4 +327,28 @@ describe("workspace schema round-trip", () => {
     if (!parsed.ok) return;
     expect(parsed.value.sheets[0]?.columnOrder).toEqual(["data", "name", "no"]);
   });
+
+  it("defaults sheet open to true for legacy data without the field", () => {
+    const legacy = JSON.parse(serializeWorkspace(createEmptyWorkspace()));
+    // 模拟老版本数据：sheet 无 open 字段（关闭/打开状态 2026-08-21 引入）。
+    for (const sheet of legacy.sheets) {
+      delete sheet.open;
+    }
+    const parsed = parseWorkspace(legacy);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.open).toBe(true);
+  });
+
+  it("preserves per-sheet open across a round-trip", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      const sheet = w.sheets[0];
+      if (sheet === undefined) return;
+      sheet.open = false;
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.open).toBe(false);
+  });
 });

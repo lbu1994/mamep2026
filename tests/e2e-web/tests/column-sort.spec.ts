@@ -277,10 +277,11 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
       "Type",
       "Comment",
     ]);
-  // 新建表 2（addSheet 自动激活）。
+  // 新建表 2（侧边栏添加入口，自动激活）。
   await page
-    .locator(".register-table-tabs .ant-tabs-nav-list .ant-tabs-nav-add")
-    .click();
+    .getByRole("button", { name: "New Register Table" })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
   await expect(
     page.locator(".register-table-tabs .ant-tabs-content-active"),
   ).toContainText("Name");

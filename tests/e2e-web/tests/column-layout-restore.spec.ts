@@ -250,10 +250,11 @@ test("restore only affects the current sheet (不共享)", async ({ page }) => {
   // 表 1：自定义布局（Name 前移 + 加宽）。
   await dragColumnTo(page, "Name", "No");
   await dragHeaderHandle(page, "Name", 60);
-  // 新建表 2（addSheet 自动激活）并自定义另一种布局（Data 移到 Write 后 + Type 加宽）。
+  // 新建表 2（侧边栏添加入口，自动激活）并自定义另一种布局（Data 移到 Write 后 + Type 加宽）。
   await page
-    .locator(".register-table-tabs .ant-tabs-nav-list .ant-tabs-nav-add")
-    .click();
+    .getByRole("button", { name: "New Register Table" })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
   await expect(
     page.locator(".register-table-tabs .ant-tabs-content-active"),
   ).toContainText("Name");

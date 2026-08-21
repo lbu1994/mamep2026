@@ -16,7 +16,6 @@ beforeEach(() => {
     loaded: true,
     connectionState: "disconnected",
     activeSheetId: null,
-    editingSheetId: null,
     pendingDeleteSheetId: null,
   });
 });
@@ -124,21 +123,116 @@ describe("addSheet 默认行", () => {
 });
 
 describe("closeSheet", () => {
-  it("删除最后一张表后自动新建空表", () => {
+  it("关闭一张表：保留在工作区、open=false、数据不丢", () => {
     const store = useAppStore.getState();
-    store.closeSheet(firstSheetId());
+    clearAllSheetRows();
+    const target = firstSheetId();
+    store.addRow(target);
+    const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    useAppStore.getState().closeSheet(target);
+    const after = useAppStore.getState();
+    expect(after.workspace.sheets).toHaveLength(1);
+    expect(after.workspace.sheets[0]?.open).toBe(false);
+    expect(after.workspace.sheets[0]?.rows[0]?.rowId).toBe(row.rowId);
+  });
+
+  it("关闭当前活动表后激活下一个仍打开的表", () => {
+    const store = useAppStore.getState();
+    store.addSheet(); // Sheet 2
+    store.addSheet(); // Sheet 3
+    const first = firstSheetId();
+    // 先把活动表切到 first，再关闭它。
+    useAppStore.getState().setActiveSheetId(first);
+    useAppStore.getState().closeSheet(first);
+    const after = useAppStore.getState();
+    expect(after.workspace.sheets[0]?.open).toBe(false);
+    expect(after.activeSheetId).toBe(after.workspace.sheets[1]?.sheetId);
+    expect(after.workspace.activeSheetId).toBe(
+      after.workspace.sheets[1]?.sheetId,
+    );
+  });
+
+  it("关闭所有表后活动表置空，表仍全部保留", () => {
+    const store = useAppStore.getState();
+    const first = firstSheetId();
+    store.addSheet(); // Sheet 2
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (second === undefined) throw new Error("missing second");
+    useAppStore.getState().closeSheet(first);
+    useAppStore.getState().closeSheet(second);
+    const after = useAppStore.getState();
+    expect(after.workspace.sheets).toHaveLength(2);
+    expect(after.workspace.sheets.every((s) => s.open === false)).toBe(true);
+    expect(after.activeSheetId).toBeNull();
+    expect(after.workspace.activeSheetId).toBeNull();
+  });
+
+  it("已关闭的表再次关闭无副作用（updatedAt 不变）", () => {
+    const first = firstSheetId();
+    useAppStore.getState().closeSheet(first);
+    const before = useAppStore.getState().workspace.updatedAt;
+    useAppStore.getState().closeSheet(first);
+    expect(useAppStore.getState().workspace.updatedAt).toBe(before);
+  });
+});
+
+describe("openSheet", () => {
+  it("重新打开已关闭的表并设为活动表", () => {
+    const first = firstSheetId();
+    useAppStore.getState().closeSheet(first);
+    expect(useAppStore.getState().workspace.sheets[0]?.open).toBe(false);
+    useAppStore.getState().openSheet(first);
+    const after = useAppStore.getState();
+    expect(after.workspace.sheets[0]?.open).toBe(true);
+    expect(after.activeSheetId).toBe(first);
+    expect(after.workspace.activeSheetId).toBe(first);
+  });
+
+  it("已打开的表仅切换为活动表", () => {
+    const store = useAppStore.getState();
+    store.addSheet(); // Sheet 2
+    const first = firstSheetId();
+    useAppStore.getState().openSheet(first);
+    const after = useAppStore.getState();
+    expect(after.workspace.sheets.every((s) => s.open === true)).toBe(true);
+    expect(after.activeSheetId).toBe(first);
+  });
+
+  it("无效 sheetId 无副作用", () => {
+    const before = useAppStore.getState().workspace.updatedAt;
+    useAppStore.getState().openSheet("missing" as SheetId);
+    expect(useAppStore.getState().workspace.updatedAt).toBe(before);
+  });
+});
+
+describe("deleteSheet", () => {
+  it("真正删除表：从工作区移除并激活剩余表", () => {
+    const store = useAppStore.getState();
+    store.addSheet(); // Sheet 2
+    const first = firstSheetId();
+    useAppStore.getState().deleteSheet(first);
+    const after = useAppStore.getState();
+    expect(after.workspace.sheets.map((s) => s.name)).toEqual(["Sheet 2"]);
+    expect(after.activeSheetId).toBe(after.workspace.sheets[0]?.sheetId);
+  });
+
+  it("删除唯一表后重建默认空表", () => {
+    const store = useAppStore.getState();
+    store.deleteSheet(firstSheetId());
     const after = useAppStore.getState();
     expect(after.workspace.sheets).toHaveLength(1);
     expect(after.workspace.sheets[0]?.name).toBe("Sheet 1");
     expect(after.workspace.sheets[0]?.rows).toHaveLength(
       defaultConfig.registerTable.defaultRowCount,
     );
+    expect(after.workspace.sheets[0]?.open).toBe(true);
     expect(after.activeSheetId).toBe(after.workspace.sheets[0]?.sheetId);
   });
 });
 
 describe("closeOtherSheets", () => {
-  it("关闭除目标外全部，目标成为活动表，order 连续", () => {
+  it("非破坏性关闭除目标外全部：其他表 open=false、目标保留并激活，order 不变", () => {
     const store = useAppStore.getState();
     store.addSheet(); // Sheet 2
     store.addSheet(); // Sheet 3
@@ -148,10 +242,15 @@ describe("closeOtherSheets", () => {
     const before = useAppStore.getState().workspace.updatedAt;
     useAppStore.getState().closeOtherSheets(target.sheetId);
     const after = useAppStore.getState();
-    expect(after.workspace.sheets.map((s) => s.name)).toEqual(["Sheet 2"]);
+    expect(after.workspace.sheets).toHaveLength(3);
+    expect(after.workspace.sheets.map((s) => s.open)).toEqual([
+      false,
+      true,
+      false,
+    ]);
     expect(after.activeSheetId).toBe(target.sheetId);
     expect(after.workspace.activeSheetId).toBe(target.sheetId);
-    expect(after.workspace.sheets[0]?.order).toBe(0);
+    expect(after.workspace.sheets.map((s) => s.order)).toEqual([0, 1, 2]);
     expect(after.workspace.updatedAt).toBeGreaterThanOrEqual(before);
   });
 
@@ -161,6 +260,7 @@ describe("closeOtherSheets", () => {
     const after = useAppStore.getState();
     expect(after.workspace.sheets).toHaveLength(1);
     expect(after.workspace.sheets[0]?.name).toBe("Sheet 1");
+    expect(after.workspace.sheets[0]?.open).toBe(true);
     expect(after.activeSheetId).toBeNull();
     expect(after.workspace.updatedAt).toBe(before);
   });
@@ -173,25 +273,40 @@ describe("closeOtherSheets", () => {
     expect(after.workspace.updatedAt).toBe(before);
   });
 
-  it("不影响被保留表的行数据", () => {
+  it("不影响被关闭表的数据（仍保留在工作区）", () => {
     const store = useAppStore.getState();
     clearAllSheetRows();
     const target = firstSheetId();
     store.addRow(target);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
     if (row === undefined) throw new Error("missing row");
-    store.addSheet(); // Sheet 2（将被关闭）
+    store.addSheet(); // Sheet 2（将被关闭，自带默认行）
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (second === undefined) throw new Error("missing second");
+    // 清空新表默认行后添加一行，便于验证数据保留。
+    useAppStore.setState((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === second ? { ...sheet, rows: [] } : sheet,
+        ),
+      },
+    }));
+    store.addRow(second);
     useAppStore.getState().closeOtherSheets(target);
     const after = useAppStore.getState();
     const kept = after.workspace.sheets[0];
     if (kept === undefined) throw new Error("missing kept sheet");
     expect(kept.rows).toHaveLength(1);
     expect(kept.rows[0]?.rowId).toBe(row.rowId);
+    // 被关闭的表仍在工作区且数据保留。
+    expect(after.workspace.sheets[1]?.open).toBe(false);
+    expect(after.workspace.sheets[1]?.rows).toHaveLength(1);
   });
 });
 
 describe("closeSheetsToRight", () => {
-  it("仅关闭目标右侧的表，左侧与目标保留且目标激活", () => {
+  it("非破坏性关闭目标右侧的表，左侧与目标保留且目标激活", () => {
     const store = useAppStore.getState();
     store.addSheet(); // Sheet 2
     store.addSheet(); // Sheet 3
@@ -201,13 +316,14 @@ describe("closeSheetsToRight", () => {
     const before = useAppStore.getState().workspace.updatedAt;
     useAppStore.getState().closeSheetsToRight(target.sheetId);
     const after = useAppStore.getState();
-    expect(after.workspace.sheets.map((s) => s.name)).toEqual([
-      "Sheet 1",
-      "Sheet 2",
+    expect(after.workspace.sheets.map((s) => s.open)).toEqual([
+      true,
+      true,
+      false,
     ]);
     expect(after.activeSheetId).toBe(target.sheetId);
     expect(after.workspace.activeSheetId).toBe(target.sheetId);
-    expect(after.workspace.sheets.map((s) => s.order)).toEqual([0, 1]);
+    expect(after.workspace.sheets.map((s) => s.order)).toEqual([0, 1, 2]);
     expect(after.workspace.updatedAt).toBeGreaterThanOrEqual(before);
   });
 
@@ -227,13 +343,13 @@ describe("closeSheetsToRight", () => {
     expect(after.workspace.updatedAt).toBe(before);
   });
 
-  it("目标为首位表时仅剩首位且激活", () => {
+  it("目标为首位表时右侧全部关闭且目标激活", () => {
     const store = useAppStore.getState();
     store.addSheet(); // Sheet 2
     const first = firstSheetId();
     useAppStore.getState().closeSheetsToRight(first);
     const after = useAppStore.getState();
-    expect(after.workspace.sheets.map((s) => s.name)).toEqual(["Sheet 1"]);
+    expect(after.workspace.sheets.map((s) => s.open)).toEqual([true, false]);
     expect(after.activeSheetId).toBe(first);
   });
 
@@ -243,20 +359,34 @@ describe("closeSheetsToRight", () => {
     expect(useAppStore.getState().workspace.updatedAt).toBe(before);
   });
 
-  it("不影响被保留表的行数据", () => {
+  it("不影响被关闭表的数据（仍保留在工作区）", () => {
     const store = useAppStore.getState();
     clearAllSheetRows();
     const target = firstSheetId();
     store.addRow(target);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
     if (row === undefined) throw new Error("missing row");
-    store.addSheet(); // Sheet 2（将被关闭）
+    store.addSheet(); // Sheet 2（将被关闭，自带默认行）
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (second === undefined) throw new Error("missing second");
+    // 清空新表默认行后添加一行，便于验证数据保留。
+    useAppStore.setState((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === second ? { ...sheet, rows: [] } : sheet,
+        ),
+      },
+    }));
+    store.addRow(second);
     useAppStore.getState().closeSheetsToRight(target);
     const after = useAppStore.getState();
     const kept = after.workspace.sheets[0];
     if (kept === undefined) throw new Error("missing kept sheet");
     expect(kept.rows).toHaveLength(1);
     expect(kept.rows[0]?.rowId).toBe(row.rowId);
+    expect(after.workspace.sheets[1]?.open).toBe(false);
+    expect(after.workspace.sheets[1]?.rows).toHaveLength(1);
   });
 });
 
@@ -702,8 +832,7 @@ describe("setConnectionSettings", () => {
     });
     // 越界 requestTimeoutMs（>60000）使持久化 schema 校验失败，整个写入被拒绝。
     expect(
-      useAppStore.getState().workspace.connectionProfiles[0]
-        ?.requestTimeoutMs,
+      useAppStore.getState().workspace.connectionProfiles[0]?.requestTimeoutMs,
     ).toBe(1000);
   });
 });
@@ -857,7 +986,9 @@ describe("commitCellText（Data 单元格提交校验）", () => {
     const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
     // §23：校验失败保留用户输入。
     expect(updated?.cellText).toBe("zz");
-    expect(useAppStore.getState().cellValidationErrors[`${row.rowId}:data`]).toEqual({
+    expect(
+      useAppStore.getState().cellValidationErrors[`${row.rowId}:data`],
+    ).toEqual({
       messageKey: "errors.dataInvalidNumber",
       detail: "DATA_INVALID_NUMBER",
     });

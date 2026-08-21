@@ -98,6 +98,8 @@ export interface RegisterSheet {
   name: string;
   type: "holding-register";
   order: number;
+  /** 打开/关闭状态：关闭的表仍在工作区中（侧边栏保留），仅从页签栏隐藏；默认打开。 */
+  open: boolean;
   rows: RegisterRow[];
   /** Register 地址列进制：默认 DEC（每表独立，ADR-014） */
   registerRadix: RegisterRadix;
@@ -257,6 +259,7 @@ export function createRegisterSheet(
     name,
     type: "holding-register",
     order,
+    open: true,
     rows: createDefaultSheetRows(defaultConfig.registerTable.defaultRowCount),
     registerRadix: defaultConfig.registerTable.addressRadix,
     slaveAddress: defaultConfig.registerTable.slaveAddress,

@@ -124,10 +124,10 @@ export const en = {
     closeToRight: "Close to the Right",
     closeOthersConfirmTitle: "Close other tables",
     closeOthersConfirmContent:
-      "Close the other {{count}} table(s)? Their registers will be removed.",
+      "Close the other {{count}} table(s)? They will remain in the sidebar.",
     closeToRightConfirmTitle: "Close tables to the right",
     closeToRightConfirmContent:
-      "Close the {{count}} table(s) to the right? Their registers will be removed.",
+      "Close the {{count}} table(s) to the right? They will remain in the sidebar.",
     moreActions: "More actions",
     addressError: "Invalid address",
     emptySheet: "Add registers to start monitoring.",
@@ -139,6 +139,8 @@ export const en = {
     slaveAddress: "Slave Address",
     slaveAddressHint:
       "Slave address used for this table's read/write requests.",
+    noOpenSheets: "No tables are open",
+    noOpenSheetsHint: "Select a table from the sidebar to open it.",
     batchSummary:
       "Read All: {{success}} succeeded, {{failure}} failed, {{skipped}} skipped",
   },
@@ -394,10 +396,10 @@ export const zh: TranslationResources = {
     closeToRight: "关闭右侧标签页",
     closeOthersConfirmTitle: "关闭其他标签页",
     closeOthersConfirmContent:
-      "关闭其他 {{count}} 个标签页？其中的寄存器将一并删除。",
+      "关闭其他 {{count}} 个标签页？它们仍保留在侧边栏中。",
     closeToRightConfirmTitle: "关闭右侧标签页",
     closeToRightConfirmContent:
-      "关闭右侧 {{count}} 个标签页？其中的寄存器将一并删除。",
+      "关闭右侧 {{count}} 个标签页？它们仍保留在侧边栏中。",
     moreActions: "更多操作",
     addressError: "地址无效",
     emptySheet: "添加寄存器开始监控。",
@@ -407,6 +409,8 @@ export const zh: TranslationResources = {
     restoreColumnLayoutHint: "将本表列宽与列排序恢复为默认。",
     slaveAddress: "从站地址",
     slaveAddressHint: "本表读写请求使用的从站地址。",
+    noOpenSheets: "没有打开的表",
+    noOpenSheetsHint: "从侧边栏选择一张表以打开。",
     batchSummary:
       "全表读取：成功 {{success}}，失败 {{failure}}，跳过 {{skipped}}",
   },

@@ -344,6 +344,17 @@ body {
   background: var(--mamep-brand-primary);
 }
 
+/* 关闭态：表仍保留在侧边栏但未在页签栏打开（置灰/低透明度提示，可点击重新打开） */
+.sheet-item--closed {
+  color: var(--ant-color-text-tertiary);
+  opacity: 0.72;
+}
+
+.sheet-item--closed:hover {
+  color: var(--ant-color-text-secondary);
+  opacity: 1;
+}
+
 .sheet-item__name {
   flex: 1;
   min-width: 0;
@@ -464,6 +475,15 @@ body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+/* 页签区空状态：全部表已关闭时提示从侧边栏打开 */
+.register-table-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 160px;
 }
 
 .sheet-sidebar.ant-layout-sider-light {

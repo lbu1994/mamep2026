@@ -135,10 +135,11 @@ test("column widths are independent per tab (不共享)", async ({ page }) => {
   await dragHeaderHandle(page, "Name", 60);
   const tab1Width = await columnWidth(page, "Name");
   expect(tab1Width).toBeGreaterThan(170);
-  // 新建表 2（addSheet 自动激活）。
+  // 新建表 2（侧边栏添加入口，自动激活）。
   await page
-    .locator(".register-table-tabs .ant-tabs-nav-list .ant-tabs-nav-add")
-    .click();
+    .getByRole("button", { name: "New Register Table" })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
   await expect(
     page.locator(".register-table-tabs .ant-tabs-content-active"),
   ).toContainText("Name");

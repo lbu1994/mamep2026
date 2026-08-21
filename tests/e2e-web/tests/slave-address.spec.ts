@@ -23,11 +23,12 @@ function slaveInput(page: Page) {
   );
 }
 
-/** 通过工具栏 + 号新建一张表（antd Tabs editable-card 的新建按钮）。 */
+/** 通过侧边栏「New Register Table」新建一张表（侧边栏为表格管理主入口，页签栏无加号）。 */
 async function addSheet(page: Page): Promise<void> {
   await page
-    .locator(".register-table-tabs .ant-tabs-nav-list .ant-tabs-nav-add")
-    .click();
+    .getByRole("button", { name: "New Register Table" })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
   ).toContainText("Sheet 2");

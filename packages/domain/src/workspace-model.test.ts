@@ -56,6 +56,11 @@ describe("createRegisterSheet 默认行（新建表默认填充 defaultRowCount 
     const sheet = createRegisterSheet("S", 0);
     expect(sheet.columnOrder).toBeNull();
   });
+
+  it("新建表默认处于打开状态（open=true，可从页签栏直接展示）", () => {
+    const sheet = createRegisterSheet("S", 0);
+    expect(sheet.open).toBe(true);
+  });
 });
 
 describe("createEmptyWorkspace 初始表", () => {

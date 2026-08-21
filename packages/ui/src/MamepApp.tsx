@@ -8,6 +8,7 @@ import {
   ConfigProvider,
   Divider,
   Dropdown,
+  Empty,
   Layout,
   Menu,
   Modal,
@@ -41,11 +42,15 @@ import { BottomPanel } from "./components/BottomPanel";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
 import { PluginManagerModal } from "./components/PluginManagerModal";
 import { RegisterTable } from "./components/RegisterTable";
+import { SheetNameEditor } from "./components/SheetNameEditor";
 import { buildSheetMenuItems } from "./components/SheetMenu";
 import { TraceWindow } from "./components/TraceWindow";
 
 /** 折叠时底部面板仅保留标签栏的高度（px）。 */
 const COLLAPSED_BOTTOM_PANEL_HEIGHT = 40;
+
+/** Sheet 名重命名入口来源：页签头（tab）或侧边栏（sidebar），决定编辑态落在哪一处。 */
+type RenameSource = "tab" | "sidebar";
 
 export function MamepApp(): React.ReactNode {
   const { t, i18n } = useTranslation();
@@ -60,13 +65,17 @@ export function MamepApp(): React.ReactNode {
   const sheetNames = useAppStore(
     useShallow((s) => s.workspace.sheets.map((sh) => sh.name)),
   );
+  const sheetOpen = useAppStore(
+    useShallow((s) => s.workspace.sheets.map((sh) => sh.open)),
+  );
   const sheetMeta = useMemo(
     () =>
       sheetIds.map((sheetId, index) => ({
         sheetId,
         name: sheetNames[index] ?? "",
+        open: sheetOpen[index] ?? true,
       })),
-    [sheetIds, sheetNames],
+    [sheetIds, sheetNames, sheetOpen],
   );
   // 当前活动表的 Slave Address（每表独立，2026-08-19）：切换表/修改当前表值时
   // 同步到 host（会话请求使用当前表的值）。原语订阅不触发级联重渲染。
@@ -110,10 +119,10 @@ export function MamepApp(): React.ReactNode {
     (s) => s.workspace.panelLayout.bottomPanelHeight,
   );
   const closeSheet = useAppStore((s) => s.closeSheet);
+  const openSheet = useAppStore((s) => s.openSheet);
+  const deleteSheet = useAppStore((s) => s.deleteSheet);
   const duplicateSheet = useAppStore((s) => s.duplicateSheet);
   const moveSheetTo = useAppStore((s) => s.moveSheetTo);
-  const editingSheetId = useAppStore((s) => s.editingSheetId);
-  const setEditingSheetId = useAppStore((s) => s.setEditingSheetId);
   const pendingDeleteSheetId = useAppStore((s) => s.pendingDeleteSheetId);
   const setPendingDeleteSheetId = useAppStore((s) => s.setPendingDeleteSheetId);
   const pendingBulkClose = useAppStore((s) => s.pendingBulkClose);
@@ -121,6 +130,13 @@ export function MamepApp(): React.ReactNode {
   const closeOtherSheets = useAppStore((s) => s.closeOtherSheets);
   const closeSheetsToRight = useAppStore((s) => s.closeSheetsToRight);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Sheet 名重命名编辑态（组件/UI 层状态，不入全局 store）：页签头与侧边栏各自独立，
+  // 互不驱动对方渲染；任一位置开始编辑时取消另一位置的编辑态，保证同一时刻至多一个。
+  const [tabRenamingSheetId, setTabRenamingSheetId] = useState<SheetId | null>(
+    null,
+  );
+  const [sidebarRenamingSheetId, setSidebarRenamingSheetId] =
+    useState<SheetId | null>(null);
   // 窄窗口（≤1100px）将顶栏次要操作（Plugin Manager/Settings/Help）收入 More 下拉；
   // Connection 入口与连接状态/Disconnect 始终可见（不收进 More）。
   const [narrow, setNarrow] = useState(false);
@@ -189,10 +205,12 @@ export function MamepApp(): React.ReactNode {
     });
   }, [host, appendTraceSample]);
 
+  // 当前活动表：仅在「打开」的表中寻找（关闭的表不在页签栏，也不应成为活动表）。
   const currentSheet = useMemo(
     () =>
-      sheetMeta.find((sheet) => sheet.sheetId === activeSheetId) ??
-      sheetMeta[0],
+      sheetMeta.find(
+        (sheet) => sheet.sheetId === activeSheetId && sheet.open,
+      ) ?? sheetMeta.find((sheet) => sheet.open),
     [sheetMeta, activeSheetId],
   );
 
@@ -229,9 +247,24 @@ export function MamepApp(): React.ReactNode {
     });
   };
 
-  const handleRenameSheet = (sheetId: SheetId): void => {
+  const startTabRename = (sheetId: SheetId): void => {
+    // 互斥：从页签头开始编辑时取消侧边栏既有编辑态。
+    setSidebarRenamingSheetId(null);
+    setTabRenamingSheetId(sheetId);
+  };
+  const startSidebarRename = (sheetId: SheetId): void => {
+    // 互斥：从侧边栏开始编辑时取消页签头既有编辑态。
+    setTabRenamingSheetId(null);
+    setSidebarRenamingSheetId(sheetId);
+  };
+
+  const handleRenameSheet = (sheetId: SheetId, source: RenameSource): void => {
     setActiveSheetId(sheetId);
-    setEditingSheetId(sheetId);
+    if (source === "tab") {
+      startTabRename(sheetId);
+    } else {
+      startSidebarRename(sheetId);
+    }
   };
 
   const handleDeleteSheet = (sheetId: SheetId): void => {
@@ -240,7 +273,7 @@ export function MamepApp(): React.ReactNode {
 
   const confirmDeleteSheet = (): void => {
     if (pendingDeleteSheetId !== null) {
-      closeSheet(pendingDeleteSheetId);
+      deleteSheet(pendingDeleteSheetId);
     }
     setPendingDeleteSheetId(null);
   };
@@ -282,9 +315,10 @@ export function MamepApp(): React.ReactNode {
   const sheetMenu = (
     sheetId: SheetId,
     index: number,
+    source: RenameSource,
   ): NonNullable<MenuProps["items"]> =>
     buildSheetMenuItems(t, sheetId, index, sheetMeta.length, {
-      onRename: handleRenameSheet,
+      onRename: (id) => handleRenameSheet(id, source),
       onDuplicate: duplicateSheet,
       onCloseOthers: handleCloseOthers,
       onCloseToRight: handleCloseToRight,
@@ -336,7 +370,10 @@ export function MamepApp(): React.ReactNode {
             <div className="connection-cluster">
               <div className="connection-cluster__primary">
                 {/* data-conn-state：纯展示钩子，供 CSS 按连接态着色状态胶囊（不改任何行为/契约） */}
-                <span className="status-badge" data-conn-state={connectionState}>
+                <span
+                  className="status-badge"
+                  data-conn-state={connectionState}
+                >
                   <span
                     className="status-badge__dot"
                     style={{
@@ -468,7 +505,8 @@ export function MamepApp(): React.ReactNode {
                   // 而非“切换表”意图，忽略以免把 active 切回源表。
                   const target = domEvent.target as HTMLElement;
                   if (target.closest(".ant-dropdown") !== null) return;
-                  setActiveSheetId(key as SheetId);
+                  // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
+                  openSheet(key as SheetId);
                 }}
                 onDragStart={(event) => {
                   const li = (
@@ -505,46 +543,37 @@ export function MamepApp(): React.ReactNode {
                   className:
                     sheet.sheetId === currentSheet?.sheetId
                       ? "sheet-item sheet-item--active"
-                      : "sheet-item",
+                      : sheet.open
+                        ? "sheet-item"
+                        : "sheet-item sheet-item--closed",
                   label: (
                     <Dropdown
                       trigger={["contextMenu"]}
-                      menu={{ items: sheetMenu(sheet.sheetId, index) }}
+                      menu={{
+                        items: sheetMenu(sheet.sheetId, index, "sidebar"),
+                      }}
                     >
                       <span className="sheet-item__label-wrap">
-                        {editingSheetId === sheet.sheetId ? (
-                          <input
+                        {sidebarRenamingSheetId === sheet.sheetId ? (
+                          <SheetNameEditor
                             className="sheet-item__input"
-                            defaultValue={sheet.name}
+                            name={sheet.name}
                             autoFocus
-                            onClick={(event) => event.stopPropagation()}
-                            onBlur={(event) => {
-                              renameSheet(sheet.sheetId, event.target.value);
-                              setEditingSheetId(null);
+                            onCommit={(name) => {
+                              renameSheet(sheet.sheetId, name);
+                              setSidebarRenamingSheetId(null);
                             }}
-                            onKeyDown={(event) => {
-                              event.stopPropagation();
-                              if (event.key === "Enter") {
-                                renameSheet(
-                                  sheet.sheetId,
-                                  event.currentTarget.value,
-                                );
-                                setEditingSheetId(null);
-                              }
-                            }}
+                            onCancel={() => setSidebarRenamingSheetId(null)}
                           />
                         ) : (
-                          <span
-                            className="sheet-item__name"
-                            onDoubleClick={() =>
-                              setEditingSheetId(sheet.sheetId)
-                            }
-                          >
+                          <span className="sheet-item__name">
                             {sheet.name}
                           </span>
                         )}
                         <Dropdown
-                          menu={{ items: sheetMenu(sheet.sheetId, index) }}
+                          menu={{
+                            items: sheetMenu(sheet.sheetId, index, "sidebar"),
+                          }}
                           trigger={["click"]}
                         >
                           <Button
@@ -593,64 +622,65 @@ export function MamepApp(): React.ReactNode {
                         type="editable-card"
                         size="small"
                         className="register-table-tabs"
+                        hideAdd
                         activeKey={currentSheet.sheetId}
                         onChange={(key) => setActiveSheetId(key as SheetId)}
-                        onEdit={(targetKey, action) => {
-                          if (action === "add") {
-                            addSheet();
-                          } else if (typeof targetKey === "string") {
-                            handleDeleteSheet(targetKey as SheetId);
+                        onEdit={(targetKey) => {
+                          // 页签「×」= 非破坏性关闭（表仍保留在侧边栏，可从侧边栏重新打开）。
+                          // hideAdd 后不存在 add 动作，此处仅处理 remove。
+                          if (typeof targetKey === "string") {
+                            closeSheet(targetKey as SheetId);
                           }
                         }}
-                        items={sheetMeta.map((sheet, index) => ({
-                          key: sheet.sheetId,
-                          label: (
-                            <Dropdown
-                              trigger={["contextMenu"]}
-                              menu={{
-                                items: sheetMenu(sheet.sheetId, index),
-                              }}
-                            >
-                              {editingSheetId === sheet.sheetId ? (
-                                <input
-                                  className="sheet-tab__input"
-                                  defaultValue={sheet.name}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onBlur={(event) => {
-                                    renameSheet(
-                                      sheet.sheetId,
-                                      event.target.value,
-                                    );
-                                    setEditingSheetId(null);
-                                  }}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                      renameSheet(
-                                        sheet.sheetId,
-                                        event.currentTarget.value,
-                                      );
-                                      setEditingSheetId(null);
-                                    } else if (event.key === "Escape") {
-                                      setEditingSheetId(null);
+                        items={sheetMeta
+                          .map((sheet, index) => ({ sheet, index }))
+                          .filter(({ sheet }) => sheet.open)
+                          .map(({ sheet, index }) => ({
+                            key: sheet.sheetId,
+                            label: (
+                              <Dropdown
+                                trigger={["contextMenu"]}
+                                menu={{
+                                  items: sheetMenu(sheet.sheetId, index, "tab"),
+                                }}
+                              >
+                                {tabRenamingSheetId === sheet.sheetId ? (
+                                  <SheetNameEditor
+                                    className="sheet-tab__input"
+                                    name={sheet.name}
+                                    onCommit={(name) => {
+                                      renameSheet(sheet.sheetId, name);
+                                      setTabRenamingSheetId(null);
+                                    }}
+                                    onCancel={() => setTabRenamingSheetId(null)}
+                                  />
+                                ) : (
+                                  <span
+                                    className="sheet-tab__label"
+                                    onDoubleClick={() =>
+                                      startTabRename(sheet.sheetId)
                                     }
-                                  }}
-                                />
-                              ) : (
-                                <span
-                                  className="sheet-tab__label"
-                                  onDoubleClick={() =>
-                                    setEditingSheetId(sheet.sheetId)
-                                  }
-                                >
-                                  {sheet.name}
-                                </span>
-                              )}
-                            </Dropdown>
-                          ),
-                          children: <RegisterTable sheetId={sheet.sheetId} />,
-                        }))}
+                                  >
+                                    {sheet.name}
+                                  </span>
+                                )}
+                              </Dropdown>
+                            ),
+                            children: <RegisterTable sheetId={sheet.sheetId} />,
+                          }))}
                       />
-                    ) : null}
+                    ) : (
+                      <div className="register-table-empty">
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description={t("table.noOpenSheets")}
+                        >
+                          <Typography.Text type="secondary">
+                            {t("table.noOpenSheetsHint")}
+                          </Typography.Text>
+                        </Empty>
+                      </div>
+                    )}
                   </div>
                 </Splitter.Panel>
                 <Splitter.Panel

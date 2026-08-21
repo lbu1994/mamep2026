@@ -85,7 +85,6 @@ export interface AppStoreState {
   connectionModalOpen: boolean;
   pluginModalOpen: boolean;
   settingsModalOpen: boolean;
-  editingSheetId: SheetId | null;
   pendingDeleteSheetId: SheetId | null;
   /** 批量关闭（关闭其他/右侧）确认弹窗状态；null 表示未在确认。 */
   pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null;
@@ -109,7 +108,6 @@ export interface AppStoreState {
   setConnectionModalOpen: (open: boolean) => void;
   setPluginModalOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
-  setEditingSheetId: (sheetId: SheetId | null) => void;
   setPendingDeleteSheetId: (sheetId: SheetId | null) => void;
   setPendingBulkClose: (
     pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null,
@@ -148,10 +146,15 @@ export interface AppStoreState {
   pasteRows: (sheetId: SheetId, afterRowId: RowId | null) => Promise<void>;
   addSheet: () => void;
   renameSheet: (sheetId: SheetId, name: string) => void;
+  /** 关闭一张表（非破坏性）：表仍保留在工作区（侧边栏可见），仅从页签栏隐藏。 */
   closeSheet: (sheetId: SheetId) => void;
-  /** 关闭除目标表外的所有表；目标表保留并成为活动表。 */
+  /** 打开一张已关闭的表并设为活动表（侧边栏点击）。 */
+  openSheet: (sheetId: SheetId) => void;
+  /** 真正删除一张表（破坏性）：从工作区移除；删除唯一表后重建默认空表。 */
+  deleteSheet: (sheetId: SheetId) => void;
+  /** 关闭除目标表外的所有表（非破坏性）；目标表保留并成为活动表。 */
   closeOtherSheets: (sheetId: SheetId) => void;
-  /** 关闭目标表右侧的所有表；目标表保留并成为活动表。 */
+  /** 关闭目标表右侧的所有表（非破坏性）；目标表保留并成为活动表。 */
   closeSheetsToRight: (sheetId: SheetId) => void;
   duplicateSheet: (sheetId: SheetId) => void;
   moveSheetTo: (sheetId: SheetId, toIndex: number) => void;
@@ -206,7 +209,6 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   connectionModalOpen: false,
   pluginModalOpen: false,
   settingsModalOpen: false,
-  editingSheetId: null,
   pendingDeleteSheetId: null,
   pendingBulkClose: null,
   theme: "light",
@@ -234,7 +236,6 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setConnectionModalOpen: (connectionModalOpen) => set({ connectionModalOpen }),
   setPluginModalOpen: (pluginModalOpen) => set({ pluginModalOpen }),
   setSettingsModalOpen: (settingsModalOpen) => set({ settingsModalOpen }),
-  setEditingSheetId: (editingSheetId) => set({ editingSheetId }),
   setPendingDeleteSheetId: (pendingDeleteSheetId) =>
     set({ pendingDeleteSheetId }),
   setPendingBulkClose: (pendingBulkClose) => set({ pendingBulkClose }),
@@ -683,6 +684,67 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
 
   closeSheet: (sheetId) =>
     set((state) => {
+      const target = state.workspace.sheets.find(
+        (sheet) => sheet.sheetId === sheetId,
+      );
+      // 目标不存在或已处于关闭状态：无副作用。
+      if (target === undefined || target.open === false) {
+        return state;
+      }
+      const sheets = state.workspace.sheets.map((sheet) =>
+        sheet.sheetId === sheetId
+          ? { ...sheet, open: false, updatedAt: Date.now() }
+          : sheet,
+      );
+      // 若关闭的是当前活动表，激活下一个仍打开的表；全部关闭时置空。
+      const currentActive =
+        state.activeSheetId ?? state.workspace.activeSheetId;
+      const nextActive =
+        currentActive === sheetId
+          ? (sheets.find((sheet) => sheet.open)?.sheetId ?? null)
+          : currentActive;
+      return {
+        workspace: {
+          ...state.workspace,
+          sheets,
+          activeSheetId: nextActive,
+          updatedAt: Date.now(),
+        },
+        activeSheetId: nextActive,
+      };
+    }),
+
+  openSheet: (sheetId) =>
+    set((state) => {
+      const target = state.workspace.sheets.find(
+        (sheet) => sheet.sheetId === sheetId,
+      );
+      if (target === undefined) return state;
+      // 已打开的表：仅切换为活动表（与 setActiveSheetId 一致，不触发自动保存）。
+      if (target.open) {
+        return {
+          activeSheetId: sheetId,
+          workspace: { ...state.workspace, activeSheetId: sheetId },
+        };
+      }
+      const sheets = state.workspace.sheets.map((sheet) =>
+        sheet.sheetId === sheetId
+          ? { ...sheet, open: true, updatedAt: Date.now() }
+          : sheet,
+      );
+      return {
+        workspace: {
+          ...state.workspace,
+          sheets,
+          activeSheetId: sheetId,
+          updatedAt: Date.now(),
+        },
+        activeSheetId: sheetId,
+      };
+    }),
+
+  deleteSheet: (sheetId) =>
+    set((state) => {
       const remaining = state.workspace.sheets.filter(
         (sheet) => sheet.sheetId !== sheetId,
       );
@@ -715,7 +777,11 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       if (target === undefined || state.workspace.sheets.length <= 1) {
         return state;
       }
-      const sheets = [{ ...target, order: 0 }];
+      const sheets = state.workspace.sheets.map((sheet) =>
+        sheet.sheetId === sheetId
+          ? { ...sheet, open: true }
+          : { ...sheet, open: false },
+      );
       return {
         workspace: {
           ...state.workspace,
@@ -736,9 +802,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       if (index === -1 || index === state.workspace.sheets.length - 1) {
         return state;
       }
-      const sheets = state.workspace.sheets
-        .slice(0, index + 1)
-        .map((sheet, i) => ({ ...sheet, order: i }));
+      const sheets = state.workspace.sheets.map((sheet, i) =>
+        i > index ? { ...sheet, open: false } : sheet,
+      );
       return {
         workspace: {
           ...state.workspace,

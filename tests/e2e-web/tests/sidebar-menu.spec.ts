@@ -193,14 +193,18 @@ test("Close Others keeps only the target table and activates it", async ({
     .locator(".ant-btn-primary")
     .evaluate((el) => (el as HTMLElement).click());
 
-  // 仅剩目标表且激活。
+  // 非破坏性：侧边栏仍保留全部表，仅目标打开且激活，其余为关闭态。
   const items = page.locator(".ant-layout-sider li.sheet-item");
-  await expect(items).toHaveCount(1);
-  await expect(items).toContainText("Sheet 2");
+  await expect(items).toHaveCount(3);
   await expect(page.locator("li.sheet-item--active")).toContainText("Sheet 2");
+  await expect(
+    page.locator(".ant-layout-sider li.sheet-item--closed"),
+  ).toHaveCount(2);
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
   ).toContainText("Sheet 2");
+  await expect(page.getByRole("tab", { name: "Sheet 1" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Sheet 3" })).toHaveCount(0);
 });
 
 test("Close to the Right keeps left tables and activates the target", async ({
@@ -223,17 +227,22 @@ test("Close to the Right keeps left tables and activates the target", async ({
     .locator(".ant-btn-primary")
     .evaluate((el) => (el as HTMLElement).click());
 
-  // 仅剩 Sheet 1 + Sheet 2，目标 Sheet 2 激活。
+  // 非破坏性：侧边栏仍保留 3 张表，Sheet 3 关闭，Sheet 1/2 打开，目标 Sheet 2 激活。
   const names = page.locator(
     ".ant-layout-sider li.sheet-item .sheet-item__name",
   );
-  await expect(names).toHaveCount(2);
+  await expect(names).toHaveCount(3);
   await expect(names.nth(0)).toHaveText("Sheet 1");
   await expect(names.nth(1)).toHaveText("Sheet 2");
+  await expect(names.nth(2)).toHaveText("Sheet 3");
   await expect(page.locator("li.sheet-item--active")).toContainText("Sheet 2");
+  await expect(
+    page.locator(".ant-layout-sider li.sheet-item--closed"),
+  ).toHaveCount(1);
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
   ).toContainText("Sheet 2");
+  await expect(page.getByRole("tab", { name: "Sheet 3" })).toHaveCount(0);
 });
 
 test("Close Others confirm cancels without effect and applies on OK", async ({
@@ -267,7 +276,11 @@ test("Close Others confirm cancels without effect and applies on OK", async ({
   await confirm
     .locator(".ant-btn-primary")
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(1);
+  // 非破坏性：侧边栏仍保留全部表，其他表变为关闭态。
+  await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(3);
+  await expect(
+    page.locator(".ant-layout-sider li.sheet-item--closed"),
+  ).toHaveCount(2);
 });
 
 test("deleting the last sheet recreates an empty Sheet 1", async ({ page }) => {
@@ -372,7 +385,7 @@ test("sidebar items can be reordered by drag and drop", async ({ page }) => {
   await expect(names.nth(1)).toHaveText("Sheet 1");
 });
 
-test("tabs add, switch and remove register table sheets", async ({ page }) => {
+test("tabs add, switch and close register table sheets", async ({ page }) => {
   await openApp(page);
 
   // 每个 Sheet 一个页签，初始激活 Sheet 1。
@@ -381,9 +394,15 @@ test("tabs add, switch and remove register table sheets", async ({ page }) => {
     "true",
   );
 
-  // TabBar 自带 "+" 新建 Sheet 2 并自动激活。
+  // 页签栏不提供 "+" 新建入口（新建走侧边栏，避免与未来多表类型添加入口冲突）。
+  await expect(
+    page.locator(".register-table-tabs .ant-tabs-nav-list .ant-tabs-nav-add"),
+  ).toHaveCount(0);
+
+  // 侧边栏 "+" 新建 Sheet 2 并自动激活。
   await page
-    .locator(".register-table-tabs .ant-tabs-nav-list .ant-tabs-nav-add")
+    .getByRole("button", { name: "New Register Table" })
+    .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByRole("tab", { name: "Sheet 2" })).toHaveAttribute(
     "aria-selected",
@@ -399,16 +418,25 @@ test("tabs add, switch and remove register table sheets", async ({ page }) => {
     "true",
   );
 
-  // 页签 "×" 关闭 → 走删除确认弹窗。
+  // 页签 "×" 关闭 Sheet 2：非破坏性关闭，无确认弹窗。
   await page
     .locator(".register-table-tabs .ant-tabs-tab", { hasText: "Sheet 2" })
     .locator(".ant-tabs-tab-remove")
     .evaluate((el) => (el as HTMLElement).click());
-  const confirm = page.locator(".ant-modal-container:visible");
-  await expect(confirm).toContainText("Delete table");
-  await confirm
-    .locator(".ant-btn-primary")
-    .evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByRole("tab", { name: "Sheet 2" })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "Sheet 1" })).toHaveCount(1);
+  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+
+  // 侧边栏仍保留 Sheet 2（关闭态），点击后重新打开并激活。
+  await expect(
+    page.locator(".ant-layout-sider li.sheet-item.sheet-item--closed"),
+  ).toContainText("Sheet 2");
+  await sidebarItem(page, "Sheet 2").click();
+  await expect(page.getByRole("tab", { name: "Sheet 2" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(
+    page.locator(".ant-layout-sider li.sheet-item--closed"),
+  ).toHaveCount(0);
 });

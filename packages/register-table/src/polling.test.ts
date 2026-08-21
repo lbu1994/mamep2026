@@ -31,6 +31,8 @@ function makeSheet(name: string, rows: RegisterRow[]): RegisterSheet {
     name,
     type: "holding-register",
     order: 0,
+    open: true,
+    slaveAddress: 1,
     rows,
     registerRadix: "dec",
     columnWidths: {},
