@@ -2820,11 +2820,11 @@ Browser：
 
 Electron：
 
-- Windows 安装包；
-- macOS 安装包；
-- Linux 安装包；
-- 对原生串口依赖执行目标平台构建；
-- Renderer 与 Main 分离打包。
+- Windows 安装包（MVP 落地为免安装绿色版：`pnpm dist:portable` 产出 `release/win-unpacked/` 整个文件夹拷贝即用，ADR-018；后续升级 `win.target: nsis` 产正式安装包）；
+- macOS 安装包（未落地）；
+- Linux 安装包（未落地）；
+- 对原生串口依赖执行目标平台构建（MVP 用 Web Serial，暂无原生依赖）；
+- Renderer 与 Main 分离打包（ADR-016：`dist-electron/` + `apps/web/dist-electron/`）。
 
 VSCode：
 
@@ -3307,7 +3307,7 @@ MVP 不接入默认云端遥测。
 - IPC；
 - COM10 验证；
 - 安全配置；
-- 桌面打包。
+- 桌面打包（2026-08-22 已落地免安装绿色版 `pnpm dist:portable` → `release/win-unpacked/`，ADR-018；正式安装包为后续事项）。
 
 Electron 成为完整参考客户端。
 

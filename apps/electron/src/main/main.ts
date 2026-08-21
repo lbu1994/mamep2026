@@ -95,6 +95,8 @@ function createWindow(): void {
     },
   });
   mainWindow = win;
+  // 关闭默认菜单栏（File/Edit/View 等原生菜单），纯调试工具界面不需要
+  win.setMenu(null);
   win.on("closed", () => {
     mainWindow = null;
   });

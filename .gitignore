@@ -20,6 +20,9 @@ playwright-report
 test-results
 apps/web/dist
 
+# Electron 免安装打包输出（release/win-unpacked、staging-app 等）
+release
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

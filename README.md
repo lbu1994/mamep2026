@@ -23,20 +23,21 @@
 
 ## 常用命令
 
-| 命令                                         | 作用                                                             |
-| -------------------------------------------- | ---------------------------------------------------------------- |
-| `pnpm dev`                                   | 网页端 Vite dev server（http://localhost:5173），不启动 Electron |
-| `pnpm dev:electron`                          | Electron 开发模式（构建主进程/preload 到 `dist-electron/`）      |
-| `pnpm start:electron`                        | 启动 Electron 窗口（`electron .`）                               |
-| `pnpm build` / `pnpm build:electron`         | 构建网页端 / Electron                                            |
-| `pnpm build:vscode`                          | 编译 `vscode-extension/`                                         |
-| `pnpm preview`                               | 本地预览网页端构建产物（apps/web，`vite preview`）               |
-| `pnpm lint`                                  | ESLint（全仓）                                                   |
-| `pnpm typecheck`                             | turbo 全包类型检查                                               |
-| `pnpm test`                                  | turbo 全包 vitest                                                |
-| `pnpm test:acceptance` / `pnpm test:e2e:web` | 单独跑对应测试包                                                 |
-| `pnpm test:e2e:electron`                     | Electron E2E（自动先构建，Playwright 启动窗口断言）             |
-| `pnpm format` / `pnpm format:check`          | Prettier                                                         |
+| 命令                                         | 作用                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------ |
+| `pnpm dev`                                   | 网页端 Vite dev server（http://localhost:5173），不启动 Electron               |
+| `pnpm dev:electron`                          | Electron 开发模式（构建主进程/preload 到 `dist-electron/`）                    |
+| `pnpm start:electron`                        | 启动 Electron 窗口（`electron .`）                                             |
+| `pnpm build` / `pnpm build:electron`         | 构建网页端 / Electron                                                          |
+| `pnpm dist:portable`                         | 免安装绿色版打包（产出 `release/win-unpacked/` 整个文件夹，拷贝即用，ADR-018） |
+| `pnpm build:vscode`                          | 编译 `vscode-extension/`                                                       |
+| `pnpm preview`                               | 本地预览网页端构建产物（apps/web，`vite preview`）                             |
+| `pnpm lint`                                  | ESLint（全仓）                                                                 |
+| `pnpm typecheck`                             | turbo 全包类型检查                                                             |
+| `pnpm test`                                  | turbo 全包 vitest                                                              |
+| `pnpm test:acceptance` / `pnpm test:e2e:web` | 单独跑对应测试包                                                               |
+| `pnpm test:e2e:electron`                     | Electron E2E（自动先构建，Playwright 启动窗口断言）                            |
+| `pnpm format` / `pnpm format:check`          | Prettier                                                                       |
 
 ## 快速开始
 
@@ -49,6 +50,14 @@ pnpm test:e2e:web      # 浏览器 E2E（Playwright 使用系统 Edge）
 
 > `?mockTransport=1` 启用 dev 内置模拟 Modbus RTU 传输（生产构建不启用），无需真实串口即可调试完整读写/轮询/Trace 闭环。
 
+### 打包分发（Electron 免安装绿色版）
+
+```bash
+pnpm dist:portable   # 产出 release/win-unpacked/（含 Mamep2026.exe），整个文件夹拷给同事双击即用
+```
+
+无需安装包、无需任何环境（Node/pnpm）；当前面向 Windows x64。详见 [docs/adr/ADR-018-免安装绿色版打包.md](docs/adr/ADR-018-免安装绿色版打包.md)。
+
 ## 文档地图
 
 完整文档地图见 [AGENTS.md](AGENTS.md) 的「文档地图」一节。核心文档：
@@ -56,5 +65,5 @@ pnpm test:e2e:web      # 浏览器 E2E（Playwright 使用系统 Edge）
 - [docs/PRD.md](docs/PRD.md) — 产品范围、MVP（P0~P3）、验收
 - [docs/TECH_DESIGN.md](docs/TECH_DESIGN.md) — 技术设计、ADR、三端能力矩阵、测试策略
 - [docs/RESEARCH.md](docs/RESEARCH.md) — 调研结论
-- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~015）
+- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~018，含 Electron 免安装绿色版打包 ADR-018）
 - [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md) — 浏览器 E2E 工作流与踩坑

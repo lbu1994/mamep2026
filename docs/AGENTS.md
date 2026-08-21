@@ -1508,7 +1508,7 @@ UI 必须：
 
 项目初始化完成后，根级 package.json 应提供稳定的统一脚本。AI 必须优先使用仓库已经存在的脚本，不得假设脚本名称。
 
-当前实际脚本（2026-08-21，根 package.json）：`pnpm dev`（仅网页端 Vite，不启动 Electron）、`pnpm dev:electron`、`pnpm start:electron`（`electron .` 启动窗口）、`pnpm build`、`pnpm build:electron`、`pnpm build:vscode`、`pnpm lint`、`pnpm typecheck`（turbo 全包 `tsc --noEmit`）、`pnpm test`（turbo 全包 vitest）、`pnpm test:acceptance`、`pnpm test:e2e:web`（Playwright 系统 Edge）、`pnpm test:e2e:electron`（Playwright + Electron，自动先 `build:electron`）、`pnpm preview`、`pnpm format`、`pnpm format:check`。以根 package.json 实际脚本为准，不得声称执行过不存在的命令。
+当前实际脚本（2026-08-22，根 package.json）：`pnpm dev`（仅网页端 Vite，不启动 Electron）、`pnpm dev:electron`、`pnpm start:electron`（`electron .` 启动窗口）、`pnpm build`、`pnpm build:electron`、`pnpm dist:portable`（免安装绿色版打包，产出 `release/win-unpacked/` 拷贝即用，ADR-018）、`pnpm build:vscode`、`pnpm lint`、`pnpm typecheck`（turbo 全包 `tsc --noEmit`）、`pnpm test`（turbo 全包 vitest）、`pnpm test:acceptance`、`pnpm test:e2e:web`（Playwright 系统 Edge）、`pnpm test:e2e:electron`（Playwright + Electron，自动先 `build:electron`）、`pnpm preview`、`pnpm format`、`pnpm format:check`。以根 package.json 实际脚本为准，不得声称执行过不存在的命令。
 
 以下脚本尚未建立，属建议而非断言，不得假设其存在：
 

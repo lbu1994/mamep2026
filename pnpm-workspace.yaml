@@ -12,6 +12,12 @@ allowBuilds:
   electron-winstaller: true
   keytar: false
 
+# electron-builder 26.15.3 依赖声明为 @electron/get ^3.0.0，但其 resolveCacheMode 使用了
+# @electron/get 5.x 才导出的 ElectronDownloadCacheMode（3.x 缺该导出 → 打包时
+# "Cannot read properties of undefined (reading 'ReadWrite')"）。此处强制提升到 5.1.0。
+overrides:
+  "@electron/get": 5.1.0
+
 catalog:
   react: ^19.2.8
   react-dom: ^19.2.8

@@ -1,0 +1,25 @@
+# Electron 免安装绿色版打包配置（docs/ADR-016 后续事项）。
+# 用法：pnpm dist:portable（= pnpm build:electron && node scripts/package-electron.mjs && electron-builder）
+# 产出：release/win-unpacked/ 整个文件夹（含 Mamep2026.exe + dll + resources/app/），拷走即用。
+#
+# 关键设计：
+# - directories.app 指向 release/staging-app（由 scripts/package-electron.mjs 组装的自包含应用根，
+#   其 package.json 无 production dependencies）→ electron-builder 跳过 node_modules 收集，
+#   根 package.json 的 antd/react/serialport 等 production deps 不会被打进安装目录。
+# - asar: false：resources/app/ 以目录形式存放，结构透明、便于排障。
+# - win.signAndEditExecutable: false：跳过 rcedit/winCodeSign 下载（本机网络受限，
+#   图标/版本信息先用 Electron 默认；后续要自定义图标/签名时改为 true 并配镜像）。
+appId: com.mamep2026.app
+productName: Mamep2026
+directories:
+  app: release/staging-app
+  output: release
+files:
+  - "**/*"
+  - "!node_modules/**"
+  - "!**/node_modules/**"
+asar: false
+win:
+  target:
+    - dir
+  signAndEditExecutable: false
