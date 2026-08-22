@@ -144,7 +144,7 @@ MVP 交付形态为三端运行骨架加核心调试闭环：
 - 三端功能完整度按 PRD 优先级逐步补齐，骨架阶段不要求串口、TCP 等能力生效；
 - 三端骨架必须符合各自安全边界：Electron 为 Main、Preload、Renderer 隔离，VSCode 为 Extension Host 与 Webview 隔离。
 
-> 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 端骨架已落地（2026-08-23：`apps/vscode-extension/` 命令打开 Webview 加载共享 UI——生产 `asWebviewUri` 打包资源 / dev `MAMEP_DEV_URL` iframe，Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC，能力矩阵如实声明，`tests/e2e-vscode` 真实 VSCode 集成测试）。
+> 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 端骨架已落地（2026-08-23：`apps/vscode-extension/` 命令打开 Webview 加载共享 UI——生产 `asWebviewUri` 打包资源 / dev `MAMEP_DEV_URL` iframe，Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC，能力矩阵如实声明，`tests/e2e-vscode` 真实 VSCode 集成测试）；Node 串口原型已通过（2026-08-23，ADR-020：`packages/platform-node` 落地 Node Serial Adapter，serialport@13 选型，Layer 1 Fake 57 用例 + Layer 2 com0com COM4/COM5 虚拟串口 7 用例全绿，Electron/VSCode 独立探针就绪，能力矩阵未翻转，见 docs/node-serial-prototype-验证记录.md）。
 
 ### 5.1 当前核心协议范围
 
@@ -288,7 +288,7 @@ Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置
 
 实际目录尚未创建或与上述结构存在合理差异时，应以当前已确认的工程结构和 ADR 为准，不得为了匹配示意结构进行无关的大规模移动。
 
-当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 ADR-019）。注：对应目标结构中的 `apps/vscode-extension` 已就位；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
+当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 [ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）。注：对应目标结构中的 `apps/vscode-extension` 已就位；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
 
 ### 7.1 模块责任
 
@@ -1767,7 +1767,6 @@ AI 代理不得：
 以下事项仍待最终确认，AI 不得在普通实现任务中自行拍板：
 
 - 是否彻底禁止广播写入（从站地址 0 允许配置，按标准无应答，MVP 不实现广播写入）
-- TCP Unit ID 的最终范围
 - Node.js 串口库最终选型（后续版本替换阶段，ADR-017；MVP Electron 使用 Web Serial）
 - 三端对 1.5 位停止位的支持
 - XON/XOFF 和 RTS/CTS 的实际能力矩阵

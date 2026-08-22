@@ -1,0 +1,27 @@
+{
+  "name": "@mamep2026/platform-node",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mamep2026/communication": "workspace:*",
+    "@mamep2026/domain": "workspace:*",
+    "@mamep2026/platform-api": "workspace:*",
+    "serialport": "^13.0.0"
+  },
+  "devDependencies": {
+    "@mamep2026/protocol-modbus": "workspace:*",
+    "@mamep2026/test-kit": "workspace:*",
+    "@mamep2026/typescript-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

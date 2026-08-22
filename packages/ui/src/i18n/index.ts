@@ -271,6 +271,10 @@ export const en = {
     serialPortInUse: "Serial port is already in use.",
     serialDeviceDisconnected: "Serial device disconnected.",
     serialError: "Serial port error.",
+    serialNotFound: "Serial port not found.",
+    serialParameterUnsupported:
+      "One or more serial parameters are not supported.",
+    serialOpenFailed: "Failed to open the serial port.",
     serialRequestFailed: "Failed to request a serial port.",
     serialEnumerationUnsupported:
       "Serial port enumeration is not supported in this environment.",
@@ -544,6 +548,9 @@ export const zh: TranslationResources = {
     serialPortInUse: "串口已被占用。",
     serialDeviceDisconnected: "串口设备已断开。",
     serialError: "串口错误。",
+    serialNotFound: "串口不存在。",
+    serialParameterUnsupported: "部分串口参数不受支持。",
+    serialOpenFailed: "打开串口失败。",
     serialRequestFailed: "请求串口失败。",
     serialEnumerationUnsupported: "当前环境不支持枚举串口。",
     transportNotOpen: "串口未打开。",

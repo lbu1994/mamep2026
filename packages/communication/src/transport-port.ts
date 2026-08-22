@@ -15,5 +15,12 @@ export interface TransportPort extends TransportEvents {
   close(): Promise<Result<void>>;
   write(bytes: Uint8Array): Promise<Result<void>>;
   isOpen(): boolean;
-  readonly kind: "web-serial" | "mock" | "fake";
+  /**
+   * 传输实现标识。
+   * - "web-serial"：浏览器/Electron MVP 的 Web Serial（packages/platform-web）
+   * - "node-serial"：Node Serial Adapter（packages/platform-node，Electron 替换 Web Serial / VSCode 使用）
+   * - "mock"：开发 mock 传输（packages/platform-web）
+   * - "fake"：测试 Fake（packages/test-kit）
+   */
+  readonly kind: "web-serial" | "node-serial" | "mock" | "fake";
 }

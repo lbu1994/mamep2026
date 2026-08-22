@@ -598,7 +598,7 @@ Host 负责装配具体适配器，不实现领域规则。
 
 ## 6.3 apps/vscode-extension
 
-> 当前状态（2026-08）：扩展位于根目录 `vscode-extension/`（入口 `src/extension.ts`）；webview 当前为 dev 模式（iframe 指向 dev server，`MAMEP_DEV_URL` 可覆盖），尚未落地本节所述的独立 webview 目录与类型化 RPC。本节为设计目标。
+> 当前状态（2026-08-23，[ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）：扩展已迁移到 `apps/vscode-extension/`——命令 `mamep2026.openMainPanel` 打开 Webview 加载共享 UI；生产模式加载 `dist/media/` 本地静态资源（`asWebviewUri()` + 构建期 CSP meta `style-src 'unsafe-inline'`，`localResourceRoots` 限定媒体目录），dev 模式 `MAMEP_DEV_URL` 覆盖为 iframe 指向 Vite dev server；Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC（新增 `get-color-theme` / `color-theme-changed` kind），能力矩阵 `vscodeCapabilities` 如实声明（`modbusRtu:false` / `modbusTcp:false` / `serialPorts:"unsupported"` / `filesystem:"unsupported"`），`select-serial-port` 返回 `SERIAL_UNSUPPORTED`；`tests/e2e-vscode` 真实 VSCode 集成测试已建立。本节其余为设计目标。
 
 ### extension
 
@@ -1071,7 +1071,11 @@ RTU 和 TCP 可以使用不同的 Transport 配置，但应向 CommunicationSess
 
 ## 9.3 Node Serial Adapter
 
-> 实现状态（2026-08-21，ADR-017）：本 Adapter 为 Electron/VSCode 共用设计，当前未实现。MVP 阶段 Electron 与浏览器一致使用 Web Serial API（Renderer `navigator.serial`，ADR-017），Node Serial Adapter 为后续版本替换方案；VSCode 端自始使用本 Adapter。
+> 实现状态（2026-08-23，ADR-020）：Node 串口原型已通过并产出选型 ADR——`packages/platform-node`
+> 落地 `NodeSerialTransport` + `NodePlatformHost` + 错误映射 + 能力描述 + 注入式 `SerialPortLike` 隔离面
+> + Fake 测试，com0com COM4↔COM5 虚拟串口闭环全绿（详见 [node-serial-prototype-验证记录.md](./node-serial-prototype-验证记录.md)）。
+> 正式接线（Electron 替换 Web Serial、VSCode 接线）仍属后续版本；MVP 阶段 Electron 与浏览器一致使用
+> Web Serial API（Renderer `navigator.serial`，ADR-017）。
 
 Electron（后续版本替换 Web Serial）和 VSCode 共用 Node Serial Adapter。
 
@@ -1797,7 +1801,7 @@ TCP 配置：
       protocol
       host
       port
-      unitId
+      unitId             // 0~255，默认 0（2026-08-23 确认：MBAP Unit Identifier 为 RTU Slave ID 的 TCP 版本，纯 TCP 忽略寻址、网关场景寻址；与 RTU Slave Address 默认 1 不同）
       connectTimeoutMs
       requestTimeoutMs
       retryCount
@@ -2342,6 +2346,8 @@ Host 插件需要更严格的安装、权限和兼容性控制。
 浏览器端不加载 Host 插件。
 
 ## 23.3 MVP 插件装载范围
+
+> 已确认（2026-08-23，PRD §20.6）：MVP 仅预留架构、不对用户开放插件安装能力——维持「内置 / 受信任」边界（Manifest 驱动启停、错误隔离、平台能力声明已具备），浏览器端已有最小插件注册表保留为内部扩展验证；本地安装、安川示例插件、插件开发文档均延后到 V1.0 评估。
 
 为降低任意代码执行风险，MVP 优先支持：
 
@@ -3143,7 +3149,7 @@ MVP 不接入默认云端遥测。
 方案：
 
 - 区分 UI-safe 和 Host 插件；
-- MVP 优先内置和受信任插件；
+- MVP 优先内置和受信任插件（2026-08-23 确认：MVP 仅预留架构、不对用户开放，见 PRD §20.6）；
 - 权限声明；
 - 统一通信 API；
 - 平台能力检查；
@@ -3216,7 +3222,7 @@ MVP 不接入默认云端遥测。
 11. ADR-011：Electron Renderer 使用严格进程隔离；
 12. ADR-012：插件通信必须经过统一调度器。
 
-> 现状注记（2026-08）：`docs/adr/` 当前已落地的决策文件为 ADR-013（monorepo 迁移与产品决策确认）、ADR-014（寄存器地址进制显示选择）、ADR-015（行编辑交互与剪贴板决策）；上述 ADR-001~012 为规划清单，尚无以文件形式归档的独立记录。
+> 现状注记（2026-08-23）：`docs/adr/` 当前已落地的决策文件为 ADR-013（monorepo 迁移与产品决策确认）、ADR-014（寄存器地址进制显示选择）、ADR-015（行编辑交互与剪贴板决策）、ADR-016（Electron 骨架与安全 IPC）、ADR-017（MVP Electron 复用 Web Serial 与串口库替换）、ADR-018（免安装绿色版打包）、[ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)（VSCode 骨架与安全 RPC）；上述 ADR-001~012 为规划清单，尚无以文件形式归档的独立记录。
 
 每个 ADR 应包含：
 
@@ -3379,6 +3385,11 @@ Electron 成为完整参考客户端。
 ## 34.3 Node 串口原型
 
 > 适用范围（ADR-017）：本原型服务于后续版本 Node 串口库替换阶段（Electron 替换 Web Serial、VSCode 自始使用），进入该阶段前完成。Electron MVP 串口走 Web Serial（§34.2 原型已覆盖浏览器路径，Electron 复用）。
+
+> 实现状态（2026-08-23，ADR-020）：本原型已完成并入选型 ADR-020（serialport@13）+ 验证记录
+> （docs/node-serial-prototype-验证记录.md）。Layer 1 Fake 57 用例、Layer 2 com0com COM4/COM5 7 用例
+> 全绿；Electron/VSCode 独立探针就绪（`pnpm prototype:electron`、`pnpm probe:vscode:serial`）；
+> COM10+ 真机、macOS/Linux 平台、真实设备、打包后原生模块加载等为接线/真机验证项，见 ADR-020 后续复审条件。
 
 目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、COM10 以上端口、原生模块兼容、资源释放及异常处理能力。
 
@@ -4051,12 +4062,12 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 
 RTU Slave Address 已确认（ADR-013）：允许范围 0~255，默认 1；地址 0 允许配置（广播语义，按标准无应答）；MVP 不实现广播写入。
 
+TCP Unit ID 已确认（2026-08-23）：允许范围 0~255，允许 255，默认 0。MBAP Header 的 Unit Identifier 是 RTU Slave ID 的 TCP 版本：纯 TCP 通信中常被忽略（默认 0），经网关访问 RTU 从站时才是必要寻址字段。UI 字段名按协议动态显示：RTU 显示 "Slave Address"，TCP 显示 "Unit ID"。
+
 仍待确认：
 
-- TCP Unit ID 的允许范围；
-- 是否允许 255；
-- UI 是否根据协议显示不同字段名称；
-- 插件是否可以提供厂商专用范围校验。
+- 插件是否可以提供厂商专用范围校验；
+- 地址 0 下除读写外哪些操作可用（RTU 0 为广播语义、不实现广播写入；TCP 0 为忽略寻址，语义不同，需分别说明）。
 
 ## 35.4 轮询间隔（已确认，2026-08）
 

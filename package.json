@@ -24,6 +24,9 @@
     "test:e2e:web": "pnpm --filter @mamep2026/e2e-web test",
     "test:e2e:electron": "pnpm --filter @mamep2026/e2e-electron test",
     "test:e2e:vscode": "pnpm build:vscode && pnpm --filter @mamep2026/e2e-vscode test",
+    "test:serial:virtual": "node scripts/serial-virtual-test.mjs",
+    "prototype:electron": "electron scripts/prototype/electron-serial-probe.mjs",
+    "probe:vscode:serial": "node tests/e2e-vscode/scripts/run-probe-serial.mjs",
     "preview": "pnpm --filter @mamep2026/web preview",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
