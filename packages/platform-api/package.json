@@ -14,6 +14,7 @@
   "dependencies": {
     "@mamep2026/domain": "workspace:*",
     "@mamep2026/communication": "workspace:*",
+    "@mamep2026/logging": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

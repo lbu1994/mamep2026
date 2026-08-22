@@ -11,26 +11,36 @@
 import type {
   BatchReadHandle,
   BatchReadRow,
+  BatchReadSummary,
   CommunicationLogEvent,
   ConnectionState,
   WriteOutcome,
 } from "@mamep2026/communication";
-import { createMamepError, fail } from "@mamep2026/domain";
+import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type {
   PlatformCapabilities,
   RegisterRow,
   Result,
   RtuConnectionProfile,
+  TcpConnectionProfile,
   Workspace,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
-import type {
-  MamepHostApi,
-  MamepHostEvent,
-  SerialDeviceHandle,
-  SerialPortOption,
+import {
+  commLogEventFromPayload,
+  electronCapabilities,
+  fromResultPayload,
+  toRegisterRowPayload,
+  toTcpConnectionProfilePayload,
+  type AppMessagePayload,
+  type CommLogEventPayload,
+  type HostResultPayload,
+  type MamepHostApi,
+  type MamepHostEvent,
+  type SerialDeviceHandle,
+  type SerialPortOption,
+  type TraceSamplePayload,
 } from "@mamep2026/platform-api";
-import { electronCapabilities } from "@mamep2026/platform-api";
 import type { PluginRegistry } from "@mamep2026/plugin-api";
 import {
   BrowserPlatformHost,
@@ -77,6 +87,27 @@ export class ElectronAppHost implements AppHost {
   /** 已选端口标签（Electron 枚举路径下覆盖 inner 的记录）。 */
   private portLabel: string | null = null;
 
+  // ---- 混合模式（2026-08-23 两端 TCP 接线）：RTU 本地（inner）/ TCP 主进程远程代理 ----
+  /** 当前活动协议（RTU 复用浏览器 Web Serial 路径；TCP 走主进程远程会话）。 */
+  private activeProtocol: "rtu" | "tcp" | null = null;
+  /** TCP 连接配置本地镜像（通信属性摘要用）。 */
+  private tcpProfile: TcpConnectionProfile | null = null;
+  /** TCP 连接状态本地镜像（connection-state 事件刷新）。 */
+  private tcpConnectionState: ConnectionState = "disconnected";
+  private readonly connectionListeners = new Set<
+    (state: ConnectionState) => void
+  >();
+  private readonly commLogListeners = new Set<
+    (event: CommunicationLogEvent) => void
+  >();
+  private readonly messageListeners = new Set<
+    (message: ApplicationMessage) => void
+  >();
+  private readonly pollResultListeners = new Set<
+    (key: string, address: number, result: Result<number>) => void
+  >();
+  private readonly traceListeners = new Set<(sample: TraceSampleEvent) => void>();
+
   constructor(bridge: MamepHostApi, options: ElectronAppHostOptions = {}) {
     this.bridge = bridge;
     this.serial = options.serial ?? navigator.serial;
@@ -93,15 +124,84 @@ export class ElectronAppHost implements AppHost {
     });
     this.capabilities = electronCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;
-    // 订阅主进程事件：serial-ports-available 携带可用端口列表，交给挂起的枚举。
-    // （Host 与应用同生命周期，无需退订；不保存退订函数。）
+    // RTU 本地会话事件（inner）转发到本 Host 的合并订阅集合（TCP 远程事件同样转发）。
+    this.inner.subscribeConnectionState((state) => {
+      for (const listener of this.connectionListeners) listener(state);
+    });
+    this.inner.subscribeCommLog((event) => {
+      for (const listener of this.commLogListeners) listener(event);
+    });
+    this.inner.subscribeMessage((message) => {
+      for (const listener of this.messageListeners) listener(message);
+    });
+    this.inner.subscribePollResult((key, address, result) => {
+      for (const listener of this.pollResultListeners) listener(key, address, result);
+    });
+    this.inner.subscribeTraceSample((sample) => {
+      for (const listener of this.traceListeners) listener(sample);
+    });
+    // 订阅主进程事件：serial-ports-available 携带可用端口列表（交给挂起的枚举）；
+    // 主进程 TCP 会话事件（comm-log/poll-result/trace-sample/app-message/connection-state）
+    // 转发到本 Host 的合并订阅集合。
     bridge.onEvent((event: MamepHostEvent) => {
       if (event.kind === "serial-ports-available") {
         const { ports } = event.payload as { ports: SerialPortOption[] };
         this.pendingPortsResolve?.(ports);
         this.pendingPortsResolve = null;
+        return;
       }
+      this.handleSessionEvent(event);
     });
+  }
+
+  /** 主进程 TCP 会话事件分发：更新本地镜像并通知订阅者（payload 形状由 kind 契约保证）。 */
+  private handleSessionEvent(event: MamepHostEvent): void {
+    switch (event.kind) {
+      case "connection-state": {
+        const { state } = event.payload as { state: ConnectionState };
+        this.tcpConnectionState = state;
+        for (const listener of this.connectionListeners) listener(state);
+        break;
+      }
+      case "comm-log": {
+        const { event: payload } = event.payload as {
+          event: CommLogEventPayload;
+        };
+        const logEvent = commLogEventFromPayload(payload);
+        for (const listener of this.commLogListeners) listener(logEvent);
+        break;
+      }
+      case "poll-result": {
+        const { key, address, result } = event.payload as {
+          key: string;
+          address: number;
+          result: HostResultPayload;
+        };
+        const pollResult = fromResultPayload(result);
+        for (const listener of this.pollResultListeners)
+          listener(key, address, pollResult);
+        break;
+      }
+      case "trace-sample": {
+        const { sample } = event.payload as { sample: TraceSamplePayload };
+        for (const listener of this.traceListeners) listener(sample);
+        break;
+      }
+      case "app-message": {
+        const { message } = event.payload as { message: AppMessagePayload };
+        const appMessage: ApplicationMessage = {
+          timestamp: message.timestamp,
+          level: message.level,
+          messageKey: message.messageKey,
+          detail: message.detail,
+          ...(message.params !== undefined ? { params: message.params } : {}),
+        };
+        for (const listener of this.messageListeners) listener(appMessage);
+        break;
+      }
+      default:
+        break;
+    }
   }
 
   // ---- 串口选择（enumerated：主进程转发列表 + 下拉框选择）----
@@ -245,97 +345,203 @@ export class ElectronAppHost implements AppHost {
     return this.platform.supportsWebSerial;
   }
 
-  connect(
+  async connect(
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
   ): Promise<Result<void>> {
-    return this.inner.connect(profile, handle);
+    const result = await this.inner.connect(profile, handle);
+    if (result.ok) this.activeProtocol = "rtu";
+    return result;
   }
 
-  disconnect(): Promise<Result<void>> {
+  /**
+   * TCP 连接（2026-08-23 两端 TCP 接线）：会话承载在主进程（ElectronSessionHost），
+   * 本方法经 bridge.sessionTcpConnect 远程代理；连接后的读写/轮询/Trace 亦走主进程。
+   */
+  async connectTcp(profile: TcpConnectionProfile): Promise<Result<void>> {
+    const result = await this.bridge
+      .sessionTcpConnect({ profile: toTcpConnectionProfilePayload(profile) })
+      .then((r) => {
+        if (!r.ok) return r;
+        this.tcpProfile = profile;
+        this.portLabel = `${profile.host}:${profile.port}`;
+        this.tcpConnectionState = "connected";
+        this.activeProtocol = "tcp";
+        return { ok: true, value: undefined } as const;
+      });
+    return result;
+  }
+
+  async disconnect(): Promise<Result<void>> {
+    if (this.activeProtocol === "tcp") {
+      const result = await this.bridge.sessionDisconnect();
+      if (result.ok) {
+        this.tcpConnectionState = "disconnected";
+        this.activeProtocol = null;
+      }
+      return result;
+    }
     return this.inner.disconnect();
   }
 
   getConnectionState(): ConnectionState {
-    return this.inner.getConnectionState();
+    return this.activeProtocol === "tcp"
+      ? this.tcpConnectionState
+      : this.inner.getConnectionState();
   }
 
   getCommProperties(): CommProperties {
+    if (this.activeProtocol === "tcp") {
+      const profile = this.tcpProfile;
+      return {
+        protocol: "tcp",
+        portLabel: this.portLabel,
+        unitId: profile?.unitId ?? 0,
+        baudRate: 0,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: profile?.requestTimeoutMs ?? 1000,
+        retryCount: profile?.retryCount ?? 1,
+        rxDelayMs: profile?.interRequestDelayMs ?? 50,
+        addressAdjust: "off",
+        connectionState: this.tcpConnectionState,
+      };
+    }
     const props = this.inner.getCommProperties();
     // 枚举路径的已选端口标签由本 Host 记录（inner 仅在浏览器路径自行记录）。
-    return { ...props, portLabel: this.portLabel ?? props.portLabel };
+    return { ...props, protocol: "rtu", portLabel: this.portLabel ?? props.portLabel };
   }
 
+  /** RTU 从站地址（TCP Unit ID 连接时确定，会话内不修改，2026-08-23）。 */
   setSlaveAddress(slave: number): void {
-    this.inner.setSlaveAddress(slave);
+    if (this.activeProtocol !== "tcp") this.inner.setSlaveAddress(slave);
   }
 
   subscribeConnectionState(
     listener: (state: ConnectionState) => void,
   ): () => void {
-    return this.inner.subscribeConnectionState(listener);
+    this.connectionListeners.add(listener);
+    return () => {
+      this.connectionListeners.delete(listener);
+    };
   }
 
-  // ---- 设备请求（统一调度器，复用浏览器路径）----
+  // ---- 设备请求（统一调度器）：RTU 复用浏览器路径（inner）/ TCP 走主进程远程会话 ----
 
   readRow(row: RegisterRow): Promise<Result<number>> {
+    if (this.activeProtocol === "tcp") {
+      return this.bridge.sessionReadRow(toRegisterRowPayload(row));
+    }
     return this.inner.readRow(row);
   }
 
   writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
+    if (this.activeProtocol === "tcp") {
+      return this.bridge.sessionWriteRow(toRegisterRowPayload(row));
+    }
     return this.inner.writeRow(row);
   }
 
   readAllRows(rows: BatchReadRow[]): BatchReadHandle {
+    if (this.activeProtocol === "tcp") {
+      const handle = this.bridge.sessionBatchRead(
+        rows.map((r) => ({ key: r.key, address: r.address })),
+      );
+      return {
+        promise: handle.then((result) =>
+          result.ok
+            ? {
+                ok: true as const,
+                value: { summary: result.value.summary } as BatchReadSummary,
+              }
+            : result,
+        ),
+        cancel: () => undefined,
+      };
+    }
     return this.inner.readAllRows(rows);
   }
 
-  // ---- 轮询 / Trace / 日志（复用浏览器路径）----
+  // ---- 轮询 / Trace / 日志：RTU 复用浏览器路径（inner）/ TCP 走主进程远程会话 ----
 
   updatePollingTargets(
     rows: Array<{ key: string; address: number }>,
   ): void {
+    if (this.activeProtocol === "tcp") {
+      void this.bridge.sessionUpdatePollingTargets(rows);
+      return;
+    }
     this.inner.updatePollingTargets(rows);
   }
 
   startPolling(): void {
+    if (this.activeProtocol === "tcp") {
+      void this.bridge.sessionPollingStart();
+      return;
+    }
     this.inner.startPolling();
   }
 
   stopPolling(): void {
+    if (this.activeProtocol === "tcp") {
+      void this.bridge.sessionPollingStop();
+      return;
+    }
     this.inner.stopPolling();
   }
 
   subscribePollResult(
     listener: (key: string, address: number, result: Result<number>) => void,
   ): () => void {
-    return this.inner.subscribePollResult(listener);
+    this.pollResultListeners.add(listener);
+    return () => {
+      this.pollResultListeners.delete(listener);
+    };
   }
 
   traceStart(key: string, address: number, speedMs: number): void {
+    if (this.activeProtocol === "tcp") {
+      void this.bridge.sessionTraceStart(key, address, speedMs);
+      return;
+    }
     this.inner.traceStart(key, address, speedMs);
   }
 
   traceStop(key: string): void {
+    if (this.activeProtocol === "tcp") {
+      void this.bridge.sessionTraceStop(key);
+      return;
+    }
     this.inner.traceStop(key);
   }
 
   subscribeTraceSample(
     listener: (sample: TraceSampleEvent) => void,
   ): () => void {
-    return this.inner.subscribeTraceSample(listener);
+    this.traceListeners.add(listener);
+    return () => {
+      this.traceListeners.delete(listener);
+    };
   }
 
   subscribeCommLog(
     listener: (event: CommunicationLogEvent) => void,
   ): () => void {
-    return this.inner.subscribeCommLog(listener);
+    this.commLogListeners.add(listener);
+    return () => {
+      this.commLogListeners.delete(listener);
+    };
   }
 
   subscribeMessage(
     listener: (message: ApplicationMessage) => void,
   ): () => void {
-    return this.inner.subscribeMessage(listener);
+    this.messageListeners.add(listener);
+    return () => {
+      this.messageListeners.delete(listener);
+    };
   }
 
   pushMessage(

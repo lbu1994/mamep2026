@@ -75,14 +75,14 @@ test("窗口加载同一套共享 UI 且 preload 白名单桥存在", async () =
   expect(bridgePresent).toBe(true);
 });
 
-test("能力如实声明（RTU 支持、串口 enumerated 下拉选择、TCP 不支持）且版本可读", async () => {
+test("能力如实声明（RTU/TCP 支持、串口 enumerated 下拉选择）且版本可读", async () => {
   const caps = await page.evaluate(async () => {
     const bridge = (window as unknown as { mamepHost: BridgeApi }).mamepHost;
     return bridge.getCapabilities();
   });
   expect(caps.ok).toBe(true);
   expect(caps.value?.modbusRtu).toBe(true);
-  expect(caps.value?.modbusTcp).toBe(false);
+  expect(caps.value?.modbusTcp).toBe(true);
   expect(caps.value?.serialPorts).toBe("enumerated");
 
   const version = await page.evaluate(async () => {
@@ -139,6 +139,19 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       "selectSerialPort",
       "onEvent",
       "getDebugState",
+      // 会话 RPC 桥（2026-08-23 两端 TCP 接线，ADR-022）：Electron TCP 会话承载主进程，
+      // preload 暴露完整会话 RPC 方法。
+      "sessionTcpConnect",
+      "sessionDisconnect",
+      "sessionGetState",
+      "sessionReadRow",
+      "sessionWriteRow",
+      "sessionBatchRead",
+      "sessionUpdatePollingTargets",
+      "sessionPollingStart",
+      "sessionPollingStop",
+      "sessionTraceStart",
+      "sessionTraceStop",
     ].sort(),
   );
   // 不暴露通用 ipcRenderer / 任意方法调用。

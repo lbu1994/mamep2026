@@ -19,8 +19,9 @@ export interface TransportPort extends TransportEvents {
    * 传输实现标识。
    * - "web-serial"：浏览器/Electron MVP 的 Web Serial（packages/platform-web）
    * - "node-serial"：Node Serial Adapter（packages/platform-node，Electron 替换 Web Serial / VSCode 使用）
+   * - "node-tcp"：Node TCP Adapter（packages/platform-node，Node 端 Modbus TCP）
    * - "mock"：开发 mock 传输（packages/platform-web）
    * - "fake"：测试 Fake（packages/test-kit）
    */
-  readonly kind: "web-serial" | "node-serial" | "mock" | "fake";
+  readonly kind: "web-serial" | "node-serial" | "node-tcp" | "mock" | "fake";
 }

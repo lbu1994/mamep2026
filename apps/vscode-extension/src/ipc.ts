@@ -5,16 +5,33 @@
  * 复用 packages/platform-api 的 HostMessage v1 契约：Envelope + Zod 校验 + kind 白名单，
  * 不允许任意方法名调用；响应引用原 messageId；结构化错误投影。
  */
-import { createMamepError } from "@mamep2026/domain";
+import { createMamepError, ok, type Result } from "@mamep2026/domain";
 import type { PlatformCapabilities } from "@mamep2026/domain";
+import type {
+  BatchReadHandle,
+  BatchReadRow,
+  ConnectionState,
+  WriteOutcome,
+} from "@mamep2026/communication";
+import type {
+  RegisterRow,
+  RtuConnectionProfile,
+  TcpConnectionProfile,
+} from "@mamep2026/domain";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   hostRequestSchema,
+  registerRowFromPayload,
+  rtuConnectionProfileFromPayload,
+  tcpConnectionProfileFromPayload,
+  toBatchReadSummaryPayload,
   toErrorPayload,
+  toWriteOutcomePayload,
   type ColorThemeKind,
   type HostErrorMessage,
   type HostRequestMessage,
   type HostResponseMessage,
+  type SerialPortOption,
   type VscodeHostDebugState,
 } from "@mamep2026/platform-api";
 
@@ -33,6 +50,33 @@ export type HostErrorCategory =
   | "plugin"
   | "internal";
 
+/**
+ * VSCode Extension Host 侧 RTU 会话依赖面（领域导向，测试注入 fake；真实实现见 session-host.ts）。
+ * ipc.ts 负责 payload ↔ 领域对象转换；本接口只暴露领域操作与领域 Result。
+ */
+export interface VscodeSessionLike {
+  enumerateSerialPorts(): Promise<Result<SerialPortOption[]>>;
+  connect(
+    portId: string,
+    profile: RtuConnectionProfile,
+    slaveAddress: number,
+  ): Promise<Result<void>>;
+  /** TCP 连接（2026-08-23 两端 TCP 接线）：profile 即连接参数，无串口句柄。 */
+  connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
+  disconnect(): Promise<Result<void>>;
+  getConnectionState(): ConnectionState;
+  setSlaveAddress(slave: number): void;
+  readRow(row: RegisterRow): Promise<Result<number>>;
+  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>>;
+  readAllRows(rows: BatchReadRow[]): BatchReadHandle;
+  updatePollingTargets(rows: Array<{ key: string; address: number }>): void;
+  startPolling(): void;
+  stopPolling(): void;
+  traceStart(key: string, address: number, speedMs: number): void;
+  traceStop(key: string): void;
+  dispose(): Promise<void>;
+}
+
 /** 扩展宿主侧外部能力（extension.ts 装配真实实现，测试注入 fake）。 */
 export interface IpcDeps {
   appVersion(): string;
@@ -44,6 +88,8 @@ export interface IpcDeps {
   isDev(): boolean;
   clipboardWriteText(text: string): Promise<void>;
   clipboardReadText(): Promise<string>;
+  /** RTU 会话（VSCode 接线，Extension Host 侧，2026-08-23）。 */
+  session: VscodeSessionLike;
 }
 
 /** 尽力从无法解析的原始消息中提取 messageId（诊断用；解析失败时为空串）。 */
@@ -89,6 +135,48 @@ export function okResponse(
   };
 }
 
+/** 会话操作统一错误投影：Result 失败 → error Envelope；异常 → internal 错误。 */
+async function sessionResult<T>(
+  message: HostRequestMessage,
+  run: () => Promise<Result<T>> | Result<T>,
+): Promise<HostResponseMessage | HostErrorMessage> {
+  try {
+    const result = await run();
+    if (!result.ok) {
+      return errorEnvelope(
+        message.messageId,
+        result.error.code,
+        result.error.technicalMessage,
+        result.error.category,
+      );
+    }
+    return okResponse(message, result.value);
+  } catch (cause) {
+    return errorEnvelope(
+      message.messageId,
+      "SESSION_INTERNAL_ERROR",
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+}
+
+/** 无返回值会话操作：异常投影为 internal 错误。 */
+function sessionVoid(
+  message: HostRequestMessage,
+  run: () => void,
+): HostResponseMessage | HostErrorMessage {
+  try {
+    run();
+    return okResponse(message, null);
+  } catch (cause) {
+    return errorEnvelope(
+      message.messageId,
+      "SESSION_INTERNAL_ERROR",
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+}
+
 export async function handleVscodeRequest(
   message: HostRequestMessage,
   deps: IpcDeps,
@@ -120,15 +208,91 @@ export async function handleVscodeRequest(
         );
       }
     case "select-serial-port":
-      // 骨架阶段串口未实现（能力矩阵 serialPorts:"unsupported"，AGENTS.md §32 ㉒ 如实声明）。
+      // VSCode 不走 Electron 的授权选择流程（串口枚举直接返回列表，选择在 session-connect 完成）。
       return errorEnvelope(
         message.messageId,
         "SERIAL_UNSUPPORTED",
-        "serial is not supported in the VSCode skeleton",
+        "select-serial-port is not used on the VSCode platform (use serial-enumerate + session-connect)",
         "capability",
       );
     case "get-color-theme":
       return okResponse(message, deps.colorTheme());
+    // ---- RTU 会话（VSCode 接线，2026-08-23）----
+    case "serial-enumerate":
+      return sessionResult(message, () => deps.session.enumerateSerialPorts());
+    case "session-connect": {
+      const { portId, profile, slaveAddress } = message.payload;
+      return sessionResult(message, () =>
+        deps.session.connect(
+          portId,
+          rtuConnectionProfileFromPayload(profile),
+          slaveAddress,
+        ),
+      );
+    }
+    case "session-disconnect":
+      return sessionResult(message, () => deps.session.disconnect());
+    case "session-get-state":
+      return sessionResult(message, () =>
+        Promise.resolve({
+          ok: true,
+          value: { connectionState: deps.session.getConnectionState() },
+        }),
+      );
+    case "session-set-slave-address":
+      return sessionVoid(message, () =>
+        deps.session.setSlaveAddress(message.payload.slave),
+      );
+    case "session-read-row": {
+      const { row } = message.payload;
+      return sessionResult(message, () =>
+        deps.session.readRow(registerRowFromPayload(row)),
+      );
+    }
+    case "session-write-row": {
+      const { row } = message.payload;
+      return sessionResult(message, async () => {
+        const result = await deps.session.writeRow(registerRowFromPayload(row));
+        return result.ok ? ok(toWriteOutcomePayload(result.value)) : result;
+      });
+    }
+    case "session-batch-read": {
+      const { rows } = message.payload;
+      return sessionResult(message, async () => {
+        const handle = deps.session.readAllRows(
+          rows.map((r) => ({ key: r.key, address: r.address })),
+        );
+        const result = await handle.promise;
+        return result.ok
+          ? ok({ summary: toBatchReadSummaryPayload(result.value) })
+          : result;
+      });
+    }
+    case "session-update-polling-targets":
+      return sessionVoid(message, () =>
+        deps.session.updatePollingTargets(message.payload.rows),
+      );
+    case "session-polling-start":
+      return sessionVoid(message, () => deps.session.startPolling());
+    case "session-polling-stop":
+      return sessionVoid(message, () => deps.session.stopPolling());
+    case "session-trace-start":
+      return sessionVoid(message, () =>
+        deps.session.traceStart(
+          message.payload.key,
+          message.payload.address,
+          message.payload.speedMs,
+        ),
+      );
+    case "session-trace-stop":
+      return sessionVoid(message, () => deps.session.traceStop(message.payload.key));
+    case "session-tcp-connect": {
+      // 两端 TCP 接线（2026-08-23）：profile 即连接参数，无串口句柄。
+      const { profile } = message.payload;
+      return sessionResult(message, () =>
+        deps.session.connectTcp(tcpConnectionProfileFromPayload(profile)),
+      );
+    }
     case "debug:get-state":
       // 开发/测试探针（e2e 用）：生产构建禁用。
       if (!deps.isDev()) {

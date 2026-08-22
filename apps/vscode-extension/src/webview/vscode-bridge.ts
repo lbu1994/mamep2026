@@ -9,11 +9,19 @@
 import { fail } from "@mamep2026/domain";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
 import type {
+  BatchReadRowPayload,
   ColorThemeKind,
   HostRequestKind,
   MamepHostEvent,
+  RegisterRowPayload,
+  SerialPortOption,
+  SessionBatchReadResponse,
+  SessionConnectPayload,
+  SessionStateResponse,
+  SessionTcpConnectPayload,
   VscodeHostApi,
   VscodeHostDebugState,
+  WriteOutcomePayload,
 } from "@mamep2026/platform-api";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
@@ -123,6 +131,33 @@ export function createVscodeBridge(
     getColorTheme: () => postRequest<ColorThemeKind>("get-color-theme", {}),
     getDebugState: () =>
       postRequest<VscodeHostDebugState | null>("debug:get-state", {}),
+    // ---- RTU 会话（VSCode 接线，2026-08-23）----
+    enumerateSerialPorts: () =>
+      postRequest<SerialPortOption[]>("serial-enumerate", {}),
+    sessionConnect: (payload: SessionConnectPayload) =>
+      postRequest<null>("session-connect", payload),
+    sessionDisconnect: () => postRequest<null>("session-disconnect", {}),
+    sessionGetState: () =>
+      postRequest<SessionStateResponse>("session-get-state", {}),
+    sessionSetSlaveAddress: (slave: number) =>
+      postRequest<null>("session-set-slave-address", { slave }),
+    sessionReadRow: (row: RegisterRowPayload) =>
+      postRequest<number>("session-read-row", { row }),
+    sessionWriteRow: (row: RegisterRowPayload) =>
+      postRequest<WriteOutcomePayload>("session-write-row", { row }),
+    sessionBatchRead: (rows: BatchReadRowPayload[]) =>
+      postRequest<SessionBatchReadResponse>("session-batch-read", { rows }),
+    sessionUpdatePollingTargets: (
+      rows: Array<{ key: string; address: number }>,
+    ) => postRequest<null>("session-update-polling-targets", { rows }),
+    sessionPollingStart: () => postRequest<null>("session-polling-start", {}),
+    sessionPollingStop: () => postRequest<null>("session-polling-stop", {}),
+    sessionTraceStart: (key: string, address: number, speedMs: number) =>
+      postRequest<null>("session-trace-start", { key, address, speedMs }),
+    sessionTraceStop: (key: string) =>
+      postRequest<null>("session-trace-stop", { key }),
+    sessionTcpConnect: (payload: SessionTcpConnectPayload) =>
+      postRequest<null>("session-tcp-connect", payload),
     onEvent: (listener: (event: MamepHostEvent) => void) => {
       listeners.add(listener);
       return () => {

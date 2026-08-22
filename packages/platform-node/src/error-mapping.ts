@@ -164,3 +164,113 @@ export function mapSerialError(cause: unknown): MamepError {
 export function mapOpenError(cause: unknown): MamepError {
   return toMamepError(cause, "open");
 }
+
+/* ------------------------------------------------------------------ *
+ * Node TCP（docs/TECH_DESIGN.md §34.3.17 模式；用户决策：unitId 0~255）
+ * ------------------------------------------------------------------ */
+
+/** 打开失败兜底：TCP_OPEN_FAILED；读写关闭兜底：TCP_CONNECTION_FAILED。 */
+type TcpFallbackKind = "open" | "io";
+
+function toTcpMamepError(
+  cause: unknown,
+  fallback: TcpFallbackKind,
+): MamepError {
+  const code = readString((cause as ErrorLike | undefined)?.code);
+  const message = cause instanceof Error ? cause.message : String(cause);
+  const normalized = message.toLowerCase();
+
+  // 端口占用：本机地址已被占用（客户端 connect 罕见，但与串口占用语义对齐）。
+  if (code === "EADDRINUSE") {
+    return createMamepError({
+      code: "TCP_PORT_IN_USE",
+      category: "permission",
+      retryable: false,
+      userMessageKey: "errors.tcpPortInUse",
+      technicalMessage: `tcp port already in use: ${message}`,
+      cause,
+    });
+  }
+
+  // 连接失败：拒绝/不可达/未解析/超时/对端重置/管道断开。
+  if (
+    code === "ECONNREFUSED" ||
+    code === "EHOSTUNREACH" ||
+    code === "ENETUNREACH" ||
+    code === "ENOTFOUND" ||
+    code === "EAI_AGAIN" ||
+    code === "ETIMEDOUT" ||
+    code === "ECONNRESET" ||
+    code === "EPIPE"
+  ) {
+    return createMamepError({
+      code: "TCP_CONNECTION_FAILED",
+      category: "connection",
+      retryable: true,
+      userMessageKey: "errors.tcpConnectionFailed",
+      technicalMessage: `tcp connection failed: ${message}`,
+      cause,
+    });
+  }
+
+  // 受控字符串匹配（errno 缺失时的补充，不替代 errno 判断）。
+  if (
+    normalized.includes("address already in use") ||
+    normalized.includes("port already in use")
+  ) {
+    return createMamepError({
+      code: "TCP_PORT_IN_USE",
+      category: "permission",
+      retryable: false,
+      userMessageKey: "errors.tcpPortInUse",
+      technicalMessage: message,
+      cause,
+    });
+  }
+  if (
+    normalized.includes("connection refused") ||
+    normalized.includes("no such host") ||
+    normalized.includes("host unreachable") ||
+    normalized.includes("network is unreachable") ||
+    normalized.includes("getaddrinfo")
+  ) {
+    return createMamepError({
+      code: "TCP_CONNECTION_FAILED",
+      category: "connection",
+      retryable: true,
+      userMessageKey: "errors.tcpConnectionFailed",
+      technicalMessage: message,
+      cause,
+    });
+  }
+
+  // 兜底。
+  if (fallback === "open") {
+    return createMamepError({
+      code: "TCP_OPEN_FAILED",
+      category: "transport",
+      retryable: true,
+      userMessageKey: "errors.tcpOpenFailed",
+      technicalMessage: message,
+      cause,
+    });
+  }
+  return createMamepError({
+    code: "TCP_CONNECTION_FAILED",
+    category: "connection",
+    retryable: true,
+    userMessageKey: "errors.tcpConnectionFailed",
+    technicalMessage: message,
+    cause,
+  });
+}
+
+/** TCP 通用映射（读/写/关闭）。 */
+export function mapTcpError(cause: unknown): MamepError {
+  return toTcpMamepError(cause, "io");
+}
+
+/** TCP 打开专用映射（未知打开错误 → TCP_OPEN_FAILED）。 */
+export function mapTcpOpenError(cause: unknown): MamepError {
+  return toTcpMamepError(cause, "open");
+}

@@ -1,0 +1,265 @@
+/**
+ * RtuSessionHost 单测（packages/application，Application 层）。
+ * 覆盖：连接/断开、FC03 读 / FC0x10 写、Address Adjust、全表读取、WP 轮询、TM 追踪、
+ * 从站地址更新、连接失败清理、设备拔出策略（interrupted → 停止轮询/追踪 + 消息）。
+ * 传输注入 FakeTransport + ScriptedModbusRtuDevice（test-kit），虚拟时钟驱动调度。
+ */
+import { describe, expect, it, vi } from "vitest";
+import { RtuSessionHost } from "./rtu-session-host";
+import type { RtuSessionHostEvents } from "./rtu-session-host";
+import type {
+  CommunicationLogEvent,
+  ConnectionState,
+  TraceSample,
+} from "@mamep2026/communication";
+import {
+  createDefaultRtuProfile,
+  createEmptyRow,
+  createMamepError,
+  fail,
+  RegisterAddress,
+  type RegisterRow,
+  type Result,
+} from "@mamep2026/domain";
+import type { ApplicationMessage } from "@mamep2026/logging";
+import { FakeTransport, ScriptedModbusRtuDevice, VirtualClock } from "@mamep2026/test-kit";
+
+/** 多轮微任务冲刷：异步链路每层 await 需一次冲刷（仓库 advanceUntil 惯例）。 */
+async function flushMicrotasks(times = 8): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await Promise.resolve();
+  }
+}
+
+type MockedEvent = ReturnType<typeof vi.fn>;
+
+interface Harness {
+  host: RtuSessionHost;
+  clock: VirtualClock;
+  transport: FakeTransport;
+  device: ScriptedModbusRtuDevice;
+  events: Record<keyof RtuSessionHostEvents, MockedEvent>;
+}
+
+function makeRow(address: number, cellText = ""): RegisterRow {
+  const row = createEmptyRow();
+  const parsed = RegisterAddress.create(address);
+  row.addressValue = parsed.ok ? parsed.value : null;
+  row.cellText = cellText;
+  return row;
+}
+
+function createHarness(): Harness {
+  const clock = new VirtualClock();
+  const device = new ScriptedModbusRtuDevice();
+  const transport = new FakeTransport();
+  transport.device = device;
+  const events: Record<keyof RtuSessionHostEvents, MockedEvent> = {
+    onLog: vi.fn<(event: CommunicationLogEvent) => void>(),
+    onStateChange: vi.fn<(state: ConnectionState) => void>(),
+    onPollResult: vi.fn<
+      (key: string, address: number, result: Result<number>) => void
+    >(),
+    onTraceSample: vi.fn<(sample: TraceSample) => void>(),
+    onMessage: vi.fn<(message: ApplicationMessage) => void>(),
+  };
+  const host = new RtuSessionHost({
+    clock,
+    events: events as RtuSessionHostEvents,
+  });
+  return { host, clock, transport, device, events };
+}
+
+async function connect(h: Harness, profile = createDefaultRtuProfile()): Promise<boolean> {
+  const result = await h.host.connect({
+    profile,
+    transport: h.transport,
+    slaveAddress: 1,
+    portLabel: "COM4",
+  });
+  return result.ok;
+}
+
+describe("RtuSessionHost 连接/断开", () => {
+  it("connect 打开传输并进入 connected", async () => {
+    const h = createHarness();
+    expect(await connect(h)).toBe(true);
+    expect(h.transport.opened).toBe(true);
+    expect(h.host.getConnectionState()).toBe("connected");
+    expect(h.host.getPortLabel()).toBe("COM4");
+    expect(h.host.getProfile()).not.toBeNull();
+  });
+
+  it("connect 失败：返回错误并关闭传输（不残留端口占用）", async () => {
+    const h = createHarness();
+    const transport = new FakeTransport();
+    // 打开失败：open 返回错误。
+    transport.open = vi.fn(async () =>
+      fail(createMamepError({ code: "SERIAL_OPEN_FAILED", category: "transport", userMessageKey: "errors.serialOpenFailed", technicalMessage: "open failed" })),
+    );
+    const result = await h.host.connect({
+      profile: createDefaultRtuProfile(),
+      transport,
+      slaveAddress: 1,
+      portLabel: null,
+    });
+    expect(result.ok).toBe(false);
+    expect(transport.closed).toBe(true);
+    expect(h.host.getConnectionState()).toBe("disconnected");
+  });
+
+  it("disconnect 关闭传输并回到 disconnected", async () => {
+    const h = createHarness();
+    await connect(h);
+    const result = await h.host.disconnect();
+    expect(result.ok).toBe(true);
+    expect(h.transport.closed).toBe(true);
+    expect(h.host.getConnectionState()).toBe("disconnected");
+  });
+
+  it("dispose 断开会话并清空状态", async () => {
+    const h = createHarness();
+    await connect(h);
+    await h.host.dispose();
+    expect(h.transport.closed).toBe(true);
+    expect(h.host.getConnectionState()).toBe("disconnected");
+    expect(h.host.getProfile()).toBeNull();
+    expect(h.host.getPortLabel()).toBeNull();
+  });
+});
+
+describe("RtuSessionHost 读/写", () => {
+  it("readRow 经调度器读取 FC03 并返回设备寄存器值", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.device.setRegister(0x1000, 0x1234);
+    const result = await h.host.readRow(makeRow(0x1000));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(0x1234);
+  });
+
+  it("writeRow 经调度器写入 FC0x10 并更新设备寄存器", async () => {
+    const h = createHarness();
+    await connect(h);
+    const result = await h.host.writeRow(makeRow(0x1000, "04D2"));
+    expect(result.ok).toBe(true);
+    expect(h.device.getRegister(0x1000)).toBe(0x04d2);
+  });
+
+  it("Address Adjust ON：用户地址 1 发送到 0（发送 = 用户 − 1）", async () => {
+    const h = createHarness();
+    const profile = createDefaultRtuProfile();
+    profile.addressAdjust = "on";
+    await connect(h, profile);
+    h.device.setRegister(0, 0x00aa);
+    const result = await h.host.readRow(makeRow(1));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(0x00aa);
+  });
+
+  it("Address Adjust ON 且用户地址 0：下溢报错（不回绕）", async () => {
+    const h = createHarness();
+    const profile = createDefaultRtuProfile();
+    profile.addressAdjust = "on";
+    await connect(h, profile);
+    const result = await h.host.readRow(makeRow(0));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("ADDRESS_ADJUST_UNDERFLOW");
+  });
+
+  it("未连接时 readRow 返回 not connected", async () => {
+    const h = createHarness();
+    const result = await h.host.readRow(makeRow(0x1000));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("CONNECTION_NOT_CONNECTED");
+  });
+});
+
+describe("RtuSessionHost 全表读取", () => {
+  it("readAllRows 批量读取并经 onPollResult 上报每行结果", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.device.setRegister(1, 0x1111);
+    h.device.setRegister(2, 0x2222);
+    const handle = h.host.readAllRows([
+      { key: "a", address: 1 },
+      { key: "b", address: 2 },
+    ]);
+    const summary = await handle.promise;
+    expect(summary.ok).toBe(true);
+    expect(h.events.onPollResult).toHaveBeenCalledWith("a", 0, expect.objectContaining({ ok: true }));
+    expect(h.events.onPollResult).toHaveBeenCalledWith("b", 0, expect.objectContaining({ ok: true }));
+  });
+});
+
+describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
+  it("updatePollingTargets + startPolling 按 Rx Delay 周期产生轮询结果", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.device.setRegister(0x2000, 0xabcd);
+    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.startPolling();
+    h.clock.advance(100);
+    await flushMicrotasks();
+    expect(h.events.onPollResult).toHaveBeenCalledWith(
+      "row-a",
+      0x2000,
+      expect.objectContaining({ ok: true, value: 0xabcd }),
+    );
+    h.host.stopPolling();
+  });
+
+  it("traceStart 按 Speed 间隔产生追踪样本", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.device.setRegister(0x3000, 0x55aa);
+    h.host.traceStart("row-b", 0x3000, 100);
+    h.clock.advance(100);
+    await flushMicrotasks();
+    expect(h.events.onTraceSample).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "row-b", rawValue: 0x55aa, sequence: 1 }),
+    );
+    h.host.traceStop("row-b");
+  });
+
+  it("setSlaveAddress 影响后续请求的从站地址", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.host.setSlaveAddress(7);
+    h.device.setRegister(0x1000, 0x0001);
+    const result = await h.host.readRow(makeRow(0x1000));
+    expect(result.ok).toBe(true);
+    // 发送帧首字节应为 0x07。
+    const lastFrame = h.transport.sentFrames.at(-1);
+    expect(lastFrame?.[0]).toBe(0x07);
+  });
+});
+
+describe("RtuSessionHost 设备拔出策略", () => {
+  it("传输错误 → interrupted：停止轮询/追踪并上报消息", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.host.updatePollingTargets([{ key: "row-a", address: 1 }]);
+    h.host.startPolling();
+    h.device.setRegister(1, 0x0001);
+
+    h.transport.simulateError(
+      createMamepError({
+        code: "SERIAL_DEVICE_DISCONNECTED",
+        category: "transport",
+        userMessageKey: "errors.serialDeviceDisconnected",
+        technicalMessage: "device unplugged",
+      }),
+    );
+
+    expect(h.events.onStateChange).toHaveBeenCalledWith("interrupted");
+    expect(h.events.onMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ level: "error", messageKey: "messages.deviceDisconnected" }),
+    );
+    // 拔出后轮询停止：推进时钟不应再有轮询结果。
+    const before = h.events.onPollResult.mock.calls.length;
+    h.clock.advance(1000);
+    await flushMicrotasks();
+    expect(h.events.onPollResult.mock.calls.length).toBe(before);
+  });
+});

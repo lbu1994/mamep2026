@@ -1,7 +1,11 @@
 /**
  * 安全 IPC 处理核心单测（docs/AGENTS.md §23：未知 kind 拒绝、输入校验、发送者校验、探针禁用）。
+ * handleRequest/handleInvoke 为异步（主进程 TCP 会话承载，2026-08-23 两端 TCP 接线）。
  */
 import { describe, expect, it, vi } from "vitest";
+import type { ConnectionState } from "@mamep2026/communication";
+import { ok } from "@mamep2026/domain";
+import type { TcpConnectionProfile } from "@mamep2026/domain";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   electronCapabilities,
@@ -11,6 +15,7 @@ import {
   extractMessageId,
   handleInvoke,
   handleRequest,
+  type ElectronSessionLike,
   type IpcDeps,
 } from "./ipc";
 
@@ -29,6 +34,44 @@ function request(
   } as HostRequestMessage;
 }
 
+function makeSession(
+  overrides: Partial<ElectronSessionLike> = {},
+): ElectronSessionLike {
+  return {
+    connectTcp: vi.fn(async () => ok(undefined)),
+    disconnect: vi.fn(async () => ok(undefined)),
+    getConnectionState: vi.fn(() => "disconnected" as ConnectionState),
+    readRow: vi.fn(async () => ok(0x1234)),
+    writeRow: vi.fn(async () =>
+      ok({ kind: "write-succeeded-no-verify" as const }),
+    ),
+    readAllRows: vi.fn(() => ({
+      promise: Promise.resolve(
+        ok({
+          batchId: "b-1",
+          totalRows: 1,
+          eligibleRows: 1,
+          successCount: 1,
+          failureCount: 0,
+          skippedCount: 0,
+          cancelledCount: 0,
+          startedAt: 0,
+          completedAt: 1,
+          durationMs: 1,
+        }),
+      ),
+      cancel: vi.fn(),
+    })),
+    updatePollingTargets: vi.fn(),
+    startPolling: vi.fn(),
+    stopPolling: vi.fn(),
+    traceStart: vi.fn(),
+    traceStop: vi.fn(),
+    dispose: vi.fn(async () => undefined),
+    ...overrides,
+  };
+}
+
 function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
   return {
     appVersion: () => "0.0.0-test",
@@ -39,13 +82,14 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     clipboardWriteText: vi.fn(),
     clipboardReadText: () => "from-clip",
     resolveSerialPortSelection: vi.fn(() => false),
+    session: makeSession(),
     ...overrides,
   };
 }
 
 describe("handleInvoke（安全 IPC 分发）", () => {
-  it("get-capabilities 返回 Electron 能力矩阵（Web Serial MVP）", () => {
-    const result = handleInvoke(request("get-capabilities"), {
+  it("get-capabilities 返回 Electron 能力矩阵（RTU/TCP 已接线）", async () => {
+    const result = await handleInvoke(request("get-capabilities"), {
       isSenderMainWindow: true,
       deps: makeDeps(),
     });
@@ -57,10 +101,11 @@ describe("handleInvoke（安全 IPC 分发）", () => {
       ok: true,
       payload: electronCapabilities,
     });
+    expect(electronCapabilities.modbusTcp).toBe(true);
   });
 
-  it("get-app-version 返回注入的版本", () => {
-    const result = handleInvoke(request("get-app-version"), {
+  it("get-app-version 返回注入的版本", async () => {
+    const result = await handleInvoke(request("get-app-version"), {
       isSenderMainWindow: true,
       deps: makeDeps(),
     });
@@ -70,18 +115,21 @@ describe("handleInvoke（安全 IPC 分发）", () => {
     }
   });
 
-  it("copy-text-to-clipboard 调用剪贴板写入并返回 ok", () => {
+  it("copy-text-to-clipboard 调用剪贴板写入并返回 ok", async () => {
     const deps = makeDeps();
-    const result = handleInvoke(request("copy-text-to-clipboard", { text: "hi" }), {
-      isSenderMainWindow: true,
-      deps,
-    });
+    const result = await handleInvoke(
+      request("copy-text-to-clipboard", { text: "hi" }),
+      {
+        isSenderMainWindow: true,
+        deps,
+      },
+    );
     expect(deps.clipboardWriteText).toHaveBeenCalledWith("hi");
     expect(result.type).toBe("response");
   });
 
-  it("read-text-from-clipboard 返回剪贴板读取值", () => {
-    const result = handleInvoke(request("read-text-from-clipboard"), {
+  it("read-text-from-clipboard 返回剪贴板读取值", async () => {
+    const result = await handleInvoke(request("read-text-from-clipboard"), {
       isSenderMainWindow: true,
       deps: makeDeps(),
     });
@@ -91,8 +139,8 @@ describe("handleInvoke（安全 IPC 分发）", () => {
     }
   });
 
-  it("debug:get-state 在未打包时返回主进程状态", () => {
-    const result = handleInvoke(request("debug:get-state"), {
+  it("debug:get-state 在未打包时返回主进程状态", async () => {
+    const result = await handleInvoke(request("debug:get-state"), {
       isSenderMainWindow: true,
       deps: makeDeps(),
     });
@@ -109,8 +157,8 @@ describe("handleInvoke（安全 IPC 分发）", () => {
     }
   });
 
-  it("debug:get-state 在打包构建时禁用", () => {
-    const result = handleInvoke(request("debug:get-state"), {
+  it("debug:get-state 在打包构建时禁用", async () => {
+    const result = await handleInvoke(request("debug:get-state"), {
       isSenderMainWindow: true,
       deps: makeDeps({ isPackaged: () => true }),
     });
@@ -120,8 +168,8 @@ describe("handleInvoke（安全 IPC 分发）", () => {
     }
   });
 
-  it("未知 kind 被拒绝（HOST_MESSAGE_INVALID）", () => {
-    const result = handleInvoke(
+  it("未知 kind 被拒绝（HOST_MESSAGE_INVALID）", async () => {
+    const result = await handleInvoke(
       {
         protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
         type: "request",
@@ -138,8 +186,8 @@ describe("handleInvoke（安全 IPC 分发）", () => {
     }
   });
 
-  it("非法 payload 被拒绝（copy 缺 text）", () => {
-    const result = handleInvoke(request("copy-text-to-clipboard", {}), {
+  it("非法 payload 被拒绝（copy 缺 text）", async () => {
+    const result = await handleInvoke(request("copy-text-to-clipboard", {}), {
       isSenderMainWindow: true,
       deps: makeDeps(),
     });
@@ -149,11 +197,14 @@ describe("handleInvoke（安全 IPC 分发）", () => {
     }
   });
 
-  it("非主窗口发送者被拒绝", () => {
-    const result = handleInvoke(request("get-capabilities", {}, "req-other"), {
-      isSenderMainWindow: false,
-      deps: makeDeps(),
-    });
+  it("非主窗口发送者被拒绝", async () => {
+    const result = await handleInvoke(
+      request("get-capabilities", {}, "req-other"),
+      {
+        isSenderMainWindow: false,
+        deps: makeDeps(),
+      },
+    );
     expect(result.type).toBe("error");
     if (result.type === "error") {
       expect(result.payload.code).toBe("HOST_MESSAGE_SENDER_REJECTED");
@@ -161,8 +212,8 @@ describe("handleInvoke（安全 IPC 分发）", () => {
     }
   });
 
-  it("无法解析的消息仍尽力回填 messageId", () => {
-    const result = handleInvoke("not-an-object", {
+  it("无法解析的消息仍尽力回填 messageId", async () => {
+    const result = await handleInvoke("not-an-object", {
       isSenderMainWindow: false,
       deps: makeDeps(),
     });
@@ -175,22 +226,23 @@ describe("handleInvoke（安全 IPC 分发）", () => {
 });
 
 describe("handleRequest（直接分发）", () => {
-  it("能力矩阵与 Electron 能力一致（RTU 支持 / enumerated 下拉选择）", () => {
-    const result = handleRequest(request("get-capabilities"), makeDeps());
+  it("能力矩阵与 Electron 能力一致（RTU/TCP 支持 / enumerated 下拉选择）", async () => {
+    const result = await handleRequest(request("get-capabilities"), makeDeps());
     expect(result.type).toBe("response");
     if (result.type === "response") {
       expect(result.payload).toEqual(electronCapabilities);
       expect(result.payload).toMatchObject({
         modbusRtu: true,
+        modbusTcp: true,
         serialPorts: "enumerated",
       });
     }
   });
 
-  it("select-serial-port：解析挂起选择成功返回 ok(null)", () => {
+  it("select-serial-port：解析挂起选择成功返回 ok(null)", async () => {
     const resolveSerialPortSelection = vi.fn(() => true);
     const deps = makeDeps({ resolveSerialPortSelection });
-    const result = handleRequest(
+    const result = await handleRequest(
       request("select-serial-port", { portId: "p1" }),
       deps,
       { tag: "wc" },
@@ -205,10 +257,10 @@ describe("handleRequest（直接分发）", () => {
     }
   });
 
-  it("select-serial-port：空串 portId（取消）同样解析挂起选择", () => {
+  it("select-serial-port：空串 portId（取消）同样解析挂起选择", async () => {
     const resolveSerialPortSelection = vi.fn(() => true);
     const deps = makeDeps({ resolveSerialPortSelection });
-    const result = handleRequest(
+    const result = await handleRequest(
       request("select-serial-port", { portId: "" }),
       deps,
       { tag: "wc" },
@@ -219,8 +271,8 @@ describe("handleRequest（直接分发）", () => {
     expect(result.type).toBe("response");
   });
 
-  it("select-serial-port：无挂起选择返回 SERIAL_PICKER_NOT_ACTIVE", () => {
-    const result = handleRequest(
+  it("select-serial-port：无挂起选择返回 SERIAL_PICKER_NOT_ACTIVE", async () => {
+    const result = await handleRequest(
       request("select-serial-port", { portId: "p1" }),
       makeDeps(),
     );
@@ -230,28 +282,127 @@ describe("handleRequest（直接分发）", () => {
     }
   });
 
-  it("select-serial-port：经 handleInvoke 完整链路（发送者校验 + Zod + 分发）", () => {
+  it("select-serial-port：经 handleInvoke 完整链路（发送者校验 + Zod + 分发）", async () => {
     const resolveSerialPortSelection = vi.fn(() => true);
     const deps = makeDeps({ resolveSerialPortSelection });
-    const result = handleInvoke(request("select-serial-port", { portId: "p2" }), {
-      isSenderMainWindow: true,
-      sender: { tag: "wc" },
-      deps,
-    });
+    const result = await handleInvoke(
+      request("select-serial-port", { portId: "p2" }),
+      {
+        isSenderMainWindow: true,
+        sender: { tag: "wc" },
+        deps,
+      },
+    );
     expect(result.type).toBe("response");
     expect(resolveSerialPortSelection).toHaveBeenCalledWith("p2", {
       tag: "wc",
     });
   });
 
-  it("select-serial-port：非法 payload 被拒绝（缺 portId）", () => {
-    const result = handleInvoke(request("select-serial-port", {}), {
+  it("select-serial-port：非法 payload 被拒绝（缺 portId）", async () => {
+    const result = await handleInvoke(request("select-serial-port", {}), {
       isSenderMainWindow: true,
       deps: makeDeps(),
     });
     expect(result.type).toBe("error");
     if (result.type === "error") {
       expect(result.payload.code).toBe("HOST_MESSAGE_INVALID");
+    }
+  });
+});
+
+describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
+  const tcpProfile = {
+    id: "conn-tcp-1",
+    name: "PLC",
+    protocol: "tcp",
+    host: "192.168.1.10",
+    port: 502,
+    unitId: 0,
+    connectTimeoutMs: 5000,
+    requestTimeoutMs: 1000,
+    retryCount: 1,
+    autoReconnect: false,
+    interRequestDelayMs: 50,
+  };
+
+  it("session-tcp-connect 重建 TCP profile 并调用主进程会话 connectTcp", async () => {
+    const session = makeSession();
+    const result = await handleRequest(
+      request("session-tcp-connect", { profile: tcpProfile }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.connectTcp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        protocol: "tcp",
+        host: "192.168.1.10",
+        port: 502,
+      }) as TcpConnectionProfile,
+    );
+  });
+
+  it("session-read-row 经主进程会话 readRow 返回数值", async () => {
+    const session = makeSession();
+    const result = await handleRequest(
+      request("session-read-row", {
+        row: {
+          rowId: "row-1",
+          order: 1,
+          name: "",
+          comment: "",
+          addressDraft: "",
+          addressValue: { value: 1 },
+          dataType: "hex",
+          pollingEnabled: false,
+          traceEnabled: false,
+          cellText: "",
+          lastKnownRawValue: null,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") expect(result.payload).toBe(0x1234);
+  });
+
+  it("session-get-state 返回主进程会话连接状态", async () => {
+    const session = makeSession({
+      getConnectionState: vi.fn(() => "connected" as ConnectionState),
+    });
+    const result = await handleRequest(
+      request("session-get-state"),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ connectionState: "connected" });
+    }
+  });
+
+  it("session-tcp-connect 失败时返回结构化错误", async () => {
+    const session = makeSession({
+      connectTcp: vi.fn(async () => ({
+        ok: false as const,
+        error: {
+          code: "TCP_CONNECTION_FAILED",
+          category: "connection" as const,
+          severity: "error" as const,
+          retryable: true,
+          userMessageKey: "errors.tcpConnectionFailed",
+          technicalMessage: "refused",
+        },
+      })),
+    });
+    const result = await handleRequest(
+      request("session-tcp-connect", { profile: tcpProfile }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("TCP_CONNECTION_FAILED");
     }
   });
 });
@@ -268,3 +419,4 @@ describe("extractMessageId", () => {
     expect(extractMessageId({ messageId: 123 })).toBe("");
   });
 });
+

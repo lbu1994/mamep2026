@@ -330,33 +330,49 @@ export function BottomPanel(): React.ReactNode {
           <Descriptions.Item label={t("panel.serialPort")}>
             {properties.portLabel ?? "-"}
           </Descriptions.Item>
-          <Descriptions.Item label={t("panel.baud")}>
-            {properties.baudRate}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("connection.dataBits")}>
-            {properties.dataBits}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("connection.stopBits")}>
-            {properties.stopBits}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("connection.parity")}>
-            {properties.parity}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("connection.flowControl")}>
-            {flowControlLabels[properties.flowControl]}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("connection.timeout")}>
-            {properties.timeoutMs}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("connection.retry")}>
-            {properties.retryCount}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("connection.rxDelay")}>
-            {properties.rxDelayMs}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("connection.addressAdjust")}>
-            {properties.addressAdjust.toUpperCase()}
-          </Descriptions.Item>
+          {properties.protocol === "tcp" ? (
+            <>
+              <Descriptions.Item label={t("connection.unitId")}>
+                {properties.unitId ?? 0}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.timeout")}>
+                {properties.timeoutMs}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.retry")}>
+                {properties.retryCount}
+              </Descriptions.Item>
+            </>
+          ) : (
+            <>
+              <Descriptions.Item label={t("panel.baud")}>
+                {properties.baudRate}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.dataBits")}>
+                {properties.dataBits}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.stopBits")}>
+                {properties.stopBits}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.parity")}>
+                {properties.parity}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.flowControl")}>
+                {flowControlLabels[properties.flowControl]}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.timeout")}>
+                {properties.timeoutMs}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.retry")}>
+                {properties.retryCount}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.rxDelay")}>
+                {properties.rxDelayMs}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("connection.addressAdjust")}>
+                {properties.addressAdjust.toUpperCase()}
+              </Descriptions.Item>
+            </>
+          )}
           <Descriptions.Item label={t("panel.status")}>
             {/* 与顶栏状态胶囊同语义：圆点 + 文字，data-conn-state 供 CSS 按连接态着色 */}
             <span

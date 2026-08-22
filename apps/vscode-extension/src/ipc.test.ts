@@ -8,10 +8,13 @@ import {
   vscodeCapabilities,
   type HostRequestMessage,
 } from "@mamep2026/platform-api";
+import { createMamepError, fail, ok } from "@mamep2026/domain";
+import type { ConnectionState } from "@mamep2026/communication";
 import {
   extractMessageId,
   handleVscodeInvoke,
   type IpcDeps,
+  type VscodeSessionLike,
 } from "./ipc";
 
 function request(
@@ -29,6 +32,47 @@ function request(
   } as HostRequestMessage;
 }
 
+function makeSession(
+  overrides: Partial<VscodeSessionLike> = {},
+): VscodeSessionLike {
+  return {
+    enumerateSerialPorts: vi.fn(async () => ok([])),
+    connect: vi.fn(async () => ok(undefined)),
+    connectTcp: vi.fn(async () => ok(undefined)),
+    disconnect: vi.fn(async () => ok(undefined)),
+    getConnectionState: vi.fn(() => "disconnected" as ConnectionState),
+    setSlaveAddress: vi.fn(),
+    readRow: vi.fn(async () => ok(0x1234)),
+    writeRow: vi.fn(async () =>
+      ok({ kind: "write-succeeded-no-verify" as const }),
+    ),
+    readAllRows: vi.fn(() => ({
+      promise: Promise.resolve(
+        ok({
+          batchId: "b-1",
+          totalRows: 1,
+          eligibleRows: 1,
+          successCount: 1,
+          failureCount: 0,
+          skippedCount: 0,
+          cancelledCount: 0,
+          startedAt: 0,
+          completedAt: 1,
+          durationMs: 1,
+        }),
+      ),
+      cancel: vi.fn(),
+    })),
+    updatePollingTargets: vi.fn(),
+    startPolling: vi.fn(),
+    stopPolling: vi.fn(),
+    traceStart: vi.fn(),
+    traceStop: vi.fn(),
+    dispose: vi.fn(async () => undefined),
+    ...overrides,
+  };
+}
+
 function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
   return {
     appVersion: () => "0.0.0-test",
@@ -37,6 +81,7 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     isDev: () => true,
     clipboardWriteText: vi.fn(async () => undefined),
     clipboardReadText: vi.fn(async () => "from-clip"),
+    session: makeSession(),
     ...overrides,
   };
 }
@@ -116,7 +161,7 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     }
   });
 
-  it("select-serial-port 返回能力错误（骨架未实现串口）", async () => {
+  it("select-serial-port 返回能力错误（VSCode 不走 Electron 授权选择流程）", async () => {
     const result = await handleVscodeInvoke(
       request("select-serial-port", { portId: "COM3" }),
       makeDeps(),
@@ -205,5 +250,253 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     expect(extractMessageId({})).toBe("");
     expect(extractMessageId(null)).toBe("");
     expect(extractMessageId("nope")).toBe("");
+  });
+});
+
+describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
+  const profile = {
+    id: "conn-1",
+    name: "RTU",
+    protocol: "rtu",
+    baudRate: 9600,
+    dataBits: 8,
+    stopBits: 1,
+    parity: "none",
+    flowControl: "off",
+    requestTimeoutMs: 1000,
+    retryCount: 1,
+    interRequestDelayMs: 50,
+    addressAdjust: "off",
+    recentPortHint: null,
+  };
+
+  const row = {
+    rowId: "row-1",
+    order: 1,
+    name: "",
+    comment: "",
+    addressDraft: "",
+    addressValue: { value: 0x1000 },
+    dataType: "hex",
+    pollingEnabled: false,
+    traceEnabled: false,
+    cellText: "",
+    lastKnownRawValue: null,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+
+  it("serial-enumerate 返回端口列表", async () => {
+    const session = makeSession({
+      enumerateSerialPorts: vi.fn(async () =>
+        ok([{ portId: "COM4", label: "Fake (COM4)" }]),
+      ),
+    });
+    const result = await handleVscodeInvoke(
+      request("serial-enumerate"),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") {
+      expect(result.payload).toEqual([{ portId: "COM4", label: "Fake (COM4)" }]);
+    }
+  });
+
+  it("session-connect 重建 profile 并调用 connect", async () => {
+    const session = makeSession();
+    const result = await handleVscodeInvoke(
+      request("session-connect", {
+        portId: "COM4",
+        profile,
+        slaveAddress: 1,
+      }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.connect).toHaveBeenCalledWith(
+      "COM4",
+      expect.objectContaining({ id: "conn-1", protocol: "rtu", baudRate: 9600 }),
+      1,
+    );
+  });
+
+  it("session-connect 失败时返回结构化错误", async () => {
+    const session = makeSession({
+      connect: vi.fn(async () =>
+        fail(
+          createMamepError({
+            code: "SERIAL_PORT_IN_USE",
+            category: "transport",
+            retryable: false,
+            userMessageKey: "errors.serialPortInUse",
+            technicalMessage: "in use",
+          }),
+        ),
+      ),
+    });
+    const result = await handleVscodeInvoke(
+      request("session-connect", { portId: "COM4", profile, slaveAddress: 1 }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("SERIAL_PORT_IN_USE");
+    }
+  });
+
+  it("session-read-row 重建 row 并返回数值", async () => {
+    const session = makeSession();
+    const result = await handleVscodeInvoke(
+      request("session-read-row", { row }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") expect(result.payload).toBe(0x1234);
+    expect(session.readRow).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: "row-1", dataType: "hex" }),
+    );
+  });
+
+  it("session-write-row 返回 WriteOutcome payload", async () => {
+    const result = await handleVscodeInvoke(
+      request("session-write-row", { row }),
+      makeDeps(),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ kind: "write-succeeded-no-verify" });
+    }
+  });
+
+  it("session-batch-read 返回汇总（行结果走 poll-result 事件）", async () => {
+    const result = await handleVscodeInvoke(
+      request("session-batch-read", {
+        rows: [{ key: "a", address: 1 }],
+      }),
+      makeDeps(),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") {
+      expect(result.payload).toMatchObject({
+        summary: { batchId: "b-1", successCount: 1 },
+      });
+    }
+  });
+
+  it("session-get-state 返回连接状态", async () => {
+    const session = makeSession({
+      getConnectionState: vi.fn(() => "connected" as ConnectionState),
+    });
+    const result = await handleVscodeInvoke(
+      request("session-get-state"),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ connectionState: "connected" });
+    }
+  });
+
+  it("session-set-slave-address 调用 setSlaveAddress", async () => {
+    const session = makeSession();
+    const result = await handleVscodeInvoke(
+      request("session-set-slave-address", { slave: 7 }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.setSlaveAddress).toHaveBeenCalledWith(7);
+  });
+
+  it("session-trace-start 调用 traceStart", async () => {
+    const session = makeSession();
+    const result = await handleVscodeInvoke(
+      request("session-trace-start", { key: "k", address: 1, speedMs: 100 }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.traceStart).toHaveBeenCalledWith("k", 1, 100);
+  });
+
+  it("会话操作抛异常时返回 SESSION_INTERNAL_ERROR", async () => {
+    const session = makeSession({
+      readRow: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+    });
+    const result = await handleVscodeInvoke(
+      request("session-read-row", { row }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("SESSION_INTERNAL_ERROR");
+    }
+  });
+});
+
+describe("TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
+  const tcpProfile = {
+    id: "conn-tcp-1",
+    name: "PLC",
+    protocol: "tcp",
+    host: "192.168.1.10",
+    port: 502,
+    unitId: 0,
+    connectTimeoutMs: 5000,
+    requestTimeoutMs: 1000,
+    retryCount: 1,
+    autoReconnect: false,
+    interRequestDelayMs: 50,
+  };
+
+  it("session-tcp-connect 重建 TCP profile 并调用 connectTcp", async () => {
+    const session = makeSession();
+    const result = await handleVscodeInvoke(
+      request("session-tcp-connect", { profile: tcpProfile }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.connectTcp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "conn-tcp-1",
+        protocol: "tcp",
+        host: "192.168.1.10",
+        port: 502,
+      }),
+    );
+  });
+
+  it("session-tcp-connect 失败时返回结构化错误", async () => {
+    const session = makeSession({
+      connectTcp: vi.fn(async () =>
+        fail(
+          createMamepError({
+            code: "TCP_CONNECTION_FAILED",
+            category: "connection",
+            retryable: true,
+            userMessageKey: "errors.tcpConnectionFailed",
+            technicalMessage: "refused",
+          }),
+        ),
+      ),
+    });
+    const result = await handleVscodeInvoke(
+      request("session-tcp-connect", { profile: tcpProfile }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("TCP_CONNECTION_FAILED");
+    }
+  });
+
+  it("session-tcp-connect 拒绝非 TCP profile", async () => {
+    const result = await handleVscodeInvoke(
+      request("session-tcp-connect", {
+        profile: { ...tcpProfile, protocol: "rtu" },
+      }),
+      makeDeps(),
+    );
+    expect(result.type).toBe("error");
   });
 });

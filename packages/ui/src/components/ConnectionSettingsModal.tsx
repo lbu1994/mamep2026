@@ -8,10 +8,13 @@ import {
   Divider,
   Flex,
   Form,
+  Input,
   InputNumber,
   Modal,
   Row,
+  Segmented,
   Select,
+  Switch,
   Tag,
   Typography,
 } from "antd";
@@ -22,9 +25,14 @@ import {
   ReloadOutlined,
   UsbOutlined,
 } from "@ant-design/icons";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createDefaultRtuProfile } from "@mamep2026/domain";
+import {
+  createDefaultRtuProfile,
+  createDefaultTcpProfile,
+  type RtuConnectionProfile,
+  type TcpConnectionProfile,
+} from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
 import type {
   SerialDeviceHandle,
@@ -79,12 +87,27 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
   const [enumerating, setEnumerating] = useState(false);
 
-  const profile = workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
+  // 持久化的首个 profile（RTU 或 TCP）：作为对应协议表单的基础值。
+  const storedProfile = workspace.connectionProfiles[0];
+  const profile =
+    storedProfile !== undefined && storedProfile.protocol === "rtu"
+      ? storedProfile
+      : createDefaultRtuProfile();
+  const tcpBase: TcpConnectionProfile =
+    storedProfile !== undefined && storedProfile.protocol === "tcp"
+      ? storedProfile
+      : createDefaultTcpProfile();
+  // 默认表单值跟随存储 profile 的协议（重开弹窗恢复上次选择的协议与参数）。
+  const defaultProfile = storedProfile ?? createDefaultRtuProfile();
   const { control, handleSubmit, reset, getValues } =
     useForm<ConnectionSettingsValues>({
       resolver: zodResolver(settingsSchema),
-      defaultValues: profileToValues(profile),
+      defaultValues: profileToValues(defaultProfile),
     });
+  // 当前协议（Segmented 选择）：RTU/TCP 表单互斥展示；浏览器能力门控隐藏 TCP 入口。
+  const protocol = useWatch({ control, name: "protocol" }) ?? "rtu";
+  const supportsTcp = host?.capabilities.modbusTcp ?? false;
+  const supportsRtu = host?.capabilities.modbusRtu ?? true;
 
   const supportsSerial = host?.supportsWebSerial() ?? false;
   const isMock = host?.isMockMode ?? false;
@@ -126,18 +149,28 @@ export function ConnectionSettingsModal(): React.ReactNode {
 
   const onSubmit = handleSubmit(async (values) => {
     if (host === null || host === undefined) return;
-    if (!isMock && selectedHandle === null && supportsSerial) {
+    // 需要选口（仅 RTU）：浏览器 picker（supportsSerial）或 enumerated 下拉（VSCode/Electron）均须先选。
+    if (
+      values.protocol !== "tcp" &&
+      !isMock &&
+      selectedHandle === null &&
+      (supportsSerial || isEnumerated)
+    ) {
       setConnectError(t("connection.selectDeviceFirst"));
       return;
     }
     setConnectError(null);
     setConnecting(true);
     try {
-      const nextProfile = toProfile(values, profile);
-      const result = await host.connect(
-        nextProfile,
-        isMock ? null : selectedHandle,
-      );
+      const result =
+        values.protocol === "tcp"
+          ? await host.connectTcp(
+              toProfile(values, tcpBase) as TcpConnectionProfile,
+            )
+          : await host.connect(
+              toProfile(values, profile) as RtuConnectionProfile,
+              isMock ? null : selectedHandle,
+            );
       if (result.ok) {
         setOpen(false);
       } else {
@@ -174,10 +207,10 @@ export function ConnectionSettingsModal(): React.ReactNode {
       onCancel={() => setOpen(false)}
       afterOpenChange={(nextOpen) => {
         if (nextOpen) {
-          // 每次打开：恢复上次持久化的连接设置（含端口参数）；串口/端口选择保持待选。
+          // 每次打开：恢复上次持久化的连接设置（含端口参数/协议）；串口/端口选择保持待选。
           // 注意：不在弹窗打开时自动枚举——navigator.serial.requestPort() 必须在用户
           // 手势（点击下拉框/刷新按钮）中调用，否则抛 SecurityError（刷不出串口）。
-          reset(profileToValues(profile));
+          reset(profileToValues(defaultProfile));
           setConnectError(null);
         } else {
           // 关闭（手动取消 / Connect 成功后自动关闭）时持久化连接设置（串口选择除外）。
@@ -215,12 +248,48 @@ export function ConnectionSettingsModal(): React.ReactNode {
         </Button>,
       ]}
     >
-      {!isMock && !supportsSerial ? (
+      {!isMock && !supportsSerial && !isEnumerated ? (
         <Typography.Paragraph type="warning">
           {t("connection.unsupportedWebSerial")}
         </Typography.Paragraph>
       ) : null}
       <Form layout="vertical" size="small">
+        <Controller
+          name="protocol"
+          control={control}
+          render={({ field }) => (
+            <Form.Item
+              label={t("connection.protocol")}
+              style={{ marginBottom: 12 }}
+            >
+              <Segmented
+                block
+                value={field.value}
+                onChange={(v) => field.onChange(v)}
+                options={[
+                  ...(supportsRtu
+                    ? [
+                        {
+                          label: t("connection.protocolRtu"),
+                          value: "rtu" as const,
+                        },
+                      ]
+                    : []),
+                  ...(supportsTcp
+                    ? [
+                        {
+                          label: t("connection.protocolTcp"),
+                          value: "tcp" as const,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </Form.Item>
+          )}
+        />
+        {protocol === "rtu" ? (
+          <>
         <Divider
           titlePlacement="left"
           plain
@@ -459,6 +528,116 @@ export function ConnectionSettingsModal(): React.ReactNode {
             />
           </Col>
         </Row>
+          </>
+        ) : null}
+        {protocol === "tcp" ? (
+          <>
+            <Divider
+              titlePlacement="left"
+              plain
+              style={{ marginTop: 16, marginBottom: 8 }}
+            >
+              {t("connection.groupTcp")}
+            </Divider>
+            <Row gutter={16}>
+              <Col span={24}>
+                <Controller
+                  name="host"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.host")}>
+                      <Input
+                        placeholder="192.168.1.10"
+                        value={field.value}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+              <Col span={12}>
+                <Controller
+                  name="port"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.portTcp")}>
+                      <InputNumber
+                        style={{ width: "100%" }}
+                        min={1}
+                        max={65535}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v ?? 502)}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+              <Col span={12}>
+                <Controller
+                  name="unitId"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item
+                      label={t("connection.unitId")}
+                      tooltip={t("connection.unitIdHint")}
+                    >
+                      <InputNumber
+                        style={{ width: "100%" }}
+                        min={0}
+                        max={255}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v ?? 0)}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+              <Col span={12}>
+                <Controller
+                  name="timeout"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.timeout")}>
+                      <InputNumber
+                        style={{ width: "100%" }}
+                        min={50}
+                        max={60000}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v ?? 1000)}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+              <Col span={12}>
+                <Controller
+                  name="retry"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.retry")}>
+                      <InputNumber
+                        style={{ width: "100%" }}
+                        min={0}
+                        max={10}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v ?? 1)}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+              <Col span={24}>
+                <Form.Item
+                  label={t("connection.autoReconnect")}
+                  tooltip={t("connection.autoReconnectHint")}
+                >
+                  {/* 自动重连为 P1（PRD §8.3），P0 仅展示/禁用（2026-08-23 确认）。 */}
+                  <Switch disabled checked={false} />
+                </Form.Item>
+              </Col>
+            </Row>
+          </>
+        ) : null}
         {connectionState !== "disconnected" && connectionState !== "failed" ? (
           <div style={{ marginTop: 8 }}>
             <Badge

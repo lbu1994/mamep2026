@@ -7,6 +7,7 @@ import type {
   RegisterRow,
   Result,
   RtuConnectionProfile,
+  TcpConnectionProfile,
   Workspace,
 } from "@mamep2026/domain";
 import {
@@ -17,6 +18,7 @@ import {
   fail,
   ok,
 } from "@mamep2026/domain";
+import { RtuSessionHost } from "@mamep2026/application";
 import type {
   BatchReadHandle,
   BatchReadRow,
@@ -25,12 +27,6 @@ import type {
   ConnectionState,
   TransportPort,
   WriteOutcome,
-} from "@mamep2026/communication";
-import {
-  BatchReadCoordinator,
-  CommunicationSession,
-  PollingCoordinator,
-  TraceCoordinator,
 } from "@mamep2026/communication";
 import type { ApplicationMessage } from "@mamep2026/logging";
 import {
@@ -43,7 +39,6 @@ import type {
   PlatformHost,
 } from "@mamep2026/platform-api";
 import { PluginRegistry } from "@mamep2026/plugin-api";
-import { RegisterTableService } from "@mamep2026/register-table";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { AutoSaveCoordinator } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
@@ -72,19 +67,12 @@ export class BrowserAppHost implements AppHost {
   private readonly messageStore = new ApplicationMessageStore(2000);
   private readonly commLogStore = new CommunicationLogStore(10000);
   private readonly autoSave: AutoSaveCoordinator;
-  private readonly tableService: RegisterTableService;
-  private session: CommunicationSession | null = null;
-  private polling: PollingCoordinator | null = null;
-  private trace: TraceCoordinator | null = null;
-  private currentProfile: RtuConnectionProfile | null = null;
+  /** RTU 会话宿主（Application 层）：会话/轮询/追踪/读写的单一编排，浏览器与 VSCode 共用。 */
+  private readonly rtu: RtuSessionHost;
   /** 当前会话从站地址（每表独立，2026-08-19）：UI 切换表/修改值时同步，连接时作为初始值。 */
   private currentSlaveAddress = 1;
+  /** 当前选中端口显示标签（connect 时传给 rtu 供通信属性展示）。 */
   private portLabel: string | null = null;
-  private pollingTargets: Array<{ key: string; address: number }> = [];
-  private readonly activeTraces = new Map<
-    string,
-    { address: number; speedMs: number }
-  >();
 
   private readonly connectionListeners = new Set<
     (state: ConnectionState) => void
@@ -133,9 +121,29 @@ export class BrowserAppHost implements AppHost {
     this.messageStore.subscribe((message) => {
       for (const listener of this.messageListeners) listener(message);
     });
-    this.tableService = new RegisterTableService({
-      getSession: () => this.session,
-      getAddressAdjustMode: () => this.currentProfile?.addressAdjust ?? "off",
+    this.rtu = new RtuSessionHost({
+      clock: this.clock,
+      events: {
+        onLog: (event) => {
+          this.commLogStore.appendFromEvent(event);
+          for (const listener of this.commLogListeners) listener(event);
+        },
+        onStateChange: (state) => {
+          // 设备拔出（interrupted）策略由 RtuSessionHost 内部处理（停止轮询/追踪 + 消息）。
+          for (const listener of this.connectionListeners) listener(state);
+        },
+        onPollResult: (key, address, result) => {
+          for (const listener of this.pollResultListeners)
+            listener(key, address, result);
+        },
+        onTraceSample: (sample) => {
+          for (const listener of this.traceListeners) listener(sample);
+        },
+        onMessage: (message) => {
+          // 主机侧消息（如设备拔出）进入 messageStore，经订阅转发到 messageListeners。
+          this.messageStore.append(message);
+        },
+      },
     });
   }
 
@@ -255,13 +263,6 @@ export class BrowserAppHost implements AppHost {
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
   ): Promise<Result<void>> {
-    // 停止旧连接的轮询与追踪。
-    this.stopPolling();
-    this.trace?.stopAll();
-    await this.session?.disconnect();
-
-    this.currentProfile = profile;
-
     let transport: TransportPort;
     if (this.isMockMode) {
       // 复用持久 mock 实例（E2E 钩子指向它）。
@@ -307,61 +308,32 @@ export class BrowserAppHost implements AppHost {
       transport = openResult.value;
     }
 
-    const session = new CommunicationSession({
+    // 会话/协调器编排委托 RtuSessionHost（连接失败时其内部关闭传输，避免端口占用）。
+    return this.rtu.connect({
+      profile,
       transport,
-      clock: this.clock,
-      config: profile,
-      // 初始从站地址：连接后可由 UI 按活动表动态更新（setSlaveAddress）。
       slaveAddress: this.currentSlaveAddress,
-      onLog: (event) => {
-        this.commLogStore.appendFromEvent(event);
-        for (const listener of this.commLogListeners) listener(event);
-      },
-      onStateChange: (state) => {
-        if (state === "interrupted") {
-          // 设备拔出：停止轮询与追踪，并提示用户（§16.2.5）。
-          this.stopPolling();
-          this.trace?.stopAll();
-          this.pushMessage("error", "messages.deviceDisconnected");
-        }
-        for (const listener of this.connectionListeners) listener(state);
-      },
+      portLabel: this.isMockMode ? "Mock Device" : this.portLabel,
     });
-    const result = await session.connect();
-    if (!result.ok) {
-      return result;
-    }
-    this.session = session;
+  }
 
-    // 重建协调器并恢复轮询/追踪配置。
-    this.polling = new PollingCoordinator(session, this.clock, {
-      getIntervalMs: () => this.currentProfile?.interRequestDelayMs ?? 50,
-    });
-    this.polling.onResult((key, address, result) => {
-      for (const listener of this.pollResultListeners)
-        listener(key, address, result);
-    });
-    this.trace = new TraceCoordinator(session, this.clock);
-    this.trace.onSample((sample) => {
-      for (const listener of this.traceListeners) listener(sample);
-    });
-
-    if (this.pollingTargets.length > 0) {
-      this.polling.setTargets(this.pollingTargets);
-      this.polling.start();
-    }
-    for (const [key, entry] of this.activeTraces) {
-      this.trace.start(key, entry.address, entry.speedMs);
-    }
-    return ok(undefined);
+  /**
+   * 浏览器不支持 Modbus TCP（PRD §7.2、能力矩阵 modbusTcp:false）：
+   * UI 依能力矩阵不调用本方法；此处返回能力错误兜底。
+   */
+  async connectTcp(_profile: TcpConnectionProfile): Promise<Result<void>> {
+    return fail(
+      createMamepError({
+        code: "TCP_UNSUPPORTED",
+        category: "capability",
+        userMessageKey: "errors.tcpUnsupported",
+        technicalMessage: "Modbus TCP is not supported in the browser",
+      }),
+    );
   }
 
   async disconnect(): Promise<Result<void>> {
-    this.stopPolling();
-    this.trace?.stopAll();
-    const result = await this.session?.disconnect();
-    this.session = null;
-    return result ?? { ok: true, value: undefined };
+    return this.rtu.disconnect();
   }
 
   async copyTextToClipboard(text: string): Promise<Result<void>> {
@@ -389,7 +361,7 @@ export class BrowserAppHost implements AppHost {
   }
 
   getConnectionState(): ConnectionState {
-    return this.session?.getState() ?? "disconnected";
+    return this.rtu.getConnectionState();
   }
 
   subscribeConnectionState(
@@ -400,9 +372,11 @@ export class BrowserAppHost implements AppHost {
   }
 
   getCommProperties(): CommProperties {
-    const profile = this.currentProfile;
+    const profile = this.rtu.getProfile();
     return {
-      portLabel: this.isMockMode ? "Mock Device" : this.portLabel,
+      protocol: "rtu",
+      portLabel: this.rtu.getPortLabel(),
+      unitId: null,
       baudRate: profile?.baudRate ?? 9600,
       dataBits: profile?.dataBits ?? 8,
       stopBits: profile?.stopBits ?? 1,
@@ -419,57 +393,31 @@ export class BrowserAppHost implements AppHost {
   /** 更新当前会话从站地址（每表独立）：对后续所有请求（读/写/轮询/追踪）生效。 */
   setSlaveAddress(slave: number): void {
     this.currentSlaveAddress = slave;
-    this.session?.setSlaveAddress(slave);
+    this.rtu.setSlaveAddress(slave);
   }
 
   async readRow(row: RegisterRow): Promise<Result<number>> {
-    return this.tableService.readRow(row);
+    return this.rtu.readRow(row);
   }
 
   async writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
-    return this.tableService.writeRow(row);
+    return this.rtu.writeRow(row);
   }
 
   readAllRows(rows: BatchReadRow[]): BatchReadHandle {
-    if (this.session === null) {
-      return {
-        promise: Promise.resolve(
-          fail(
-            createMamepError({
-              code: "CONNECTION_NOT_CONNECTED",
-              category: "connection",
-              userMessageKey: "errors.notConnected",
-              technicalMessage: "no active connection",
-            }),
-          ),
-        ),
-        cancel: () => undefined,
-      };
-    }
-    const coordinator = new BatchReadCoordinator(this.session, this.clock);
-    return coordinator.readAll(rows, (key, result) => {
-      for (const listener of this.pollResultListeners) listener(key, 0, result);
-    });
+    return this.rtu.readAllRows(rows);
   }
 
   updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
-    this.pollingTargets = rows;
-    this.polling?.setTargets(rows);
-    if (rows.length > 0 && this.session !== null) {
-      this.polling?.start();
-    } else {
-      this.polling?.stop();
-    }
+    this.rtu.updatePollingTargets(rows);
   }
 
   startPolling(): void {
-    if (this.pollingTargets.length > 0 && this.session !== null) {
-      this.polling?.start();
-    }
+    this.rtu.startPolling();
   }
 
   stopPolling(): void {
-    this.polling?.stop();
+    this.rtu.stopPolling();
   }
 
   subscribePollResult(
@@ -480,13 +428,11 @@ export class BrowserAppHost implements AppHost {
   }
 
   traceStart(key: string, address: number, speedMs: number): void {
-    this.activeTraces.set(key, { address, speedMs });
-    this.trace?.start(key, address, speedMs);
+    this.rtu.traceStart(key, address, speedMs);
   }
 
   traceStop(key: string): void {
-    this.activeTraces.delete(key);
-    this.trace?.stop(key);
+    this.rtu.traceStop(key);
   }
 
   subscribeTraceSample(

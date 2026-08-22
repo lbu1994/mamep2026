@@ -5,11 +5,21 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
-import { createDefaultRtuProfile } from "@mamep2026/domain";
+import {
+  createDefaultRtuProfile,
+  createDefaultTcpProfile,
+  createEmptyRow,
+  RegisterAddress,
+} from "@mamep2026/domain";
+import type { ConnectionState } from "@mamep2026/communication";
 import type {
   MamepHostEvent,
+  SerialPortOption,
+  SessionBatchReadResponse,
+  SessionStateResponse,
   VscodeHostApi,
   VscodeHostDebugState,
+  WriteOutcomePayload,
 } from "@mamep2026/platform-api";
 import { vscodeCapabilities } from "@mamep2026/platform-api";
 import { InMemoryWorkspaceRepository } from "@mamep2026/test-kit";
@@ -64,6 +74,84 @@ function createFakeBridge(): {
         value: null,
       }),
     ),
+    // ---- RTU 会话 RPC（VSCode 接线，2026-08-23）----
+    enumerateSerialPorts: vi.fn(
+      async (): Promise<Result<SerialPortOption[]>> => ({
+        ok: true,
+        value: [{ portId: "COM4", label: "Fake (COM4)" }],
+      }),
+    ),
+    sessionConnect: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    sessionDisconnect: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    sessionGetState: vi.fn(
+      async (): Promise<Result<SessionStateResponse>> => ({
+        ok: true,
+        value: { connectionState: "disconnected" },
+      }),
+    ),
+    sessionSetSlaveAddress: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    sessionReadRow: vi.fn(async (): Promise<Result<number>> => ({
+      ok: true,
+      value: 0x1234,
+    })),
+    sessionWriteRow: vi.fn(
+      async (): Promise<Result<WriteOutcomePayload>> => ({
+        ok: true,
+        value: { kind: "write-succeeded-no-verify" },
+      }),
+    ),
+    sessionBatchRead: vi.fn(
+      async (): Promise<Result<SessionBatchReadResponse>> => ({
+        ok: true,
+        value: {
+          summary: {
+            batchId: "b-1",
+            totalRows: 1,
+            eligibleRows: 1,
+            successCount: 1,
+            failureCount: 0,
+            skippedCount: 0,
+            cancelledCount: 0,
+            startedAt: 0,
+            completedAt: 1,
+            durationMs: 1,
+          },
+        },
+      }),
+    ),
+    sessionUpdatePollingTargets: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    sessionPollingStart: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    sessionPollingStop: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    sessionTraceStart: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    sessionTraceStop: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    sessionTcpConnect: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
   };
   return {
     bridge,
@@ -86,13 +174,13 @@ describe("VscodeAppHost", () => {
     useAppStore.getState().setTheme("light");
   });
 
-  it("能力矩阵如实声明（骨架：RTU/TCP/串口/文件均未支持）", () => {
+  it("能力矩阵如实声明（RTU/TCP 已接线：modbusRtu/modbusTcp true、serialPorts enumerated）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
     expect(host.capabilities).toBe(vscodeCapabilities);
-    expect(host.capabilities.modbusRtu).toBe(false);
-    expect(host.capabilities.modbusTcp).toBe(false);
-    expect(host.capabilities.serialPorts).toBe("unsupported");
+    expect(host.capabilities.modbusRtu).toBe(true);
+    expect(host.capabilities.modbusTcp).toBe(true);
+    expect(host.capabilities.serialPorts).toBe("enumerated");
     expect(host.capabilities.filesystem).toBe("unsupported");
     expect(host.isMockMode).toBe(false);
   });
@@ -132,11 +220,209 @@ describe("VscodeAppHost", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("连接不虚报成功（骨架未实现串口，能力缺失如实失败）", async () => {
+  it("连接不虚报成功（未选择串口返回校验错误）", async () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
     const profile = createDefaultRtuProfile();
     const connect = await host.connect(profile, null);
     expect(connect.ok).toBe(false);
+    if (!connect.ok) expect(connect.error.code).toBe("SERIAL_DEVICE_NOT_SELECTED");
+  });
+});
+
+describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
+  it("connect 经 session-connect RPC 委托 Extension Host（携带 profile payload 与从站地址）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const profile = createDefaultRtuProfile();
+    const result = await host.connect(profile, { id: "COM4", label: "Fake (COM4)" });
+    expect(result.ok).toBe(true);
+    expect(bridge.sessionConnect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portId: "COM4",
+        slaveAddress: 1,
+        profile: expect.objectContaining({ protocol: "rtu", baudRate: 9600 }),
+      }),
+    );
+    expect(host.getConnectionState()).toBe("connected");
+  });
+
+  it("session-connect 失败时连接不虚报成功", async () => {
+    const { bridge } = createFakeBridge();
+    (bridge.sessionConnect as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      error: { code: "SERIAL_PORT_IN_USE", category: "transport", severity: "error", retryable: false, userMessageKey: "errors.serialPortInUse", technicalMessage: "in use" },
+    });
+    const host = makeHost(bridge);
+    const result = await host.connect(createDefaultRtuProfile(), { id: "COM4", label: "x" });
+    expect(result.ok).toBe(false);
+    expect(host.getConnectionState()).toBe("disconnected");
+  });
+
+  it("enumerateSerialPorts 走 serial-enumerate RPC 并缓存端口列表", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const result = await host.enumerateSerialPorts();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([{ portId: "COM4", label: "Fake (COM4)" }]);
+    const handle = await host.selectSerialPort("COM4");
+    expect(handle.ok).toBe(true);
+    if (handle.ok) expect(handle.value).toEqual({ id: "COM4", label: "Fake (COM4)" });
+  });
+
+  it("readRow / writeRow 经 RPC 委托（row 序列化为 payload）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const profile = createDefaultRtuProfile();
+    await host.connect(profile, { id: "COM4", label: "x" });
+    const row = createEmptyRow();
+    const address = RegisterAddress.create(0x1000);
+    if (address.ok) row.addressValue = address.value;
+    const read = await host.readRow(row);
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.value).toBe(0x1234);
+    expect(bridge.sessionReadRow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rowId: row.rowId,
+        addressValue: { value: 0x1000 },
+      }),
+    );
+    const write = await host.writeRow(row);
+    expect(write.ok).toBe(true);
+    if (write.ok) expect(write.value).toEqual({ kind: "write-succeeded-no-verify" });
+  });
+
+  it("connection-state 事件更新缓存并通知订阅者", () => {
+    const { bridge, emit } = createFakeBridge();
+    const host = makeHost(bridge);
+    const states: ConnectionState[] = [];
+    host.subscribeConnectionState((s) => states.push(s));
+    emit({ kind: "connection-state", payload: { state: "connected" } });
+    expect(host.getConnectionState()).toBe("connected");
+    expect(states).toEqual(["connected"]);
+  });
+
+  it("poll-result 事件经 fromResultPayload 还原并通知订阅者", () => {
+    const { bridge, emit } = createFakeBridge();
+    const host = makeHost(bridge);
+    const results: Array<[string, number, number]> = [];
+    host.subscribePollResult((key, _address, result) => {
+      if (result.ok) results.push([key, _address, result.value]);
+    });
+    emit({ kind: "poll-result", payload: { key: "row-a", address: 1, result: { ok: true, value: 0xabcd } } });
+    expect(results).toEqual([["row-a", 1, 0xabcd]]);
+  });
+
+  it("comm-log 事件还原 CommunicationLogEvent（bytes 从 hex 还原）", () => {
+    const { bridge, emit } = createFakeBridge();
+    const host = makeHost(bridge);
+    const bytes: number[][] = [];
+    host.subscribeCommLog((e) => bytes.push(Array.from(e.bytes)));
+    emit({
+      kind: "comm-log",
+      payload: {
+        event: {
+          timestamp: 1,
+          direction: "request",
+          bytesHex: "010300000001",
+          protocol: "rtu",
+          slaveAddress: 1,
+          functionCode: 3,
+          userAddress: 0,
+          sentAddress: 0,
+          quantity: 1,
+          attempt: 1,
+          status: "success",
+          errorCode: null,
+          exceptionCode: null,
+          source: "manual-read",
+          durationMs: null,
+        },
+      },
+    });
+    expect(bytes).toEqual([[1, 3, 0, 0, 0, 1]]);
+  });
+
+  it("app-message 事件（设备拔出）通知订阅者", () => {
+    const { bridge, emit } = createFakeBridge();
+    const host = makeHost(bridge);
+    const keys: string[] = [];
+    host.subscribeMessage((m) => keys.push(m.messageKey));
+    emit({
+      kind: "app-message",
+      payload: {
+        message: { timestamp: 1, level: "error", messageKey: "messages.deviceDisconnected", detail: null },
+      },
+    });
+    expect(keys).toEqual(["messages.deviceDisconnected"]);
+  });
+
+  it("readAllRows 单次往返：响应汇总 resolve BatchReadHandle.promise", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const handle = host.readAllRows([{ key: "row-a", address: 1 }]);
+    const summary = await handle.promise;
+    expect(summary.ok).toBe(true);
+    if (summary.ok) expect(summary.value.successCount).toBe(1);
+  });
+
+  it("traceStart/traceStop 与 polling 命令经 RPC 委托", () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    host.traceStart("row-a", 1, 100);
+    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100);
+    host.traceStop("row-a");
+    expect(bridge.sessionTraceStop).toHaveBeenCalledWith("row-a");
+    host.updatePollingTargets([{ key: "row-a", address: 1 }]);
+    expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalledWith([{ key: "row-a", address: 1 }]);
+    host.startPolling();
+    expect(bridge.sessionPollingStart).toHaveBeenCalled();
+    host.stopPolling();
+    expect(bridge.sessionPollingStop).toHaveBeenCalled();
+  });
+});
+
+describe("VscodeAppHost TCP 远程会话代理（2026-08-23）", () => {
+  it("connectTcp 经 session-tcp-connect RPC 委托 Extension Host（携带 TCP profile payload）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const profile = createDefaultTcpProfile("PLC-502");
+    profile.host = "192.168.1.10";
+    profile.port = 502;
+    profile.unitId = 1;
+    const result = await host.connectTcp(profile);
+    expect(result.ok).toBe(true);
+    expect(bridge.sessionTcpConnect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: expect.objectContaining({
+          protocol: "tcp",
+          host: "192.168.1.10",
+          port: 502,
+          unitId: 1,
+        }),
+      }),
+    );
+    expect(host.getConnectionState()).toBe("connected");
+    // 通信属性摘要显示 host:port。
+    expect(host.getCommProperties().portLabel).toBe("192.168.1.10:502");
+  });
+
+  it("session-tcp-connect 失败时连接不虚报成功", async () => {
+    const { bridge } = createFakeBridge();
+    (bridge.sessionTcpConnect as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      error: {
+        code: "TCP_CONNECTION_FAILED",
+        category: "connection",
+        severity: "error",
+        retryable: true,
+        userMessageKey: "errors.tcpConnectionFailed",
+        technicalMessage: "refused",
+      },
+    });
+    const host = makeHost(bridge);
+    const result = await host.connectTcp(createDefaultTcpProfile());
+    expect(result.ok).toBe(false);
+    expect(host.getConnectionState()).toBe("disconnected");
   });
 });

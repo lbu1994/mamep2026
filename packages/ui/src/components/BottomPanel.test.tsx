@@ -262,7 +262,9 @@ describe("BottomPanel comm log", () => {
 
 describe("BottomPanel properties", () => {
   const fullProperties: CommProperties = {
+    protocol: "rtu",
     portLabel: "COM3",
+    unitId: null,
     baudRate: 19200,
     dataBits: 8,
     stopBits: 1,

@@ -791,6 +791,7 @@ describe("setConnectionSettings", () => {
     if (before === undefined) throw new Error("missing profile");
 
     useAppStore.getState().setConnectionSettings({
+      protocol: "rtu",
       baudRate: 115200,
       dataBits: 7,
       stopBits: 2,
@@ -802,7 +803,8 @@ describe("setConnectionSettings", () => {
       addressAdjust: "on",
     });
 
-    const profile = useAppStore.getState().workspace.connectionProfiles[0];
+    const stored = useAppStore.getState().workspace.connectionProfiles[0];
+    const profile = stored !== undefined && stored.protocol === "rtu" ? stored : undefined;
     // 端口参数被更新。
     expect(profile?.baudRate).toBe(115200);
     expect(profile?.dataBits).toBe(7);
@@ -820,6 +822,7 @@ describe("setConnectionSettings", () => {
 
   it("越界等非法值被拒绝，不写入工作区", () => {
     useAppStore.getState().setConnectionSettings({
+      protocol: "rtu",
       baudRate: 115200,
       dataBits: 7,
       stopBits: 2,
@@ -831,8 +834,11 @@ describe("setConnectionSettings", () => {
       addressAdjust: "on",
     });
     // 越界 requestTimeoutMs（>60000）使持久化 schema 校验失败，整个写入被拒绝。
+    const stored = useAppStore.getState().workspace.connectionProfiles[0];
     expect(
-      useAppStore.getState().workspace.connectionProfiles[0]?.requestTimeoutMs,
+      stored !== undefined && stored.protocol === "rtu"
+        ? stored.requestTimeoutMs
+        : undefined,
     ).toBe(1000);
   });
 });

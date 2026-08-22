@@ -104,6 +104,30 @@ const rtuProfileSchema = z.object({
   recentPortHint: z.string().nullable().default(null),
 });
 
+/**
+ * TCP 连接配置持久化（2026-08-23 确认：入 workspace，恢复 host/port/unitId/超时/重试；
+ * 保持离线、不自动连接）。unitId 0~255 默认 0；autoReconnect 为 P1 能力默认 false（UI 灰显）；
+ * interRequestDelayMs 为内部字段（请求间隔，兼作 WP 轮询间隔）。
+ */
+const tcpProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  protocol: z.literal("tcp"),
+  host: z.string().min(1),
+  port: z.number().int().min(1).max(65535),
+  unitId: z
+    .number()
+    .int()
+    .min(0)
+    .max(255)
+    .default(defaultConfig.tcp.unitId),
+  connectTimeoutMs: z.number().int().min(0),
+  requestTimeoutMs: z.number().int().min(0),
+  retryCount: z.number().int().min(0).max(10),
+  autoReconnect: z.boolean().default(defaultConfig.tcp.autoReconnect),
+  interRequestDelayMs: z.number().int().min(0),
+});
+
 const pluginStateSchema = z.object({
   pluginId: z.string(),
   enabled: z.boolean(),
@@ -120,7 +144,9 @@ export const workspaceSchema = z.object({
   updatedAt: z.number(),
   activeSheetId: z.string().nullable(),
   sheets: z.array(sheetSchema),
-  connectionProfiles: z.array(rtuProfileSchema),
+  connectionProfiles: z.array(
+    z.discriminatedUnion("protocol", [rtuProfileSchema, tcpProfileSchema]),
+  ),
   activeConnectionProfileId: z.string().nullable(),
   pollingSettings: z.object({
     enabledBehavior: z.literal("manual"),

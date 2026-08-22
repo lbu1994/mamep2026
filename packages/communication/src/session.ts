@@ -10,17 +10,23 @@ import {
   type MamepError,
   type Result,
   type RtuConnectionProfile,
+  type TcpConnectionProfile,
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import {
   decodeRtuResponse,
   encodeReadHoldingRegistersRequest,
+  encodeTcpReadHoldingRegistersRequest,
+  encodeTcpWriteSingleRegisterRequest,
   encodeWriteSingleRegisterRequest,
   FUNCTION_READ_HOLDING,
   FUNCTION_WRITE_MULTIPLE,
   type DecodedRtuResponse,
+  type DecodedTcpResponse,
   type ExpectedResponse,
+  type TcpExpectedResponse,
 } from "@mamep2026/protocol-modbus";
+import { TcpFrameParser } from "./tcp-frame-parser";
 import {
   createCancellationToken,
   type CancellationToken,
@@ -44,13 +50,19 @@ interface ExchangeMeta {
   quantity: number;
 }
 
+/** 会话协议：rtu（默认）/ tcp（2026-08-23 TCP 接线）。 */
+export type SessionProtocol = "rtu" | "tcp";
+
+/** RTU 与 TCP 解码结果的公共形态（kind 判别兼容）。 */
+type DecodedResponse = DecodedRtuResponse | DecodedTcpResponse;
+
 interface PendingExchange {
   cancelToken: CancellationToken;
   /** 取消当前等待并失败返回（disconnect / 资源释放用）。 */
   cancel: (reason: string) => void;
   /** 写入完成后开始超时计时（超时从完整请求实际发送后开始）。 */
   startTimeout: () => void;
-  promise: Promise<Result<{ result: DecodedRtuResponse; frame: Uint8Array }>>;
+  promise: Promise<Result<{ result: DecodedResponse; frame: Uint8Array }>>;
 }
 
 function cancelledError(reason: string): MamepError {
@@ -169,9 +181,13 @@ export interface SessionOptions {
   transport: TransportPort;
   clock: Clock;
   /** 连接配置快照；超时、重试、Rx Delay 的修改对后续请求生效。 */
-  config: RtuConnectionProfile;
-  /** 初始从站地址（默认 1）；连接后可经 setSlaveAddress 动态更新（2026-08-19）。 */
+  config: RtuConnectionProfile | TcpConnectionProfile;
+  /** 协议：rtu（默认）/ tcp。 */
+  protocol?: SessionProtocol;
+  /** 初始从站地址（RTU，默认 1）；连接后可经 setSlaveAddress 动态更新（2026-08-19）。 */
   slaveAddress?: number;
+  /** TCP Unit ID（MBAP 单元标识，默认 0）：连接时由 profile 确定，会话内不做动态修改。 */
+  unitId?: number;
   onLog?: (event: CommunicationLogEvent) => void;
   onStateChange?: (state: ConnectionState) => void;
   fairnessThresholdMs?: number;
@@ -182,11 +198,19 @@ export class CommunicationSession {
   private readonly options: SessionOptions;
   private readonly scheduler: RequestScheduler;
   private pendingExchange: PendingExchange | null = null;
-  /** 当前从站地址：连接后可动态更新（每表独立设置，2026-08-19）。 */
+  /** 会话协议：rtu / tcp。 */
+  private readonly protocol: SessionProtocol;
+  /** TCP Unit ID（MBAP 单元标识，默认 0）。 */
+  private readonly unitId: number;
+  /** 当前从站地址（RTU）：连接后可动态更新（每表独立设置，2026-08-19）。 */
   private slaveAddress: number;
+  /** TCP Transaction ID 计数器：16 位递增回绕，连接时重置（§8.7）。 */
+  private nextTransactionId = 0;
 
   constructor(options: SessionOptions) {
     this.options = options;
+    this.protocol = options.protocol ?? "rtu";
+    this.unitId = options.unitId ?? 0;
     this.slaveAddress = options.slaveAddress ?? 1;
     this.scheduler = new RequestScheduler(options.clock, {
       fairnessThresholdMs: options.fairnessThresholdMs ?? 2000,
@@ -200,7 +224,7 @@ export class CommunicationSession {
           timestamp: this.options.clock.now(),
           direction: "response",
           bytes: chunk,
-          protocol: "rtu",
+          protocol: this.protocol,
           slaveAddress: null,
           functionCode: null,
           userAddress: null,
@@ -245,8 +269,8 @@ export class CommunicationSession {
       timestamp: this.options.clock.now(),
       direction: "response",
       bytes: new Uint8Array(0),
-      protocol: "rtu",
-      slaveAddress: this.slaveAddress,
+      protocol: this.protocol,
+      slaveAddress: this.logUnitAddress(),
       functionCode: null,
       userAddress: null,
       sentAddress: null,
@@ -276,12 +300,15 @@ export class CommunicationSession {
     return this.stateMachine.getState();
   }
 
-  /** 动态更新当前从站地址：对后续所有请求（读/写/轮询/追踪）生效（2026-08-19）。 */
+  /**
+   * 动态更新当前从站地址（RTU）：对后续所有请求（读/写/轮询/追踪）生效（2026-08-19）。
+   * TCP 的 Unit ID 连接时由 profile 确定，会话内不做动态修改（2026-08-23）。
+   */
   setSlaveAddress(slave: number): void {
     this.slaveAddress = slave;
   }
 
-  getConfig(): RtuConnectionProfile {
+  getConfig(): RtuConnectionProfile | TcpConnectionProfile {
     return this.options.config;
   }
 
@@ -290,6 +317,8 @@ export class CommunicationSession {
     if (!this.stateMachine.transition("connecting").ok) {
       this.stateMachine.forceState("connecting");
     }
+    // TCP Transaction ID 连接重建后重置/重新初始化（§8.7）。
+    this.nextTransactionId = 0;
     const openResult = await this.options.transport.open();
     if (!openResult.ok) {
       if (!this.stateMachine.transition("failed").ok)
@@ -360,20 +389,8 @@ export class CommunicationSession {
     sentAddress: number,
     meta: { source: RequestSource; userAddress?: number },
   ): Promise<Result<number>> {
-    const expect: ExpectedResponse = {
-      kind: "read-holding",
-      slaveAddress: this.slaveAddress,
-      startAddress: sentAddress,
-      quantity: 1,
-    };
     const decoded = await this.executeExchange(
-      () =>
-        encodeReadHoldingRegistersRequest({
-          slaveAddress: this.slaveAddress,
-          startAddress: sentAddress,
-          quantity: 1,
-        }),
-      expect,
+      () => this.buildReadAttempt(sentAddress),
       {
         source: meta.source,
         userAddress: meta.userAddress ?? null,
@@ -406,20 +423,8 @@ export class CommunicationSession {
     rawValue: number,
     meta: { source: RequestSource; userAddress?: number },
   ): Promise<Result<WriteOutcome>> {
-    const expect: ExpectedResponse = {
-      kind: "write-single",
-      slaveAddress: this.slaveAddress,
-      address: sentAddress,
-      quantity: 1,
-    };
     const decoded = await this.executeExchange(
-      () =>
-        encodeWriteSingleRegisterRequest({
-          slaveAddress: this.slaveAddress,
-          address: sentAddress,
-          rawValue,
-        }),
-      expect,
+      () => this.buildWriteAttempt(sentAddress, rawValue),
       {
         source: meta.source,
         userAddress: meta.userAddress ?? null,
@@ -449,26 +454,31 @@ export class CommunicationSession {
   }
 
   private async executeExchange(
-    buildRequest: () => Uint8Array,
-    expect: ExpectedResponse,
+    buildAttempt: () => {
+      frame: Uint8Array;
+      expect: ExpectedResponse | TcpExpectedResponse;
+    },
     meta: ExchangeMeta,
-  ): Promise<Result<DecodedRtuResponse>> {
+  ): Promise<Result<DecodedResponse>> {
     const maxAttempts = this.options.config.retryCount + 1;
-    let lastResult: Result<DecodedRtuResponse> | null = null;
+    let lastResult: Result<DecodedResponse> | null = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (this.stateMachine.getState() !== "connected") {
         return fail(notConnectedError());
       }
 
-      const frame = buildRequest();
+      const { frame, expect } = buildAttempt();
       const startedAt = this.options.clock.now();
       this.emitLog({
         timestamp: startedAt,
         direction: "request",
         bytes: frame,
-        protocol: "rtu",
-        slaveAddress: expect.slaveAddress,
+        protocol: this.protocol,
+        slaveAddress:
+          "slaveAddress" in expect
+            ? expect.slaveAddress
+            : this.logUnitAddress(),
         functionCode: meta.functionCode,
         userAddress: meta.userAddress,
         sentAddress: meta.sentAddress,
@@ -553,18 +563,112 @@ export class CommunicationSession {
     return error.category === "timeout" || error.category === "transport";
   }
 
-  private startExchange(expect: ExpectedResponse): PendingExchange {
-    const parser = new RtuFrameParser(expect);
+  /** 构建单次读尝试（frame + expect）：TCP 每次尝试（含重试）使用新 Transaction ID（§12.2）。 */
+  private buildReadAttempt(sentAddress: number): {
+    frame: Uint8Array;
+    expect: ExpectedResponse | TcpExpectedResponse;
+  } {
+    if (this.protocol === "tcp") {
+      const transactionId = this.allocateTransactionId();
+      return {
+        frame: encodeTcpReadHoldingRegistersRequest({
+          transactionId,
+          unitId: this.unitId,
+          startAddress: sentAddress,
+          quantity: 1,
+        }),
+        expect: {
+          kind: "read-holding",
+          transactionId,
+          unitId: this.unitId,
+          startAddress: sentAddress,
+          quantity: 1,
+        },
+      };
+    }
+    return {
+      frame: encodeReadHoldingRegistersRequest({
+        slaveAddress: this.slaveAddress,
+        startAddress: sentAddress,
+        quantity: 1,
+      }),
+      expect: {
+        kind: "read-holding",
+        slaveAddress: this.slaveAddress,
+        startAddress: sentAddress,
+        quantity: 1,
+      },
+    };
+  }
+
+  /** 构建单次写尝试（frame + expect）：TCP 每次尝试（含重试）使用新 Transaction ID（§12.2）。 */
+  private buildWriteAttempt(sentAddress: number, rawValue: number): {
+    frame: Uint8Array;
+    expect: ExpectedResponse | TcpExpectedResponse;
+  } {
+    if (this.protocol === "tcp") {
+      const transactionId = this.allocateTransactionId();
+      return {
+        frame: encodeTcpWriteSingleRegisterRequest({
+          transactionId,
+          unitId: this.unitId,
+          address: sentAddress,
+          rawValue,
+        }),
+        expect: {
+          kind: "write-single",
+          transactionId,
+          unitId: this.unitId,
+          address: sentAddress,
+          quantity: 1,
+        },
+      };
+    }
+    return {
+      frame: encodeWriteSingleRegisterRequest({
+        slaveAddress: this.slaveAddress,
+        address: sentAddress,
+        rawValue,
+      }),
+      expect: {
+        kind: "write-single",
+        slaveAddress: this.slaveAddress,
+        address: sentAddress,
+        quantity: 1,
+      },
+    };
+  }
+
+  /** TCP Transaction ID：16 位递增回绕（§8.7）；RTU 无事务 ID（不使用，返回 0）。 */
+  private allocateTransactionId(): number {
+    const tid = this.nextTransactionId;
+    this.nextTransactionId = (this.nextTransactionId + 1) & 0xffff;
+    return tid;
+  }
+
+  /** 日志字段 slaveAddressOrUnitId：RTU 为当前从站地址，TCP 为 Unit ID。 */
+  private logUnitAddress(): number {
+    return this.protocol === "tcp" ? this.unitId : this.slaveAddress;
+  }
+
+  private startExchange(
+    expect: ExpectedResponse | TcpExpectedResponse,
+  ): PendingExchange {
+    // RTU 期望响应含 slaveAddress 字段；TCP 期望响应含 transactionId/unitId（无歧义判别）。
+    const parser =
+      "slaveAddress" in expect
+        ? new RtuFrameParser(expect)
+        : new TcpFrameParser(expect);
     const cancelToken = createCancellationToken();
     let settled = false;
     let timeoutHandle: { cancel(): void } | null = null;
     let unsubscribeData: (() => void) | null = null;
     let resolvePromise: (
-      result: Result<{ result: DecodedRtuResponse; frame: Uint8Array }>,
+      result: Result<{ result: DecodedResponse; frame: Uint8Array }>,
     ) => void = () => {};
 
     const finish = (
-      result: Result<{ result: DecodedRtuResponse; frame: Uint8Array }>,
+      result: Result<{ result: DecodedResponse; frame: Uint8Array }>,
     ): void => {
       if (settled) return;
       settled = true;
@@ -577,7 +681,7 @@ export class CommunicationSession {
     };
 
     const promise = new Promise<
-      Result<{ result: DecodedRtuResponse; frame: Uint8Array }>
+      Result<{ result: DecodedResponse; frame: Uint8Array }>
     >((resolve) => {
       resolvePromise = resolve;
     });
@@ -621,8 +725,8 @@ export class CommunicationSession {
       timestamp: this.options.clock.now(),
       direction: "response",
       bytes,
-      protocol: "rtu",
-      slaveAddress: this.slaveAddress,
+      protocol: this.protocol,
+      slaveAddress: this.logUnitAddress(),
       functionCode: meta.functionCode,
       userAddress: meta.userAddress,
       sentAddress: meta.sentAddress,

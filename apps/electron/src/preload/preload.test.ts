@@ -56,6 +56,17 @@ describe("preload 白名单桥", () => {
       "platform",
       "readTextFromClipboard",
       "selectSerialPort",
+      "sessionBatchRead",
+      "sessionDisconnect",
+      "sessionGetState",
+      "sessionPollingStart",
+      "sessionPollingStop",
+      "sessionReadRow",
+      "sessionTcpConnect",
+      "sessionTraceStart",
+      "sessionTraceStop",
+      "sessionUpdatePollingTargets",
+      "sessionWriteRow",
     ]);
     expect(bridge.platform).toBe("electron");
   });
@@ -67,7 +78,7 @@ describe("preload 白名单桥", () => {
       messageId: "m",
       kind: "get-capabilities",
       ok: true,
-      payload: { modbusRtu: true, modbusTcp: false },
+      payload: { modbusRtu: true, modbusTcp: true },
     });
     const result = await bridge.getCapabilities();
     expect(invoke).toHaveBeenCalledWith(
@@ -84,7 +95,7 @@ describe("preload 白名单桥", () => {
     expect(envelope.messageId.length).toBeGreaterThan(0);
     expect(result).toEqual({
       ok: true,
-      value: { modbusRtu: true, modbusTcp: false },
+      value: { modbusRtu: true, modbusTcp: true },
     });
   });
 

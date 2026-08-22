@@ -12,6 +12,8 @@ import type {
   Workspace,
 } from "@mamep2026/domain";
 import {
+  createDefaultRtuProfile,
+  createDefaultTcpProfile,
   createEmptyRow,
   createEmptyWorkspace,
   createRegisterSheet,
@@ -262,8 +264,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       // 防御性校验：InputNumber 临时越界（如输入 999）时拒绝写入，避免污染持久化数据。
       const validated = persistedSettingsSchema.safeParse(settings);
       if (!validated.success) return {};
+      const next = validated.data;
+      // 按协议重建 profile（保留 id）：切换协议时从默认值 + 持久化子集构建。
+      const merged =
+        next.protocol === "rtu"
+          ? { ...createDefaultRtuProfile(), ...next, id: current.id }
+          : { ...createDefaultTcpProfile(), ...next, id: current.id };
       const connectionProfiles = [
-        { ...current, ...validated.data },
+        merged,
         ...state.workspace.connectionProfiles.slice(1),
       ];
       return {

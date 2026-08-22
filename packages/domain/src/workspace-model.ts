@@ -5,6 +5,7 @@
 import { defaultConfig } from "./config";
 import type { RegisterAddress } from "./register-address";
 import type { RawRegisterValue } from "./raw-value";
+import type { TcpConnectionProfile } from "./tcp-profile";
 
 /** 品牌化 ID：避免不同类型 ID 互相混用（docs/AGENTS.md §9.2）。 */
 export type WorkspaceId = string & { readonly __brand: "WorkspaceId" };
@@ -160,7 +161,7 @@ export interface Workspace {
   updatedAt: number;
   activeSheetId: SheetId | null;
   sheets: RegisterSheet[];
-  connectionProfiles: RtuConnectionProfile[];
+  connectionProfiles: (RtuConnectionProfile | TcpConnectionProfile)[];
   activeConnectionProfileId: ConnectionProfileId | null;
   pollingSettings: PollingSettings;
   readVerifySettings: ReadVerifySettings;
@@ -216,6 +217,24 @@ export function createDefaultRtuProfile(name = "RTU"): RtuConnectionProfile {
     interRequestDelayMs: c.interRequestDelayMs,
     addressAdjust: c.addressAdjust,
     recentPortHint: null,
+  };
+}
+
+/** 创建默认 TCP 连接配置（值来自集中 defaultConfig）。 */
+export function createDefaultTcpProfile(name = "TCP"): TcpConnectionProfile {
+  const c = defaultConfig.tcp;
+  return {
+    id: newConnectionProfileId(),
+    name,
+    protocol: "tcp",
+    host: "127.0.0.1",
+    port: 502,
+    unitId: c.unitId,
+    connectTimeoutMs: c.connectTimeoutMs,
+    requestTimeoutMs: c.requestTimeoutMs,
+    retryCount: c.retryCount,
+    autoReconnect: c.autoReconnect,
+    interRequestDelayMs: c.interRequestDelayMs,
   };
 }
 

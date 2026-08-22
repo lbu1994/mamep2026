@@ -12,22 +12,98 @@
  */
 import * as fs from "node:fs";
 import * as vscode from "vscode";
+import { NodePlatformHost } from "@mamep2026/platform-node";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
+  toAppMessagePayload,
+  toCommLogEventPayload,
+  toResultPayload,
   vscodeCapabilities,
   type ColorThemeKind,
+  type HostErrorMessage,
   type HostEventMessage,
+  type HostResponseMessage,
 } from "@mamep2026/platform-api";
-import { handleVscodeInvoke, type IpcDeps } from "./ipc";
+import { DevFakeSerialFactory } from "./dev-fake-serial";
+import { createDevFakeTcpServer, type DevFakeTcpServer } from "./dev-fake-tcp";
+import {
+  errorEnvelope,
+  extractMessageId,
+  handleVscodeInvoke,
+  type IpcDeps,
+} from "./ipc";
+import { VscodeSessionHost } from "./session-host";
 
 /** 当前主面板（单实例：重复命令 reveal）。 */
 let panel: vscode.WebviewPanel | undefined;
 /** 面板级订阅：dispose 时统一释放。 */
 let panelDisposables: vscode.Disposable[] = [];
+/** 装配后的依赖（供 deactivate 释放会话）。 */
+let deps: IpcDeps | undefined;
+/** dev/e2e 假 TCP 设备（MAMEP_FAKE_TCP=1，deactivate 时停止）。 */
+let fakeTcpServer: DevFakeTcpServer | null = null;
+/** event Envelope 消息号（面板事件与主题事件共用，避免冲突）。 */
+let eventSeq = 0;
+
+/** 构造 HostMessage v1 event Envelope（payload 形状由 kind 契约保证，边界一次收窄）。 */
+function hostEventMessage(
+  kind: HostEventMessage["kind"],
+  payload: unknown,
+): HostEventMessage {
+  return {
+    protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+    type: "event",
+    messageId: `evt-${Date.now()}-${eventSeq++}`,
+    kind,
+    payload,
+  } as HostEventMessage;
+}
+
+/**
+ * 装配 Extension Host 侧 RTU 会话（docs/TECH_DESIGN §34.3.16 共享边界）：
+ * 生产用 RealSerialPortFactory（serialport@13）；dev/e2e `MAMEP_FAKE_SERIAL=1` 时注入
+ * DevFakeSerialFactory（宿主进程内假串口，内联 CRC16 RTU responder）。
+ */
+function createSessionHost(
+  isDev: boolean,
+  postEvent: (event: HostEventMessage) => void,
+): VscodeSessionHost {
+  const factory =
+    isDev && process.env.MAMEP_FAKE_SERIAL === "1"
+      ? new DevFakeSerialFactory()
+      : undefined;
+  const platform = new NodePlatformHost({ factory });
+  return new VscodeSessionHost({
+    platform,
+    events: {
+      onLog: (event) =>
+        postEvent(hostEventMessage("comm-log", { event: toCommLogEventPayload(event) })),
+      onStateChange: (state) =>
+        postEvent(hostEventMessage("connection-state", { state })),
+      onPollResult: (key, address, result) =>
+        postEvent(
+          hostEventMessage("poll-result", {
+            key,
+            address,
+            result: toResultPayload(result),
+          }),
+        ),
+      onTraceSample: (sample) =>
+        postEvent(hostEventMessage("trace-sample", { sample })),
+      onMessage: (message) =>
+        postEvent(
+          hostEventMessage("app-message", {
+            message: toAppMessagePayload(message),
+          }),
+        ),
+    },
+  });
+}
 
 function createDeps(
   context: vscode.ExtensionContext,
   isDev: boolean,
+  postEvent: (event: HostEventMessage) => void,
 ): IpcDeps {
   return {
     appVersion: () =>
@@ -40,6 +116,7 @@ function createDeps(
       await vscode.env.clipboard.writeText(text);
     },
     clipboardReadText: async () => vscode.env.clipboard.readText(),
+    session: createSessionHost(isDev, postEvent),
   };
 }
 
@@ -60,33 +137,67 @@ function toColorThemeKind(kind: vscode.ColorThemeKind): ColorThemeKind {
 export function activate(context: vscode.ExtensionContext): void {
   // dev：MAMEP_DEV_URL 存在则 Webview 以 iframe 加载 dev server（浏览器/Electron 同页面）。
   const devUrl = process.env.MAMEP_DEV_URL;
-  // 探针/调试能力仅开发模式（F5 / extensionDevelopmentPath，含 e2e）开放。
-  const isDev = context.extensionMode === vscode.ExtensionMode.Development;
-  const deps = createDeps(context, isDev);
+  // 探针/调试能力仅开发/测试模式开放（F5 / extensionDevelopmentPath / @vscode/test-electron
+  // e2e 为 ExtensionMode.Test，非 Production 即视为可探测）；生产打包（Production）禁用。
+  const isDev = context.extensionMode !== vscode.ExtensionMode.Production;
+  // 会话事件（通信日志/连接状态/轮询/追踪/消息）推送到当前面板；无面板时静默丢弃。
+  const postEvent = (event: HostEventMessage): void => {
+    if (panel !== undefined) void panel.webview.postMessage(event);
+  };
+  const activeDeps = createDeps(context, isDev, postEvent);
+  deps = activeDeps;
+
+  // dev/e2e：MAMEP_FAKE_TCP=1 时启动本地回环 Modbus TCP Server（假 TCP 设备，127.0.0.1:1502）。
+  // 与 MAMEP_FAKE_SERIAL 同为宿主进程内注入（仅 dev/test 门控，生产打包不装配）。
+  if (isDev && process.env.MAMEP_FAKE_TCP === "1") {
+    fakeTcpServer = createDevFakeTcpServer();
+    void fakeTcpServer.start().catch(() => {
+      // 端口占用等启动失败：e2e 会因连接失败暴露，此处静默。
+      fakeTcpServer = null;
+    });
+  }
 
   context.subscriptions.push(
     vscode.commands.registerCommand("mamep2026.openMainPanel", () => {
-      openMainPanel(context, deps, devUrl);
+      openMainPanel(context, activeDeps, devUrl);
     }),
     // dev/测试探针命令（e2e/调试用）：返回当前面板引用。
     // 仅扩展宿主进程内代码可调用命令（Webview 无法调用），暴露面板引用无安全风险；
     // 真正敏感的状态探针（debug:get-state RPC）仍由 isDev 门控。
     vscode.commands.registerCommand("mamep2026.debug:getPanel", () => panel),
+    // dev/e2e：经真实 HostMessage v1 RPC 路径（schema 校验 → ipc 分发 → 会话 → 串口）
+    // 驱动 RTU 闭环（tests/e2e-vscode/run.test.ts）。生产构建禁用；返回 response/error Envelope。
+    vscode.commands.registerCommand(
+      "mamep2026.debug:rpc",
+      (raw: unknown): Promise<HostResponseMessage | HostErrorMessage> => {
+        if (!isDev) {
+          return Promise.resolve(
+            errorEnvelope(
+              extractMessageId(raw),
+              "DEBUG_PROBE_DISABLED",
+              "debug rpc is disabled in production",
+              "capability",
+            ),
+          );
+        }
+        return handleVscodeInvoke(raw, activeDeps);
+      },
+    ),
     // 颜色主题变化 → 推送 color-theme-changed 事件。
     vscode.window.onDidChangeActiveColorTheme(() => {
-      if (panel !== undefined) postThemeEvent(panel, deps.colorTheme());
+      if (panel !== undefined) postThemeEvent(panel, activeDeps.colorTheme());
     }),
     // 重载/重启后恢复面板（需 activationEvents: onWebviewPanel:mamep2026.mainPanel）。
     vscode.window.registerWebviewPanelSerializer("mamep2026.mainPanel", {
       deserializeWebviewPanel: async (webviewPanel) => {
         panel = webviewPanel;
-        setupPanel(webviewPanel, deps);
+        setupPanel(webviewPanel, activeDeps);
         webviewPanel.webview.html = getWebviewHtml(
           webviewPanel.webview,
           context.extensionUri,
           devUrl,
         );
-        postThemeEvent(webviewPanel, deps.colorTheme());
+        postThemeEvent(webviewPanel, activeDeps.colorTheme());
       },
     }),
   );
@@ -141,6 +252,8 @@ function setupPanel(p: vscode.WebviewPanel, deps: IpcDeps): void {
       panel = undefined;
       for (const disposable of panelDisposables) disposable.dispose();
       panelDisposables = [];
+      // Webview 关闭即断开（用户决策，2026-08-23）：释放 RTU 会话与串口，避免端口占用。
+      void deps?.session.dispose();
     }),
     p.onDidChangeViewState((event) => {
       // 面板重新可见时重推主题，保证与宿主当前主题一致。
@@ -273,4 +386,11 @@ export function deactivate(): void {
   for (const disposable of panelDisposables) disposable.dispose();
   panelDisposables = [];
   panel = undefined;
+  // 扩展停用（§22.2）：释放会话（断开连接/释放串口），避免端口残留占用。
+  void deps?.session.dispose();
+  // 停止 dev/e2e 假 TCP 设备（若已启动）。
+  if (fakeTcpServer !== null) {
+    void fakeTcpServer.stop();
+    fakeTcpServer = null;
+  }
 }

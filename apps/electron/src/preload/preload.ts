@@ -6,6 +6,7 @@
  */
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  BatchReadRowPayload,
   HostDebugState,
   HostErrorMessage,
   HostEventMessage,
@@ -13,6 +14,11 @@ import type {
   HostResponseMessage,
   MamepHostApi,
   MamepHostEvent,
+  RegisterRowPayload,
+  SessionBatchReadResponse,
+  SessionStateResponse,
+  SessionTcpConnectPayload,
+  WriteOutcomePayload,
 } from "@mamep2026/platform-api";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
@@ -71,6 +77,54 @@ const api: MamepHostApi = {
   async selectSerialPort(portId: string): Promise<Result<null>> {
     const result = await invoke<null>("select-serial-port", { portId });
     return result;
+  },
+  /** 打开并连接主进程 TCP 会话（session-tcp-connect；Electron TCP 走主进程，2026-08-23）。 */
+  async sessionTcpConnect(
+    payload: SessionTcpConnectPayload,
+  ): Promise<Result<null>> {
+    const result = await invoke<null>("session-tcp-connect", {
+      profile: payload.profile,
+    });
+    return result;
+  },
+  // ---- 远程会话 RPC（Electron TCP 会话在主进程，Renderer 远程代理）----
+  sessionDisconnect(): Promise<Result<null>> {
+    return invoke<null>("session-disconnect", {});
+  },
+  sessionGetState(): Promise<Result<SessionStateResponse>> {
+    return invoke<SessionStateResponse>("session-get-state", {});
+  },
+  sessionReadRow(row: RegisterRowPayload): Promise<Result<number>> {
+    return invoke<number>("session-read-row", { row });
+  },
+  sessionWriteRow(row: RegisterRowPayload): Promise<Result<WriteOutcomePayload>> {
+    return invoke<WriteOutcomePayload>("session-write-row", { row });
+  },
+  sessionBatchRead(
+    rows: BatchReadRowPayload[],
+  ): Promise<Result<SessionBatchReadResponse>> {
+    return invoke<SessionBatchReadResponse>("session-batch-read", { rows });
+  },
+  sessionUpdatePollingTargets(
+    rows: Array<{ key: string; address: number }>,
+  ): Promise<Result<null>> {
+    return invoke<null>("session-update-polling-targets", { rows });
+  },
+  sessionPollingStart(): Promise<Result<null>> {
+    return invoke<null>("session-polling-start", {});
+  },
+  sessionPollingStop(): Promise<Result<null>> {
+    return invoke<null>("session-polling-stop", {});
+  },
+  sessionTraceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+  ): Promise<Result<null>> {
+    return invoke<null>("session-trace-start", { key, address, speedMs });
+  },
+  sessionTraceStop(key: string): Promise<Result<null>> {
+    return invoke<null>("session-trace-stop", { key });
   },
   getDebugState(): Promise<Result<HostDebugState | null>> {
     return invoke<HostDebugState | null>("debug:get-state", {});

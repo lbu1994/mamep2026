@@ -8,6 +8,7 @@ import type {
   RegisterRow,
   Result,
   RtuConnectionProfile,
+  TcpConnectionProfile,
   Workspace,
 } from "@mamep2026/domain";
 import type {
@@ -33,7 +34,11 @@ export interface TraceSampleEvent {
 }
 
 export interface CommProperties {
+  /** 连接协议：RTU 显示串口参数；TCP 显示 host/port/unitId（2026-08-23）。 */
+  protocol: "rtu" | "tcp";
   portLabel: string | null;
+  /** TCP Unit ID（仅 TCP 有意义；RTU 为 null）。 */
+  unitId: number | null;
   baudRate: number;
   dataBits: number;
   stopBits: number;
@@ -79,6 +84,11 @@ export interface AppHost {
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
   ): Promise<Result<void>>;
+  /**
+   * TCP 连接（2026-08-23 两端 TCP 接线）：profile 即连接参数（host/port/unitId/超时/重试），
+   * 无串口句柄。仅 Electron/VSCode 支持；浏览器返回能力错误（UI 依能力矩阵不调用）。
+   */
+  connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
   disconnect(): Promise<Result<void>>;
   getConnectionState(): ConnectionState;
   getCommProperties(): CommProperties;

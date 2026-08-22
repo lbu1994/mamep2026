@@ -20,6 +20,12 @@ const extensionTestsPath = path.resolve(
   "tests/e2e-vscode/dist/run.test.js",
 );
 
+// e2e 统一注入宿主进程内假串口（Extension Host 装配 DevFakeSerialFactory，内联
+// CRC16 RTU responder）与假 TCP 设备（DevFakeTcpServer，127.0.0.1:1502，MBAP
+// responder）：确定性、无真实设备依赖；runTests 子进程继承本环境变量。
+process.env.MAMEP_FAKE_SERIAL = "1";
+process.env.MAMEP_FAKE_TCP = "1";
+
 try {
   const code = await runTests({
     extensionDevelopmentPath,

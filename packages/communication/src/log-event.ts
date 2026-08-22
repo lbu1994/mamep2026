@@ -18,7 +18,9 @@ export interface CommunicationLogEvent {
   timestamp: number;
   direction: "request" | "response";
   bytes: Uint8Array;
-  protocol: "rtu";
+  /** 协议：rtu / tcp（2026-08-23 TCP 接线）。 */
+  protocol: "rtu" | "tcp";
+  /** slaveAddressOrUnitId：RTU 为从站地址，TCP 为 Unit ID。 */
   slaveAddress: number | null;
   functionCode: number | null;
   /** 用户输入地址（Address Adjust 之前的地址） */

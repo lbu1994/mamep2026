@@ -5,4 +5,5 @@ export * from "./raw-value";
 export * from "./register-address";
 export * from "./result";
 export * from "./slave-address";
+export * from "./tcp-profile";
 export * from "./workspace-model";

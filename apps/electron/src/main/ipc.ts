@@ -3,18 +3,45 @@
  * 与 electron 运行时解耦：外部能力经 IpcDeps 注入，便于单测校验/分发/拒绝路径
  * （未知 kind、非法 payload、发送者校验、debug 探针打包禁用等）。
  */
-import { createMamepError } from "@mamep2026/domain";
-import type { ConnectionState } from "@mamep2026/communication";
+import { createMamepError, ok, type Result } from "@mamep2026/domain";
+import type { RegisterRow, TcpConnectionProfile } from "@mamep2026/domain";
+import type {
+  BatchReadHandle,
+  BatchReadRow,
+  ConnectionState,
+  WriteOutcome,
+} from "@mamep2026/communication";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   electronCapabilities,
   hostRequestSchema,
+  registerRowFromPayload,
+  tcpConnectionProfileFromPayload,
+  toBatchReadSummaryPayload,
   toErrorPayload,
+  toWriteOutcomePayload,
   type HostDebugState,
   type HostErrorMessage,
   type HostRequestMessage,
   type HostResponseMessage,
+  type SessionStateResponse,
 } from "@mamep2026/platform-api";
+
+/** 主进程侧 TCP 会话能力（ElectronSessionHost 实现；测试注入 fake）。 */
+export interface ElectronSessionLike {
+  connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
+  disconnect(): Promise<Result<void>>;
+  getConnectionState(): ConnectionState;
+  readRow(row: RegisterRow): Promise<Result<number>>;
+  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>>;
+  readAllRows(rows: BatchReadRow[]): BatchReadHandle;
+  updatePollingTargets(rows: Array<{ key: string; address: number }>): void;
+  startPolling(): void;
+  stopPolling(): void;
+  traceStart(key: string, address: number, speedMs: number): void;
+  traceStop(key: string): void;
+  dispose(): Promise<void>;
+}
 
 /** 主进程侧外部能力（Main 装配真实实现，测试注入 fake）。 */
 export interface IpcDeps {
@@ -30,6 +57,47 @@ export interface IpcDeps {
    * portId 空串 = 用户取消；sender 用于归属校验；返回是否成功解析。
    */
   resolveSerialPortSelection(portId: string, sender: unknown): boolean;
+  /** TCP 会话（Electron 主进程承载，2026-08-23 两端 TCP 接线）。 */
+  session: ElectronSessionLike;
+}
+
+/** 会话 RPC 包装：run 返回 Result 并映射为 response/error Envelope。 */
+async function sessionResult<T>(
+  message: HostRequestMessage,
+  run: () => Promise<Result<T>>,
+): Promise<HostResponseMessage | HostErrorMessage> {
+  try {
+    const result = await run();
+    if (result.ok) return okResponse(message, result.value);
+    return errorEnvelope(
+      message.messageId,
+      result.error.code,
+      result.error.technicalMessage,
+    );
+  } catch (cause) {
+    return errorEnvelope(
+      message.messageId,
+      "SESSION_INTERNAL_ERROR",
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+}
+
+/** 会话 void 命令包装（轮询/追踪/目标更新等）。 */
+async function sessionVoid(
+  message: HostRequestMessage,
+  run: () => void,
+): Promise<HostResponseMessage | HostErrorMessage> {
+  try {
+    run();
+    return okResponse(message, null);
+  } catch (cause) {
+    return errorEnvelope(
+      message.messageId,
+      "SESSION_INTERNAL_ERROR",
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
 }
 
 /** 尽力从无法解析的原始消息中提取 messageId（诊断用；解析失败时为空串）。 */
@@ -74,11 +142,11 @@ export function okResponse(
   };
 }
 
-export function handleRequest(
+export async function handleRequest(
   message: HostRequestMessage,
   deps: IpcDeps,
   sender?: unknown,
-): HostResponseMessage | HostErrorMessage {
+): Promise<HostResponseMessage | HostErrorMessage> {
   switch (message.kind) {
     case "get-capabilities":
       return okResponse(message, electronCapabilities);
@@ -106,6 +174,77 @@ export function handleRequest(
         message.messageId,
         "COLOR_THEME_UNSUPPORTED",
         "color theme RPC is not supported on the Electron host",
+      );
+    // ---- RTU 会话 kind（2026-08-23）：Electron RTU 运行在 Renderer（Web Serial），
+    // 不发给主进程；此处返回能力错误并满足穷尽守卫。----
+    case "serial-enumerate":
+    case "session-connect":
+    case "session-set-slave-address":
+      return errorEnvelope(
+        message.messageId,
+        "SESSION_NOT_AVAILABLE",
+        "RTU session RPC runs in the renderer (Web Serial); not handled by the Electron main host",
+      );
+    // ---- TCP 会话（2026-08-23 两端 TCP 接线）：主进程 ElectronSessionHost 承载。----
+    case "session-tcp-connect": {
+      const { profile } = message.payload;
+      return sessionResult(message, () =>
+        deps.session.connectTcp(tcpConnectionProfileFromPayload(profile)),
+      );
+    }
+    case "session-disconnect":
+      return sessionResult(message, () => deps.session.disconnect());
+    case "session-get-state":
+      return sessionResult(message, () =>
+        Promise.resolve({
+          ok: true,
+          value: { connectionState: deps.session.getConnectionState() },
+        } satisfies Result<SessionStateResponse>),
+      );
+    case "session-read-row": {
+      const { row } = message.payload;
+      return sessionResult(message, () =>
+        deps.session.readRow(registerRowFromPayload(row)),
+      );
+    }
+    case "session-write-row": {
+      const { row } = message.payload;
+      return sessionResult(message, async () => {
+        const result = await deps.session.writeRow(registerRowFromPayload(row));
+        return result.ok ? ok(toWriteOutcomePayload(result.value)) : result;
+      });
+    }
+    case "session-batch-read": {
+      const { rows } = message.payload;
+      return sessionResult(message, async () => {
+        const handle = deps.session.readAllRows(
+          rows.map((r) => ({ key: r.key, address: r.address })),
+        );
+        const result = await handle.promise;
+        return result.ok
+          ? ok({ summary: toBatchReadSummaryPayload(result.value) })
+          : result;
+      });
+    }
+    case "session-update-polling-targets":
+      return sessionVoid(message, () =>
+        deps.session.updatePollingTargets(message.payload.rows),
+      );
+    case "session-polling-start":
+      return sessionVoid(message, () => deps.session.startPolling());
+    case "session-polling-stop":
+      return sessionVoid(message, () => deps.session.stopPolling());
+    case "session-trace-start":
+      return sessionVoid(message, () =>
+        deps.session.traceStart(
+          message.payload.key,
+          message.payload.address,
+          message.payload.speedMs,
+        ),
+      );
+    case "session-trace-stop":
+      return sessionVoid(message, () =>
+        deps.session.traceStop(message.payload.key),
       );
     case "debug:get-state":
       // 开发/测试探针（Playwright Electron E2E 用）：打包构建禁用。
@@ -143,10 +282,10 @@ export interface HandleInvokeOptions {
   deps: IpcDeps;
 }
 
-export function handleInvoke(
+export async function handleInvoke(
   raw: unknown,
   options: HandleInvokeOptions,
-): HostResponseMessage | HostErrorMessage {
+): Promise<HostResponseMessage | HostErrorMessage> {
   // 仅接受主窗口渲染进程的消息（防跨窗口/未知发送者）。
   if (!options.isSenderMainWindow) {
     return errorEnvelope(

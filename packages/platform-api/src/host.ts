@@ -2,7 +2,11 @@
  * 平台统一接口（docs/TECH_DESIGN.md §6.12、§7）。
  * UI 只通过该接口访问平台能力；平台不支持的能力由能力矩阵明确声明。
  */
-import type { Result, RtuConnectionProfile } from "@mamep2026/domain";
+import type {
+  Result,
+  RtuConnectionProfile,
+  TcpConnectionProfile,
+} from "@mamep2026/domain";
 import type { PlatformCapabilities } from "@mamep2026/domain";
 import type { Clock } from "@mamep2026/communication";
 import type { TransportPort } from "@mamep2026/communication";
@@ -22,5 +26,12 @@ export interface PlatformHost {
   openSerialTransport(
     handle: SerialDeviceHandle,
     profile: RtuConnectionProfile,
+  ): Promise<Result<TransportPort>>;
+  /**
+   * 用连接配置打开 TCP 传输（Node 端能力，packages/platform-node）。
+   * 不支持 TCP 的平台（如浏览器）返回 capability 错误。
+   */
+  openTcpTransport(
+    profile: TcpConnectionProfile,
   ): Promise<Result<TransportPort>>;
 }

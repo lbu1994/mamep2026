@@ -16,15 +16,20 @@ import type { IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ConnectionState } from "@mamep2026/communication";
+import { NodeTcpPlatformHost } from "@mamep2026/platform-node/tcp";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   MAMEP_IPC_EVENT_CHANNEL,
   MAMEP_IPC_INVOKE_CHANNEL,
+  toAppMessagePayload,
+  toCommLogEventPayload,
+  toResultPayload,
   type HostErrorMessage,
   type HostEventMessage,
   type HostResponseMessage,
 } from "@mamep2026/platform-api";
 import { handleInvoke, type IpcDeps } from "./ipc";
+import { ElectronSessionHost } from "./session-host";
 import {
   deriveAllowedOrigins,
   installSerialPermissionHandlers,
@@ -48,10 +53,73 @@ let eventSeq = 0;
  */
 let serialPermissionHandlers: SerialPermissionHandlers | null = null;
 /**
- * 主进程侧连接状态：MVP 下连接会话由 Renderer（共享 UI）驱动，主进程不跟踪实时状态，
- * 此处恒为离线（仅供 dev 探针 debug:get-state 的初始值；真实状态以 Renderer 为准）。
+ * 主进程侧连接状态：RTU 下连接会话由 Renderer（共享 UI）驱动，主进程不跟踪实时状态，
+ * 此处恒为离线（仅供 dev 探针 debug:get-state 的初始值）；TCP 会话由主进程承载，
+ * 其状态经 connection-state 事件推送 Renderer（真实状态以会话为准）。
  */
 const currentConnectionState: ConnectionState = "disconnected";
+
+/** 主进程侧 TCP 会话宿主（Electron TCP 走主进程，惰性装配）。 */
+let electronSessionHost: ElectronSessionHost | null = null;
+
+/** 主进程会话事件 → 推送渲染进程（HostMessage v1 event Envelope；无窗口时静默丢弃）。 */
+function postSessionEvent(event: HostEventMessage): void {
+  if (mainWindow !== null && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(MAMEP_IPC_EVENT_CHANNEL, event);
+  }
+}
+
+/** 装配主进程 TCP 会话（2026-08-23 两端 TCP 接线）：NodeTcpPlatformHost（仅 TCP，零 serialport）+ TcpSessionHost。 */
+function ensureSessionHost(): ElectronSessionHost {
+  if (electronSessionHost === null) {
+    electronSessionHost = new ElectronSessionHost({
+      platform: new NodeTcpPlatformHost(),
+      events: {
+        onLog: (event) =>
+          postSessionEvent({
+            protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+            type: "event",
+            messageId: nextEventId(),
+            kind: "comm-log",
+            payload: { event: toCommLogEventPayload(event) },
+          }),
+        onStateChange: (state) =>
+          postSessionEvent({
+            protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+            type: "event",
+            messageId: nextEventId(),
+            kind: "connection-state",
+            payload: { state },
+          }),
+        onPollResult: (key, address, result) =>
+          postSessionEvent({
+            protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+            type: "event",
+            messageId: nextEventId(),
+            kind: "poll-result",
+            payload: { key, address, result: toResultPayload(result) },
+          }),
+        onTraceSample: (sample) =>
+          postSessionEvent({
+            protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+            type: "event",
+            messageId: nextEventId(),
+            kind: "trace-sample",
+            payload: { sample },
+          }),
+        onMessage: (message) =>
+          postSessionEvent({
+            protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+            type: "event",
+            messageId: nextEventId(),
+            kind: "app-message",
+            payload: { message: toAppMessagePayload(message) },
+          }),
+      },
+    });
+  }
+  return electronSessionHost;
+}
 
 function nextEventId(): string {
   eventSeq += 1;
@@ -69,12 +137,14 @@ const ipcDeps: IpcDeps = {
   clipboardReadText: () => clipboard.readText(),
   resolveSerialPortSelection: (portId, sender) =>
     serialPermissionHandlers?.resolvePendingSelection(portId, sender) ?? false,
+  // TCP 会话：主进程承载（Electron TCP，2026-08-23 两端 TCP 接线）。
+  session: ensureSessionHost(),
 };
 
-function handleInvokeEvent(
+async function handleInvokeEvent(
   event: IpcMainInvokeEvent,
   raw: unknown,
-): HostResponseMessage | HostErrorMessage {
+): Promise<HostResponseMessage | HostErrorMessage> {
   return handleInvoke(raw, {
     isSenderMainWindow: event.sender === mainWindow?.webContents,
     sender: event.sender,
@@ -157,5 +227,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  // 窗口全部关闭：释放主进程 TCP 会话（断开连接/释放 socket）。
+  void electronSessionHost?.dispose();
   if (process.platform !== "darwin") app.quit();
 });

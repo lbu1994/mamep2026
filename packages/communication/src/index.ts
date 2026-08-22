@@ -6,5 +6,6 @@ export * from "./log-event";
 export * from "./polling-coordinator";
 export * from "./request-scheduler";
 export * from "./session";
+export * from "./tcp-frame-parser";
 export * from "./trace-coordinator";
 export * from "./transport-port";

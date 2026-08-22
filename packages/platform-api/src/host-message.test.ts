@@ -7,10 +7,12 @@ import {
   MAMEP_IPC_EVENT_CHANNEL,
   MAMEP_IPC_INVOKE_CHANNEL,
   fromErrorPayload,
+  fromResultPayload,
   parseHostMessage,
   toErrorPayload,
+  toResultPayload,
 } from "./host-message";
-import { createMamepError } from "@mamep2026/domain";
+import { createMamepError, fail, ok } from "@mamep2026/domain";
 
 describe("host-message protocol v1", () => {
   it("accepts a valid get-capabilities request", () => {
@@ -170,5 +172,281 @@ describe("host-message protocol v1", () => {
 
   it("exposes distinct invoke/event channels", () => {
     expect(MAMEP_IPC_INVOKE_CHANNEL).not.toBe(MAMEP_IPC_EVENT_CHANNEL);
+  });
+});
+
+describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () => {
+  const profile = {
+    id: "conn-1",
+    name: "RTU",
+    protocol: "rtu",
+    baudRate: 9600,
+    dataBits: 8,
+    stopBits: 1,
+    parity: "none",
+    flowControl: "off",
+    requestTimeoutMs: 1000,
+    retryCount: 1,
+    interRequestDelayMs: 50,
+    addressAdjust: "off",
+    recentPortHint: null,
+  };
+
+  it("accepts serial-enumerate request", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-enum",
+      kind: "serial-enumerate",
+      payload: {},
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts a valid session-connect request", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-connect",
+      kind: "session-connect",
+      payload: { portId: "COM4", profile, slaveAddress: 1 },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects session-connect with missing portId", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-connect-bad",
+      kind: "session-connect",
+      payload: { profile, slaveAddress: 1 },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a valid session-read-row request", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-read",
+      kind: "session-read-row",
+      payload: {
+        row: {
+          rowId: "row-1",
+          order: 1,
+          name: "",
+          comment: "",
+          addressDraft: "",
+          addressValue: { value: 0x1000 },
+          dataType: "hex",
+          pollingEnabled: false,
+          traceEnabled: false,
+          cellText: "",
+          lastKnownRawValue: null,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects session-read-row with invalid dataType", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-read-bad",
+      kind: "session-read-row",
+      payload: {
+        row: {
+          rowId: "row-1",
+          order: 1,
+          name: "",
+          comment: "",
+          addressDraft: "",
+          addressValue: { value: 1 },
+          dataType: "float32",
+          pollingEnabled: false,
+          traceEnabled: false,
+          cellText: "",
+          lastKnownRawValue: null,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a valid comm-log event", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "evt-log",
+      kind: "comm-log",
+      payload: {
+        event: {
+          timestamp: 1,
+          direction: "request",
+          bytesHex: "01030000",
+          protocol: "rtu",
+          slaveAddress: 1,
+          functionCode: 3,
+          userAddress: 0,
+          sentAddress: 0,
+          quantity: 1,
+          attempt: 1,
+          status: "success",
+          errorCode: null,
+          exceptionCode: null,
+          source: "manual-read",
+          durationMs: null,
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects comm-log event with invalid status", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "evt-log-bad",
+      kind: "comm-log",
+      payload: {
+        event: {
+          timestamp: 1,
+          direction: "request",
+          bytesHex: "01030000",
+          protocol: "rtu",
+          slaveAddress: 1,
+          functionCode: 3,
+          userAddress: 0,
+          sentAddress: 0,
+          quantity: 1,
+          attempt: 1,
+          status: "nope",
+          errorCode: null,
+          exceptionCode: null,
+          source: "manual-read",
+          durationMs: null,
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a valid poll-result event", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "evt-poll",
+      kind: "poll-result",
+      payload: {
+        key: "row-a",
+        address: 1,
+        result: { ok: true, value: 1234 },
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts a valid app-message event", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "evt-msg",
+      kind: "app-message",
+      payload: {
+        message: {
+          timestamp: 1,
+          level: "error",
+          messageKey: "messages.deviceDisconnected",
+          detail: null,
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects unknown session request kind", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-unknown",
+      kind: "session-rm-rf",
+      payload: {},
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("round-trips a Result<number> payload", () => {
+    const restored = fromResultPayload(toResultPayload(ok(1234)));
+    expect(restored.ok).toBe(true);
+    if (restored.ok) expect(restored.value).toBe(1234);
+
+    const failed = createMamepError({
+      code: "REQUEST_TIMEOUT",
+      category: "timeout",
+      retryable: true,
+      userMessageKey: "errors.requestTimeout",
+      technicalMessage: "timeout",
+    });
+    const restoredFail = fromResultPayload(toResultPayload(fail(failed)));
+    expect(restoredFail.ok).toBe(false);
+    if (!restoredFail.ok) expect(restoredFail.error.code).toBe("REQUEST_TIMEOUT");
+  });
+});
+
+describe("host-message TCP session kinds（2026-08-23 两端 TCP 接线）", () => {
+  const tcpProfile = {
+    id: "conn-tcp-1",
+    name: "PLC",
+    protocol: "tcp",
+    host: "192.168.1.10",
+    port: 502,
+    unitId: 0,
+    connectTimeoutMs: 5000,
+    requestTimeoutMs: 1000,
+    retryCount: 1,
+    autoReconnect: false,
+    interRequestDelayMs: 50,
+  };
+
+  it("accepts a valid session-tcp-connect request", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-tcp-connect",
+      kind: "session-tcp-connect",
+      payload: { profile: tcpProfile },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects session-tcp-connect with an RTU profile", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-tcp-connect-bad",
+      kind: "session-tcp-connect",
+      payload: {
+        profile: { ...tcpProfile, protocol: "rtu" },
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects session-tcp-connect with missing host", () => {
+    const { host: _host, ...noHost } = tcpProfile;
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-tcp-connect-nohost",
+      kind: "session-tcp-connect",
+      payload: { profile: noHost },
+    });
+    expect(result.ok).toBe(false);
   });
 });

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createEmptyWorkspace, type Workspace } from "@mamep2026/domain";
+import {
+  createEmptyWorkspace,
+  type RtuConnectionProfile,
+  type Workspace,
+} from "@mamep2026/domain";
 import { parseWorkspace, serializeWorkspace } from "./schema";
 
 function mutate(w: Workspace, patch: (mutable: Workspace) => void): Workspace {
@@ -7,11 +11,21 @@ function mutate(w: Workspace, patch: (mutable: Workspace) => void): Workspace {
   return w;
 }
 
+/** 测试辅助：默认工作区首个 profile 为 RTU，收窄联合类型后返回。 */
+function firstRtuProfile(
+  profiles: Workspace["connectionProfiles"],
+): RtuConnectionProfile {
+  const profile = profiles[0];
+  if (profile === undefined || profile.protocol !== "rtu") {
+    throw new Error("expected first connection profile to be RTU");
+  }
+  return profile;
+}
+
 describe("connection profile persistence", () => {
   it("persists port parameters and non-port settings across a round-trip", () => {
     const workspace = mutate(createEmptyWorkspace(), (w) => {
-      const profile = w.connectionProfiles[0];
-      if (profile === undefined) return;
+      const profile = firstRtuProfile(w.connectionProfiles);
       // 端口连接参数（持久化）
       profile.baudRate = 115200;
       profile.dataBits = 7;
@@ -37,19 +51,19 @@ describe("connection profile persistence", () => {
     const parsed = parseWorkspace(JSON.parse(serialized));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    const profile = parsed.value.connectionProfiles[0];
+    const profile = firstRtuProfile(parsed.value.connectionProfiles);
     // 端口参数恢复。
-    expect(profile?.baudRate).toBe(115200);
-    expect(profile?.dataBits).toBe(7);
-    expect(profile?.stopBits).toBe(2);
-    expect(profile?.parity).toBe("even");
-    expect(profile?.flowControl).toBe("rts-cts");
-    expect(profile?.recentPortHint).toBe("COM10");
+    expect(profile.baudRate).toBe(115200);
+    expect(profile.dataBits).toBe(7);
+    expect(profile.stopBits).toBe(2);
+    expect(profile.parity).toBe("even");
+    expect(profile.flowControl).toBe("rts-cts");
+    expect(profile.recentPortHint).toBe("COM10");
     // 非端口参数恢复。
-    expect(profile?.requestTimeoutMs).toBe(2000);
-    expect(profile?.retryCount).toBe(3);
-    expect(profile?.interRequestDelayMs).toBe(120);
-    expect(profile?.addressAdjust).toBe("on");
+    expect(profile.requestTimeoutMs).toBe(2000);
+    expect(profile.retryCount).toBe(3);
+    expect(profile.interRequestDelayMs).toBe(120);
+    expect(profile.addressAdjust).toBe("on");
     // 每表独立从站地址恢复。
     expect(parsed.value.sheets[0]?.slaveAddress).toBe(5);
   });
@@ -76,16 +90,16 @@ describe("connection profile persistence", () => {
     const parsed = parseWorkspace(legacy);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    const restored = parsed.value.connectionProfiles[0];
+    const restored = firstRtuProfile(parsed.value.connectionProfiles);
     // 端口字段回填默认值；非端口字段保留。
-    expect(restored?.baudRate).toBe(9600);
-    expect(restored?.dataBits).toBe(8);
-    expect(restored?.stopBits).toBe(1);
-    expect(restored?.parity).toBe("none");
-    expect(restored?.flowControl).toBe("off");
-    expect(restored?.recentPortHint).toBeNull();
+    expect(restored.baudRate).toBe(9600);
+    expect(restored.dataBits).toBe(8);
+    expect(restored.stopBits).toBe(1);
+    expect(restored.parity).toBe("none");
+    expect(restored.flowControl).toBe("off");
+    expect(restored.recentPortHint).toBeNull();
     // 从站地址已迁移为表级字段：profile 不再含该字段。
-    expect("slaveAddress" in (restored ?? {})).toBe(false);
+    expect("slaveAddress" in restored).toBe(false);
   });
 
   it("parses legacy persisted profiles (round-trip shape unchanged)", () => {
@@ -109,15 +123,15 @@ describe("connection profile persistence", () => {
     const parsed = parseWorkspace(legacy);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    const profile = parsed.value.connectionProfiles[0];
+    const profile = firstRtuProfile(parsed.value.connectionProfiles);
     // 端口字段与非端口字段均从旧数据恢复。
-    expect(profile?.baudRate).toBe(57600);
-    expect(profile?.parity).toBe("odd");
-    expect(profile?.recentPortHint).toBe("COM10");
-    expect(profile?.interRequestDelayMs).toBe(200);
-    expect(profile?.requestTimeoutMs).toBe(3000);
+    expect(profile.baudRate).toBe(57600);
+    expect(profile.parity).toBe("odd");
+    expect(profile.recentPortHint).toBe("COM10");
+    expect(profile.interRequestDelayMs).toBe(200);
+    expect(profile.requestTimeoutMs).toBe(3000);
     // 旧 profile 中的 slaveAddress 被剥离，不再进入领域对象。
-    expect("slaveAddress" in (profile ?? {})).toBe(false);
+    expect("slaveAddress" in profile).toBe(false);
     // 从站地址以表级默认 1 回退（sheet 缺省补默认）。
     expect(parsed.value.sheets[0]?.slaveAddress).toBe(1);
   });
@@ -174,8 +188,9 @@ describe("workspace schema round-trip", () => {
     expect(value.schemaVersion).toBe(workspace.schemaVersion);
     expect(value.sheets).toHaveLength(1);
     expect(value.connectionProfiles).toHaveLength(1);
-    expect(value.connectionProfiles[0]?.interRequestDelayMs).toBe(50);
-    expect(value.connectionProfiles[0]?.addressAdjust).toBe("off");
+    const rtu = firstRtuProfile(value.connectionProfiles);
+    expect(rtu.interRequestDelayMs).toBe(50);
+    expect(rtu.addressAdjust).toBe("off");
     // 从站地址为表级字段：默认 1。
     expect(value.sheets[0]?.slaveAddress).toBe(1);
   });
@@ -350,5 +365,76 @@ describe("workspace schema round-trip", () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.value.sheets[0]?.open).toBe(false);
+  });
+});
+
+describe("tcp connection profile persistence", () => {
+  it("round-trips a TCP profile alongside the default RTU profile", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      w.connectionProfiles = [
+        {
+          id: "conn-tcp" as never,
+          name: "PLC",
+          protocol: "tcp",
+          host: "192.168.1.10",
+          port: 502,
+          unitId: 0,
+          connectTimeoutMs: 3000,
+          requestTimeoutMs: 2000,
+          retryCount: 3,
+          autoReconnect: false,
+          interRequestDelayMs: 80,
+        },
+      ];
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const profile = parsed.value.connectionProfiles[0];
+    expect(profile?.protocol).toBe("tcp");
+    expect(profile).toMatchObject({
+      name: "PLC",
+      host: "192.168.1.10",
+      port: 502,
+      unitId: 0,
+      connectTimeoutMs: 3000,
+      requestTimeoutMs: 2000,
+      retryCount: 3,
+      autoReconnect: false,
+      interRequestDelayMs: 80,
+    });
+  });
+
+  it("backfills TCP defaults for legacy data missing extended fields", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      w.connectionProfiles = [
+        {
+          id: "conn-tcp" as never,
+          name: "TCP",
+          protocol: "tcp",
+          host: "127.0.0.1",
+          port: 502,
+          unitId: 0,
+          connectTimeoutMs: 5000,
+          requestTimeoutMs: 1000,
+          retryCount: 1,
+          autoReconnect: false,
+          interRequestDelayMs: 50,
+        },
+      ];
+    });
+    // 模拟早期写入数据：只保留核心字段。
+    const legacy = JSON.parse(serializeWorkspace(workspace));
+    const profile = legacy.connectionProfiles[0];
+    delete profile.unitId;
+    delete profile.autoReconnect;
+    const parsed = parseWorkspace(legacy);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.connectionProfiles[0]).toMatchObject({
+      protocol: "tcp",
+      unitId: 0,
+      autoReconnect: false,
+    });
   });
 });

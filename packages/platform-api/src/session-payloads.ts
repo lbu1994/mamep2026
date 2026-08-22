@@ -1,0 +1,316 @@
+/**
+ * RTU 会话 RPC 载荷（HostMessage v1，VSCode 端接线，docs/TECH_DESIGN.md §22/§23）。
+ *
+ * 跨边界传输的领域对象用「可序列化投影」：Zod schema 产出纯 JSON 载荷类型，
+ * 配合 toXxxPayload / xxxFromPayload 在边界往返。品牌化 ID（ConnectionProfileId /
+ * RowId）在 JSON 往返后丢失名义类型，由 FromPayload 重建（结构化收窄，非蒙混）。
+ *
+ * 本文件只定义领域对象投影，不包含 Envelope / kind 白名单（见 host-message.ts），
+ * 不反向依赖 host-message.ts，避免循环导入。
+ */
+import { z } from "zod";
+import {
+  RawRegisterValue,
+  RegisterAddress,
+  type ConnectionProfileId,
+  type RegisterRow,
+  type RowId,
+  type RtuConnectionProfile,
+  type TcpConnectionProfile,
+} from "@mamep2026/domain";
+import type {
+  BatchReadRow,
+  BatchReadSummary,
+  CommunicationLogEvent,
+  WriteOutcome,
+} from "@mamep2026/communication";
+import type { ApplicationMessage } from "@mamep2026/logging";
+
+// ---- 字节 <-> hex（RPC 载荷紧凑传输；显示格式化仍用 communication formatBytesHex）----
+
+export function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export function hexToBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+// ---- RtuConnectionProfile ----
+
+export const rtuConnectionProfilePayloadSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  protocol: z.literal("rtu"),
+  baudRate: z.number(),
+  dataBits: z.union([z.literal(7), z.literal(8)]),
+  stopBits: z.union([z.literal(1), z.literal(2)]),
+  parity: z.enum(["none", "even", "odd"]),
+  flowControl: z.enum(["off", "rts-cts", "xon-xoff"]),
+  requestTimeoutMs: z.number(),
+  retryCount: z.number(),
+  /** Rx Delay：请求间隔，兼作 WP 轮询间隔。 */
+  interRequestDelayMs: z.number(),
+  addressAdjust: z.enum(["off", "on"]),
+  recentPortHint: z.string().nullable(),
+});
+export type RtuConnectionProfilePayload = z.infer<
+  typeof rtuConnectionProfilePayloadSchema
+>;
+
+export function toRtuConnectionProfilePayload(
+  profile: RtuConnectionProfile,
+): RtuConnectionProfilePayload {
+  return { ...profile };
+}
+
+export function rtuConnectionProfileFromPayload(
+  payload: RtuConnectionProfilePayload,
+): RtuConnectionProfile {
+  return { ...payload, id: payload.id as ConnectionProfileId };
+}
+
+// ---- TcpConnectionProfile（2026-08-23 TCP 接线）----
+
+export const tcpConnectionProfilePayloadSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  protocol: z.literal("tcp"),
+  host: z.string(),
+  port: z.number(),
+  unitId: z.number(),
+  connectTimeoutMs: z.number(),
+  requestTimeoutMs: z.number(),
+  retryCount: z.number(),
+  autoReconnect: z.boolean(),
+  interRequestDelayMs: z.number(),
+});
+export type TcpConnectionProfilePayload = z.infer<
+  typeof tcpConnectionProfilePayloadSchema
+>;
+
+export function toTcpConnectionProfilePayload(
+  profile: TcpConnectionProfile,
+): TcpConnectionProfilePayload {
+  return { ...profile };
+}
+
+export function tcpConnectionProfileFromPayload(
+  payload: TcpConnectionProfilePayload,
+): TcpConnectionProfile {
+  return { ...payload, id: payload.id as ConnectionProfileId };
+}
+
+/** session-tcp-connect 载荷（2026-08-23）：TCP 无串口句柄，profile 即完整连接参数。 */
+export const sessionTcpConnectPayloadSchema = z.object({
+  profile: tcpConnectionProfilePayloadSchema,
+});
+export type SessionTcpConnectPayload = z.infer<
+  typeof sessionTcpConnectPayloadSchema
+>;
+
+// ---- RegisterRow ----
+
+const dataTypeEnumSchema = z.enum([
+  "hex",
+  "unsigned",
+  "unsigned-0.1",
+  "unsigned-0.01",
+  "unsigned-0.001",
+  "unsigned-0.0001",
+  "signed",
+  "signed-0.1",
+  "signed-0.01",
+  "signed-0.001",
+  "signed-0.0001",
+  "binary",
+]);
+
+export const registerAddressPayloadSchema = z.object({
+  value: z.number(),
+});
+export type RegisterAddressPayload = z.infer<
+  typeof registerAddressPayloadSchema
+>;
+
+export const registerRowPayloadSchema = z.object({
+  rowId: z.string(),
+  order: z.number(),
+  name: z.string(),
+  comment: z.string(),
+  addressDraft: z.string(),
+  addressValue: registerAddressPayloadSchema.nullable(),
+  dataType: dataTypeEnumSchema,
+  pollingEnabled: z.boolean(),
+  traceEnabled: z.boolean(),
+  cellText: z.string(),
+  lastKnownRawValue: registerAddressPayloadSchema.nullable(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+export type RegisterRowPayload = z.infer<typeof registerRowPayloadSchema>;
+
+export function toRegisterRowPayload(row: RegisterRow): RegisterRowPayload {
+  return {
+    ...row,
+    addressValue:
+      row.addressValue === null ? null : { value: row.addressValue.value },
+    lastKnownRawValue:
+      row.lastKnownRawValue === null
+        ? null
+        : { value: row.lastKnownRawValue.value },
+  };
+}
+
+export function registerRowFromPayload(
+  payload: RegisterRowPayload,
+): RegisterRow {
+  const address =
+    payload.addressValue === null
+      ? null
+      : RegisterAddress.create(payload.addressValue.value);
+  const lastKnown =
+    payload.lastKnownRawValue === null
+      ? null
+      : RawRegisterValue.create(payload.lastKnownRawValue.value);
+  return {
+    ...payload,
+    rowId: payload.rowId as RowId,
+    addressValue:
+      address === null ? null : address.ok ? address.value : null,
+    lastKnownRawValue:
+      lastKnown === null ? null : lastKnown.ok ? lastKnown.value : null,
+  };
+}
+
+// ---- 批量读取 ----
+
+export const batchReadRowPayloadSchema = z.object({
+  key: z.string(),
+  /** null 表示地址为空或非法，将被跳过。 */
+  address: z.number().nullable(),
+});
+export type BatchReadRowPayload = z.infer<typeof batchReadRowPayloadSchema>;
+
+export const batchReadSummaryPayloadSchema = z.object({
+  batchId: z.string(),
+  totalRows: z.number(),
+  eligibleRows: z.number(),
+  successCount: z.number(),
+  failureCount: z.number(),
+  skippedCount: z.number(),
+  cancelledCount: z.number(),
+  startedAt: z.number(),
+  completedAt: z.number(),
+  durationMs: z.number(),
+});
+export type BatchReadSummaryPayload = z.infer<
+  typeof batchReadSummaryPayloadSchema
+>;
+
+export function toBatchReadSummaryPayload(
+  summary: BatchReadSummary,
+): BatchReadSummaryPayload {
+  return { ...summary };
+}
+
+export function toBatchReadRowPayload(row: BatchReadRow): BatchReadRowPayload {
+  return { ...row };
+}
+
+// ---- WriteOutcome ----
+
+export const writeOutcomePayloadSchema = z.object({
+  kind: z.literal("write-succeeded-no-verify"),
+});
+export type WriteOutcomePayload = z.infer<typeof writeOutcomePayloadSchema>;
+
+export function toWriteOutcomePayload(
+  outcome: WriteOutcome,
+): WriteOutcomePayload {
+  return { ...outcome };
+}
+
+// ---- CommunicationLogEvent（bytes 转 hex）----
+
+export const commLogEventPayloadSchema = z.object({
+  timestamp: z.number(),
+  direction: z.enum(["request", "response"]),
+  bytesHex: z.string(),
+  /** 协议：rtu / tcp（2026-08-23 TCP 接线）。 */
+  protocol: z.enum(["rtu", "tcp"]),
+  slaveAddress: z.number().nullable(),
+  functionCode: z.number().nullable(),
+  userAddress: z.number().nullable(),
+  sentAddress: z.number().nullable(),
+  quantity: z.number().nullable(),
+  attempt: z.number(),
+  status: z.enum([
+    "success",
+    "failure",
+    "timeout",
+    "cancelled",
+    "discarded",
+  ]),
+  errorCode: z.string().nullable(),
+  exceptionCode: z.number().nullable(),
+  source: z.enum([
+    "manual-read",
+    "manual-write",
+    "batch-read",
+    "polling",
+    "trace",
+    "plugin",
+    "connection-control",
+  ]),
+  durationMs: z.number().nullable(),
+});
+export type CommLogEventPayload = z.infer<typeof commLogEventPayloadSchema>;
+
+export function toCommLogEventPayload(
+  event: CommunicationLogEvent,
+): CommLogEventPayload {
+  return { ...event, bytesHex: bytesToHex(event.bytes) };
+}
+
+export function commLogEventFromPayload(
+  payload: CommLogEventPayload,
+): CommunicationLogEvent {
+  const { bytesHex, ...rest } = payload;
+  return { ...rest, bytes: hexToBytes(bytesHex) };
+}
+
+// ---- TraceSample ----
+
+export const traceSamplePayloadSchema = z.object({
+  key: z.string(),
+  sequence: z.number(),
+  rawValue: z.number(),
+  timestamp: z.number(),
+});
+export type TraceSamplePayload = z.infer<typeof traceSamplePayloadSchema>;
+
+// ---- ApplicationMessage ----
+
+export const appMessagePayloadSchema = z.object({
+  timestamp: z.number(),
+  level: z.enum(["info", "warning", "error"]),
+  messageKey: z.string(),
+  params: z
+    .record(z.string(), z.union([z.string(), z.number()]))
+    .optional(),
+  detail: z.string().nullable(),
+});
+export type AppMessagePayload = z.infer<typeof appMessagePayloadSchema>;
+
+export function toAppMessagePayload(
+  message: ApplicationMessage,
+): AppMessagePayload {
+  return { ...message };
+}

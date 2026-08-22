@@ -12,6 +12,20 @@ import type {
 } from "@mamep2026/domain";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
+import {
+  appMessagePayloadSchema,
+  batchReadRowPayloadSchema,
+  batchReadSummaryPayloadSchema,
+  commLogEventPayloadSchema,
+  registerRowPayloadSchema,
+  rtuConnectionProfilePayloadSchema,
+  sessionTcpConnectPayloadSchema,
+  traceSamplePayloadSchema,
+  type BatchReadRowPayload,
+  type RegisterRowPayload,
+  type SessionTcpConnectPayload,
+  type WriteOutcomePayload,
+} from "./session-payloads";
 
 /** 消息协议版本：与 appVersion / 插件 apiVersion / 工作区 schemaVersion 相互独立。 */
 export const HOST_MESSAGE_PROTOCOL_VERSION = 1 as const;
@@ -29,6 +43,22 @@ export const HOST_REQUEST_KINDS = [
   "select-serial-port",
   "get-color-theme",
   "debug:get-state",
+  // VSCode RTU 接线（2026-08-23）：串口枚举 + 远程会话命令。
+  "serial-enumerate",
+  "session-connect",
+  "session-disconnect",
+  "session-get-state",
+  "session-set-slave-address",
+  "session-read-row",
+  "session-write-row",
+  "session-batch-read",
+  "session-update-polling-targets",
+  "session-polling-start",
+  "session-polling-stop",
+  "session-trace-start",
+  "session-trace-stop",
+  // 两端 TCP 接线（2026-08-23）：TCP 会话连接（无串口句柄，profile 即参数）。
+  "session-tcp-connect",
 ] as const;
 export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
 
@@ -37,6 +67,11 @@ export const HOST_EVENT_KINDS = [
   "connection-state",
   "serial-ports-available",
   "color-theme-changed",
+  // VSCode RTU 接线（2026-08-23）：远程会话事件推送。
+  "comm-log",
+  "poll-result",
+  "trace-sample",
+  "app-message",
 ] as const;
 export type HostEventKind = (typeof HOST_EVENT_KINDS)[number];
 
@@ -116,6 +151,47 @@ export function fromErrorPayload(payload: HostErrorPayload): MamepError {
   });
 }
 
+/** Result<number> 可序列化投影（事件载荷用，如 poll-result）。 */
+export const hostResultPayloadSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), value: z.number() }),
+  z.object({ ok: z.literal(false), error: hostErrorPayloadSchema }),
+]);
+export type HostResultPayload = z.infer<typeof hostResultPayloadSchema>;
+
+export function toResultPayload(result: Result<number>): HostResultPayload {
+  return result.ok
+    ? { ok: true, value: result.value }
+    : { ok: false, error: toErrorPayload(result.error) };
+}
+
+export function fromResultPayload(
+  payload: HostResultPayload,
+): Result<number> {
+  return payload.ok ? ok(payload.value) : fail(fromErrorPayload(payload.error));
+}
+
+/** session-connect 载荷。 */
+export const sessionConnectPayloadSchema = z.object({
+  portId: z.string(),
+  profile: rtuConnectionProfilePayloadSchema,
+  slaveAddress: z.number(),
+});
+export type SessionConnectPayload = z.infer<typeof sessionConnectPayloadSchema>;
+
+/** session-get-state 响应载荷。 */
+export const sessionStateResponseSchema = z.object({
+  connectionState: connectionStateSchema,
+});
+export type SessionStateResponse = z.infer<typeof sessionStateResponseSchema>;
+
+/** session-batch-read 响应载荷：仅汇总（每行结果经 poll-result 事件流推送）。 */
+export const sessionBatchReadResponseSchema = z.object({
+  summary: batchReadSummaryPayloadSchema,
+});
+export type SessionBatchReadResponse = z.infer<
+  typeof sessionBatchReadResponseSchema
+>;
+
 const requestBase = {
   protocolVersion: protocolVersionSchema,
   type: z.literal("request"),
@@ -159,6 +235,86 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
     ...requestBase,
     kind: z.literal("debug:get-state"),
     payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("serial-enumerate"),
+    // VSCode：Extension Host 直接枚举系统串口（无浏览器授权手势约束）。
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-connect"),
+    payload: sessionConnectPayloadSchema,
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-disconnect"),
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-get-state"),
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-set-slave-address"),
+    payload: z.object({ slave: z.number() }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-read-row"),
+    payload: z.object({ row: registerRowPayloadSchema }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-write-row"),
+    payload: z.object({ row: registerRowPayloadSchema }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-batch-read"),
+    payload: z.object({ rows: z.array(batchReadRowPayloadSchema) }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-update-polling-targets"),
+    payload: z.object({
+      rows: z.array(
+        z.object({ key: z.string(), address: z.number() }),
+      ),
+    }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-polling-start"),
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-polling-stop"),
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-trace-start"),
+    payload: z.object({
+      key: z.string(),
+      address: z.number(),
+      speedMs: z.number(),
+    }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-trace-stop"),
+    payload: z.object({ key: z.string() }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-tcp-connect"),
+    // 两端 TCP 接线（2026-08-23）：profile 即完整连接参数（host/port/unitId/超时/重试）。
+    payload: sessionTcpConnectPayloadSchema,
   }),
 ]);
 export type HostRequestMessage = z.infer<typeof hostRequestSchema>;
@@ -206,6 +362,40 @@ export const hostEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("color-theme-changed"),
     // 宿主颜色主题变化（VSCode 端骨架：扩展侧读 activeColorTheme 推送；UI 映射为 antd 主题）。
     payload: z.object({ theme: colorThemeSchema }),
+  }),
+  z.object({
+    protocolVersion: protocolVersionSchema,
+    type: z.literal("event"),
+    messageId: messageIdSchema,
+    kind: z.literal("comm-log"),
+    // 远程会话通信日志（bytes 以 hex 传输，Renderer 还原 Uint8Array）。
+    payload: z.object({ event: commLogEventPayloadSchema }),
+  }),
+  z.object({
+    protocolVersion: protocolVersionSchema,
+    type: z.literal("event"),
+    messageId: messageIdSchema,
+    kind: z.literal("poll-result"),
+    payload: z.object({
+      key: z.string(),
+      address: z.number(),
+      result: hostResultPayloadSchema,
+    }),
+  }),
+  z.object({
+    protocolVersion: protocolVersionSchema,
+    type: z.literal("event"),
+    messageId: messageIdSchema,
+    kind: z.literal("trace-sample"),
+    payload: z.object({ sample: traceSamplePayloadSchema }),
+  }),
+  z.object({
+    protocolVersion: protocolVersionSchema,
+    type: z.literal("event"),
+    messageId: messageIdSchema,
+    kind: z.literal("app-message"),
+    // 主机侧应用消息（如设备拔出）回灌 Renderer 的 messageStore。
+    payload: z.object({ message: appMessagePayloadSchema }),
   }),
 ]);
 export type HostEventMessage = z.infer<typeof hostEventSchema>;
@@ -274,6 +464,35 @@ export interface MamepHostApi {
   onEvent(listener: (event: MamepHostEvent) => void): () => void;
   /** 开发/测试探针：主进程内部状态（生产构建返回 fail）。 */
   getDebugState(): Promise<Result<HostDebugState | null>>;
+  /** 打开并连接主进程 TCP 会话（session-tcp-connect；Electron TCP 走主进程，2026-08-23）。 */
+  sessionTcpConnect(payload: SessionTcpConnectPayload): Promise<Result<null>>;
+
+  // ---- 远程会话 RPC（2026-08-23 两端 TCP 接线：Electron TCP 会话在主进程，Renderer 远程代理）----
+
+  sessionDisconnect(): Promise<Result<null>>;
+  /** 查询会话状态快照（session-get-state）。 */
+  sessionGetState(): Promise<Result<SessionStateResponse>>;
+  /** 单行读（session-read-row）：经主进程统一调度器 FC03。 */
+  sessionReadRow(row: RegisterRowPayload): Promise<Result<number>>;
+  /** 单行写（session-write-row）：经主进程统一调度器 FC0x10。 */
+  sessionWriteRow(
+    row: RegisterRowPayload,
+  ): Promise<Result<WriteOutcomePayload>>;
+  /** 全表读取（session-batch-read）：单次往返返回汇总 + 每行结果。 */
+  sessionBatchRead(
+    rows: BatchReadRowPayload[],
+  ): Promise<Result<SessionBatchReadResponse>>;
+  sessionUpdatePollingTargets(
+    rows: Array<{ key: string; address: number }>,
+  ): Promise<Result<null>>;
+  sessionPollingStart(): Promise<Result<null>>;
+  sessionPollingStop(): Promise<Result<null>>;
+  sessionTraceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+  ): Promise<Result<null>>;
+  sessionTraceStop(key: string): Promise<Result<null>>;
 }
 
 /** VSCode 端 dev 探针快照（打包构建返回禁用错误；仅诊断用，不进 UI 状态源）。 */
@@ -297,18 +516,51 @@ export interface VscodeHostApi
   getColorTheme(): Promise<Result<ColorThemeKind>>;
   /** 开发/测试探针：扩展宿主内部状态（生产构建返回 fail）。 */
   getDebugState(): Promise<Result<VscodeHostDebugState | null>>;
+
+  // ---- VSCode RTU 接线（2026-08-23）：远程会话 RPC（HostMessage v1）----
+
+  /** 枚举系统串口（serial-enumerate；VSCode 无浏览器授权手势约束，直接返回列表）。 */
+  enumerateSerialPorts(): Promise<Result<SerialPortOption[]>>;
+  /** 打开并连接远程 RTU 会话（session-connect；portId 为 serial-enumerate 返回的端口）。 */
+  sessionConnect(payload: SessionConnectPayload): Promise<Result<null>>;
+  sessionDisconnect(): Promise<Result<null>>;
+  /** 查询会话状态快照（session-get-state）。 */
+  sessionGetState(): Promise<Result<SessionStateResponse>>;
+  sessionSetSlaveAddress(slave: number): Promise<Result<null>>;
+  /** 单行读（session-read-row）：经 Extension Host 统一调度器 FC03。 */
+  sessionReadRow(row: RegisterRowPayload): Promise<Result<number>>;
+  /** 单行写（session-write-row）：经 Extension Host 统一调度器 FC0x10。 */
+  sessionWriteRow(
+    row: RegisterRowPayload,
+  ): Promise<Result<WriteOutcomePayload>>;
+  /** 全表读取（session-batch-read）：单次往返返回汇总 + 每行结果。 */
+  sessionBatchRead(
+    rows: BatchReadRowPayload[],
+  ): Promise<Result<SessionBatchReadResponse>>;
+  sessionUpdatePollingTargets(
+    rows: Array<{ key: string; address: number }>,
+  ): Promise<Result<null>>;
+  sessionPollingStart(): Promise<Result<null>>;
+  sessionPollingStop(): Promise<Result<null>>;
+  sessionTraceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+  ): Promise<Result<null>>;
+  sessionTraceStop(key: string): Promise<Result<null>>;
+  /** 打开并连接远程 TCP 会话（session-tcp-connect；profile 即连接参数，无串口句柄）。 */
+  sessionTcpConnect(payload: SessionTcpConnectPayload): Promise<Result<null>>;
 }
 
 /**
- * Electron 能力矩阵（ADR-017 扩展，2026-08-21）：MVP 串口仍经 Web Serial API
- * （Renderer navigator.serial），但主进程 select-serial-port 不再自动选第一个端口，
- * 而是转发端口列表给渲染进程、由用户在 antd Select 下拉框中选择（serialPorts:
- * "enumerated"，含刷新/取消/空态）；TCP 仍不支持（MVP 不做）。
- * 后续 Node Serial/TCP Adapter 落地后再翻转为系统枚举 / modbusTcp。
+ * Electron 能力矩阵（ADR-017 扩展，2026-08-21；2026-08-23 TCP 接线）：MVP 串口仍经
+ * Web Serial API（Renderer navigator.serial，serialPorts:"enumerated" 下拉选择）；
+ * Modbus TCP 已接线——会话承载在主进程（Node TCP Adapter + TcpSessionHost），
+ * Renderer 经 HostMessage v1 远程代理（modbusTcp:true）。
  */
 export const electronCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: true,
-  modbusTcp: false,
+  modbusTcp: true,
   serialPorts: "enumerated",
   filesystem: "limited",
   nodePlugins: false,
@@ -316,16 +568,14 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
 });
 
 /**
- * VSCode 端能力矩阵（骨架阶段，2026-08-23）：如实声明——
- * modbusRtu/modbusTcp 均 false（Node Serial/TCP Adapter 属后续阶段，docs/TECH_DESIGN.md §34.3、ADR-017）；
- * serialPorts "unsupported"（骨架未实现串口枚举）；filesystem "unsupported"（未实现文件持久化）；
- * nodePlugins false（插件装配未接线；扩展宿主虽为 Node，但 UI 不得展示不可用能力）。
- * 后续能力逐一落地后再翻转为 true / enumerated / limited。
+ * VSCode 端能力矩阵（2026-08-23 TCP 接线后）：RTU 经 Extension Host Node Serial Adapter 打通
+ * （modbusRtu:true、serialPorts:"enumerated"），Modbus TCP 经 Extension Host Node TCP Adapter
+ * 打通（modbusTcp:true）；filesystem/nodePlugins 未实现维持如实声明（docs/AGENTS.md §32 ㉒）。
  */
 export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
-  modbusRtu: false,
-  modbusTcp: false,
-  serialPorts: "unsupported",
+  modbusRtu: true,
+  modbusTcp: true,
+  serialPorts: "enumerated",
   filesystem: "unsupported",
   nodePlugins: false,
   webPlugins: true,

@@ -47,7 +47,7 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
       ok: true,
       payload: {
         modbusRtu: false,
-        modbusTcp: false,
+        modbusTcp: true,
         serialPorts: "unsupported",
         filesystem: "unsupported",
         nodePlugins: false,
@@ -160,6 +160,7 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
     expect(keys).toEqual(
       [
         "copyTextToClipboard",
+        "enumerateSerialPorts",
         "getAppVersion",
         "getCapabilities",
         "getColorTheme",
@@ -168,6 +169,19 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
         "platform",
         "readTextFromClipboard",
         "selectSerialPort",
+        "sessionBatchRead",
+        "sessionConnect",
+        "sessionDisconnect",
+        "sessionGetState",
+        "sessionPollingStart",
+        "sessionPollingStop",
+        "sessionReadRow",
+        "sessionSetSlaveAddress",
+        "sessionTraceStart",
+        "sessionTraceStop",
+        "sessionTcpConnect",
+        "sessionUpdatePollingTargets",
+        "sessionWriteRow",
       ].sort(),
     );
     expect(

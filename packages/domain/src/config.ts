@@ -16,6 +16,17 @@ export const defaultConfig = {
     /** Address Adjust：默认 OFF（ON 时发送地址 = 用户地址 − 1） */
     addressAdjust: "off",
   },
+  tcp: {
+    /** MBAP 单元标识默认 0（2026-08-23 确认：与 RTU Slave Address 默认 1 不同） */
+    unitId: 0,
+    connectTimeoutMs: 5000,
+    requestTimeoutMs: 1000,
+    retryCount: 1,
+    /** 自动重连：P1 能力（UI 灰显禁用，2026-08-23 确认） */
+    autoReconnect: false,
+    /** 请求间隔，兼作 WP 轮询间隔（内部字段，不入表单） */
+    interRequestDelayMs: 50,
+  },
   registerTable: {
     /** Register 地址列进制：默认 DEC（按表独立，ADR-014） */
     addressRadix: "dec",

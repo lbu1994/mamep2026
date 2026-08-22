@@ -2,7 +2,11 @@
  * 浏览器平台 Host（docs/TECH_DESIGN.md §6.1）。
  * Web Serial 授权选择、串口传输打开、能力矩阵、浏览器时钟。
  */
-import type { Result, RtuConnectionProfile } from "@mamep2026/domain";
+import type {
+  Result,
+  RtuConnectionProfile,
+  TcpConnectionProfile,
+} from "@mamep2026/domain";
 import { createMamepError } from "@mamep2026/domain";
 import {
   browserCapabilities,
@@ -86,5 +90,19 @@ export class BrowserPlatformHost implements PlatformHost {
     const serialHandle = handle as WebSerialHandle;
     const transport = new WebSerialTransport(serialHandle.port, profile);
     return ok(transport);
+  }
+
+  /** 浏览器不支持 Modbus TCP（能力矩阵 modbusTcp:false），返回 capability 错误。 */
+  async openTcpTransport(
+    _profile: TcpConnectionProfile,
+  ): Promise<Result<TransportPort>> {
+    return fail(
+      createMamepError({
+        code: "TCP_UNSUPPORTED",
+        category: "capability",
+        userMessageKey: "errors.tcpUnsupported",
+        technicalMessage: "Modbus TCP is not supported in the browser",
+      }),
+    );
   }
 }

@@ -561,7 +561,7 @@ Host 负责装配具体适配器，不实现领域规则。
 
 ## 6.2 apps/electron
 
-> 当前状态（2026-08-21，ADR-016/017）：Electron 已迁移到 `apps/electron/`——主进程 `src/main/main.ts`、preload `src/preload/preload.ts`，Main/Preload/Renderer 三层落地（Renderer 即 apps/web 共享 UI，dev 用 `VITE_DEV_SERVER_URL`，生产 `loadFile` 指向 `apps/web/dist-electron/index.html`，渲染器独立产物目录避免与浏览器构建互相覆盖）；安全 IPC 采用 HostMessage v1 版本化 Envelope + Zod 校验 + kind 白名单（`packages/platform-api/src/host-message.ts`），`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`（preload 为 CJS 输出）。MVP 串口已落地（ADR-017，2026-08-21 扩展为下拉框选择）：与浏览器一致复用 Web Serial API——主进程新增可测 `serial-permissions.ts`（`select-serial-port` 最小授权，仅本应用 origin 放行；不再自动选第一个端口，而是把端口列表经 `serial-ports-available` 事件转发给渲染进程、由用户在 antd Select 下拉框选择，选择结果经 `select-serial-port` invoke 回传后调用 callback；设置 `selectPort` 策略可回到自动选择模式），Renderer `ElectronAppHost` 为薄门面，连接/读写/轮询/Trace/日志/工作区全部委托复用浏览器路径（`BrowserAppHost` + `BrowserPlatformHost({serial: navigator.serial})`，含 IndexedDB 自动保存），能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`（含刷新/取消/空态）；TCP/文件持久化仍未实现；`debug:get-state` 为 dev 探针（打包后禁用）。后续版本再替换为 Node Serial/TCP Adapter 并由本节 main 职责接管。
+> 当前状态（2026-08-21，ADR-016/017；2026-08-23 TCP 接线，ADR-022）：Electron 已迁移到 `apps/electron/`——主进程 `src/main/main.ts`、preload `src/preload/preload.ts`，Main/Preload/Renderer 三层落地；安全 IPC 采用 HostMessage v1 版本化 Envelope + Zod 校验 + kind 白名单，`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**Modbus TCP 已接线（2026-08-23，ADR-022）**：会话承载在主进程——`ElectronSessionHost`（`NodePlatformHost` + `TcpSessionHost`）处理 `session-tcp-connect` 等会话 kinds（`ipc.ts` 异步化 + 事件转发 Renderer），Renderer `ElectronAppHost` 变混合（RTU 本地 `BrowserAppHost` / TCP 主进程远程代理，按 `activeProtocol` 路由），preload 暴露完整会话 RPC 桥，能力矩阵 `modbusTcp:true`；文件持久化仍未实现；`debug:get-state` 为 dev 探针（打包后禁用）。后续版本再把串口替换为 Node Serial Adapter。
 
 ### main
 
@@ -598,7 +598,7 @@ Host 负责装配具体适配器，不实现领域规则。
 
 ## 6.3 apps/vscode-extension
 
-> 当前状态（2026-08-23，[ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）：扩展已迁移到 `apps/vscode-extension/`——命令 `mamep2026.openMainPanel` 打开 Webview 加载共享 UI；生产模式加载 `dist/media/` 本地静态资源（`asWebviewUri()` + 构建期 CSP meta `style-src 'unsafe-inline'`，`localResourceRoots` 限定媒体目录），dev 模式 `MAMEP_DEV_URL` 覆盖为 iframe 指向 Vite dev server；Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC（新增 `get-color-theme` / `color-theme-changed` kind），能力矩阵 `vscodeCapabilities` 如实声明（`modbusRtu:false` / `modbusTcp:false` / `serialPorts:"unsupported"` / `filesystem:"unsupported"`），`select-serial-port` 返回 `SERIAL_UNSUPPORTED`；`tests/e2e-vscode` 真实 VSCode 集成测试已建立。本节其余为设计目标。
+> 当前状态（2026-08-23，[ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)、[ADR-021](adr/ADR-021-vscode-rtu接线.md)）：扩展已迁移到 `apps/vscode-extension/`——命令 `mamep2026.openMainPanel` 打开 Webview 加载共享 UI；生产模式加载 `dist/media/` 本地静态资源（`asWebviewUri()` + 构建期 CSP meta `style-src 'unsafe-inline'`，`localResourceRoots` 限定媒体目录），dev 模式 `MAMEP_DEV_URL` 覆盖为 iframe 指向 Vite dev server；Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC（新增 `get-color-theme` / `color-theme-changed` kind），能力矩阵 `vscodeCapabilities` 如实声明（`modbusRtu:false` / `modbusTcp:false` / `serialPorts:"unsupported"` / `filesystem:"unsupported"`），`select-serial-port` 返回 `SERIAL_UNSUPPORTED`；`tests/e2e-vscode` 真实 VSCode 集成测试已建立。**VSCode RTU 已接线（2026-08-23，ADR-021）**：通信在 Extension Host 全量承载（TECH_DESIGN §28.3）——`NodePlatformHost`（packages/platform-node）+ 共享编排层 `RtuSessionHost`（packages/application），Renderer `VscodeAppHost` 为远程会话代理（HostMessage v1 新 kind：`serial-enumerate`/`session-connect`/`session-read-row`/`session-write-row`/`session-batch-read`/轮询/追踪/`comm-log`/`poll-result`/`trace-sample`/`app-message` 事件）；能力矩阵翻转 `modbusRtu:true` / `serialPorts:"enumerated"`（antd Select 下拉选择）；e2e 经 `MAMEP_FAKE_SERIAL=1` 宿主进程内假串口（DevFakeSerialFactory，内联 CRC16 RTU responder）走通枚举→连接→FC10 写→FC03 读→断开闭环与面板关闭释放。**VSCode Modbus TCP 已接线（2026-08-23，ADR-022）**：`VscodeSessionHost.connectTcp`（`NodePlatformHost.openTcpTransport` + `TcpSessionHost`），`ipc.ts` 分发 `session-tcp-connect`，`DevFakeTcpServer`（`MAMEP_FAKE_TCP=1`，127.0.0.1:1502），能力矩阵 `modbusTcp:true`；e2e 走通 TCP 连接→FC10 写→FC03 读→断开闭环。本节其余为设计目标。
 
 ### extension
 
@@ -817,7 +817,7 @@ Host 负责装配具体适配器，不实现领域规则。
 | 系统通知     |                   浏览器能力 |     支持 |    VSCode 通知 |
 | 自动更新     |                       不适用 | 后续支持 | 由 VSCode 管理 |
 
-> 实现状态（2026-08-21）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（2026-08-21，ADR-017 扩展：与浏览器一致经 Web Serial——主进程 `select-serial-port` 最小授权 + 端口列表转发、渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`；IndexedDB 自动保存/会话恢复随共享 UI 一并启用；TCP/文件持久化仍未实现，能力如实声明；`debug:get-state` dev 探针可用）；VSCode 列（含 Modbus TCP、Node 串口、文件持久化）为规划目标，当前未实现/未验证。
+> 实现状态（2026-08-21；2026-08-23 更新）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**VSCode 列 RTU 已接线（2026-08-23，ADR-021）**（Extension Host `NodePlatformHost` + 共享 `RtuSessionHost`，Renderer 远程代理，能力翻转）。**两端 Modbus TCP 已接线（2026-08-23，ADR-022）**：会话层 `CommunicationSession` 支持 `protocol:"tcp"`（`TcpFrameParser` MBAP 分帧 + Transaction ID 管理）；Electron TCP 会话承载主进程（`ElectronSessionHost`，Renderer `ElectronAppHost` 混合远程代理）、VSCode TCP 会话承载 Extension Host（`VscodeSessionHost.connectTcp`），能力矩阵 `electronCapabilities`/`vscodeCapabilities` → `modbusTcp:true`；UI Connection Settings 增加 TCP 分组（协议 Segmented 能力门控，浏览器不显示 TCP 入口）；`tests/e2e-vscode` 走通 TCP 闭环、`tests/e2e-electron` 走通 TCP 配置连接 → FC03 读 → FC10 写闭环。VSCode 文件持久化仍为规划目标。
 
 能力矩阵通过 PlatformCapabilities 对象注入 UI。
 
@@ -1806,6 +1806,12 @@ TCP 配置：
       requestTimeoutMs
       retryCount
       autoReconnect
+      interRequestDelayMs // 请求间隔，兼作 WP 轮询间隔（内部字段，不入表单）
+
+> **持久化边界（2026-08-23 确认，ADR-022）**：TCP 配置随工作区持久化（host/port/unitId/
+> requestTimeoutMs/retryCount/interRequestDelayMs；connectTimeoutMs/autoReconnect 默认值
+> 随 profile 保存）。恢复后保持离线、不自动连接；unitId 会话内不动态修改（与 RTU 每表从站
+> 地址不同，工具栏从站地址对 TCP 无效）。
 
 串口路径不作为必须恢复项。
 
@@ -2749,7 +2755,7 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 - 插件加载失败隔离；
 - Renderer 无直接 Node.js 权限。
 
-> 实现状态（2026-08-21，ADR-016/017 扩展）：已建立 `tests/e2e-electron/`（Playwright + Electron，`pnpm test:e2e:electron` 自动先 `build:electron`）——已覆盖：启动加载同一共享 UI、Main/Renderer IPC（HostMessage v1 校验）、preload 白名单桥、能力矩阵（RTU 支持 / enumerated 下拉选择）、`debug:get-state` 探针、剪贴板、Renderer 无直接 Node.js 权限、无 console 错误、关窗退出，以及串口下拉选择 + RTU 读写闭环（`serial-rtu-loop.spec.ts`：注入自包含可控 fake `navigator.serial` + 内联 CRC16 RTU responder，覆盖下拉空态/取消、下拉选择、FC03 读/FC10 写；主进程 `select-serial-port` 转发与 `resolvePendingSelection` 逻辑由 `apps/electron` 单测覆盖）。未覆盖（待后续版本落地）：COM10+ 真实设备、TCP 连接、文件持久化、窗口重启恢复、断开释放、插件加载失败隔离。
+> 实现状态（2026-08-21，ADR-016/017 扩展）：已建立 `tests/e2e-electron/`（Playwright + Electron，`pnpm test:e2e:electron` 自动先 `build:electron`）——已覆盖：启动加载同一共享 UI、Main/Renderer IPC（HostMessage v1 校验）、preload 白名单桥、能力矩阵（RTU 支持 / enumerated 下拉选择）、`debug:get-state` 探针、剪贴板、Renderer 无直接 Node.js 权限、无 console 错误、关窗退出，以及串口下拉选择 + RTU 读写闭环（`serial-rtu-loop.spec.ts`：注入自包含可控 fake `navigator.serial` + 内联 CRC16 RTU responder，覆盖下拉空态/取消、下拉选择、FC03 读/FC10 写；主进程 `select-serial-port` 转发与 `resolvePendingSelection` 逻辑由 `apps/electron` 单测覆盖）。**TCP 闭环已覆盖（2026-08-23，ADR-022）**：`tcp-loop.spec.ts` 在测试进程内启动本地回环 MBAP TCP Server，经 Connection Settings TCP 表单连接主进程会话 → FC03 读/FC10 写闭环 + 无 console 错误。未覆盖（待后续版本落地）：COM10+ 真实设备、文件持久化、窗口重启恢复、断开释放、插件加载失败隔离。
 
 ## 26.9 VSCode 集成测试
 
@@ -3222,7 +3228,7 @@ MVP 不接入默认云端遥测。
 11. ADR-011：Electron Renderer 使用严格进程隔离；
 12. ADR-012：插件通信必须经过统一调度器。
 
-> 现状注记（2026-08-23）：`docs/adr/` 当前已落地的决策文件为 ADR-013（monorepo 迁移与产品决策确认）、ADR-014（寄存器地址进制显示选择）、ADR-015（行编辑交互与剪贴板决策）、ADR-016（Electron 骨架与安全 IPC）、ADR-017（MVP Electron 复用 Web Serial 与串口库替换）、ADR-018（免安装绿色版打包）、[ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)（VSCode 骨架与安全 RPC）；上述 ADR-001~012 为规划清单，尚无以文件形式归档的独立记录。
+> 现状注记（2026-08-23）：`docs/adr/` 当前已落地的决策文件为 ADR-013（monorepo 迁移与产品决策确认）、ADR-014（寄存器地址进制显示选择）、ADR-015（行编辑交互与剪贴板决策）、ADR-016（Electron 骨架与安全 IPC）、ADR-017（MVP Electron 复用 Web Serial 与串口库替换）、ADR-018（免安装绿色版打包）、[ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)（VSCode 骨架与安全 RPC）、[ADR-020](adr/ADR-020-串口库选型与NodeSerialAdapter原型.md)（串口库选型与 Node Serial Adapter 原型）、[ADR-021](adr/ADR-021-vscode-rtu接线.md)（VSCode RTU 接线）、[ADR-022](adr/ADR-022-两端TCP接线.md)（两端 Modbus TCP 接线）；上述 ADR-001~012 为规划清单，尚无以文件形式归档的独立记录。
 
 每个 ADR 应包含：
 
@@ -3390,6 +3396,14 @@ Electron 成为完整参考客户端。
 > （docs/node-serial-prototype-验证记录.md）。Layer 1 Fake 57 用例、Layer 2 com0com COM4/COM5 7 用例
 > 全绿；Electron/VSCode 独立探针就绪（`pnpm prototype:electron`、`pnpm probe:vscode:serial`）；
 > COM10+ 真机、macOS/Linux 平台、真实设备、打包后原生模块加载等为接线/真机验证项，见 ADR-020 后续复审条件。
+
+> 实现状态（2026-08-23，Node TCP Adapter）：`packages/platform-node` 新增 Node TCP Adapter
+> （`NodeTcpTransport` + `SocketLike`/`NetFactoryLike` 注入面 + TCP 错误映射 + `NodeTcpCapabilities`），
+> 遵循 §34.3.16 共享边界，复用串口侧错误映射/能力描述/Fake 测试模式；`TransportPort.kind` 新增
+> `"node-tcp"`；domain 新增最小 `TcpConnectionProfile`（host/port/unitId 0~255，不入持久化）；
+> Layer 1 Fake + Layer 2 本地回环用例全绿，详见 docs/node-tcp-adapter-验证记录.md。
+> 能力矩阵未翻转（`modbusTcp` 仍 false）；会话层 TCP 帧解析、UI TCP 配置入口、
+> Electron/VSCode TCP 接线属后续接线步骤（ADR-020 后续复审条件）。
 
 目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、COM10 以上端口、原生模块兼容、资源释放及异常处理能力。
 

@@ -32,8 +32,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@mamep2026/application": "workspace:*",
+    "@mamep2026/communication": "workspace:*",
     "@mamep2026/domain": "workspace:*",
-    "@mamep2026/platform-api": "workspace:*"
+    "@mamep2026/logging": "workspace:*",
+    "@mamep2026/platform-api": "workspace:*",
+    "@mamep2026/platform-node": "workspace:*",
+    "serialport": "^13.0.0"
   },
   "devDependencies": {
     "@mamep2026/typescript-config": "workspace:*",

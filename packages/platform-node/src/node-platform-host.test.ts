@@ -1,7 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultRtuProfile } from "@mamep2026/domain";
+import { createDefaultRtuProfile, type TcpConnectionProfile } from "@mamep2026/domain";
 import { NodePlatformHost, displayLabel } from "./node-platform-host";
 import { FakeSerialPortFactory } from "./testing/fake-serial-port";
+import { FakeNetFactory } from "./testing/fake-socket";
+
+/** 完整 TCP 连接配置（openTcpTransport 入参，2026-08-23 TCP 接线）。 */
+function tcpProfile(
+  host: string,
+  port: number,
+  unitId: number,
+): TcpConnectionProfile {
+  return {
+    id: "conn-tcp" as TcpConnectionProfile["id"],
+    name: "TCP",
+    protocol: "tcp",
+    host,
+    port,
+    unitId,
+    connectTimeoutMs: 5000,
+    requestTimeoutMs: 1000,
+    retryCount: 1,
+    autoReconnect: false,
+    interRequestDelayMs: 50,
+  };
+}
 
 const ports = [
   { path: "COM4", manufacturer: "com0com" },
@@ -105,5 +127,41 @@ describe("displayLabel", () => {
 
   it("falls back to the raw path", () => {
     expect(displayLabel({ path: "/dev/ttyUSB0" })).toBe("/dev/ttyUSB0");
+  });
+});
+
+describe("NodePlatformHost openTcpTransport", () => {
+  it("creates a node-tcp transport with host/port passed through", async () => {
+    const netFactory = new FakeNetFactory();
+    const host = new NodePlatformHost({ netFactory });
+    const result = await host.openTcpTransport(tcpProfile("127.0.0.1", 502, 1));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.kind).toBe("node-tcp");
+      expect(netFactory.created).toHaveLength(1);
+      expect(netFactory.created[0]!.openedOptions).toEqual({
+        host: "127.0.0.1",
+        port: 502,
+      });
+    }
+  });
+
+  it("rejects invalid profile before creating a connection", async () => {
+    const netFactory = new FakeNetFactory();
+    const host = new NodePlatformHost({ netFactory });
+    const result = await host.openTcpTransport(tcpProfile("", 502, 1));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("TCP_HOST_INVALID");
+      expect(result.error.category).toBe("validation");
+    }
+    expect(netFactory.created).toHaveLength(0);
+  });
+
+  it("exposes default TCP capabilities (unit id 0..255)", () => {
+    const host = new NodePlatformHost();
+    expect(host.tcpCapabilities.host).toBe("node");
+    expect(host.tcpCapabilities.unitIdMin).toBe(0);
+    expect(host.tcpCapabilities.unitIdMax).toBe(255);
   });
 });

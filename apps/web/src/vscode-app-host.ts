@@ -1,14 +1,15 @@
 /**
- * VSCode Webview Renderer Host（docs/TECH_DESIGN.md §5.1.6、§6.3）。
- * 实现共享 UI 的 AppHost 契约。骨架阶段（2026-08-23）：串口/TCP/文件持久化未实现，
- * 能力矩阵 vscodeCapabilities 如实声明（modbusRtu:false、serialPorts:"unsupported" 等，
- * AGENTS.md §32 ㉒）。连接/读写/轮询/Trace/日志/工作区全部委托复用 BrowserAppHost
- * （含 IndexedDB 自动保存与会话恢复）；剪贴板与颜色主题走 VSCode 桥
- * （window.mamepHost，HostMessage v1 类型化 RPC）。
+ * VSCode Webview Renderer Host（docs/TECH_DESIGN.md §5.1.6、§6.3、§22.2）。
+ * 实现共享 UI 的 AppHost 契约。VSCode RTU 接线（2026-08-23）：通信在 Extension Host 执行
+ * （TECH_DESIGN §28.3），本类作为「远程会话代理」——connect/读/写/批量/轮询/Trace 全部
+ * 经 HostMessage v1 类型化 RPC（window.mamepHost，VscodeHostApi）委托 Extension Host；
+ * 工作区持久化（IndexedDB）复用 BrowserAppHost 路径；剪贴板与颜色主题走 VSCode 桥。
+ * 能力矩阵 vscodeCapabilities 如实声明（modbusRtu:true、serialPorts:"enumerated"）。
  */
 import type {
   BatchReadHandle,
   BatchReadRow,
+  BatchReadSummary,
   CommunicationLogEvent,
   ConnectionState,
   WriteOutcome,
@@ -18,17 +19,28 @@ import type {
   RegisterRow,
   Result,
   RtuConnectionProfile,
+  TcpConnectionProfile,
   Workspace,
 } from "@mamep2026/domain";
+import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
-import type {
-  ColorThemeKind,
-  MamepHostEvent,
-  SerialDeviceHandle,
-  SerialPortOption,
-  VscodeHostApi,
+import {
+  commLogEventFromPayload,
+  fromResultPayload,
+  toRegisterRowPayload,
+  toRtuConnectionProfilePayload,
+  toTcpConnectionProfilePayload,
+  vscodeCapabilities,
+  type AppMessagePayload,
+  type ColorThemeKind,
+  type CommLogEventPayload,
+  type HostResultPayload,
+  type MamepHostEvent,
+  type SerialDeviceHandle,
+  type SerialPortOption,
+  type TraceSamplePayload,
+  type VscodeHostApi,
 } from "@mamep2026/platform-api";
-import { vscodeCapabilities } from "@mamep2026/platform-api";
 import type { PluginRegistry } from "@mamep2026/plugin-api";
 import {
   BrowserPlatformHost,
@@ -46,6 +58,11 @@ export interface VscodeAppHostOptions {
   repository?: WorkspaceRepositoryPort | undefined;
 }
 
+/** 从枚举结果中取端口显示标签（未匹配时回退端口 id）。 */
+function portLabelOf(ports: SerialPortOption[], portId: string): string {
+  return ports.find((p) => p.portId === portId)?.label ?? portId;
+}
+
 export class VscodeAppHost implements AppHost {
   readonly capabilities: PlatformCapabilities;
   readonly isMockMode = false;
@@ -53,11 +70,36 @@ export class VscodeAppHost implements AppHost {
   readonly appVersion = __APP_VERSION__;
 
   private readonly bridge: VscodeHostApi;
+  /** 工作区持久化复用浏览器路径（IndexedDB 自动保存与会话恢复）。 */
   private readonly inner: BrowserAppHost;
+
+  // 远程会话本地镜像（RPC 往返前的同步读取缓存）。
+  private connectionState: ConnectionState = "disconnected";
+  private currentProfile: RtuConnectionProfile | TcpConnectionProfile | null =
+    null;
+  private currentSlaveAddress = 1;
+  private portLabel: string | null = null;
+  private lastEnumeratedPorts: SerialPortOption[] = [];
+
+  private readonly connectionListeners = new Set<
+    (state: ConnectionState) => void
+  >();
+  private readonly commLogListeners = new Set<
+    (event: CommunicationLogEvent) => void
+  >();
+  private readonly messageListeners = new Set<
+    (message: ApplicationMessage) => void
+  >();
+  private readonly pollResultListeners = new Set<
+    (key: string, address: number, result: Result<number>) => void
+  >();
+  private readonly traceListeners = new Set<
+    (sample: TraceSampleEvent) => void
+  >();
 
   constructor(bridge: VscodeHostApi, options: VscodeAppHostOptions = {}) {
     this.bridge = bridge;
-    // 骨架阶段无串口：platform host 不注入 serial（capabilities 声明 unsupported，UI 不发起连接）。
+    // 工作区/剪贴板/插件注册表复用浏览器路径；通信不走 inner（经 RPC 到 Extension Host）。
     this.inner = new BrowserAppHost({
       platform: new BrowserPlatformHost({}),
       repository:
@@ -71,12 +113,64 @@ export class VscodeAppHost implements AppHost {
     // （Host 与应用同生命周期，无需退订）。
     void this.applyColorThemeFromHost();
     bridge.onEvent((event: MamepHostEvent) => {
-      if (event.kind === "color-theme-changed") {
-        // 事件 payload 结构由 color-theme-changed kind 契约保证（Zod 已校验）。
+      this.handleHostEvent(event);
+    });
+  }
+
+  /** 宿主事件分发：会话事件 → 本地缓存 + 订阅者（payload 形状由 kind 契约保证，Zod 已校验）。 */
+  private handleHostEvent(event: MamepHostEvent): void {
+    switch (event.kind) {
+      case "color-theme-changed": {
         const { theme } = event.payload as { theme: ColorThemeKind };
         useAppStore.getState().setTheme(theme);
+        break;
       }
-    });
+      case "connection-state": {
+        const { state } = event.payload as { state: ConnectionState };
+        this.connectionState = state;
+        for (const listener of this.connectionListeners) listener(state);
+        break;
+      }
+      case "comm-log": {
+        const { event: payload } = event.payload as {
+          event: CommLogEventPayload;
+        };
+        const logEvent = commLogEventFromPayload(payload);
+        for (const listener of this.commLogListeners) listener(logEvent);
+        break;
+      }
+      case "poll-result": {
+        const { key, address, result } = event.payload as {
+          key: string;
+          address: number;
+          result: HostResultPayload;
+        };
+        const pollResult = fromResultPayload(result);
+        for (const listener of this.pollResultListeners)
+          listener(key, address, pollResult);
+        break;
+      }
+      case "trace-sample": {
+        const { sample } = event.payload as { sample: TraceSamplePayload };
+        for (const listener of this.traceListeners) listener(sample);
+        break;
+      }
+      case "app-message": {
+        const { message } = event.payload as { message: AppMessagePayload };
+        const appMessage: ApplicationMessage = {
+          timestamp: message.timestamp,
+          level: message.level,
+          messageKey: message.messageKey,
+          detail: message.detail,
+          ...(message.params !== undefined ? { params: message.params } : {}),
+        };
+        for (const listener of this.messageListeners) listener(appMessage);
+        break;
+      }
+      case "serial-ports-available":
+        // VSCode 枚举走请求-响应（serial-enumerate），不使用本事件。
+        break;
+    }
   }
 
   private async applyColorThemeFromHost(): Promise<void> {
@@ -108,107 +202,211 @@ export class VscodeAppHost implements AppHost {
     return this.inner.subscribeSaveStatus(listener);
   }
 
-  // ---- 串口（骨架未实现：委托 inner，能力矩阵已声明 unsupported，UI 不发起连接）----
+  // ---- 串口（enumerated 下拉路径：serial-enumerate 枚举 + 本地选择句柄）----
 
   supportsWebSerial(): boolean {
-    return this.inner.supportsWebSerial();
+    // VSCode Webview 无 navigator.serial；串口选择走 enumerated 下拉路径。
+    return false;
   }
 
-  enumerateSerialPorts(): Promise<Result<SerialPortOption[]>> {
-    return this.inner.enumerateSerialPorts();
+  async enumerateSerialPorts(): Promise<Result<SerialPortOption[]>> {
+    const result = await this.bridge.enumerateSerialPorts();
+    if (result.ok) {
+      this.lastEnumeratedPorts = result.value;
+    }
+    return result;
   }
 
-  selectSerialPort(
+  async selectSerialPort(
     portId?: string | null,
   ): Promise<Result<SerialDeviceHandle | null>> {
-    return this.inner.selectSerialPort(portId);
+    // VSCode：选择结果本地暂存，实际打开在 session-connect（Extension Host openSerialTransport）。
+    if (portId === null || portId === undefined || portId === "") {
+      return ok(null);
+    }
+    return ok({ id: portId, label: portLabelOf(this.lastEnumeratedPorts, portId) });
   }
 
   connect(
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
   ): Promise<Result<void>> {
-    return this.inner.connect(profile, handle);
+    if (handle === null) {
+      return Promise.resolve(
+        fail(
+          createMamepError({
+            code: "SERIAL_DEVICE_NOT_SELECTED",
+            category: "validation",
+            userMessageKey: "errors.selectDeviceFirst",
+            technicalMessage: "no serial device selected",
+          }),
+        ),
+      );
+    }
+    return this.bridge.sessionConnect({
+      portId: handle.id,
+      profile: toRtuConnectionProfilePayload(profile),
+      slaveAddress: this.currentSlaveAddress,
+    }).then((result) => {
+      if (!result.ok) return result;
+      this.currentProfile = profile;
+      this.portLabel = handle.label;
+      this.connectionState = "connected";
+      return ok(undefined);
+    });
+  }
+
+  /** TCP 连接（session-tcp-connect）：profile 即连接参数，无串口句柄。 */
+  connectTcp(profile: TcpConnectionProfile): Promise<Result<void>> {
+    return this.bridge
+      .sessionTcpConnect({ profile: toTcpConnectionProfilePayload(profile) })
+      .then((result) => {
+        if (!result.ok) return result;
+        this.currentProfile = profile;
+        this.portLabel = `${profile.host}:${profile.port}`;
+        this.connectionState = "connected";
+        return ok(undefined);
+      });
   }
 
   disconnect(): Promise<Result<void>> {
-    return this.inner.disconnect();
+    return this.bridge.sessionDisconnect().then((result) => {
+      if (!result.ok) return result;
+      this.connectionState = "disconnected";
+      return ok(undefined);
+    });
   }
 
   getConnectionState(): ConnectionState {
-    return this.inner.getConnectionState();
+    return this.connectionState;
   }
 
   getCommProperties(): CommProperties {
-    return this.inner.getCommProperties();
+    const profile = this.currentProfile;
+    if (profile !== null && profile.protocol === "tcp") {
+      // TCP 摘要（2026-08-23）：RTU 专属字段置默认；BottomPanel 按 protocol 渲染 TCP 字段。
+      return {
+        protocol: "tcp",
+        portLabel: this.portLabel,
+        unitId: profile.unitId,
+        baudRate: 0,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: profile.requestTimeoutMs,
+        retryCount: profile.retryCount,
+        rxDelayMs: profile.interRequestDelayMs,
+        addressAdjust: "off",
+        connectionState: this.connectionState,
+      };
+    }
+    const rtu = profile as RtuConnectionProfile | null;
+    return {
+      protocol: "rtu",
+      portLabel: this.portLabel,
+      unitId: null,
+      baudRate: rtu?.baudRate ?? 9600,
+      dataBits: rtu?.dataBits ?? 8,
+      stopBits: rtu?.stopBits ?? 1,
+      parity: rtu?.parity ?? "none",
+      flowControl: rtu?.flowControl ?? "off",
+      timeoutMs: rtu?.requestTimeoutMs ?? 1000,
+      retryCount: rtu?.retryCount ?? 1,
+      rxDelayMs: rtu?.interRequestDelayMs ?? 50,
+      addressAdjust: rtu?.addressAdjust ?? "off",
+      connectionState: this.connectionState,
+    };
   }
 
   setSlaveAddress(slave: number): void {
-    this.inner.setSlaveAddress(slave);
+    this.currentSlaveAddress = slave;
+    void this.bridge.sessionSetSlaveAddress(slave);
+  }
+
+  // ---- 寄存器读写 / 轮询 / Trace（远程会话 RPC）----
+
+  readRow(row: RegisterRow): Promise<Result<number>> {
+    return this.bridge.sessionReadRow(toRegisterRowPayload(row));
+  }
+
+  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
+    return this.bridge.sessionWriteRow(toRegisterRowPayload(row));
+  }
+
+  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
+    // 单次往返：行结果经 poll-result 事件流推送，响应只带汇总。
+    let resolvePromise: (result: Result<BatchReadSummary>) => void = () => {};
+    const promise = new Promise<Result<BatchReadSummary>>((resolve) => {
+      resolvePromise = resolve;
+    });
+    void this.bridge.sessionBatchRead(rows).then((result) => {
+      if (result.ok) {
+        resolvePromise(ok(result.value.summary));
+      } else {
+        resolvePromise(result);
+      }
+    });
+    return {
+      promise,
+      // 单次往返请求无法中途取消宿主侧批任务（ADR 记录，P0 可接受）。
+      cancel: () => undefined,
+    };
+  }
+
+  updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
+    void this.bridge.sessionUpdatePollingTargets(rows);
+  }
+
+  startPolling(): void {
+    void this.bridge.sessionPollingStart();
+  }
+
+  stopPolling(): void {
+    void this.bridge.sessionPollingStop();
+  }
+
+  traceStart(key: string, address: number, speedMs: number): void {
+    void this.bridge.sessionTraceStart(key, address, speedMs);
+  }
+
+  traceStop(key: string): void {
+    void this.bridge.sessionTraceStop(key);
   }
 
   subscribeConnectionState(
     listener: (state: ConnectionState) => void,
   ): () => void {
-    return this.inner.subscribeConnectionState(listener);
-  }
-
-  // ---- 寄存器读写 / 轮询 / Trace（全部委托 inner）----
-
-  readRow(row: RegisterRow): Promise<Result<number>> {
-    return this.inner.readRow(row);
-  }
-
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
-    return this.inner.writeRow(row);
-  }
-
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
-    return this.inner.readAllRows(rows);
-  }
-
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
-    this.inner.updatePollingTargets(rows);
-  }
-
-  startPolling(): void {
-    this.inner.startPolling();
-  }
-
-  stopPolling(): void {
-    this.inner.stopPolling();
+    this.connectionListeners.add(listener);
+    return () => this.connectionListeners.delete(listener);
   }
 
   subscribePollResult(
     listener: (key: string, address: number, result: Result<number>) => void,
   ): () => void {
-    return this.inner.subscribePollResult(listener);
-  }
-
-  traceStart(key: string, address: number, speedMs: number): void {
-    this.inner.traceStart(key, address, speedMs);
-  }
-
-  traceStop(key: string): void {
-    this.inner.traceStop(key);
+    this.pollResultListeners.add(listener);
+    return () => this.pollResultListeners.delete(listener);
   }
 
   subscribeTraceSample(
     listener: (sample: TraceSampleEvent) => void,
   ): () => void {
-    return this.inner.subscribeTraceSample(listener);
+    this.traceListeners.add(listener);
+    return () => this.traceListeners.delete(listener);
   }
 
   subscribeCommLog(
     listener: (event: CommunicationLogEvent) => void,
   ): () => void {
-    return this.inner.subscribeCommLog(listener);
+    this.commLogListeners.add(listener);
+    return () => this.commLogListeners.delete(listener);
   }
 
   subscribeMessage(
     listener: (message: ApplicationMessage) => void,
   ): () => void {
-    return this.inner.subscribeMessage(listener);
+    this.messageListeners.add(listener);
+    return () => this.messageListeners.delete(listener);
   }
 
   pushMessage(
@@ -216,7 +414,13 @@ export class VscodeAppHost implements AppHost {
     messageKey: string,
     detail?: string,
   ): void {
-    this.inner.pushMessage(level, messageKey, detail);
+    const message: ApplicationMessage = {
+      timestamp: Date.now(),
+      level,
+      messageKey,
+      detail: detail ?? null,
+    };
+    for (const listener of this.messageListeners) listener(message);
   }
 
   // ---- 剪贴板（走 VSCode 桥：vscode.env.clipboard，宿主校验）----
