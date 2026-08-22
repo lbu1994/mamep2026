@@ -13,9 +13,11 @@ import type { ConnectionState } from "@mamep2026/communication";
 import {
   extractMessageId,
   handleVscodeInvoke,
+  okResponse,
   type IpcDeps,
   type VscodeSessionLike,
 } from "./ipc";
+import { parseHostMessage } from "@mamep2026/platform-api";
 
 function request(
   kind: HostRequestMessage["kind"],
@@ -498,5 +500,27 @@ describe("TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
       makeDeps(),
     );
     expect(result.type).toBe("error");
+  });
+});
+
+describe("okResponse 序列化归一化（2026-08-23 连接卡死根因修复）", () => {
+  it("undefined payload 归一为 null（postMessage 结构化克隆会丢弃 undefined 属性）", () => {
+    const reply = okResponse(request("session-connect"), undefined);
+    expect(reply.payload).toBeNull();
+  });
+
+  it("null payload 原样保留", () => {
+    const reply = okResponse(request("session-connect"), null);
+    expect(reply.payload).toBeNull();
+  });
+
+  it("模拟结构化克隆后的 response 仍能通过接收端 hostResponseSchema 校验", () => {
+    // 回归保护：Result<void> 的 value=undefined → okResponse 归一为 null；
+    // 即使序列化边界丢 undefined 属性，克隆后 envelope 仍可被 parseHostMessage 接受。
+    const reply = okResponse(request("session-connect"), undefined);
+    const cloned = JSON.parse(JSON.stringify(reply));
+    const parsed = parseHostMessage(cloned);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.value.payload).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "mamep2026",
   "private": true,
-  "version": "0.0.16",
+  "version": "0.0.17",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "main": "dist-electron/main.js",
@@ -11,6 +11,7 @@
     "dev:vscode": "node scripts/dev-vscode.mjs",
     "dev:slave": "node scripts/dev-with-slave.mjs dev",
     "dev:electron:slave": "node scripts/dev-with-slave.mjs dev:electron",
+    "dev:vscode:slave": "node scripts/dev-with-slave.mjs dev:vscode",
     "build": "pnpm --filter @mamep2026/web build",
     "build:electron": "pnpm --filter @mamep2026/web build:electron",
     "start:electron": "electron .",

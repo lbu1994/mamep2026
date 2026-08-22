@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * dev / dev:electron 组合启动器：同时启动 Vite dev server 与 Modbus RTU 从站（COM5）。
+ * dev / dev:electron / dev:vscode 组合启动器：同时启动 Vite dev server 与 Modbus RTU 从站（COM5）。
  *
- * 用法（由根 package.json 的 dev / dev:electron 脚本调用）：
+ * 用法（由根 package.json 的 dev / dev:electron / dev:vscode 脚本调用）：
  *   node scripts/dev-with-slave.mjs dev            # 等价原 pnpm --filter @mamep2026/web dev
  *   node scripts/dev-with-slave.mjs dev:electron   # 等价原 pnpm --filter @mamep2026/web dev:electron
+ *   node scripts/dev-with-slave.mjs dev:vscode     # 等价原 pnpm dev:vscode（启动 Vite，供 VSCode dev 模式 iframe 加载）
  *
  * 生命周期约定：
  *   - Vite 退出（Ctrl+C / 崩溃）→ 立即终止从站（核心要求：dev 退出时 slave 同时退出）；
@@ -40,13 +41,21 @@ const WEB_DIR = path.join(ROOT, "apps", "web");
 
 const mode = process.argv[2] ?? "dev";
 const electron = mode === "dev:electron";
+const vscode = mode === "dev:vscode";
 const viteArgs = electron
   ? [VITE_ENTRY, "--mode", "electron"]
   : [VITE_ENTRY];
 
 console.log(
-  `[dev-with-slave] 启动 ${electron ? "dev:electron" : "dev"}（Vite）与从站（COM5）...`,
+  `[dev-with-slave] 启动 ${
+    electron ? "dev:electron" : vscode ? "dev:vscode" : "dev"
+  }（Vite）与从站（COM5）...`,
 );
+if (vscode) {
+  console.log(
+    "[dev-with-slave] 之后在 VS Code 中按 F5（launch.json「运行 Mamep2026 扩展（dev 模式）」，MAMEP_DEV_URL 指向本 server）。",
+  );
+}
 
 const vite = spawn(process.execPath, viteArgs, {
   cwd: WEB_DIR,

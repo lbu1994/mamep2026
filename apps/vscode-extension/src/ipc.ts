@@ -131,7 +131,10 @@ export function okResponse(
     messageId: message.messageId,
     kind: message.kind,
     ok: true,
-    payload,
+    // 序列化边界：postMessage/IPC 结构化克隆会丢弃 undefined 属性，导致 response
+    // 缺 payload 字段、接收端 zod 校验失败（Result<void> 的 value 即 undefined）。
+    // 统一归一为 null（z.unknown() 接受），保证 envelope 始终可序列化。
+    payload: payload === undefined ? null : payload,
   };
 }
 

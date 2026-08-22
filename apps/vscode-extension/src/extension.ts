@@ -33,6 +33,7 @@ import {
   type IpcDeps,
 } from "./ipc";
 import { VscodeSessionHost } from "./session-host";
+import { getDevHtml } from "./webview/html";
 
 /** 当前主面板（单实例：重复命令 reveal）。 */
 let panel: vscode.WebviewPanel | undefined;
@@ -279,50 +280,10 @@ function getWebviewHtml(
   extensionUri: vscode.Uri,
   devUrl: string | undefined,
 ): string {
-  return devUrl !== undefined
-    ? getDevHtml(devUrl)
-    : getProdHtml(webview, extensionUri);
-}
-
-/**
- * dev 模式：iframe 指向 Vite dev server（浏览器/Electron 同页面，MAMEP_DEV_URL 可覆盖）。
- * 注意：CSP 的 default-src 'none' 会作为 style-src 的回退源，若不显式允许内联样式，
- * iframe 的铺满样式会被阻止，导致 iframe 退回 300x150 默认尺寸，因此必须声明 style-src。
- */
-function getDevHtml(devUrl: string): string {
-  const csp = [
-    "default-src 'none'",
-    "style-src 'unsafe-inline'",
-    `frame-src ${devUrl} http://localhost:*`,
-  ].join("; ");
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <style>
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-
-    iframe {
-      display: block;
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-  </style>
-</head>
-<body>
-  <iframe src="${devUrl}"></iframe>
-</body>
-</html>`;
+  if (devUrl === undefined) return getProdHtml(webview, extensionUri);
+  // dev 模式：主 frame 以 iframe 加载 dev server + 中继脚本桥接 window.mamepHost
+  // （详见 webview/html.ts；iframe 内应用用 postMessage 桥，主 frame 中继到扩展宿主）。
+  return getDevHtml({ devUrl });
 }
 
 /**
