@@ -97,6 +97,42 @@ describe("host-message protocol v1", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("accepts a valid get-color-theme request (VSCode skeleton)", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-theme",
+      kind: "get-color-theme",
+      payload: {},
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.type === "request") {
+      expect(result.value.kind).toBe("get-color-theme");
+    }
+  });
+
+  it("accepts a valid color-theme-changed event", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "evt-theme",
+      kind: "color-theme-changed",
+      payload: { theme: "dark" },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a color-theme-changed event with unknown theme", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "evt-theme-2",
+      kind: "color-theme-changed",
+      payload: { theme: "high-contrast" },
+    });
+    expect(result.ok).toBe(false);
+  });
+
   it("rejects an event with unknown state", () => {
     const result = parseHostMessage({
       protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,

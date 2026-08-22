@@ -13,7 +13,7 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 ## 当前实际工程结构（重要）
 
 - **已迁移到 pnpm monorepo**（2026-08-13，ADR-013）：网页端在 `apps/web/`（Vite + React）；`packages/` 下为分层共享包（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）；`tooling/typescript-config` 共享 TS 配置；`tests/` 下为 acceptance 与 e2e-web。
-- Electron 骨架已落地（2026-08-21，ADR-016）：主进程在 `apps/electron/src/main/main.ts`、preload 在 `apps/electron/src/preload/preload.ts`（Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）；MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017，主进程 `serial-permissions.ts` 最小授权 + Renderer 复用浏览器路径，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"browser-picker"`）；`vscode-extension/` 仍不在本轮实现/测试范围（仅保证编译与路径引用不破坏）。
+- Electron 骨架已落地（2026-08-21，ADR-016）：主进程在 `apps/electron/src/main/main.ts`、preload 在 `apps/electron/src/preload/preload.ts`（Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）；MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017，主进程 `serial-permissions.ts` 最小授权 + Renderer 复用浏览器路径，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"browser-picker"`）；`apps/vscode-extension/` VSCode 端骨架已落地（2026-08-23）：命令打开 Webview 加载共享 UI（生产 `asWebviewUri` 打包资源 / dev `MAMEP_DEV_URL` iframe），Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC（新增 `get-color-theme`/`color-theme-changed` kind），能力矩阵如实声明，`tests/e2e-vscode` 真实 VSCode 集成测试。
 - **开发进度（2026-08-13）**：浏览器侧 MVP（P0）已实现并验收——文档修正（ADR-013）→ monorepo 迁移 → domain/protocol/data-conversion/communication/workspace/logging/plugin-api/register-table/platform-web/ui 分层实现（TDD，包内测试 170+）→ acceptance 与 e2e-web（Playwright 系统 Edge，mock 传输）全绿。浏览器端支持：Web Serial RTU（含 dev mock 传输 `?mockTransport=1`）、单表寄存器 FC03/FC0x10、单行/全表读取、WP 轮询（间隔=Rx Delay）、TM 追踪窗、多标签页、通信日志（仅字节）、IndexedDB 自动保存与恢复、浅/深主题、i18n（en-US 主 + zh-CN）、最小插件注册表。
 - **开发进度（2026-08-15，ADR-015）**：行编辑完整落地——插入行、剪切/粘贴（系统 CSV + 应用内剪贴板）、多行选择（antd rowSelection 原生）、行级键盘快捷键、行级右键菜单（Dropdown）；多选/剪切/粘贴由 PRD §8.3 P1 提前到 MVP；删除维持直接删除不弹确认（用户决策）。
 - **开发进度（2026-08-15）**：UI 打磨与细节迭代——寄存器表改为 antd `Tabs type="editable-card"`（每 Sheet 一页签，`className="register-table-tabs"`）；通信日志支持自动滚动/暂停/复制（复用 `host.copyTextToClipboard` 端口）；PluginManager 改用 antd 6.6 独立虚拟列表组件 **`Listy`**（`import { Listy } from 'antd'`，用 `items`+`itemRender`；**`List` 已弃用**，使用会在 dev console 报弃用警告、污染 e2e「无 console 错误」断言）；启动分双模式（Mock `?mockTransport=1` 自动连接不弹窗 / 非 Mock 启动弹 Connection Settings）。详细踩坑见 [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md) 与仓库技能 `.agents/skills/browser-e2e-testing/`。
@@ -27,7 +27,7 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 - `pnpm dev:electron` — Electron 开发模式（apps/web `vite --mode electron`，主进程/preload 打包到根 `dist-electron/`）；另需 `pnpm start:electron`（`electron .`）启动窗口
 - `pnpm build` / `pnpm build:electron` — 构建网页端 / Electron（产物 `apps/web/dist/`）
 - `pnpm dist:portable` — 免安装绿色版打包（build:electron → staging 组装 → electron-builder `--dir`，产出 `release/win-unpacked/` 整个文件夹，拷贝即用；配置 `electron-builder.yml` + `scripts/package-electron.mjs`，详见 ADR-018）
-- `pnpm build:vscode` — 编译 `vscode-extension/`（`tsc -p vscode-extension`，本轮仅确认不破坏）
+- `pnpm build:vscode` — VSCode 端构建（`node scripts/build-vscode.mjs`：`vite --mode vscode` 构建共享 UI → 拷贝到 `apps/vscode-extension/dist/media/` → esbuild 打包扩展宿主 `dist/extension.js` 与 webview bridge `dist/media/vscode-bridge.js`）
 - `pnpm lint` — ESLint（全仓）
 - `pnpm typecheck` — turbo 全包类型检查（各包 `tsc --noEmit`）
 - `pnpm test` — turbo 全包 vitest；`pnpm test:acceptance` / `pnpm test:e2e:web` / `pnpm test:e2e:electron` 单独跑对应测试包（e2e:electron 自动先 `build:electron`）

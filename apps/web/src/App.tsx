@@ -17,6 +17,7 @@ import {
 import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
 import { ElectronAppHost } from "./electron-app-host";
+import { VscodeAppHost } from "./vscode-app-host";
 
 const MOCK_FLAG = "mockTransport";
 
@@ -81,13 +82,16 @@ export default function App(): React.ReactNode {
 
   const mockTransport = useMemo(() => isMockMode(), []);
 
-  // 启动装配（一次）。Electron renderer 由 preload 暴露 window.mamepHost（白名单桥），
-  // 走共享 AppHost 契约的 ElectronAppHost；否则按浏览器 Host 装配（Web Serial + IndexedDB）。
+  // 启动装配（一次）。宿主 renderer 由 preload / vscode-bridge 暴露 window.mamepHost
+  // （白名单桥），按 platform 判别窄化分支装配：VSCode Webview → VscodeAppHost、
+  // Electron → ElectronAppHost；否则按浏览器 Host 装配（Web Serial + IndexedDB）。
   useEffect(() => {
     const bridge = window.mamepHost;
     const host: AppHost =
       bridge !== undefined
-        ? new ElectronAppHost(bridge)
+        ? bridge.platform === "vscode"
+          ? new VscodeAppHost(bridge)
+          : new ElectronAppHost(bridge)
         : (() => {
             const serial = navigator.serial;
             const platformHost =

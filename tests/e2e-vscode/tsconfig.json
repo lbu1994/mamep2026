@@ -1,0 +1,21 @@
+{
+  "extends": "../../tooling/typescript-config/base.json",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["ES2022"],
+    // 测试运行在 VSCode 扩展宿主（CommonJS require 加载），必须编译为 CJS。
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "types": ["node", "vscode"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "noEmit": false,
+    // base.json 默认开启 allowImportingTsExtensions（要求 noEmit），此处需要 emit，显式关闭。
+    "allowImportingTsExtensions": false,
+    // CJS 输出需允许 ESM import/export 语法被转译为 require。
+    "verbatimModuleSyntax": false,
+    // TS 6.0 弃用 node10 解析（CJS 产物所需），显式接受弃用以保持 CJS 输出。
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src"]
+}

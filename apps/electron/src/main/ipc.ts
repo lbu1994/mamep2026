@@ -99,6 +99,14 @@ export function handleRequest(
         "SERIAL_PICKER_NOT_ACTIVE",
         "no pending serial port selection for this sender",
       );
+    case "get-color-theme":
+      // 共享协议新增 kind（VSCode 端骨架，2026-08-23）：Electron preload 不暴露该能力，
+      // 此处仅满足穷尽守卫，返回能力错误（不改变既有行为）。
+      return errorEnvelope(
+        message.messageId,
+        "COLOR_THEME_UNSUPPORTED",
+        "color theme RPC is not supported on the Electron host",
+      );
     case "debug:get-state":
       // 开发/测试探针（Playwright Electron E2E 用）：打包构建禁用。
       if (deps.isPackaged()) {

@@ -11,6 +11,8 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
 const DIST_ELECTRON = path.join(ROOT, "dist-electron");
 /** Electron 渲染器独立产物目录：与浏览器构建（base /）分开，避免互相覆盖（ADR-016）。 */
 const RENDERER_DIST = path.resolve(ROOT, "apps/web/dist-electron");
+/** VSCode Webview 渲染器独立产物目录（VSCode 端骨架，2026-08-23）：与浏览器/Electron 构建分开。 */
+const RENDERER_DIST_VSCODE = path.resolve(ROOT, "apps/web/dist-vscode");
 
 /**
  * 生产构建向 index.html 注入 CSP meta（docs/TECH_DESIGN.md §22.1、§22.4）。
@@ -41,6 +43,9 @@ function injectCspMeta(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const isElectron = mode === "electron";
+  // VSCode Webview 模式：产物独立目录（apps/web/dist-vscode），base "./" 供 asWebviewUri 相对解析。
+  const isVscode = mode === "vscode";
+  const isPlatformBuild = isElectron || isVscode;
   // 应用版本号取自根 package.json（三端共用版本），经 __APP_VERSION__ 注入，dev/build 均生效。
   const rootPkg = JSON.parse(
     readFileSync(path.resolve(ROOT, "package.json"), "utf-8"),
@@ -50,11 +55,14 @@ export default defineConfig(({ mode }) => {
     define: {
       __APP_VERSION__: JSON.stringify(rootPkg.version),
     },
-    // Electron 生产模式经 loadFile(file://) 加载：必须相对路径，否则 /assets/* 会解析到盘根目录。
-    base: isElectron ? "./" : "/",
-    // Electron 渲染器独立产物目录，与浏览器构建（base /）分开（exactOptionalPropertyTypes 下按条件展开）。
+    // Electron 生产模式经 loadFile(file://)、VSCode Webview 经 asWebviewUri 加载：必须相对路径。
+    base: isPlatformBuild ? "./" : "/",
+    // 各平台渲染器独立产物目录，与浏览器构建（base /）分开（exactOptionalPropertyTypes 下按条件展开）。
     ...(isElectron
       ? { build: { outDir: RENDERER_DIST, emptyOutDir: true } }
+      : {}),
+    ...(isVscode
+      ? { build: { outDir: RENDERER_DIST_VSCODE, emptyOutDir: true } }
       : {}),
     plugins: [
       react(),

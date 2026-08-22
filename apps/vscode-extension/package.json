@@ -1,0 +1,47 @@
+{
+  "name": "@mamep2026/vscode-extension",
+  "displayName": "Mamep2026",
+  "description": "Mamep2026 Modbus 开发调试工具（VSCode 端）",
+  "version": "0.0.1",
+  "publisher": "mamep2026",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:mamep2026.openMainPanel",
+    "onWebviewPanel:mamep2026.mainPanel"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "mamep2026.openMainPanel",
+        "title": "Mamep2026: 打开主面板",
+        "category": "Mamep2026"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mamep2026/domain": "workspace:*",
+    "@mamep2026/platform-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "@types/node": "^24.13.3",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "jsdom": "^30.0.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

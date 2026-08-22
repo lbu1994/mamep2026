@@ -1,0 +1,19 @@
+{
+  "name": "@mamep2026/e2e-vscode",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "tsc -p .",
+    "pretest": "tsc -p .",
+    "test": "node scripts/run-e2e.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "@types/node": "^24.13.3",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.1.0",
+    "typescript": "catalog:"
+  }
+}

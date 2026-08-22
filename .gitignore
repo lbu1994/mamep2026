@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 dist-electron
+.vscode-test
 *.local
 
 # Test artifacts
@@ -19,6 +20,7 @@ coverage
 playwright-report
 test-results
 apps/web/dist
+apps/web/dist-vscode
 
 # Electron 免安装打包输出（release/win-unpacked、staging-app 等）
 release

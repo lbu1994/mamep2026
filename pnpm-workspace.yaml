@@ -10,6 +10,7 @@ allowBuilds:
   "@vscode/vsce-sign": true
   electron: true
   electron-winstaller: true
+  esbuild: true
   keytar: false
 
 # electron-builder 26.15.3 依赖声明为 @electron/get ^3.0.0，但其 resolveCacheMode 使用了

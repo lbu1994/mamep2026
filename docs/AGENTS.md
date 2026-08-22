@@ -144,7 +144,7 @@ MVP 交付形态为三端运行骨架加核心调试闭环：
 - 三端功能完整度按 PRD 优先级逐步补齐，骨架阶段不要求串口、TCP 等能力生效；
 - 三端骨架必须符合各自安全边界：Electron 为 Main、Preload、Renderer 隔离，VSCode 为 Extension Host 与 Webview 隔离。
 
-> 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 骨架尚未实现/验证（仅保证编译与路径引用不破坏）。
+> 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 端骨架已落地（2026-08-23：`apps/vscode-extension/` 命令打开 Webview 加载共享 UI——生产 `asWebviewUri` 打包资源 / dev `MAMEP_DEV_URL` iframe，Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC，能力矩阵如实声明，`tests/e2e-vscode` 真实 VSCode 集成测试）。
 
 ### 5.1 当前核心协议范围
 
@@ -288,7 +288,7 @@ Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置
 
 实际目录尚未创建或与上述结构存在合理差异时，应以当前已确认的工程结构和 ADR 为准，不得为了匹配示意结构进行无关的大规模移动。
 
-当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`vscode-extension/` 保持不变（不在本轮实现与测试范围）。注：对应目标结构中的 `apps/vscode-extension` 目前位于仓库根目录而非 `apps/` 下；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
+当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 ADR-019）。注：对应目标结构中的 `apps/vscode-extension` 已就位；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
 
 ### 7.1 模块责任
 
@@ -1508,7 +1508,7 @@ UI 必须：
 
 项目初始化完成后，根级 package.json 应提供稳定的统一脚本。AI 必须优先使用仓库已经存在的脚本，不得假设脚本名称。
 
-当前实际脚本（2026-08-22，根 package.json）：`pnpm dev`（仅网页端 Vite，不启动 Electron）、`pnpm dev:electron`、`pnpm start:electron`（`electron .` 启动窗口）、`pnpm build`、`pnpm build:electron`、`pnpm dist:portable`（免安装绿色版打包，产出 `release/win-unpacked/` 拷贝即用，ADR-018）、`pnpm build:vscode`、`pnpm lint`、`pnpm typecheck`（turbo 全包 `tsc --noEmit`）、`pnpm test`（turbo 全包 vitest）、`pnpm test:acceptance`、`pnpm test:e2e:web`（Playwright 系统 Edge）、`pnpm test:e2e:electron`（Playwright + Electron，自动先 `build:electron`）、`pnpm preview`、`pnpm format`、`pnpm format:check`。以根 package.json 实际脚本为准，不得声称执行过不存在的命令。
+当前实际脚本（2026-08-22，根 package.json）：`pnpm dev`（仅网页端 Vite，不启动 Electron）、`pnpm dev:electron`、`pnpm start:electron`（`electron .` 启动窗口）、`pnpm build`、`pnpm build:electron`、`pnpm dist:portable`（免安装绿色版打包，产出 `release/win-unpacked/` 拷贝即用，ADR-018）、`pnpm build:vscode`、`pnpm lint`、`pnpm typecheck`（turbo 全包 `tsc --noEmit`）、`pnpm test`（turbo 全包 vitest）、`pnpm test:acceptance`、`pnpm test:e2e:web`（Playwright 系统 Edge）、`pnpm test:e2e:electron`（Playwright + Electron，自动先 `build:electron`）、`pnpm test:e2e:vscode`（@vscode/test-electron 真实 VSCode，自动先 `build:vscode`）、`pnpm preview`、`pnpm format`、`pnpm format:check`。以根 package.json 实际脚本为准，不得声称执行过不存在的命令。
 
 以下脚本尚未建立，属建议而非断言，不得假设其存在：
 

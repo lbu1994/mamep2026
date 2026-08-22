@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "pnpm --filter @mamep2026/web dev",
     "dev:electron": "pnpm --filter @mamep2026/web dev:electron",
+    "dev:vscode": "node scripts/dev-vscode.mjs",
     "dev:slave": "node scripts/dev-with-slave.mjs dev",
     "dev:electron:slave": "node scripts/dev-with-slave.mjs dev:electron",
     "build": "pnpm --filter @mamep2026/web build",
@@ -15,13 +16,14 @@
     "start:electron": "electron .",
     "dist:portable": "pnpm build:electron && node scripts/package-electron.mjs && electron-builder",
     "slave": "node scripts/modbus-slave/modbus-rtu-slave.mjs",
-    "build:vscode": "tsc -p vscode-extension",
+    "build:vscode": "node scripts/build-vscode.mjs",
     "lint": "eslint .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:acceptance": "pnpm --filter @mamep2026/acceptance test",
     "test:e2e:web": "pnpm --filter @mamep2026/e2e-web test",
     "test:e2e:electron": "pnpm --filter @mamep2026/e2e-electron test",
+    "test:e2e:vscode": "pnpm build:vscode && pnpm --filter @mamep2026/e2e-vscode test",
     "preview": "pnpm --filter @mamep2026/web preview",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

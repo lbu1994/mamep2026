@@ -1,0 +1,276 @@
+/**
+ * Mamep2026 VSCode 扩展入口（docs/TECH_DESIGN.md §6.3、§22.2、§22.4、docs/AGENTS.md §22）。
+ * 骨架阶段（2026-08-23）：
+ * - 命令 mamep2026.openMainPanel 创建 WebviewPanel 加载共享 UI（三端同一套 React UI）；
+ * - 生产模式：打包进扩展的本地静态资源（dist/media/，由 scripts/build-vscode.mjs 产出）
+ *   经 webview.asWebviewUri() 加载（构建期 CSP meta：style-src 'unsafe-inline'）；
+ * - dev 模式：MAMEP_DEV_URL 覆盖为 iframe 指向 Vite dev server（与浏览器/Electron 同页面）；
+ * - 类型化 RPC：Webview ↔ Extension Host 复用 packages/platform-api HostMessage v1
+ *   （Envelope + Zod 校验 + kind 白名单，handleVscodeInvoke 校验一切输入，不允许任意方法名调用）；
+ * - 颜色主题：activeColorTheme 变化经 color-theme-changed 事件推送 Webview；
+ * - 资源释放：onDidReceiveMessage / 主题订阅 / panel dispose 全部随 context.subscriptions 管理。
+ */
+import * as fs from "node:fs";
+import * as vscode from "vscode";
+import {
+  HOST_MESSAGE_PROTOCOL_VERSION,
+  vscodeCapabilities,
+  type ColorThemeKind,
+  type HostEventMessage,
+} from "@mamep2026/platform-api";
+import { handleVscodeInvoke, type IpcDeps } from "./ipc";
+
+/** 当前主面板（单实例：重复命令 reveal）。 */
+let panel: vscode.WebviewPanel | undefined;
+/** 面板级订阅：dispose 时统一释放。 */
+let panelDisposables: vscode.Disposable[] = [];
+
+function createDeps(
+  context: vscode.ExtensionContext,
+  isDev: boolean,
+): IpcDeps {
+  return {
+    appVersion: () =>
+      (context.extension.packageJSON?.version as string | undefined) ??
+      "unknown",
+    capabilities: () => vscodeCapabilities,
+    colorTheme: () => toColorThemeKind(vscode.window.activeColorTheme.kind),
+    isDev: () => isDev,
+    clipboardWriteText: async (text) => {
+      await vscode.env.clipboard.writeText(text);
+    },
+    clipboardReadText: async () => vscode.env.clipboard.readText(),
+  };
+}
+
+/** VSCode ColorThemeKind → 协议 ColorThemeKind（antd 仅 light/dark，高对比度映射为 dark）。 */
+function toColorThemeKind(kind: vscode.ColorThemeKind): ColorThemeKind {
+  switch (kind) {
+    case vscode.ColorThemeKind.Dark:
+    case vscode.ColorThemeKind.HighContrast:
+      return "dark";
+    case vscode.ColorThemeKind.Light:
+    case vscode.ColorThemeKind.HighContrastLight:
+      return "light";
+    default:
+      return "light";
+  }
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+  // dev：MAMEP_DEV_URL 存在则 Webview 以 iframe 加载 dev server（浏览器/Electron 同页面）。
+  const devUrl = process.env.MAMEP_DEV_URL;
+  // 探针/调试能力仅开发模式（F5 / extensionDevelopmentPath，含 e2e）开放。
+  const isDev = context.extensionMode === vscode.ExtensionMode.Development;
+  const deps = createDeps(context, isDev);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("mamep2026.openMainPanel", () => {
+      openMainPanel(context, deps, devUrl);
+    }),
+    // dev/测试探针命令（e2e/调试用）：返回当前面板引用。
+    // 仅扩展宿主进程内代码可调用命令（Webview 无法调用），暴露面板引用无安全风险；
+    // 真正敏感的状态探针（debug:get-state RPC）仍由 isDev 门控。
+    vscode.commands.registerCommand("mamep2026.debug:getPanel", () => panel),
+    // 颜色主题变化 → 推送 color-theme-changed 事件。
+    vscode.window.onDidChangeActiveColorTheme(() => {
+      if (panel !== undefined) postThemeEvent(panel, deps.colorTheme());
+    }),
+    // 重载/重启后恢复面板（需 activationEvents: onWebviewPanel:mamep2026.mainPanel）。
+    vscode.window.registerWebviewPanelSerializer("mamep2026.mainPanel", {
+      deserializeWebviewPanel: async (webviewPanel) => {
+        panel = webviewPanel;
+        setupPanel(webviewPanel, deps);
+        webviewPanel.webview.html = getWebviewHtml(
+          webviewPanel.webview,
+          context.extensionUri,
+          devUrl,
+        );
+        postThemeEvent(webviewPanel, deps.colorTheme());
+      },
+    }),
+  );
+}
+
+function openMainPanel(
+  context: vscode.ExtensionContext,
+  deps: IpcDeps,
+  devUrl: string | undefined,
+): void {
+  if (panel !== undefined) {
+    panel.reveal(vscode.ViewColumn.One);
+    return;
+  }
+  const mediaUri = vscode.Uri.joinPath(context.extensionUri, "dist", "media");
+  panel = vscode.window.createWebviewPanel(
+    "mamep2026.mainPanel",
+    "Mamep2026",
+    vscode.ViewColumn.One,
+    {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      // Webview 只能加载 localResourceRoots 内的资源（安全边界，docs/AGENTS.md §22.2）。
+      localResourceRoots: [mediaUri],
+    },
+  );
+  setupPanel(panel, deps);
+  // 面板图标：复用共享 UI 的 favicon.svg（dist/media 下，构建期拷贝）。
+  const iconPath = vscode.Uri.joinPath(mediaUri, "favicon.svg");
+  if (fs.existsSync(iconPath.fsPath)) {
+    panel.iconPath = iconPath;
+  }
+  panel.webview.html = getWebviewHtml(
+    panel.webview,
+    context.extensionUri,
+    devUrl,
+  );
+}
+
+/** 面板级事件接线（重复打开 / serializer 恢复时先释放旧订阅）。 */
+function setupPanel(p: vscode.WebviewPanel, deps: IpcDeps): void {
+  for (const disposable of panelDisposables) disposable.dispose();
+  panelDisposables = [
+    p.webview.onDidReceiveMessage((raw) => {
+      void handleVscodeInvoke(raw, deps).then((reply) => {
+        // 面板可能已 dispose：postMessage 前校验（onDidDispose 会把 panel 置 undefined）。
+        if (panel !== p) return;
+        void p.webview.postMessage(reply);
+      });
+    }),
+    p.onDidDispose(() => {
+      panel = undefined;
+      for (const disposable of panelDisposables) disposable.dispose();
+      panelDisposables = [];
+    }),
+    p.onDidChangeViewState((event) => {
+      // 面板重新可见时重推主题，保证与宿主当前主题一致。
+      if (event.webviewPanel.visible) postThemeEvent(p, deps.colorTheme());
+    }),
+  ];
+}
+
+/** 推送 color-theme-changed 事件（HostMessage v1 event Envelope）。 */
+function postThemeEvent(p: vscode.WebviewPanel, theme: ColorThemeKind): void {
+  const event: HostEventMessage = {
+    protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+    type: "event",
+    messageId: `evt-${Date.now()}`,
+    kind: "color-theme-changed",
+    payload: { theme },
+  };
+  void p.webview.postMessage(event);
+}
+
+function getWebviewHtml(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+  devUrl: string | undefined,
+): string {
+  return devUrl !== undefined
+    ? getDevHtml(devUrl)
+    : getProdHtml(webview, extensionUri);
+}
+
+/**
+ * dev 模式：iframe 指向 Vite dev server（浏览器/Electron 同页面，MAMEP_DEV_URL 可覆盖）。
+ * 注意：CSP 的 default-src 'none' 会作为 style-src 的回退源，若不显式允许内联样式，
+ * iframe 的铺满样式会被阻止，导致 iframe 退回 300x150 默认尺寸，因此必须声明 style-src。
+ */
+function getDevHtml(devUrl: string): string {
+  const csp = [
+    "default-src 'none'",
+    "style-src 'unsafe-inline'",
+    `frame-src ${devUrl} http://localhost:*`,
+  ].join("; ");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="${csp}" />
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    iframe {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <iframe src="${devUrl}"></iframe>
+</body>
+</html>`;
+}
+
+/**
+ * 生产模式：读取打包进扩展的共享 UI 构建产物（dist/media/index.html），把相对资源路径
+ * 重写为 webview.asWebviewUri()（仅允许 localResourceRoots 内资源），并在 module script
+ * 之前注入 webview bridge 经典脚本（同步执行、先于 deferred module script，保证
+ * window.mamepHost 先于共享 UI 就绪）。
+ * CSP：VSCode 1.134+ 的 webview 资源经 file+.vscode-resource.vscode-cdn.net 虚拟源加载
+ * （非文档同源），构建期静态 CSP 的 'self' 会拦截脚本；因此用 webview.cspSource（资源源）
+ * 重写 CSP meta，并保留 style-src 'unsafe-inline'（antd CSS-in-JS）。
+ */
+function getProdHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+  const mediaUri = vscode.Uri.joinPath(extensionUri, "dist", "media");
+  const indexHtml = fs.readFileSync(
+    vscode.Uri.joinPath(mediaUri, "index.html").fsPath,
+    "utf8",
+  );
+  const bridgeUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(mediaUri, "vscode-bridge.js"),
+  );
+  const toWebviewUri = (mediaPath: string): string =>
+    webview.asWebviewUri(vscode.Uri.joinPath(mediaUri, mediaPath)).toString();
+
+  // Webview 专用 CSP：资源源用 webview.cspSource（VSCode 版本无关），'self' 保留兜底。
+  const cspSource = webview.cspSource;
+  const csp = [
+    `default-src ${cspSource} 'self'`,
+    `script-src ${cspSource} 'self'`,
+    // antd CSS-in-JS 依赖内联 <style>，必须放行 unsafe-inline。
+    `style-src ${cspSource} 'self' 'unsafe-inline'`,
+    `img-src ${cspSource} 'self' data:`,
+    `font-src ${cspSource} 'self' data:`,
+    `connect-src ${cspSource} 'self'`,
+  ].join("; ");
+
+  return indexHtml
+    // <base> 指向 media 的 asWebviewUri 根：兜底运行时构造的相对 URL（标准 Webview 模式）。
+    .replace(
+      "<head>",
+      `<head>\n    <base href="${webview.asWebviewUri(mediaUri).toString()}" />`,
+    )
+    // 用 Webview 专用 CSP 替换构建期静态 CSP meta（'self' 在 1.134+ 会拦截脚本）。
+    .replace(
+      /<meta http-equiv="Content-Security-Policy" content="[^"]*" \/>/,
+      `<meta http-equiv="Content-Security-Policy" content="${csp}" />`,
+    )
+    .replace(/\.\/assets\/([^"']+\.js)/g, (_match, file: string) =>
+      toWebviewUri(`assets/${file}`),
+    )
+    .replace(/\.\/assets\/([^"']+\.css)/g, (_match, file: string) =>
+      toWebviewUri(`assets/${file}`),
+    )
+    .replace(/href="\.\/favicon\.svg"/, () => `href="${toWebviewUri("favicon.svg")}"`)
+    .replace(
+      '<script type="module"',
+      `<script src="${bridgeUri}"></script>\n    <script type="module"`,
+    );
+}
+
+export function deactivate(): void {
+  for (const disposable of panelDisposables) disposable.dispose();
+  panelDisposables = [];
+  panel = undefined;
+}

@@ -27,6 +27,7 @@ export const HOST_REQUEST_KINDS = [
   "copy-text-to-clipboard",
   "read-text-from-clipboard",
   "select-serial-port",
+  "get-color-theme",
   "debug:get-state",
 ] as const;
 export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
@@ -35,6 +36,7 @@ export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
 export const HOST_EVENT_KINDS = [
   "connection-state",
   "serial-ports-available",
+  "color-theme-changed",
 ] as const;
 export type HostEventKind = (typeof HOST_EVENT_KINDS)[number];
 
@@ -44,6 +46,10 @@ export const serialPortOptionSchema = z.object({
   label: z.string(),
 });
 export type SerialPortOption = z.infer<typeof serialPortOptionSchema>;
+
+/** 宿主颜色主题（UI 侧映射为 antd light/dark；高对比度由宿主映射为 dark）。 */
+export const colorThemeSchema = z.enum(["light", "dark"]);
+export type ColorThemeKind = z.infer<typeof colorThemeSchema>;
 
 export type HostMessageType = "request" | "response" | "event" | "error";
 
@@ -145,6 +151,12 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     ...requestBase,
+    kind: z.literal("get-color-theme"),
+    // VSCode 端骨架：查询当前颜色主题（get-color-theme request kind，2026-08-23）。
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
     kind: z.literal("debug:get-state"),
     payload: z.object({}),
   }),
@@ -186,6 +198,14 @@ export const hostEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("serial-ports-available"),
     // 主进程 select-serial-port 事件转发的可用端口列表（供渲染进程下拉框展示）。
     payload: z.object({ ports: z.array(serialPortOptionSchema) }),
+  }),
+  z.object({
+    protocolVersion: protocolVersionSchema,
+    type: z.literal("event"),
+    messageId: messageIdSchema,
+    kind: z.literal("color-theme-changed"),
+    // 宿主颜色主题变化（VSCode 端骨架：扩展侧读 activeColorTheme 推送；UI 映射为 antd 主题）。
+    payload: z.object({ theme: colorThemeSchema }),
   }),
 ]);
 export type HostEventMessage = z.infer<typeof hostEventSchema>;
@@ -256,6 +276,29 @@ export interface MamepHostApi {
   getDebugState(): Promise<Result<HostDebugState | null>>;
 }
 
+/** VSCode 端 dev 探针快照（打包构建返回禁用错误；仅诊断用，不进 UI 状态源）。 */
+export interface VscodeHostDebugState {
+  readonly platform: "vscode";
+  readonly appVersion: string;
+  readonly colorTheme: ColorThemeKind;
+  readonly capabilities: PlatformCapabilities;
+}
+
+/**
+ * VSCode Webview 侧白名单桥（vscode-bridge 暴露 window.mamepHost，docs/TECH_DESIGN.md §6.3）。
+ * 独立于 MamepHostApi 声明（platform 判别值不同），与 MamepHostApi 组成可窄化的判别联合
+ * （window.mamepHost: MamepHostApi | VscodeHostApi，App.tsx 按 platform 分支装配）。
+ * selectSerialPort 仍保留契约，但骨架阶段由扩展宿主返回 capability 错误（能力矩阵如实声明）。
+ */
+export interface VscodeHostApi
+  extends Omit<MamepHostApi, "platform" | "getDebugState"> {
+  readonly platform: "vscode";
+  /** 查询当前颜色主题（get-color-theme request kind）。 */
+  getColorTheme(): Promise<Result<ColorThemeKind>>;
+  /** 开发/测试探针：扩展宿主内部状态（生产构建返回 fail）。 */
+  getDebugState(): Promise<Result<VscodeHostDebugState | null>>;
+}
+
 /**
  * Electron 能力矩阵（ADR-017 扩展，2026-08-21）：MVP 串口仍经 Web Serial API
  * （Renderer navigator.serial），但主进程 select-serial-port 不再自动选第一个端口，
@@ -268,6 +311,22 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   modbusTcp: false,
   serialPorts: "enumerated",
   filesystem: "limited",
+  nodePlugins: false,
+  webPlugins: true,
+});
+
+/**
+ * VSCode 端能力矩阵（骨架阶段，2026-08-23）：如实声明——
+ * modbusRtu/modbusTcp 均 false（Node Serial/TCP Adapter 属后续阶段，docs/TECH_DESIGN.md §34.3、ADR-017）；
+ * serialPorts "unsupported"（骨架未实现串口枚举）；filesystem "unsupported"（未实现文件持久化）；
+ * nodePlugins false（插件装配未接线；扩展宿主虽为 Node，但 UI 不得展示不可用能力）。
+ * 后续能力逐一落地后再翻转为 true / enumerated / limited。
+ */
+export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
+  modbusRtu: false,
+  modbusTcp: false,
+  serialPorts: "unsupported",
+  filesystem: "unsupported",
   nodePlugins: false,
   webPlugins: true,
 });
