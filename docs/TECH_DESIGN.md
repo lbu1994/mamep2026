@@ -316,7 +316,7 @@ MVP 不建设远程后端服务，也不引入服务端数据库。
 各端的本地后端职责如下：
 
 - 浏览器端：Web API、Web Serial 和 IndexedDB；
-- Electron 端：MVP 阶段串口经 Renderer 的 Web Serial API 承担（与浏览器一致，ADR-017），主进程负责 TCP、插件和文件持久化；后续版本串口改由主进程经 Node 串口库接管；
+- Electron 端：MVP 阶段串口经 Renderer 的 Web Serial API 承担（与浏览器一致，ADR-017），主进程负责 TCP、插件；文件持久化已移出 MVP，由后续版本落地；后续版本串口改由主进程经 Node 串口库接管；
 - VSCode 端：扩展宿主负责串口、TCP、插件和工作区持久化。
 
 不采用 SQLite 作为 MVP 默认存储，原因：
@@ -3315,7 +3315,7 @@ MVP 不接入默认云端遥测。
 - Main、Preload 和 Renderer；
 - 串口（MVP 复用 Web Serial API，ADR-017；后续替换为 Node Serial）；
 - Node TCP；
-- 文件持久化；
+- 文件持久化（已移出 MVP，后续版本）；
 - IPC；
 - COM10 验证；
 - 安全配置；
@@ -3333,7 +3333,7 @@ Electron 成为完整参考客户端。
 - Node Serial；
 - Node TCP；
 - VSCode 存储；
-- 主题适配；
+- 主题适配（已移出 MVP，后续版本）；
 - Extension 测试。
 
 目标：
