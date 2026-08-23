@@ -52,6 +52,7 @@ function makeHost(
     connect: vi.fn(async () => ({ ok: true as const, value: undefined })),
     connectTcp,
     disconnect: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    dispose: vi.fn(async () => undefined),
     getConnectionState: vi.fn(() => "disconnected" as const),
     getCommProperties: vi.fn(),
     setSlaveAddress: vi.fn(),

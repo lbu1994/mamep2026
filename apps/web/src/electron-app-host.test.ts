@@ -563,6 +563,40 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     expect(logs).toEqual([[0, 1, 0, 0, 0, 6]]);
   });
 
+  it("dispose 退订主进程桥事件：StrictMode 双挂载下旧 host 不再重复投递（2026-08-23）", async () => {
+    const { bridge, emit } = createFakeBridge();
+    const logs: number[][] = [];
+    const host1 = makeTcpHost(bridge);
+    host1.subscribeCommLog((e) => logs.push(Array.from(e.bytes)));
+    await host1.dispose();
+    const host2 = makeTcpHost(bridge);
+    host2.subscribeCommLog((e) => logs.push(Array.from(e.bytes)));
+    emit({
+      kind: "comm-log",
+      payload: {
+        event: {
+          timestamp: 1,
+          direction: "request",
+          bytesHex: "000100000006",
+          protocol: "tcp",
+          slaveAddress: 0,
+          functionCode: 3,
+          userAddress: 0,
+          sentAddress: 0,
+          quantity: 1,
+          attempt: 1,
+          status: "success",
+          errorCode: null,
+          exceptionCode: null,
+          source: "manual-read",
+          durationMs: null,
+        },
+      },
+    });
+    // 修复前：host1 + host2 各投递一次 → 2 条；修复后：仅 host2 → 1 条。
+    expect(logs).toEqual([[0, 1, 0, 0, 0, 6]]);
+  });
+
   it("session-tcp-connect 失败时连接不虚报成功", async () => {
     const { bridge } = createFakeBridge();
     (bridge.sessionTcpConnect as ReturnType<typeof vi.fn>).mockResolvedValue({

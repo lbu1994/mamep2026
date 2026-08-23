@@ -426,3 +426,66 @@ describe("VscodeAppHost TCP 远程会话代理（2026-08-23）", () => {
     expect(host.getConnectionState()).toBe("disconnected");
   });
 });
+
+describe("VscodeAppHost 生命周期（dispose / StrictMode 双挂载回归，2026-08-23）", () => {
+  /** 构造一条 comm-log 桥事件（与宿主协议契约一致）。 */
+  function commLogEvent(): MamepHostEvent {
+    return {
+      kind: "comm-log",
+      payload: {
+        event: {
+          timestamp: 1,
+          direction: "request",
+          bytesHex: "010300000001",
+          protocol: "rtu",
+          slaveAddress: 1,
+          functionCode: 3,
+          userAddress: 0,
+          sentAddress: 0,
+          quantity: 1,
+          attempt: 1,
+          status: "success",
+          errorCode: null,
+          exceptionCode: null,
+          source: "manual-read",
+          durationMs: null,
+        },
+      },
+    };
+  }
+
+  it("dispose 退订桥事件：之后同一桥不再向旧 host 投递 comm-log", async () => {
+    const { bridge, emit } = createFakeBridge();
+    const host = makeHost(bridge);
+    const logs: number[][] = [];
+    host.subscribeCommLog((e) => logs.push(Array.from(e.bytes)));
+    await host.dispose();
+    emit(commLogEvent());
+    expect(logs).toEqual([]);
+  });
+
+  it("StrictMode 双挂载不重复投递：dispose 旧 host 后同一桥事件只到达新 host 一次", async () => {
+    const { bridge, emit } = createFakeBridge();
+    const logs: number[][] = [];
+    // 第一次挂载（StrictMode effect 第一次执行）→ cleanup 仅 dispose（App.tsx 语义）。
+    const host1 = makeHost(bridge);
+    host1.subscribeCommLog((e) => logs.push(Array.from(e.bytes)));
+    await host1.dispose();
+    // 第二次挂载：新 host 再次订阅同一桥。
+    const host2 = makeHost(bridge);
+    host2.subscribeCommLog((e) => logs.push(Array.from(e.bytes)));
+    emit(commLogEvent());
+    // 修复前：host1 + host2 各投递一次 → 2 条；修复后：仅 host2 → 1 条。
+    expect(logs).toHaveLength(1);
+  });
+
+  it("dispose 清空本地订阅集合：connection-state 不再投递", async () => {
+    const { bridge, emit } = createFakeBridge();
+    const host = makeHost(bridge);
+    const states: string[] = [];
+    host.subscribeConnectionState((s) => states.push(s));
+    await host.dispose();
+    emit({ kind: "connection-state", payload: { state: "interrupted" } });
+    expect(states).toEqual([]);
+  });
+});

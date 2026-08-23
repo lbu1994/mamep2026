@@ -90,6 +90,12 @@ export interface AppHost {
    */
   connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
   disconnect(): Promise<Result<void>>;
+  /**
+   * 释放全部资源（页面卸载 / Webview 销毁 / StrictMode 重复挂载清理）：
+   * 断开会话、退订所有外部事件源（如 bridge.onEvent）并清空本地订阅集合，
+   * 保证重复挂载不产生重复订阅（事件重复投递的根因，2026-08-23）。
+   */
+  dispose(): Promise<void>;
   getConnectionState(): ConnectionState;
   getCommProperties(): CommProperties;
   /** 更新当前会话的从站地址（每表独立，2026-08-19）：对后续所有请求生效。 */

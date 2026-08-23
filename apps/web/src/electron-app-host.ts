@@ -11,7 +11,6 @@
 import type {
   BatchReadHandle,
   BatchReadRow,
-  BatchReadSummary,
   CommunicationLogEvent,
   ConnectionState,
   WriteOutcome,
@@ -70,6 +69,8 @@ export class ElectronAppHost implements AppHost {
   readonly appVersion = __APP_VERSION__;
 
   private readonly bridge: MamepHostApi;
+  /** 主进程桥事件退订（dispose 时调用；StrictMode 重复挂载时保证旧 host 不再接收事件）。 */
+  private readonly disposeBridgeEvents: () => void;
   private readonly platform: BrowserPlatformHost;
   private readonly inner: BrowserAppHost;
   private readonly serial: Serial | undefined;
@@ -143,7 +144,7 @@ export class ElectronAppHost implements AppHost {
     // 订阅主进程事件：serial-ports-available 携带可用端口列表（交给挂起的枚举）；
     // 主进程 TCP 会话事件（comm-log/poll-result/trace-sample/app-message/connection-state）
     // 转发到本 Host 的合并订阅集合。
-    bridge.onEvent((event: MamepHostEvent) => {
+    this.disposeBridgeEvents = bridge.onEvent((event: MamepHostEvent) => {
       if (event.kind === "serial-ports-available") {
         const { ports } = event.payload as { ports: SerialPortOption[] };
         this.pendingPortsResolve?.(ports);
@@ -378,10 +379,30 @@ export class ElectronAppHost implements AppHost {
       if (result.ok) {
         this.tcpConnectionState = "disconnected";
         this.activeProtocol = null;
+        return ok(undefined);
       }
       return result;
     }
     return this.inner.disconnect();
+  }
+
+  /**
+   * 释放全部资源（StrictMode 重复挂载 / 卸载清理）：退订主进程桥事件、清空本地订阅
+   * 集合、取消挂起选择会话并 dispose inner。修复事件重复投递（comm-log 一条变两条）
+   * 的根因（2026-08-23）。
+   */
+  async dispose(): Promise<void> {
+    this.disposeBridgeEvents();
+    this.connectionListeners.clear();
+    this.commLogListeners.clear();
+    this.messageListeners.clear();
+    this.pollResultListeners.clear();
+    this.traceListeners.clear();
+    await this.cancelPendingPicker();
+    await this.inner.dispose();
+    this.activeProtocol = null;
+    this.tcpProfile = null;
+    this.tcpConnectionState = "disconnected";
   }
 
   getConnectionState(): ConnectionState {
@@ -452,10 +473,7 @@ export class ElectronAppHost implements AppHost {
       return {
         promise: handle.then((result) =>
           result.ok
-            ? {
-                ok: true as const,
-                value: { summary: result.value.summary } as BatchReadSummary,
-              }
+            ? { ok: true as const, value: result.value.summary }
             : result,
         ),
         cancel: () => undefined,

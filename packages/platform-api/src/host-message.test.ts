@@ -439,7 +439,8 @@ describe("host-message TCP session kinds（2026-08-23 两端 TCP 接线）", () 
   });
 
   it("rejects session-tcp-connect with missing host", () => {
-    const { host: _host, ...noHost } = tcpProfile;
+    const { host, ...noHost } = tcpProfile;
+    expect(typeof host).toBe("string");
     const result = parseHostMessage({
       protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
       type: "request",

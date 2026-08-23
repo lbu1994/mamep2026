@@ -62,7 +62,7 @@ export class DevFakeTcpServer {
 
   /** 单连接 MBAP 分帧处理：半包/粘包缓冲，完整帧后响应。 */
   private handle(socket: net.Socket): void {
-    let buffer: number[] = [];
+    const buffer: number[] = [];
     socket.on("data", (chunk: Buffer) => {
       for (const byte of chunk) buffer.push(byte);
       while (true) {

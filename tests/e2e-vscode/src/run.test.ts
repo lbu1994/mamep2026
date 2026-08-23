@@ -52,6 +52,18 @@ async function rpcEnvelope(
   };
 }
 
+/** 会话通信统计（dev 探针 debug:get-state 的 sessionStats 字段，2026-08-23）。 */
+async function sessionStats(): Promise<{
+  requestFrames: number;
+  responseFrames: number;
+}> {
+  const state = await rpcEnvelope("debug:get-state");
+  const payload = state.payload as {
+    sessionStats?: { requestFrames: number; responseFrames: number };
+  };
+  return payload.sessionStats ?? { requestFrames: 0, responseFrames: 0 };
+}
+
 /** RTU 连接配置（与 UI Connection Settings 默认一致）。 */
 function rtuProfile(): Record<string, unknown> {
   return {
@@ -117,12 +129,27 @@ async function runRtuLoop(): Promise<void> {
   });
   assert.strictEqual(connect.type, "response", "session-connect should succeed");
 
+  // 2.5 会话通信统计基线（连接后；sessionStats 为 dev 探针 comm-log 帧计数）。
+  const baseline = await sessionStats();
+
   // 3. session-write-row：地址 1 写 0x1234（FC0x10）。
   const write = await rpcEnvelope("session-write-row", {
     row: registerRow(1, "1234"),
   });
   assert.strictEqual(write.type, "response", "session-write-row should succeed");
   assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
+  // 一次写入 = 恰好一次发送 + 一次收到（从站只收到一次）。
+  const afterWrite = await sessionStats();
+  assert.strictEqual(
+    afterWrite.requestFrames - baseline.requestFrames,
+    1,
+    "one FC10 write should send exactly one request frame",
+  );
+  assert.strictEqual(
+    afterWrite.responseFrames - baseline.responseFrames,
+    1,
+    "one FC10 write should receive exactly one response frame",
+  );
 
   // 4. session-read-row：地址 1 读回 0x1234（FC03）。
   const read = await rpcEnvelope("session-read-row", {
@@ -133,6 +160,20 @@ async function runRtuLoop(): Promise<void> {
     read.payload,
     0x1234,
     "FC03 read should return the value written via FC10",
+  );
+  // 回归（2026-08-23）：一次读取在会话层恰好 1 次发送 + 1 次收到。
+  // 「Comm Log 收发各两次、从站只收到一次」的重复投递根因在 Renderer 订阅层
+  // （StrictMode 双挂载），由 apps/web 单测覆盖；此处保证会话层物理帧 1:1。
+  const afterRead = await sessionStats();
+  assert.strictEqual(
+    afterRead.requestFrames - afterWrite.requestFrames,
+    1,
+    "one FC03 read should send exactly one request frame (slave receives once)",
+  );
+  assert.strictEqual(
+    afterRead.responseFrames - afterWrite.responseFrames,
+    1,
+    "one FC03 read should receive exactly one response frame",
   );
 
   // 5. session-get-state：connected。

@@ -70,6 +70,8 @@ export class VscodeAppHost implements AppHost {
   readonly appVersion = __APP_VERSION__;
 
   private readonly bridge: VscodeHostApi;
+  /** 桥事件退订（dispose 时调用；StrictMode 重复挂载时保证旧 host 不再接收事件）。 */
+  private readonly disposeBridgeEvents: () => void;
   /** 工作区持久化复用浏览器路径（IndexedDB 自动保存与会话恢复）。 */
   private readonly inner: BrowserAppHost;
 
@@ -112,7 +114,8 @@ export class VscodeAppHost implements AppHost {
     // 主题：初始化查询 + 订阅宿主 color-theme-changed 事件，映射共享 store 的 antd 主题
     // （Host 与应用同生命周期，无需退订）。
     void this.applyColorThemeFromHost();
-    bridge.onEvent((event: MamepHostEvent) => {
+    // 桥事件订阅：dispose 时退订（StrictMode 双挂载下避免旧 host 残留订阅重复投递）。
+    this.disposeBridgeEvents = bridge.onEvent((event: MamepHostEvent) => {
       this.handleHostEvent(event);
     });
   }
@@ -275,6 +278,23 @@ export class VscodeAppHost implements AppHost {
       this.connectionState = "disconnected";
       return ok(undefined);
     });
+  }
+
+  /**
+   * 释放全部资源（StrictMode 重复挂载 / Webview 卸载清理）：退订桥事件、清空本地订阅
+   * 集合、断开会话并 dispose inner。修复「一次读取在 Comm Log 里收发各两次、从站只
+   * 收到一次」的重复投递根因（2026-08-23）。
+   */
+  async dispose(): Promise<void> {
+    this.disposeBridgeEvents();
+    this.connectionListeners.clear();
+    this.commLogListeners.clear();
+    this.messageListeners.clear();
+    this.pollResultListeners.clear();
+    this.traceListeners.clear();
+    await this.inner.dispose();
+    this.connectionState = "disconnected";
+    this.currentProfile = null;
   }
 
   getConnectionState(): ConnectionState {

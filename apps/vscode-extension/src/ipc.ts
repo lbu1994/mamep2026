@@ -90,6 +90,11 @@ export interface IpcDeps {
   clipboardReadText(): Promise<string>;
   /** RTU 会话（VSCode 接线，Extension Host 侧，2026-08-23）。 */
   session: VscodeSessionLike;
+  /**
+   * 会话通信统计（dev/e2e 探针，2026-08-23）：comm-log request/response 帧计数。
+   * 用于 e2e 断言一次读取恰好一次收发；生产构建不进入 UI 状态源。
+   */
+  sessionStats(): { requestFrames: number; responseFrames: number };
 }
 
 /** 尽力从无法解析的原始消息中提取 messageId（诊断用；解析失败时为空串）。 */
@@ -312,6 +317,7 @@ export async function handleVscodeRequest(
           appVersion: deps.appVersion(),
           colorTheme: deps.colorTheme(),
           capabilities: deps.capabilities(),
+          sessionStats: deps.sessionStats(),
         } satisfies VscodeHostDebugState,
       );
     default: {

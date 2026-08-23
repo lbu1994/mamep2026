@@ -45,6 +45,12 @@ let deps: IpcDeps | undefined;
 let fakeTcpServer: DevFakeTcpServer | null = null;
 /** event Envelope 消息号（面板事件与主题事件共用，避免冲突）。 */
 let eventSeq = 0;
+/**
+ * 会话通信统计（dev/e2e 探针，2026-08-23）：comm-log request/response 帧计数，
+ * 经 debug:get-state 返回。用于 e2e 断言「一次读取 = 恰好一次发送 + 一次收到」，
+ * 不进入 UI 状态源；仅作诊断/验证用。
+ */
+const sessionStats = { requestFrames: 0, responseFrames: 0 };
 
 /** 构造 HostMessage v1 event Envelope（payload 形状由 kind 契约保证，边界一次收窄）。 */
 function hostEventMessage(
@@ -77,8 +83,16 @@ function createSessionHost(
   return new VscodeSessionHost({
     platform,
     events: {
-      onLog: (event) =>
-        postEvent(hostEventMessage("comm-log", { event: toCommLogEventPayload(event) })),
+      onLog: (event) => {
+        // 会话层帧计数（与物理写帧 1:1）：e2e 断言一次读取恰好一次收发。
+        if (event.direction === "request") sessionStats.requestFrames += 1;
+        else sessionStats.responseFrames += 1;
+        postEvent(
+          hostEventMessage("comm-log", {
+            event: toCommLogEventPayload(event),
+          }),
+        );
+      },
       onStateChange: (state) =>
         postEvent(hostEventMessage("connection-state", { state })),
       onPollResult: (key, address, result) =>
@@ -118,6 +132,7 @@ function createDeps(
     },
     clipboardReadText: async () => vscode.env.clipboard.readText(),
     session: createSessionHost(isDev, postEvent),
+    sessionStats: () => ({ ...sessionStats }),
   };
 }
 

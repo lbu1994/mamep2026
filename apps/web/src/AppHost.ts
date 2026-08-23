@@ -336,6 +336,20 @@ export class BrowserAppHost implements AppHost {
     return this.rtu.disconnect();
   }
 
+  /**
+   * 释放全部资源（StrictMode 重复挂载 / 页面卸载清理）：断开会话并清空所有本地订阅
+   * 集合，避免旧 host 残留订阅导致事件重复投递（如 comm-log 一条变两条）。
+   */
+  async dispose(): Promise<void> {
+    this.connectionListeners.clear();
+    this.commLogListeners.clear();
+    this.messageListeners.clear();
+    this.saveListeners.clear();
+    this.pollResultListeners.clear();
+    this.traceListeners.clear();
+    await this.rtu.dispose();
+  }
+
   async copyTextToClipboard(text: string): Promise<Result<void>> {
     if (navigator.clipboard === undefined) {
       return fail(clipboardUnavailableError());

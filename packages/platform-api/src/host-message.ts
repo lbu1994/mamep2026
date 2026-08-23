@@ -501,6 +501,11 @@ export interface VscodeHostDebugState {
   readonly appVersion: string;
   readonly colorTheme: ColorThemeKind;
   readonly capabilities: PlatformCapabilities;
+  /** 会话通信统计（dev/e2e 探针，2026-08-23）：comm-log request/response 帧计数。 */
+  readonly sessionStats: {
+    readonly requestFrames: number;
+    readonly responseFrames: number;
+  };
 }
 
 /**

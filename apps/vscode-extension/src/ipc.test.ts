@@ -84,6 +84,7 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     clipboardWriteText: vi.fn(async () => undefined),
     clipboardReadText: vi.fn(async () => "from-clip"),
     session: makeSession(),
+    sessionStats: () => ({ requestFrames: 0, responseFrames: 0 }),
     ...overrides,
   };
 }
@@ -187,6 +188,7 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
         appVersion: "0.0.0-test",
         colorTheme: "dark",
         capabilities: vscodeCapabilities,
+        sessionStats: { requestFrames: 0, responseFrames: 0 },
       });
     }
   });

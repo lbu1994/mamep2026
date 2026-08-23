@@ -131,7 +131,8 @@ export default function App(): React.ReactNode {
         key,
         address,
         result.value,
-        profile.addressAdjust,
+        // TCP 恒为 off（ADR-022）；仅 RTU 才有 Address Adjust。
+        profile.protocol === "rtu" ? profile.addressAdjust : "off",
       );
       if (updated !== null) updateRow(key as RowId, () => updated);
     });
@@ -168,7 +169,10 @@ export default function App(): React.ReactNode {
           const profile =
             (result.ok ? result.value.connectionProfiles[0] : undefined) ??
             createDefaultRtuProfile();
-          void host.connect(profile, null).then((connectResult) => {
+          // Mock 模式仅浏览器（RTU 连接）；工作区若存了 TCP profile 则回退默认 RTU。
+          const rtuProfile =
+            profile.protocol === "rtu" ? profile : createDefaultRtuProfile();
+          void host.connect(rtuProfile, null).then((connectResult) => {
             if (!connectResult.ok) {
               appendMessage({
                 timestamp: Date.now(),
@@ -191,7 +195,9 @@ export default function App(): React.ReactNode {
       });
 
     return () => {
-      void host.disconnect();
+      // 释放 host（断开会话 + 退订桥事件 + 清空订阅），避免 StrictMode 双挂载下旧 host
+      // 残留订阅导致事件重复投递（comm-log 一条变两条，2026-08-23）。
+      void host.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -209,9 +215,13 @@ export default function App(): React.ReactNode {
 
       const profile =
         state.workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
-      // 应用层纯函数构建轮询目标（含 Address Adjust 偏移与地址 0 跳过）。
+      // 应用层纯函数构建轮询目标（含 Address Adjust 偏移与地址 0 跳过）；
+      // TCP 恒为 off（ADR-022），仅 RTU 才有 Address Adjust。
       host.updatePollingTargets(
-        buildPollingTargets(state.workspace.sheets, profile.addressAdjust),
+        buildPollingTargets(
+          state.workspace.sheets,
+          profile.protocol === "rtu" ? profile.addressAdjust : "off",
+        ),
       );
     });
   }, []);
