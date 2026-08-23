@@ -16,6 +16,7 @@
     "build:electron": "pnpm --filter @mamep2026/web build:electron",
     "start:electron": "electron .",
     "dist:portable": "pnpm build:electron && node scripts/package-electron.mjs && electron-builder",
+    "dist:vscode": "pnpm build:vscode && node scripts/package-vscode.mjs",
     "slave": "node scripts/modbus-slave/modbus-rtu-slave.mjs",
     "build:vscode": "node scripts/build-vscode.mjs",
     "lint": "eslint .",

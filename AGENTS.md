@@ -30,6 +30,7 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 - `pnpm dev:electron` — Electron 开发模式（apps/web `vite --mode electron`，主进程/preload 打包到根 `dist-electron/`）；另需 `pnpm start:electron`（`electron .`）启动窗口
 - `pnpm build` / `pnpm build:electron` — 构建网页端 / Electron（产物 `apps/web/dist/`）
 - `pnpm dist:portable` — 免安装绿色版打包（build:electron → staging 组装 → electron-builder `--dir`，产出 `release/win-unpacked/` 整个文件夹，拷贝即用；配置 `electron-builder.yml` + `scripts/package-electron.mjs`，详见 ADR-018）
+- `pnpm dist:vscode` — VSCode 扩展 VSIX 打包（build:vscode → staging 组装 release/vscode-extension/ → npm 装 serialport 生产依赖 → vsce package，产出 `release/mamep2026-<version>.vsix`，仅打包不发布；staging 原因与流程见 `scripts/package-vscode.mjs` 头注释）
 - `pnpm build:vscode` — VSCode 端构建（`node scripts/build-vscode.mjs`：`vite --mode vscode` 构建共享 UI → 拷贝到 `apps/vscode-extension/dist/media/` → esbuild 打包扩展宿主 `dist/extension.js` 与 webview bridge `dist/media/vscode-bridge.js`）
 - `pnpm lint` — ESLint（全仓）
 - `pnpm typecheck` — turbo 全包类型检查（各包 `tsc --noEmit`）
