@@ -85,6 +85,9 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     clipboardReadText: vi.fn(async () => "from-clip"),
     session: makeSession(),
     sessionStats: () => ({ requestFrames: 0, responseFrames: 0 }),
+    loadConnectionConfig: vi.fn(async () =>
+      ok({ config: null, sourcePath: null }),
+    ),
     ...overrides,
   };
 }

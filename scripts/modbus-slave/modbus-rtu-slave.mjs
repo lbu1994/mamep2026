@@ -20,9 +20,12 @@
  * - 响应延迟：config.responseDelayMs（默认 0），模拟设备处理延迟
  *
  * 串口库：使用仓库根 node_modules 已安装的 serialport@13（原生绑定已构建），本脚本不重装/不重建。
- * 说明：CRC16 与异常码在脚本内自包含（protocol-modbus 包 exports 指向 TS 源，独立 .mjs
- * 无法直接导入）；算法与常量以 packages/protocol-modbus/src/crc16.ts、rtu-frame.ts 为唯一
- * 权威，修改时须同步。
+ * 说明：协议/规则/日志/CRC 复用共享模块 ./lib/modbus-core.mjs（RTU / TCP 从站单一事实源；
+ * protocol-modbus 包 exports 指向 TS 源，独立 .mjs 无法直接导入）；算法与常量以
+ * packages/protocol-modbus/src/crc16.ts、rtu-frame.ts 为唯一权威，修改须同步。
+ * 扩展行为（配置文件规则可用，不在 DEFAULT_MOCK_RULES 内）：
+ *   { "delayedResponse": ms } —— 按区间延迟响应（如 1500ms > 应用超时 → 迟到/丢弃路径）
+ *   { "splitResponse": { chunkSize, chunkDelayMs } } —— 响应拆段发送（半包/粘包组帧健壮性）
  *
  * 用法：
  *   node scripts/modbus-slave/modbus-rtu-slave.mjs                        # 默认读取同目录 modbus-slave.config.json（不存在则用内建默认配置）
@@ -34,136 +37,30 @@
 import { SerialPort, InterByteTimeoutParser } from "serialport";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-
-// ---------------------------------------------------------------------------
-// 常量（与 packages/protocol-modbus/src/rtu-frame.ts 一致，唯一权威）
-// ---------------------------------------------------------------------------
-const FUNCTION_READ_HOLDING = 0x03;
-const FUNCTION_WRITE_MULTIPLE = 0x10;
-
-const EXCEPTION_ILLEGAL_FUNCTION = 0x01;
-const EXCEPTION_ILLEGAL_DATA_ADDRESS = 0x02;
-const EXCEPTION_ILLEGAL_DATA_VALUE = 0x03;
-
-const EXCEPTION_NAMES = {
-  0x01: "非法功能",
-  0x02: "非法数据地址",
-  0x03: "非法数据值",
-};
-
-// ---------------------------------------------------------------------------
-// CRC-16/Modbus（多项式 0xA001，初始 0xFFFF，低字节在前）
-// 算法与 packages/protocol-modbus/src/crc16.ts 一致。
-// ---------------------------------------------------------------------------
-function crc16Modbus(bytes, start = 0, end = bytes.length) {
-  let crc = 0xffff;
-  for (let i = start; i < end; i++) {
-    crc ^= bytes[i] ?? 0;
-    for (let bit = 0; bit < 8; bit++) {
-      crc = crc & 1 ? (crc >> 1) ^ 0xa001 : crc >> 1;
-    }
-  }
-  return crc & 0xffff;
-}
-
-/** 将 CRC 附加到帧尾（低字节在前）。 */
-function appendCrc(body) {
-  const crc = crc16Modbus(body);
-  const frame = new Uint8Array(body.length + 2);
-  frame.set(body, 0);
-  frame[body.length] = crc & 0xff;
-  frame[body.length + 1] = (crc >> 8) & 0xff;
-  return frame;
-}
-
-/** 十六进制显示："01 03 00 00 00 01 84 0A"。 */
-function toHex(bytes) {
-  return Array.from(bytes, (b) =>
-    b.toString(16).padStart(2, "0").toUpperCase(),
-  ).join(" ");
-}
-
-// ---------------------------------------------------------------------------
-// 日志（分级 + 帧十六进制开关）
-// ---------------------------------------------------------------------------
-const LOG_LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
-
-function createLogger(level = "info", logFrames = true) {
-  const threshold = LOG_LEVELS[level] ?? LOG_LEVELS.info;
-  return {
-    frames: logFrames === true,
-    debug: (...args) => {
-      if (threshold <= LOG_LEVELS.debug) console.log(...args);
-    },
-    info: (...args) => {
-      if (threshold <= LOG_LEVELS.info) console.log(...args);
-    },
-    warn: (...args) => {
-      if (threshold <= LOG_LEVELS.warn) console.warn(...args);
-    },
-    error: (...args) => {
-      if (threshold <= LOG_LEVELS.error) console.error(...args);
-    },
-  };
-}
+import {
+  DEFAULT_RULES,
+  EXCEPTION_ILLEGAL_DATA_ADDRESS,
+  EXCEPTION_ILLEGAL_DATA_VALUE,
+  EXCEPTION_ILLEGAL_FUNCTION,
+  EXCEPTION_NAMES,
+  FUNCTION_READ_HOLDING,
+  FUNCTION_WRITE_MULTIPLE,
+  appendCrc,
+  createLogger,
+  crc16Modbus,
+  matchRule,
+  normalizeRules,
+  parseRegisters,
+  sendWithBehavior,
+  toHex,
+} from "./lib/modbus-core.mjs";
 
 // ---------------------------------------------------------------------------
 // 配置：默认值 + 归一化（行为枚举与 Mock 的 MockOpBehavior 对齐）
 // ---------------------------------------------------------------------------
-/**
- * 默认地址区间规则（与 DEFAULT_MOCK_RULES 一一对应）：
- * - 0x0000–0x000f 正常区：读/写均成功
- * - 0x0100–0x010f 只读区：读成功，写回异常 0x02
- * - 0x0200–0x020f 只写区：写成功，读回异常 0x02
- * - 0x0300–0x030f 寄存器不存在：读/写均回异常 0x02
- * - 0x0400–0x040f 非法数据值：读成功；写值须 ≤ 0x7FFF，超出回异常 0x03
- * - 0x0500–0x050f 不支持功能：读/写均回异常 0x01
- * - 0x0600–0x060f 设备无响应：读/写均不回任何帧
- */
-const DEFAULT_RULES = [
-  {
-    start: 0x0000,
-    end: 0x000f,
-    read: { kind: "normal" },
-    write: { kind: "normal" },
-  },
-  {
-    start: 0x0100,
-    end: 0x010f,
-    read: { kind: "normal" },
-    write: { kind: "exception", exceptionCode: EXCEPTION_ILLEGAL_DATA_ADDRESS },
-  },
-  {
-    start: 0x0200,
-    end: 0x020f,
-    read: { kind: "exception", exceptionCode: EXCEPTION_ILLEGAL_DATA_ADDRESS },
-    write: { kind: "normal" },
-  },
-  {
-    start: 0x0300,
-    end: 0x030f,
-    read: { kind: "exception", exceptionCode: EXCEPTION_ILLEGAL_DATA_ADDRESS },
-    write: { kind: "exception", exceptionCode: EXCEPTION_ILLEGAL_DATA_ADDRESS },
-  },
-  {
-    start: 0x0400,
-    end: 0x040f,
-    read: { kind: "normal" },
-    write: { kind: "write-value-gate", maxValue: 0x7fff },
-  },
-  {
-    start: 0x0500,
-    end: 0x050f,
-    read: { kind: "exception", exceptionCode: EXCEPTION_ILLEGAL_FUNCTION },
-    write: { kind: "exception", exceptionCode: EXCEPTION_ILLEGAL_FUNCTION },
-  },
-  {
-    start: 0x0600,
-    end: 0x060f,
-    read: { kind: "no-response" },
-    write: { kind: "no-response" },
-  },
-];
+// 默认地址区间规则（DEFAULT_RULES，7 区）与行为归一化/顺序匹配/寄存器解析均来自
+// 共享模块 ./lib/modbus-core.mjs（RTU / TCP 从站单一事实源，见其头注释）。
+// 扩展行为（delayed-response / split-response）同在该模块，配置文件规则可引用。
 
 const DEFAULT_CONFIG = {
   port: "COM5",
@@ -182,57 +79,6 @@ const DEFAULT_CONFIG = {
 // 默认配置文件：脚本同目录下的 modbus-slave.config.json。
 // 未显式 --config 时自动加载；该文件不存在则回退内建默认配置。
 const DEFAULT_CONFIG_PATH = join(import.meta.dirname, "modbus-slave.config.json");
-
-/**
- * 归一化配置中的行为描述（read/write 字段）：
- *   "normal"                 → { kind: "normal" }
- *   "no-response"            → { kind: "no-response" }
- *   { "exception": <code> }  → { kind: "exception", exceptionCode }
- *   { "writeValueGate": n }  → { kind: "write-value-gate", maxValue }
- */
-function normalizeBehavior(value, fieldName) {
-  if (typeof value === "string") {
-    if (value === "normal") return { kind: "normal" };
-    if (value === "no-response") return { kind: "no-response" };
-    throw new Error(
-      `${fieldName} 行为 "${value}" 无效（应为 "normal" / "no-response" / { "exception": n } / { "writeValueGate": n }）`,
-    );
-  }
-  if (value && typeof value === "object") {
-    if (typeof value.exception === "number") {
-      return { kind: "exception", exceptionCode: value.exception };
-    }
-    if (typeof value.writeValueGate === "number") {
-      return { kind: "write-value-gate", maxValue: value.writeValueGate };
-    }
-  }
-  throw new Error(
-    `${fieldName} 行为无效（应为 "normal" / "no-response" / { "exception": n } / { "writeValueGate": n }）`,
-  );
-}
-
-function normalizeRules(rules) {
-  if (rules === undefined) return DEFAULT_RULES;
-  if (!Array.isArray(rules)) throw new Error("配置 rules 必须是数组");
-  return rules.map((rule, index) => {
-    if (
-      !rule ||
-      typeof rule.start !== "number" ||
-      typeof rule.end !== "number"
-    ) {
-      throw new Error(`rules[${index}] 缺少 start/end 数值字段`);
-    }
-    return {
-      start: rule.start & 0xffff,
-      end: rule.end & 0xffff,
-      read: normalizeBehavior(rule.read ?? "normal", `rules[${index}].read`),
-      write: normalizeBehavior(
-        rule.write ?? "normal",
-        `rules[${index}].write`,
-      ),
-    };
-  });
-}
 
 function assertConfigNumber(value, fieldName, { min, max }) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -282,26 +128,9 @@ function loadConfig(configPath) {
     );
   }
 
-  // registers：{"<十进制地址>": <值>} → Map<number, number>（& 0xffff）
-  const registers = new Map();
-  if (config.registers && typeof config.registers === "object") {
-    for (const [key, value] of Object.entries(config.registers)) {
-      const address = Number.parseInt(key, 10) & 0xffff;
-      registers.set(address, Number(value) & 0xffff);
-    }
-  }
-  config.registers = registers;
-
+  config.registers = parseRegisters(config.registers);
   config.rules = normalizeRules(config.rules);
   return config;
-}
-
-/** 命中地址所在规则（顺序匹配，第一条命中生效）；未命中返回 null（回退正常行为）。 */
-function matchRule(rules, address) {
-  for (const rule of rules) {
-    if (address >= rule.start && address <= rule.end) return rule;
-  }
-  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -412,6 +241,7 @@ class ModbusRtuSlave {
         this.logException(functionCode, behavior.exceptionCode, addrHex);
         this.respond(
           this.exceptionFrame(slave, FUNCTION_READ_HOLDING, behavior.exceptionCode),
+          behavior,
         );
         return;
       }
@@ -426,6 +256,7 @@ class ModbusRtuSlave {
           (value >> 8) & 0xff,
           value & 0xff,
         ]),
+        behavior,
       );
       return;
     }
@@ -441,6 +272,7 @@ class ModbusRtuSlave {
         this.logException(functionCode, behavior.exceptionCode, addrHex);
         this.respond(
           this.exceptionFrame(slave, FUNCTION_WRITE_MULTIPLE, behavior.exceptionCode),
+          behavior,
         );
         return;
       }
@@ -450,6 +282,7 @@ class ModbusRtuSlave {
         );
         this.respond(
           this.exceptionFrame(slave, FUNCTION_WRITE_MULTIPLE, EXCEPTION_ILLEGAL_DATA_VALUE),
+          behavior,
         );
         return;
       }
@@ -466,6 +299,7 @@ class ModbusRtuSlave {
           0x00,
           0x01,
         ]),
+        behavior,
       );
       return;
     }
@@ -476,6 +310,7 @@ class ModbusRtuSlave {
     );
     this.respond(
       this.exceptionFrame(slave, functionCode, EXCEPTION_ILLEGAL_FUNCTION),
+      { kind: "normal" },
     );
   }
 
@@ -490,20 +325,18 @@ class ModbusRtuSlave {
     return Uint8Array.from([slave, functionCode | 0x80, exceptionCode]);
   }
 
-  /** 追加 CRC 并按 responseDelayMs 延迟发送。 */
-  respond(body) {
+  /** 追加 CRC 并按行为投递（normal 用 responseDelayMs；扩展延迟/拆段由 sendWithBehavior 处理）。 */
+  respond(body, behavior = { kind: "normal" }) {
     const frame = appendCrc(body);
-    const send = () => {
-      if (this.log.frames) this.log.debug(`[TX] ${toHex(frame)}`);
-      this.port.write(frame, (err) => {
+    const logWrite = (chunk) => {
+      if (this.log.frames) this.log.debug(`[TX] ${toHex(chunk)}`);
+      this.port.write(Buffer.from(chunk), (err) => {
         if (err) this.log.error(`发送失败: ${err.message}`);
       });
     };
-    if (this.config.responseDelayMs > 0) {
-      setTimeout(send, this.config.responseDelayMs);
-    } else {
-      send();
-    }
+    sendWithBehavior(logWrite, frame, behavior, {
+      baseDelayMs: this.config.responseDelayMs,
+    });
   }
 
   close() {
@@ -802,7 +635,11 @@ function printHelp() {
   0x0200–0x020f  只写区（读回异常 0x02）    0x0300–0x030f  不存在（读/写异常 0x02）
   0x0400–0x040f  非法值（写须 ≤ 0x7FFF，超限异常 0x03）
   0x0500–0x050f  不支持功能（读/写异常 0x01）  0x0600–0x060f  无响应（不回帧）
-  规则外地址回退为正常行为。`);
+  规则外地址回退为正常行为。
+
+扩展行为（配置文件规则可选，真实从站验证用，与 dev Mock 无关）:
+  0x0700–0x070f  delayedResponse=1500（延迟响应 → 主站超时/迟到丢弃路径）
+  0x0800–0x080f  splitResponse chunkSize=2（响应拆段发送 → 半包/粘包组帧健壮性）`);
 }
 
 function parseArgs(argv) {

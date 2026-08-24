@@ -7,6 +7,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   BatchReadRowPayload,
+  ConnectionConfigLoadResponse,
   HostDebugState,
   HostErrorMessage,
   HostEventMessage,
@@ -86,6 +87,10 @@ const api: MamepHostApi = {
       profile: payload.profile,
     });
     return result;
+  },
+  /** 加载连接对象配置文件（connection-config-load，ADR-023）：主进程读文件系统。 */
+  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>> {
+    return invoke<ConnectionConfigLoadResponse>("connection-config-load", {});
   },
   // ---- 远程会话 RPC（Electron TCP 会话在主进程，Renderer 远程代理）----
   sessionDisconnect(): Promise<Result<null>> {

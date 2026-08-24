@@ -13,6 +13,9 @@ import type {
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
 import {
+  connectionConfigFileSchema,
+} from "@mamep2026/connection-config";
+import {
   appMessagePayloadSchema,
   batchReadRowPayloadSchema,
   batchReadSummaryPayloadSchema,
@@ -59,6 +62,8 @@ export const HOST_REQUEST_KINDS = [
   "session-trace-stop",
   // 两端 TCP 接线（2026-08-23）：TCP 会话连接（无串口句柄，profile 即参数）。
   "session-tcp-connect",
+  // 连接对象配置文件（ADR-023）：桌面端从文件系统加载 config/connections.json（payload 空）。
+  "connection-config-load",
 ] as const;
 export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
 
@@ -192,6 +197,19 @@ export type SessionBatchReadResponse = z.infer<
   typeof sessionBatchReadResponseSchema
 >;
 
+/**
+ * connection-config-load 响应载荷（ADR-023）：桌面端从文件系统读取外部连接对象配置。
+ * config 为 null 表示未找到配置文件（可选能力，非错误）；sourcePath 为实际读取路径（诊断用）。
+ * 校验失败 / 读取失败经 HostMessage error 通道返回 MamepError。
+ */
+export const connectionConfigLoadResponseSchema = z.object({
+  config: connectionConfigFileSchema.nullable(),
+  sourcePath: z.string().nullable(),
+});
+export type ConnectionConfigLoadResponse = z.infer<
+  typeof connectionConfigLoadResponseSchema
+>;
+
 const requestBase = {
   protocolVersion: protocolVersionSchema,
   type: z.literal("request"),
@@ -315,6 +333,12 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
     kind: z.literal("session-tcp-connect"),
     // 两端 TCP 接线（2026-08-23）：profile 即完整连接参数（host/port/unitId/超时/重试）。
     payload: sessionTcpConnectPayloadSchema,
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("connection-config-load"),
+    // 连接对象配置文件加载（ADR-023）：无参数，平台侧按默认路径策略查找。
+    payload: z.object({}),
   }),
 ]);
 export type HostRequestMessage = z.infer<typeof hostRequestSchema>;
@@ -467,6 +491,13 @@ export interface MamepHostApi {
   /** 打开并连接主进程 TCP 会话（session-tcp-connect；Electron TCP 走主进程，2026-08-23）。 */
   sessionTcpConnect(payload: SessionTcpConnectPayload): Promise<Result<null>>;
 
+  /**
+   * 加载外部连接对象配置文件（connection-config-load，ADR-023）：
+   * 桌面端从文件系统读取 config/connections.json（默认路径策略见平台侧实现）。
+   * 未找到配置文件返回 ok({ config: null, sourcePath: null })；解析/读取失败返回 fail。
+   */
+  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
+
   // ---- 远程会话 RPC（2026-08-23 两端 TCP 接线：Electron TCP 会话在主进程，Renderer 远程代理）----
 
   sessionDisconnect(): Promise<Result<null>>;
@@ -570,6 +601,7 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   filesystem: "limited",
   nodePlugins: false,
   webPlugins: true,
+  connectionConfig: "file",
 });
 
 /**
@@ -584,4 +616,5 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   filesystem: "unsupported",
   nodePlugins: false,
   webPlugins: true,
+  connectionConfig: "file",
 });

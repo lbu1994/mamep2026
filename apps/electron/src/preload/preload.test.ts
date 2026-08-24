@@ -52,6 +52,7 @@ describe("preload 白名单桥", () => {
       "getAppVersion",
       "getCapabilities",
       "getDebugState",
+      "loadConnectionConfig",
       "onEvent",
       "platform",
       "readTextFromClipboard",

@@ -20,6 +20,7 @@ import {
   toBatchReadSummaryPayload,
   toErrorPayload,
   toWriteOutcomePayload,
+  type ConnectionConfigLoadResponse,
   type HostDebugState,
   type HostErrorMessage,
   type HostRequestMessage,
@@ -59,6 +60,8 @@ export interface IpcDeps {
   resolveSerialPortSelection(portId: string, sender: unknown): boolean;
   /** TCP 会话（Electron 主进程承载，2026-08-23 两端 TCP 接线）。 */
   session: ElectronSessionLike;
+  /** 连接对象配置文件加载（connection-config-load，ADR-023）。 */
+  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
 }
 
 /** 会话 RPC 包装：run 返回 Result 并映射为 response/error Envelope。 */
@@ -249,6 +252,9 @@ export async function handleRequest(
       return sessionVoid(message, () =>
         deps.session.traceStop(message.payload.key),
       );
+    case "connection-config-load":
+      // 连接对象配置文件加载（ADR-023）：未找到返回 ok({config:null})，失败返回 error。
+      return sessionResult(message, () => deps.loadConnectionConfig());
     case "debug:get-state":
       // 开发/测试探针（Playwright Electron E2E 用）：打包构建禁用。
       if (deps.isPackaged()) {

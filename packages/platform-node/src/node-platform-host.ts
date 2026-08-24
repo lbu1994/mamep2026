@@ -46,6 +46,7 @@ export const nodeHostCapabilities: PlatformCapabilities = Object.freeze({
   filesystem: "unsupported",
   nodePlugins: false,
   webPlugins: false,
+  connectionConfig: "file",
 });
 
 export interface NodePlatformHostOptions {

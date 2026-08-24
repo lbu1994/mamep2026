@@ -1,0 +1,14 @@
+{
+  "extends": "../../tooling/typescript-config/base.json",
+  "compilerOptions": {
+    // real/*.spec.ts 由 Playwright 自己的 TS 转换运行（ESM 包 vscode-test-playwright）；
+    // 此 tsconfig 仅用于 typecheck，不参与 tsc 构建（build/pretest 仍走 tsconfig.json 的 src）。
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["real", "playwright.real.config.ts"]
+}

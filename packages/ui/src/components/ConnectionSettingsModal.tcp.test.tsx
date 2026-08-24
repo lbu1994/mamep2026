@@ -8,7 +8,7 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
-import { createEmptyWorkspace } from "@mamep2026/domain";
+import { createEmptyWorkspace, createMamepError, fail } from "@mamep2026/domain";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import type { AppHost } from "../host";
@@ -28,6 +28,7 @@ function makeHost(
       filesystem: "unsupported",
       nodePlugins: false,
       webPlugins: true,
+      connectionConfig: "import",
       ...caps,
     },
     isMockMode: false,
@@ -51,6 +52,20 @@ function makeHost(
     selectSerialPort: vi.fn(async () => ({ ok: true as const, value: null })),
     connect: vi.fn(async () => ({ ok: true as const, value: undefined })),
     connectTcp,
+    loadConnectionConfig: vi.fn(async () => ({
+      ok: true as const,
+      value: { config: null, sourcePath: null },
+    })),
+    importConnectionConfigText: vi.fn(async () =>
+      fail(
+        createMamepError({
+          code: "CONNECTION_CONFIG_IMPORT_UNSUPPORTED",
+          category: "capability",
+          userMessageKey: "errors.connectionConfigImportUnsupported",
+          technicalMessage: "not supported",
+        }),
+      ),
+    ),
     disconnect: vi.fn(async () => ({ ok: true as const, value: undefined })),
     dispose: vi.fn(async () => undefined),
     getConnectionState: vi.fn(() => "disconnected" as const),

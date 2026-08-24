@@ -56,6 +56,10 @@ await mkdir(STAGING, { recursive: true });
 await mkdir(RELEASE_DIR, { recursive: true });
 await cp(path.join(EXT, "dist"), path.join(STAGING, "dist"), { recursive: true });
 
+// 2.5. 拷贝扩展图标（package.json icon 字段指向，vsce 打包进 VSIX 作为市场图标；
+//   由 scripts/generate-icons.mjs 从根 AppIcon.svg 生成）
+await cp(path.join(EXT, "icon.png"), path.join(STAGING, "icon.png"));
+
 // 3. staging package.json：name 显式 mamep2026（市场 name 不允许 @scope；扩展 ID 为
 //    publisher.name = mamep2026.mamep2026，VSIX 文件名 mamep2026-<version>.vsix），
 //    去掉 private/devDependencies/scripts，dependencies 仅保留 serialport（其余被 esbuild 内联）。
@@ -71,6 +75,7 @@ await writeFile(
       publisher: extPkg.publisher,
       engines: extPkg.engines,
       categories: extPkg.categories,
+      icon: extPkg.icon,
       main: extPkg.main,
       activationEvents: extPkg.activationEvents,
       contributes: extPkg.contributes,
@@ -82,24 +87,10 @@ await writeFile(
   "utf-8",
 );
 
-// 4. README（vsce 打包进 readme 资产；不含相对链接/图片/SVG，避免 vsce 链接重写报错）
-await writeFile(
-  path.join(STAGING, "README.md"),
-  `# Mamep2026
-
-Mamep2026 Modbus 开发调试工具（VSCode 端）。
-
-## 使用
-
-- 命令面板（\`Ctrl+Shift+P\`）→ \`Mamep2026: 打开主面板\`
-- 支持 Modbus RTU（串口）与 Modbus TCP 调试
-
-## 打包
-
-本 VSIX 由根目录 \`pnpm dist:vscode\` 生成（staging 组装，仅打包不发布）。
-`,
-  "utf-8",
-);
+// 4. README（vsce 打包进 readme 资产；不含相对链接/图片/SVG，避免 vsce 链接重写报错）。
+//   单一事实源：apps/vscode-extension/README.md（仓库内维护），staging 直接引用。
+const extReadme = await readFile(path.join(EXT, "README.md"), "utf-8");
+await writeFile(path.join(STAGING, "README.md"), extReadme, "utf-8");
 
 // 5. .vscodeignore：排除源码/构建配置/锁文件（staging 内本无 src，兜底防未来变更）
 await writeFile(

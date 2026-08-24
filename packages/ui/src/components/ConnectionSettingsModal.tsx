@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Alert,
@@ -23,6 +23,7 @@ import {
   CloseOutlined,
   DisconnectOutlined,
   ReloadOutlined,
+  UploadOutlined,
   UsbOutlined,
 } from "@ant-design/icons";
 import { useForm, Controller, useWatch } from "react-hook-form";
@@ -35,12 +36,16 @@ import {
 } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
 import type {
+  ConnectionConfigObject,
+} from "@mamep2026/connection-config";
+import type {
   SerialDeviceHandle,
   SerialPortOption,
 } from "@mamep2026/platform-api";
 import { useAppStore } from "../app-store";
 import {
   extractPersistedSettings,
+  loadConnectionToSettings,
   profileToValues,
   settingsSchema,
   toProfile,
@@ -86,6 +91,14 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const [portOptions, setPortOptions] = useState<SerialPortOption[]>([]);
   const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
   const [enumerating, setEnumerating] = useState(false);
+  // ---- 连接对象配置文件（ADR-023）----
+  const [configConnections, setConfigConnections] = useState<
+    ConnectionConfigObject[]
+  >([]);
+  const [configSource, setConfigSource] = useState<string | null>(null);
+  const [configLoadError, setConfigLoadError] = useState<string | null>(null);
+  const [loadedConfigId, setLoadedConfigId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 持久化的首个 profile（RTU 或 TCP）：作为对应协议表单的基础值。
   const storedProfile = workspace.connectionProfiles[0];
@@ -113,17 +126,22 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const isMock = host?.isMockMode ?? false;
   const serialPorts = host?.capabilities.serialPorts ?? "unsupported";
   const isEnumerated = serialPorts === "enumerated";
+  const supportsConfig =
+    host?.capabilities.connectionConfig ?? "unsupported";
+  const canLoadConfig = supportsConfig !== "unsupported";
 
-  /** enumerated：枚举可用串口（打开弹窗 / 点击刷新时调用）。 */
-  const enumeratePorts = async (): Promise<void> => {
-    if (host === null || host === undefined) return;
+  /** enumerated：枚举可用串口（打开弹窗 / 点击刷新时调用）；返回端口列表（供配置自动匹配）。 */
+  const enumeratePorts = async (): Promise<SerialPortOption[]> => {
+    if (host === null || host === undefined) return [];
     setEnumerating(true);
     try {
       const result = await host.enumerateSerialPorts();
       if (result.ok) {
         setPortOptions(result.value);
         setConnectError(null);
+        return result.value;
       }
+      return [];
     } finally {
       setEnumerating(false);
     }
@@ -144,6 +162,104 @@ export function ConnectionSettingsModal(): React.ReactNode {
       setConnectError(
         `${t(result.error.userMessageKey)} (${result.error.technicalMessage})`,
       );
+    }
+  };
+
+  // ---- 连接对象配置文件（ADR-023）：载入 / 导入 / 端口匹配 ----
+
+  /** 加载外部连接对象配置文件（桌面端读文件；浏览器返回 URL/导入内容）。 */
+  const loadConfig = useCallback(async (): Promise<void> => {
+    if (host === null || host === undefined) return;
+    const result = await host.loadConnectionConfig();
+    if (result.ok) {
+      setConfigConnections(result.value.config?.connections ?? []);
+      setConfigSource(result.value.sourcePath);
+      setConfigLoadError(null);
+    } else {
+      setConfigConnections([]);
+      setConfigLoadError(
+        `${t(result.error.userMessageKey)} (${result.error.technicalMessage})`,
+      );
+    }
+  }, [host, t]);
+
+  // 连接对象配置文件（ADR-023）：重连/重启时重新读取——弹窗打开时加载（无热更新）。
+  // 用 useEffect 而非 Modal.afterOpenChange：jsdom 下动画不完成、afterOpenChange 不触发。
+  // setState 均在 await 之后（异步回调），不在 effect 同步执行路径（react-hooks/set-state-in-effect）。
+  useEffect(() => {
+    if (!open || !canLoadConfig || host === null || host === undefined) return;
+    let cancelled = false;
+    void host.loadConnectionConfig().then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setConfigConnections(result.value.config?.connections ?? []);
+        setConfigSource(result.value.sourcePath);
+        setConfigLoadError(null);
+      } else {
+        setConfigConnections([]);
+        setConfigLoadError(
+          `${t(result.error.userMessageKey)} (${result.error.technicalMessage})`,
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, canLoadConfig, host, t]);
+
+  /** 浏览器端导入 JSON 文件（connectionConfig === "import"）。 */
+  const onImportFile = async (file: File | undefined): Promise<void> => {
+    if (host === null || host === undefined || file === undefined) return;
+    const text = await file.text();
+    const result = await host.importConnectionConfigText(text);
+    if (result.ok) {
+      setConfigConnections(result.value.connections);
+      setConfigSource("import");
+      setConfigLoadError(null);
+      const activeId = result.value.activeConnectionId;
+      if (activeId !== null) {
+        await applyConnection(activeId);
+      }
+    } else {
+      setConfigLoadError(
+        `${t(result.error.userMessageKey)} (${result.error.technicalMessage})`,
+      );
+    }
+  };
+
+  /** 从配置文件载入指定连接对象：预填表单 +（RTU）端口匹配与从站地址同步。 */
+  const applyConnection = async (connectionId: string): Promise<void> => {
+    const connection = configConnections.find((c) => c.id === connectionId);
+    if (connection === undefined) return;
+    const loaded = loadConnectionToSettings(connection);
+    reset(loaded.values);
+    setLoadedConfigId(connection.id);
+    setConnectError(null);
+    if (connection.protocol === "rtu" && !isMock) {
+      // RTU：按配置文件指定的串口名匹配端口。
+      if (isEnumerated) {
+        const ports = await enumeratePorts();
+        const match = ports.find(
+          (p) => p.portId === connection.port || p.label === connection.port,
+        );
+        if (match !== undefined) {
+          await selectPort(match.portId);
+        } else if (ports.length > 0) {
+          // 配置的串口名不在当前枚举结果中：清空选择并提示。
+          setSelectedHandle(null);
+          setSelectedPortId(null);
+          setConnectError(
+            `${t("connection.configInvalid")} ${t("connection.selectDeviceFirst")}`,
+          );
+        }
+      } else {
+        // browser-picker：无法自动授权，用户仍需点选（保留现有流程）；若已选则不覆盖。
+        if (selectedHandle === null) {
+          setConnectError(t("connection.selectDeviceFirst"));
+        }
+      }
+      // 同步当前表从站地址（「从站地址按表独立」模型：载入即采用该连接对象的默认从站地址）。
+      host?.setSlaveAddress(connection.slaveAddress);
     }
   };
 
@@ -254,6 +370,71 @@ export function ConnectionSettingsModal(): React.ReactNode {
         </Typography.Paragraph>
       ) : null}
       <Form layout="vertical" size="small">
+        {canLoadConfig ? (
+          <>
+            <Divider
+              titlePlacement="left"
+              plain
+              style={{ marginTop: 0, marginBottom: 8 }}
+            >
+              {t("connection.configGroup")}
+            </Divider>
+            <Flex gap={8} align="center" style={{ marginBottom: 4 }}>
+              <Select
+                style={{ flex: 1 }}
+                aria-label={t("connection.configLoadPlaceholder")}
+                placeholder={t("connection.configLoadPlaceholder")}
+                value={loadedConfigId ?? undefined}
+                options={configConnections.map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                }))}
+                onChange={(id) => {
+                  if (id !== undefined) void applyConnection(id);
+                }}
+                notFoundContent={t("connection.configEmpty")}
+              />
+              {supportsConfig === "import" ? (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      void onImportFile(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    icon={<UploadOutlined />}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {t("connection.configImport")}
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => void loadConfig()}
+                title={t("connection.portRefresh")}
+              />
+            </Flex>
+            {configSource !== null ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {t("connection.configSource")}: {configSource}
+              </Typography.Text>
+            ) : null}
+            {configLoadError !== null ? (
+              <Alert
+                type="error"
+                showIcon
+                message={configLoadError}
+                style={{ marginTop: 8, marginBottom: 8 }}
+              />
+            ) : null}
+          </>
+        ) : null}
         <Controller
           name="protocol"
           control={control}

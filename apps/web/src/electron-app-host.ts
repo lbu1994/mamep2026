@@ -25,6 +25,7 @@ import type {
   Workspace,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
+import type { ConnectionConfigFile } from "@mamep2026/connection-config";
 import {
   commLogEventFromPayload,
   electronCapabilities,
@@ -33,6 +34,7 @@ import {
   toTcpConnectionProfilePayload,
   type AppMessagePayload,
   type CommLogEventPayload,
+  type ConnectionConfigLoadResponse,
   type HostResultPayload,
   type MamepHostApi,
   type MamepHostEvent,
@@ -344,6 +346,26 @@ export class ElectronAppHost implements AppHost {
   supportsWebSerial(): boolean {
     // 以注入/装配的 serial 为准（生产为 navigator.serial），不依赖全局 navigator 探测。
     return this.platform.supportsWebSerial;
+  }
+
+  /** 加载连接对象配置文件（ADR-023）：主进程读文件系统（经 preload 白名单桥）。 */
+  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>> {
+    return this.bridge.loadConnectionConfig();
+  }
+
+  /** 桌面端由宿主文件读取配置，不经 UI 导入：返回能力错误。 */
+  importConnectionConfigText(): Promise<Result<ConnectionConfigFile>> {
+    return Promise.resolve(
+      fail(
+        createMamepError({
+          code: "CONNECTION_CONFIG_IMPORT_UNSUPPORTED",
+          category: "capability",
+          userMessageKey: "errors.connectionConfigImportUnsupported",
+          technicalMessage:
+            "connection config import is not supported on the Electron host (load from config file)",
+        }),
+      ),
+    );
   }
 
   async connect(

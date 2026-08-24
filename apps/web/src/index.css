@@ -1307,21 +1307,10 @@ textarea:focus-visible {
 
 /* ---------------- 1. Header ---------------- */
 
-/* 品牌标记：标题前品牌色小方块（纯 CSS 装饰，不动 DOM 结构） */
-.mamep-header__brand-title::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 6px;
-  border-radius: 2px;
-  background: linear-gradient(
-    135deg,
-    var(--ant-color-primary),
-    var(--ant-color-primary-active)
-  );
-  box-shadow: 0 0 0 1px var(--ant-color-primary-border);
-  vertical-align: 0;
+/* 品牌图标：MamepApp 头部用 antd Avatar 承载 AppIcon.svg（替代原 ::before 小方块） */
+.mamep-header__brand-icon {
+  flex: none;
+  background: var(--ant-color-bg-container);
 }
 
 /* 连接状态摘要胶囊：加边框与状态着色（连接中/成功/告警/失败 各自柔和浅底） */

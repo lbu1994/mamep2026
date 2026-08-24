@@ -815,9 +815,10 @@ Host 负责装配具体适配器，不实现领域规则。
 | Web 插件     |                 支持受限插件 |   可支持 |         可支持 |
 | VSCode 命令  |                       不支持 |   不支持 |           支持 |
 | 系统通知     |                   浏览器能力 |     支持 |    VSCode 通知 |
+| 连接对象配置文件（ADR-023） |   导入/URL（import） |     文件（file） |     文件（file） |
 | 自动更新     |                       不适用 | 后续支持 | 由 VSCode 管理 |
 
-> 实现状态（2026-08-21；2026-08-23 更新）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**VSCode 列 RTU 已接线（2026-08-23，ADR-021）**（Extension Host `NodePlatformHost` + 共享 `RtuSessionHost`，Renderer 远程代理，能力翻转）。**两端 Modbus TCP 已接线（2026-08-23，ADR-022）**：会话层 `CommunicationSession` 支持 `protocol:"tcp"`（`TcpFrameParser` MBAP 分帧 + Transaction ID 管理）；Electron TCP 会话承载主进程（`ElectronSessionHost`，Renderer `ElectronAppHost` 混合远程代理）、VSCode TCP 会话承载 Extension Host（`VscodeSessionHost.connectTcp`），能力矩阵 `electronCapabilities`/`vscodeCapabilities` → `modbusTcp:true`；UI Connection Settings 增加 TCP 分组（协议 Segmented 能力门控，浏览器不显示 TCP 入口）；`tests/e2e-vscode` 走通 TCP 闭环、`tests/e2e-electron` 走通 TCP 配置连接 → FC03 读 → FC10 写闭环。VSCode 文件持久化仍为规划目标。
+> 实现状态（2026-08-21；2026-08-23 更新）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**VSCode 列 RTU 已接线（2026-08-23，ADR-021）**（Extension Host `NodePlatformHost` + 共享 `RtuSessionHost`，Renderer 远程代理，能力翻转）。**两端 Modbus TCP 已接线（2026-08-23，ADR-022）**：会话层 `CommunicationSession` 支持 `protocol:"tcp"`（`TcpFrameParser` MBAP 分帧 + Transaction ID 管理）；Electron TCP 会话承载主进程（`ElectronSessionHost`，Renderer `ElectronAppHost` 混合远程代理）、VSCode TCP 会话承载 Extension Host（`VscodeSessionHost.connectTcp`），能力矩阵 `electronCapabilities`/`vscodeCapabilities` → `modbusTcp:true`；UI Connection Settings 增加 TCP 分组（协议 Segmented 能力门控，浏览器不显示 TCP 入口）；`tests/e2e-vscode` 走通 TCP 闭环、`tests/e2e-electron` 走通 TCP 配置连接 → FC03 读 → FC10 写闭环。**连接对象配置文件已落地（2026-08-24，ADR-023）**：`config/connections.json`（JSON + Zod 校验，`packages/connection-config`）定义真实设备连接对象（RTU 含串口名/从站地址，TCP 含 host/port/unitId 等），供 UI「从配置载入」预填 + 脚本消费（消除 COM4/COM5/127.0.0.1:1502 硬编码）；三端加载——Electron/VSCode 读文件（`connection-config-load` kind，`connectionConfig:"file"`），浏览器导入 JSON/`?connectionConfig=` URL（`connectionConfig:"import"`）；生效时机为重连/重启重读；MOCK/FAKE 保持显式 dev-only 可选，默认路径即真实设备。VSCode 文件持久化仍为规划目标。
 
 能力矩阵通过 PlatformCapabilities 对象注入 UI。
 
@@ -1816,6 +1817,29 @@ TCP 配置：
 串口路径不作为必须恢复项。
 
 recentPortHint 只能用于显示最近使用信息，不得触发自动连接。
+
+## 18.4.1 连接对象配置文件（ADR-023）
+
+外部连接对象（真实设备连接参数）以 `config/connections.json` 集中管理，供 UI「从配置载入」与
+测试/验证脚本消费。与 `connectionProfiles`（工作区持久化）的关系：**默认值来源 + 导入预填**——
+UI 载入后预填连接表单，关闭时照常合并进 `connectionProfiles[0]` 持久化，不改变持久化格式与边界。
+
+配置文件格式（由 `packages/connection-config` 的 Zod schema 校验，判别联合 `protocol`）：
+
+    ConnectionConfigFile
+      schemaVersion           // 1
+      activeConnectionId      // 默认选中连接对象 id（可 null）
+      connections[]           // RTU 连接对象（port/baudRate/dataBits/stopBits/parity/flowControl/
+                              //   slaveAddress/requestTimeoutMs/retryCount/interRequestDelayMs/addressAdjust）
+                              // TCP 连接对象（host/port/unitId/connectTimeoutMs/requestTimeoutMs/
+                              //   retryCount/autoReconnect/interRequestDelayMs）
+
+- 省略字段按 `defaultConfig` 回填；`port`（串口名）为配置文件特有字段，**不进入 connectionProfiles
+  持久化**（ADR-017 边界不变）；RTU `slaveAddress` 为该连接对象的默认从站地址，UI 载入时同步到
+  当前表从站地址（不改变「从站地址按表独立」模型）。
+- 三端加载：Electron/VSCode 读文件（`connection-config-load` HostMessage kind，`connectionConfig:"file"`），
+  浏览器导入 JSON / `?connectionConfig=<base64>` URL（`connectionConfig:"import"`）。生效时机：重连/重启
+  重读（打开连接设置时加载），无热更新。字段说明与消费方式详见 `config/README.md`。
 
 ## 18.5 ReadVerifySettings
 
@@ -2816,6 +2840,40 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 - 长时间轮询资源释放。
 
 真实设备测试结果应记录环境信息，但具体执行清单放入测试文档或发布流程，不写入 AGENTS.md 以外的代理执行细节。
+
+## 26.12 真实端口 e2e（com0com + 真实从站，ADR-024）
+
+2026-08-24 落地（ADR-024）：三端「真实端口」e2e 作为**默认真实路径**的自动化闭环，
+与 MOCK/FAKE（`?mockTransport=1`、`MAMEP_FAKE_SERIAL/TCP=1`）正交（MOCK 保留为显式可选
+dev 手段）。统一编排 `scripts/e2e-real.mjs <web|electron|vscode|all>`：预检（RTU 用
+serialport `list()` 检查主站口 rtu-com4-master.port 与从站口 modbus-slave.config.json.port
+均存在；TCP 探测 tcp-local-slave 端口可监听）→ 设 `MAMEP_REAL=1` → 拉起从站（RTU: COM5 /
+TCP: 127.0.0.1:1502，均来自 `config/connections.json` / 从站自身配置，不硬编码）→ 跑对应端
+命令 → 回收。缺环境 → SKIP 提示、退出码 0（不失败）。命令：`pnpm test:e2e:real`（all）、
+`pnpm test:e2e:web:real` / `:electron:real` / `:vscode:real`。
+
+- **从站**：`scripts/modbus-slave/lib/modbus-core.mjs`（RTU/TCP 单一事实源：7 区 DEFAULT_RULES、
+  行为归一化、CRC、日志、响应投递）+ `modbus-rtu-slave.mjs`（COM5，重构复用 lib，`--self-test`
+  保回归）+ `modbus-tcp-slave.mjs`（MBAP，默认 host/port/unitId 取 config tcp-local-slave）。
+  扩展行为（真实从站配置，不在 DEFAULT_MOCK_RULES）：`delayedResponse`（0x0700 延迟 1500ms →
+  超时/迟到丢弃）与 `splitResponse`（0x0800 拆段 2B/5ms → 半包/粘包组帧）。
+- **浏览器**（`tests/e2e-web/tests-real/real-serial.spec.ts`，系统 Edge 有头）：Connection
+  Settings → 系统 Web Serial picker（用户手势，启动时选择 COM4 一次）→ 记录 localStorage
+  （`mamep:real-serial-port`）→ `test.describe.serial` 共享 page/连接复用；跨运行打印上次选择。
+- **Electron**（`tests/e2e-electron/tests-real/real-serial.spec.ts` / `real-tcp.spec.ts`，
+  生产构建路径，全自动）：RTU 走串口下拉枚举（用户手势）→ 自动选 config 指定串口 COM4；
+  TCP 走切 Modbus TCP → 按 config tcp-local-slave 填表。
+- **VSCode**（`tests/e2e-vscode/real/real-rtu.spec.ts` / `real-tcp.spec.ts`，
+  vscode-test-playwright 0.0.1-beta2，UI 级断言）：extensionDevelopmentPath 加载扩展 → 生产
+  webview（未设 MAMEP_DEV_URL → getProdHtml）→ `workbox.frames()` 定位 `vscode-webview://`
+  frame 驱动共享 UI → RTU 串口下拉 serial-enumerate（RPC）选 COM4；TCP 按 config 填表。
+  fixture 每测试新建 VS Code 实例 → 每协议单测试 + `test.step()` 控制启动次数。
+- **场景矩阵（三端一致，RTU/TCP）**：连接 Online → FC03 读（0x0000=0x04D2）/ FC10 写 + 读回
+  → 写值门控 0x0400（0x8000 拒/0x1234 成）→ 异常区 0x0100/0x0200/0x0300→0x02、0x0500→0x01
+  → no-response 0x0600 超时且后续正常 → 边界 0x0000/0xFFFF → 扩展 0x0800 分片 / 0x0700 延迟
+  → 通信日志帧字节 → 断开/重连（浏览器仅断开一次，重连稳定性由桌面端覆盖）→ 无 console 错误。
+- 能力矩阵不变（modbusRtu/serialPorts/modbusTcp/connectionConfig 已如实）；无新增 HostMessage
+  kind；浏览器不追加 TCP；测试参数不硬编码（读 `config/connections.json`）。
 
 ---
 

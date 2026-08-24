@@ -165,6 +165,7 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
         "getCapabilities",
         "getColorTheme",
         "getDebugState",
+        "loadConnectionConfig",
         "onEvent",
         "platform",
         "readTextFromClipboard",

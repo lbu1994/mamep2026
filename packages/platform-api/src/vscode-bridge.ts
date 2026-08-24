@@ -19,6 +19,7 @@ import { fail } from "@mamep2026/domain";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
 import type {
   ColorThemeKind,
+  ConnectionConfigLoadResponse,
   HostRequestKind,
   MamepHostEvent,
   SerialPortOption,
@@ -173,6 +174,8 @@ export function createVscodeBridge(
       postRequest<null>("session-trace-stop", { key }),
     sessionTcpConnect: (payload: SessionTcpConnectPayload) =>
       postRequest<null>("session-tcp-connect", payload),
+    loadConnectionConfig: () =>
+      postRequest<ConnectionConfigLoadResponse>("connection-config-load", {}),
     onEvent: (listener: (event: MamepHostEvent) => void) => {
       listeners.add(listener);
       return () => {

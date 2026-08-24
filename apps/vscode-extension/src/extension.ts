@@ -11,6 +11,7 @@
  * - 资源释放：onDidReceiveMessage / 主题订阅 / panel dispose 全部随 context.subscriptions 管理。
  */
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as vscode from "vscode";
 import { NodePlatformHost } from "@mamep2026/platform-node";
 import {
@@ -34,6 +35,10 @@ import {
 } from "./ipc";
 import { VscodeSessionHost } from "./session-host";
 import { getDevHtml } from "./webview/html";
+import {
+  loadConnectionConfig,
+  resolveVscodeCandidatePaths,
+} from "./config-loader";
 
 /** 当前主面板（单实例：重复命令 reveal）。 */
 let panel: vscode.WebviewPanel | undefined;
@@ -133,6 +138,19 @@ function createDeps(
     clipboardReadText: async () => vscode.env.clipboard.readText(),
     session: createSessionHost(isDev, postEvent),
     sessionStats: () => ({ ...sessionStats }),
+    // 连接对象配置文件（ADR-023）：配置项 > workspace 根 config/ > 用户主目录。
+    loadConnectionConfig: () =>
+      loadConnectionConfig(
+        resolveVscodeCandidatePaths({
+          settingPath:
+            vscode.workspace
+              .getConfiguration("mamep2026")
+              .get<string>("connectionConfigPath") ?? undefined,
+          workspaceRoot:
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null,
+          homeDir: os.homedir(),
+        }),
+      ),
   };
 }
 

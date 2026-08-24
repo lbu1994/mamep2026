@@ -72,6 +72,15 @@ export const en = {
     unitIdHint: "MBAP Unit Identifier: 0–255. 0 = broadcast (not implemented).",
     autoReconnect: "Auto Reconnect",
     autoReconnectHint: "Planned for V1.0 (P1); not yet available.",
+    // ---- 连接对象配置文件（ADR-023）----
+    configGroup: "Load from Config File",
+    configLoadPlaceholder: "Select a connection from config…",
+    configEmpty: "No connections defined in the config file",
+    configImport: "Import JSON…",
+    configSource: "Source",
+    configInvalidJson: "The config file is not valid JSON.",
+    configInvalid: "The config file failed validation.",
+    configLoadFailed: "Failed to read the config file.",
   },
   state: {
     disconnected: "Offline",
@@ -298,6 +307,8 @@ export const en = {
     tcpHostInvalid: "Invalid TCP host.",
     tcpPortOutOfRange: "TCP port is out of range (1..65535).",
     tcpUnitIdOutOfRange: "TCP unit ID is out of range (0..255).",
+    connectionConfigImportUnsupported:
+      "Importing a JSON config file is not supported here (use the config file instead).",
     clipboardUnavailable: "System clipboard is not available.",
     internal: "Internal error.",
     unexpectedResponse: "Unexpected response from the device.",
@@ -373,8 +384,15 @@ export const zh: TranslationResources = {
     unitId: "Unit ID",
     unitIdHint: "MBAP 单元标识：0~255；0=广播（未实现）。",
     autoReconnect: "自动重连",
-    autoReconnectHint: "规划于 V1.0（P1），暂不可用。",
-  },
+    autoReconnectHint: "规划于 V1.0（P1），暂不可用。",    // ---- 连接对象配置文件（ADR-023）----
+    configGroup: "从配置文件载入",
+    configLoadPlaceholder: "选择配置文件中的连接…",
+    configEmpty: "配置文件中没有定义连接",
+    configImport: "导入 JSON…",
+    configSource: "来源",
+    configInvalidJson: "配置文件不是合法的 JSON。",
+    configInvalid: "配置文件校验失败。",
+    configLoadFailed: "配置文件读取失败。",  },
   state: {
     disconnected: "离线",
     "selecting-device": "选择设备中",
@@ -591,6 +609,8 @@ export const zh: TranslationResources = {
     tcpHostInvalid: "TCP 主机无效。",
     tcpPortOutOfRange: "TCP 端口超出范围（1..65535）。",
     tcpUnitIdOutOfRange: "TCP 单元标识超出范围（0..255）。",
+    connectionConfigImportUnsupported:
+      "此环境不支持导入 JSON 文件（请改用配置文件）。",
     clipboardUnavailable: "系统剪贴板不可用。",
     internal: "内部错误。",
     unexpectedResponse: "设备响应异常。",

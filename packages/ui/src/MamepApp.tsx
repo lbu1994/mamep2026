@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { MenuProps, MenuRef } from "antd";
 import {
   App as AntApp,
+  Avatar,
   Button,
   ConfigProvider,
   Divider,
@@ -21,6 +22,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import appIconUrl from "./assets/AppIcon.svg";
 import {
   ApiOutlined,
   AppstoreOutlined,
@@ -352,6 +354,14 @@ export function MamepApp(): React.ReactNode {
         <Layout style={{ height: "100vh" }}>
           <Layout.Header className="mamep-header">
             <div className="mamep-header__brand">
+              {/* 品牌图标：共享 UI 资源（AppIcon.svg），替代原 CSS ::before 小方块 */}
+              <Avatar
+                shape="square"
+                size={22}
+                src={appIconUrl}
+                className="mamep-header__brand-icon"
+                alt=""
+              />
               <Typography.Text className="mamep-header__brand-title">
                 {t("app.title")}
               </Typography.Text>

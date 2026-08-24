@@ -1,9 +1,22 @@
-# Modbus RTU 从站（模拟设备）使用说明
+# Modbus 从站（模拟设备）使用说明
 
-独立进程的 Node.js Modbus RTU 从站，默认挂载 **COM5**，行为与仓库 dev Mock 模拟设备
-（`packages/platform-web/src/mock-transport.ts` + `mock-scenarios.ts`）**完全一致**。
-配合 com0com 虚拟串口对 **COM4 ↔ COM5**，让 Mamep2026 应用（连接 COM4）走真实串口
-完成 RTU 调试闭环。
+独立进程的 Node.js Modbus 从站，分 RTU 与 TCP 两种传输（同一套协议/规则核心，
+见下方「共享核心」）：
+
+- **Modbus RTU 从站**（`modbus-rtu-slave.mjs`）：默认挂载 **COM5**，配合 com0com
+  虚拟串口对 **COM4 ↔ COM5**，让 Mamep2026 应用（连接 COM4）走真实串口完成 RTU 调试闭环。
+- **Modbus TCP 从站**（`modbus-tcp-slave.mjs`）：默认监听 **127.0.0.1:1502**（host/port/
+  unitId 取自 `config/connections.json` 的 `tcp-local-slave`），让桌面端走真实 TCP 闭环。
+
+两者行为与仓库 dev Mock 模拟设备（`packages/platform-web/src/mock-transport.ts` +
+`mock-scenarios.ts`）**完全一致**（7 个默认地址区间），并额外支持扩展行为（分片/延迟，
+见下），供真实端口 e2e 验证半包/粘包与迟到响应路径。
+
+## 共享核心
+
+协议/规则/日志/CRC 复用 `lib/modbus-core.mjs`（RTU / TCP 从站单一事实源，避免规则漂移）；
+行为归一化、规则顺序匹配、响应投递（含扩展行为）均在其中。算法与常量以
+`packages/protocol-modbus/src/crc16.ts`、`rtu-frame.ts` 为权威，修改须同步。
 
 ## 环境前提
 
@@ -13,17 +26,23 @@
 ## 快速启动
 
 ```powershell
-# 无 --config：自动读取脚本同目录 modbus-slave.config.json（不存在则用内建默认配置）
+# RTU 从站（默认 COM5，读取脚本同目录 modbus-slave.config.json）
 node scripts/modbus-slave/modbus-rtu-slave.mjs
 
-# 显式指定配置文件（默认配置即 scripts/modbus-slave/modbus-slave.config.json）
-node scripts/modbus-slave/modbus-rtu-slave.mjs --config scripts/modbus-slave/modbus-slave.config.json
-
-# 回环自测：同进程开 COM4（主）+ COM5（从），脚本化断言全部行为清单
+# RTU 从站回环自测：同进程开 COM4（主）+ COM5（从），脚本化断言全部行为清单
 node scripts/modbus-slave/modbus-rtu-slave.mjs --self-test
+
+# TCP 从站（默认 127.0.0.1:1502，host/port/unitId 取自 config/connections.json 的 tcp-local-slave）
+node scripts/modbus-slave/modbus-tcp-slave.mjs
+
+# TCP 从站回环自测：同进程开主站（临时端口）+ 从站，脚本化断言全部行为清单
+node scripts/modbus-slave/modbus-tcp-slave.mjs --self-test
+
+# TCP 从站自定义端口
+node scripts/modbus-slave/modbus-tcp-slave.mjs --port 1503
 ```
 
-启动日志示例（默认 `logLevel: "info"` + `logFrames: true`，收发帧为十六进制，便于与应用通信日志对照）：
+启动日志示例（RTU，默认 `logLevel: "info"` + `logFrames: true`，收发帧为十六进制）：
 
 ```
 从站已启动: COM5 @ 9600 8N1，从站地址 1
@@ -33,9 +52,15 @@ node scripts/modbus-slave/modbus-rtu-slave.mjs --self-test
 [TX] 01 03 02 04 D2 3A D9
 ```
 
+TCP 从站启动日志：
+
+```
+从站已启动: 127.0.0.1:1502，unitId 1。Ctrl+C 退出。
+```
+
 ## 配置文件
 
-字段：
+RTU 从站（`modbus-slave.config.json`）字段：
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -51,14 +76,27 @@ node scripts/modbus-slave/modbus-rtu-slave.mjs --self-test
 | `registers` | `{}` | 初始寄存器值：`{ "<十进制地址>": <值> }`，默认 0 |
 | `rules` | 见下 | 地址区间 → 读写行为；缺省时与 `DEFAULT_MOCK_RULES` 相同 |
 
-`rules` 中 `read`/`write` 行为枚举（与 Mock 的 `MockOpBehavior` 对齐）：
+TCP 从站（`modbus-tcp-slave.config.json`）字段：
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `host` / `port` / `unitId` | `config/connections.json` 的 `tcp-local-slave` | 监听地址/端口/应答 unitId（命令行 `--host`/`--port` 可覆盖） |
+| `responseDelayMs` | `0` | 模拟设备响应延迟（毫秒） |
+| `logLevel` / `logFrames` | `"info"` / `true` | 日志 |
+| `registers` / `rules` | 同 RTU | 初始寄存器 / 地址区间规则 |
+
+`rules` 中 `read`/`write` 行为枚举（与 Mock 的 `MockOpBehavior` 对齐 + 扩展）：
 
 - `"normal"` — 正常：返回成功响应
 - `{ "exception": <code> }` — 返回指定 Modbus 异常码（0x01 非法功能 / 0x02 非法数据地址 / 0x03 非法数据值）
 - `{ "writeValueGate": <max> }` — 写专用：值 ≤ max 成功，超出回异常 0x03；读按正常处理
 - `"no-response"` — 不回任何帧（触发请求超时/重试路径）
+- `{ "delayedResponse": <ms> }` — **扩展**：该区间响应延迟 ms 后再发（如 1500ms > 应用
+  超时 1000ms → 主站超时/重试后迟到帧被丢弃，验证迟到响应路径）
+- `{ "splitResponse": { "chunkSize": n, "chunkDelayMs": m } }` — **扩展**：响应帧按
+  chunkSize 字节拆段、间隔 m ms 发送（模拟半包/粘包，验证主站组帧健壮性）
 
-默认地址区间规则（与 `DEFAULT_MOCK_RULES` 一一对应）：
+默认地址区间规则（与 `DEFAULT_MOCK_RULES` 一一对应）+ 扩展区间（配置文件自带）：
 
 | 区间 | 读 | 写 | 用途 |
 | --- | --- | --- | --- |
@@ -69,6 +107,8 @@ node scripts/modbus-slave/modbus-rtu-slave.mjs --self-test
 | `0x0400–0x040f` | 成功 | 值须 ≤ 0x7FFF，超限异常 0x03 | 非法数据值 |
 | `0x0500–0x050f` | 异常 0x01 | 异常 0x01 | 不支持功能 |
 | `0x0600–0x060f` | 无响应 | 无响应 | 设备无响应（超时/重试） |
+| `0x0700–0x070f` | 延迟 1500ms | 延迟 1500ms | 扩展：延迟/迟到响应 |
+| `0x0800–0x080f` | 拆段 2B/5ms | 拆段 2B/5ms | 扩展：半包/粘包 |
 
 规则按数组顺序匹配，第一条命中生效；规则外地址回退为正常行为。
 
@@ -90,16 +130,26 @@ node scripts/modbus-slave/modbus-rtu-slave.mjs --self-test
 2. 启动网页端 dev server：`pnpm dev`（http://localhost:5173）。
 3. 在应用连接 COM4：
    - **浏览器 Web Serial**：连接设置弹窗中选 **COM4**（系统选口，注意确认实际选中 COM4）；
-   - **Electron**：自动选第一个可用端口（`select-serial-port` 最小授权），确认实际选中的是 COM4；
+   - **Electron / VSCode**：串口下拉枚举后自动选择 COM4（Electron 经主进程 select-serial-port
+     最小授权；VSCode 经 Extension Host serialport 枚举），确认实际选中的是 COM4；
    - 连接参数须与从站一致（9600/8N1，从站地址 1）。
 4. 完成读、写、轮询（WP）、Trace、通信日志闭环；`0x0600–0x060f` 无响应区间可验证
-   请求超时/重试路径（与 dev Mock 的 NoResponse 场景一致）。
+   请求超时/重试路径（与 dev Mock 的 NoResponse 场景一致）；`0x0700–0x070f` 延迟区间、
+   `0x0800–0x080f` 分片区间验证迟到响应与半包/粘包组帧。
+
+### 真实端口 e2e（自动化）
+
+三端真实端口 e2e 由 `scripts/e2e-real.mjs` 统一编排：预检（COM4/COM5 存在、TCP 端口可
+监听）→ 自动拉起从站（RTU: COM5 / TCP: 127.0.0.1:1502）→ 跑对应端测试 → 回收从站；
+缺环境时 SKIP 提示不失败。命令见根 package.json（`pnpm test:e2e:real` 及三端
+`test:e2e:*:real`）。浏览器端启动时需在系统串口选择器手动选中 COM4 一次（Web Serial
+授权无法自动化），选择结果记录于 localStorage，运行内复用。
 
 > 注意：浏览器 Web Serial 选口为系统授权流程，无法由 Playwright 自动化，需人工确认选中的是 COM4。
 
 ## 自测（--self-test）
 
-同进程打开主站（默认 COM4，可用 `--master-port` 覆盖）+ 从站（配置端口），脚本化断言：
+**RTU**（`modbus-rtu-slave.mjs --self-test`，同进程开主站默认 COM4，可用 `--master-port` 覆盖）：
 
 1. FC03 读正常区返回当前值；
 2. FC10 写回执 + 重读值已更新；
@@ -113,6 +163,10 @@ node scripts/modbus-slave/modbus-rtu-slave.mjs --self-test
 10. 坏 CRC 帧静默丢弃无响应；
 11. 从站地址不匹配忽略无响应；
 12. no-response 区读/写均无响应（超时路径）。
+
+**TCP**（`modbus-tcp-slave.mjs --self-test`，同进程开主站临时端口 + 从站）：与上述 1–8、
+12 对应（MBAP 分帧/unitId 匹配），另加：unitId 不匹配忽略无响应、分片区拆段后仍正确组帧、
+延迟区短超时内无响应、规则外地址（0xFFFF）回退正常。
 
 全部 PASS 退出码 0，任一失败退出码 1。
 

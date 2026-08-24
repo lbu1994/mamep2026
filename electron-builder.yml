@@ -7,8 +7,10 @@
 #   其 package.json 无 production dependencies）→ electron-builder 跳过 node_modules 收集，
 #   根 package.json 的 antd/react/serialport 等 production deps 不会被打进安装目录。
 # - asar: false：resources/app/ 以目录形式存放，结构透明、便于排障。
-# - win.signAndEditExecutable: false：跳过 rcedit/winCodeSign 下载（本机网络受限，
-#   图标/版本信息先用 Electron 默认；后续要自定义图标/签名时改为 true 并配镜像）。
+# - win.icon: build/icon.ico（scripts/generate-icons.mjs 由 AppIcon.svg 生成的多尺寸 ICO）。
+#   signAndEditExecutable: true 时 electron-builder 需下载 rcedit/winCodeSign 写 exe 图标与版本信息；
+#   本机网络受限时设置环境变量 ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
+#   后打包，或临时改回 false（图标/版本信息回退 Electron 默认）。
 appId: com.mamep2026.app
 productName: Mamep2026
 directories:
@@ -22,4 +24,5 @@ asar: false
 win:
   target:
     - dir
-  signAndEditExecutable: false
+  icon: build/icon.ico
+  signAndEditExecutable: true

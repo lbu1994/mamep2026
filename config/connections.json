@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "activeConnectionId": "rtu-com4-master",
+  "connections": [
+    {
+      "id": "rtu-com4-master",
+      "name": "COM4（com0com 主站 → modbus-slave COM5）",
+      "protocol": "rtu",
+      "port": "COM4",
+      "baudRate": 9600,
+      "dataBits": 8,
+      "stopBits": 1,
+      "parity": "none",
+      "flowControl": "off",
+      "slaveAddress": 1,
+      "requestTimeoutMs": 1000,
+      "retryCount": 1,
+      "interRequestDelayMs": 50,
+      "addressAdjust": "off"
+    },
+    {
+      "id": "tcp-local-slave",
+      "name": "本地 TCP 从站（127.0.0.1:1502）",
+      "protocol": "tcp",
+      "host": "127.0.0.1",
+      "port": 1502,
+      "unitId": 1,
+      "connectTimeoutMs": 5000,
+      "requestTimeoutMs": 1000,
+      "retryCount": 1,
+      "autoReconnect": false,
+      "interRequestDelayMs": 50
+    }
+  ]
+}

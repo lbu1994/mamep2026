@@ -1,0 +1,23 @@
+{
+  "name": "@mamep2026/connection-config",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mamep2026/domain": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

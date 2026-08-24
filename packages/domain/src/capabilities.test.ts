@@ -21,4 +21,8 @@ describe("browserCapabilities", () => {
   it("supports UI-safe web plugins", () => {
     expect(caps.webPlugins).toBe(true);
   });
+
+  it("loads external connection config via import/URL (no filesystem)", () => {
+    expect(caps.connectionConfig).toBe("import");
+  });
 });

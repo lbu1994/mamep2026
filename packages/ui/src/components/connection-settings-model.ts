@@ -2,6 +2,7 @@ import {
   type RtuConnectionProfile,
   type TcpConnectionProfile,
 } from "@mamep2026/domain";
+import type { ConnectionConfigObject } from "@mamep2026/connection-config";
 import { z } from "zod";
 
 /** 连接设置表单（RTU 与 TCP 字段共存；UI 按 protocol 互斥展示）。
@@ -155,5 +156,62 @@ export function extractPersistedSettings(
     retryCount: values.retry,
     interRequestDelayMs: values.rxDelay,
     addressAdjust: values.addressAdjust,
+  };
+}
+
+/** 从配置文件载入连接对象的结果（ADR-023）。 */
+export interface LoadedConnectionSettings {
+  /** 预填表单值。 */
+  values: ConnectionSettingsValues;
+  /** RTU：配置文件指定的串口名（端口匹配用）；TCP：null。 */
+  port: string | null;
+  /** RTU：配置文件指定的从站地址（载入时同步当前表从站地址）；TCP：null。 */
+  slaveAddress: number | null;
+}
+
+/** 连接对象 → 连接设置表单值 + 端口/从站地址（「从配置载入」预填，ADR-023）。 */
+export function loadConnectionToSettings(
+  connection: ConnectionConfigObject,
+): LoadedConnectionSettings {
+  if (connection.protocol === "tcp") {
+    return {
+      values: {
+        protocol: "tcp",
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        rxDelay: connection.interRequestDelayMs,
+        timeout: connection.requestTimeoutMs,
+        retry: connection.retryCount,
+        addressAdjust: "off",
+        host: connection.host,
+        port: connection.port,
+        unitId: connection.unitId,
+      },
+      port: null,
+      slaveAddress: null,
+    };
+  }
+  return {
+    values: {
+      protocol: "rtu",
+      baudRate: connection.baudRate,
+      dataBits: connection.dataBits,
+      stopBits: connection.stopBits,
+      parity: connection.parity,
+      flowControl:
+        connection.flowControl === "xon-xoff" ? "off" : connection.flowControl,
+      rxDelay: connection.interRequestDelayMs,
+      timeout: connection.requestTimeoutMs,
+      retry: connection.retryCount,
+      addressAdjust: connection.addressAdjust,
+      host: "",
+      port: 502,
+      unitId: 0,
+    },
+    port: connection.port,
+    slaveAddress: connection.slaveAddress,
   };
 }

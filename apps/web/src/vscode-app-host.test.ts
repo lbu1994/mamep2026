@@ -20,6 +20,7 @@ import type {
   VscodeHostApi,
   VscodeHostDebugState,
   WriteOutcomePayload,
+  ConnectionConfigLoadResponse,
 } from "@mamep2026/platform-api";
 import { vscodeCapabilities } from "@mamep2026/platform-api";
 import { InMemoryWorkspaceRepository } from "@mamep2026/test-kit";
@@ -68,6 +69,12 @@ function createFakeBridge(): {
         listeners.delete(listener);
       };
     }),
+    loadConnectionConfig: vi.fn(
+      async (): Promise<Result<ConnectionConfigLoadResponse>> => ({
+        ok: true,
+        value: { config: null, sourcePath: null },
+      }),
+    ),
     getDebugState: vi.fn(
       async (): Promise<Result<VscodeHostDebugState | null>> => ({
         ok: true,

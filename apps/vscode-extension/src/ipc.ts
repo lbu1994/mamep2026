@@ -28,6 +28,7 @@ import {
   toErrorPayload,
   toWriteOutcomePayload,
   type ColorThemeKind,
+  type ConnectionConfigLoadResponse,
   type HostErrorMessage,
   type HostRequestMessage,
   type HostResponseMessage,
@@ -95,6 +96,8 @@ export interface IpcDeps {
    * 用于 e2e 断言一次读取恰好一次收发；生产构建不进入 UI 状态源。
    */
   sessionStats(): { requestFrames: number; responseFrames: number };
+  /** 连接对象配置文件加载（connection-config-load，ADR-023）。 */
+  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
 }
 
 /** 尽力从无法解析的原始消息中提取 messageId（诊断用；解析失败时为空串）。 */
@@ -301,6 +304,9 @@ export async function handleVscodeRequest(
         deps.session.connectTcp(tcpConnectionProfileFromPayload(profile)),
       );
     }
+    case "connection-config-load":
+      // 连接对象配置文件加载（ADR-023）：未找到返回 ok({config:null})，失败返回 error。
+      return sessionResult(message, () => deps.loadConnectionConfig());
     case "debug:get-state":
       // 开发/测试探针（e2e 用）：生产构建禁用。
       if (!deps.isDev()) {

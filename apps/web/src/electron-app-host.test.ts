@@ -21,6 +21,7 @@ import type {
   SessionBatchReadResponse,
   SessionStateResponse,
   WriteOutcomePayload,
+  ConnectionConfigLoadResponse,
 } from "@mamep2026/platform-api";
 import {
   createDefaultTcpProfile,
@@ -54,6 +55,7 @@ function createFakeBridge(): {
         filesystem: "limited",
         nodePlugins: false,
         webPlugins: true,
+        connectionConfig: "file",
       },
     })),
     getAppVersion: vi.fn(async (): Promise<Result<string>> => ({
@@ -80,6 +82,12 @@ function createFakeBridge(): {
         listeners.delete(listener);
       };
     }),
+    loadConnectionConfig: vi.fn(
+      async (): Promise<Result<ConnectionConfigLoadResponse>> => ({
+        ok: true,
+        value: { config: null, sourcePath: null },
+      }),
+    ),
     getDebugState: vi.fn(
       async (): Promise<Result<HostDebugState | null>> => ({
         ok: true,

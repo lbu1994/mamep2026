@@ -83,6 +83,9 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     clipboardReadText: () => "from-clip",
     resolveSerialPortSelection: vi.fn(() => false),
     session: makeSession(),
+    loadConnectionConfig: vi.fn(async () =>
+      ok({ config: null, sourcePath: null }),
+    ),
     ...overrides,
   };
 }

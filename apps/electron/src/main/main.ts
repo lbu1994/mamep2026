@@ -31,6 +31,10 @@ import {
 import { handleInvoke, type IpcDeps } from "./ipc";
 import { ElectronSessionHost } from "./session-host";
 import {
+  loadConnectionConfig,
+  resolveCandidatePaths,
+} from "./config-loader";
+import {
   deriveAllowedOrigins,
   installSerialPermissionHandlers,
   type SerialPermissionHandlers,
@@ -139,6 +143,17 @@ const ipcDeps: IpcDeps = {
     serialPermissionHandlers?.resolvePendingSelection(portId, sender) ?? false,
   // TCP 会话：主进程承载（Electron TCP，2026-08-23 两端 TCP 接线）。
   session: ensureSessionHost(),
+  // 连接对象配置文件（ADR-023）：env > 仓库根/exe 目录 config/ > 用户数据目录。
+  loadConnectionConfig: () =>
+    loadConnectionConfig(
+      resolveCandidatePaths({
+        envPath: process.env.MAMEP_CONNECTION_CONFIG,
+        appRootDir: app.isPackaged
+          ? path.dirname(app.getPath("exe"))
+          : process.cwd(),
+        userDataDir: app.getPath("userData"),
+      }),
+    ),
 };
 
 async function handleInvokeEvent(

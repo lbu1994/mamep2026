@@ -11,6 +11,7 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findConnection } from "../lib/connection-config.mjs";
 
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
 const SLAVE_SCRIPT = resolve(
@@ -19,7 +20,9 @@ const SLAVE_SCRIPT = resolve(
   "modbus-slave",
   "modbus-rtu-slave.mjs",
 );
-const MASTER_PORT = "COM4";
+// 主站连接参数来自 config/connections.json（ADR-023）：rtu-com4-master 即 COM4 主站。
+const master = findConnection("rtu-com4-master");
+const MASTER_PORT = master.port;
 const SLAVE_PORT = "COM5";
 // 在 Electron 中 process.execPath 是 electron.exe，必须用 node 启动从站。
 const NODE_BIN = process.env.npm_node_execpath ?? "node";
@@ -141,10 +144,10 @@ async function main() {
 
     const port = new SerialPort({
       path: MASTER_PORT,
-      baudRate: 9600,
-      dataBits: 8,
-      stopBits: 1,
-      parity: "none",
+      baudRate: master.baudRate,
+      dataBits: master.dataBits,
+      stopBits: master.stopBits,
+      parity: master.parity,
       autoOpen: false,
     });
     await new Promise((resolveOpen, rejectOpen) => {
