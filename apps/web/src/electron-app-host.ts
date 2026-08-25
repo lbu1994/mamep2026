@@ -458,9 +458,16 @@ export class ElectronAppHost implements AppHost {
     return { ...props, protocol: "rtu", portLabel: this.portLabel ?? props.portLabel };
   }
 
-  /** RTU 从站地址（TCP Unit ID 连接时确定，会话内不修改，2026-08-23）。 */
+  /**
+   * 从站地址 / TCP Unit ID 会话内动态修改（2026-08-25，ADR-022 已知限制打通）：
+   * RTU 本地路径（inner）；TCP 经 session-set-unit-id 远程代理主进程。
+   */
   setSlaveAddress(slave: number): void {
-    if (this.activeProtocol !== "tcp") this.inner.setSlaveAddress(slave);
+    if (this.activeProtocol === "tcp") {
+      void this.bridge.sessionSetUnitId(slave);
+    } else {
+      this.inner.setSlaveAddress(slave);
+    }
   }
 
   subscribeConnectionState(

@@ -2,9 +2,9 @@
  * TCP 会话宿主（docs/TECH_DESIGN.md §5.1.2 Application 层、docs/AGENTS.md §6）。
  *
  * 协议专用薄封装：构建 protocol="tcp" 的 CommunicationSession（unitId 连接时由
- * profile 确定，会话内不做动态修改），其余会话编排（轮询/追踪/批量读取/设备拔出策略）
- * 委托共享 SessionHostCore（session-host-core.ts），与 RtuSessionHost 共用，
- * 避免复制核心会话逻辑（AGENTS.md §32 ㉑）。TCP 无 Address Adjust（恒 off）。
+ * profile 确定，连接后可经 setUnitId 动态修改，2026-08-25），其余会话编排
+ * （轮询/追踪/批量读取/设备拔出策略）委托共享 SessionHostCore（session-host-core.ts），
+ * 与 RtuSessionHost 共用，避免复制核心会话逻辑（AGENTS.md §32 ㉑）。TCP 无 Address Adjust（恒 off）。
  *
  * 本类不感知平台细节：传输由调用方打开后注入（connect 的 transport 参数），
  * 不依赖 platform-api / platform-node。
@@ -91,6 +91,11 @@ export class TcpSessionHost {
 
   getPortLabel(): string | null {
     return this.core.getPortLabel();
+  }
+
+  /** 更新当前会话 TCP Unit ID（每表独立，2026-08-25）：对后续所有请求（读/写/轮询/追踪）生效。 */
+  setUnitId(unitId: number): void {
+    this.core.setUnitId(unitId);
   }
 
   readRow(row: RegisterRow): Promise<Result<number>> {

@@ -451,6 +451,31 @@ describe("host-message TCP session kinds（2026-08-23 两端 TCP 接线）", () 
     });
     expect(result.ok).toBe(false);
   });
+
+  it("accepts a valid session-set-unit-id request（TCP Unit ID 会话内动态修改，2026-08-25）", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-set-unit-id",
+      kind: "session-set-unit-id",
+      payload: { unitId: 9 },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.type === "request") {
+      expect(result.value.payload).toEqual({ unitId: 9 });
+    }
+  });
+
+  it("rejects session-set-unit-id with missing unitId", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-set-unit-id-bad",
+      kind: "session-set-unit-id",
+      payload: {},
+    });
+    expect(result.ok).toBe(false);
+  });
 });
 
 describe("host-message connection-config-load kind（ADR-023 连接对象配置文件）", () => {

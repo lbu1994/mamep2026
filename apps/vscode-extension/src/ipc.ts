@@ -67,6 +67,8 @@ export interface VscodeSessionLike {
   disconnect(): Promise<Result<void>>;
   getConnectionState(): ConnectionState;
   setSlaveAddress(slave: number): void;
+  /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）。 */
+  setUnitId(unitId: number): void;
   readRow(row: RegisterRow): Promise<Result<number>>;
   writeRow(row: RegisterRow): Promise<Result<WriteOutcome>>;
   readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle;
@@ -255,6 +257,11 @@ export async function handleVscodeRequest(
     case "session-set-slave-address":
       return sessionVoid(message, () =>
         deps.session.setSlaveAddress(message.payload.slave),
+      );
+    case "session-set-unit-id":
+      // TCP Unit ID 会话内动态修改（2026-08-25）：渲染端按活动协议路由到本 kind。
+      return sessionVoid(message, () =>
+        deps.session.setUnitId(message.payload.unitId),
       );
     case "session-read-row": {
       const { row } = message.payload;

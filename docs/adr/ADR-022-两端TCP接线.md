@@ -90,6 +90,10 @@
   入口；`BatchReadHandle` 接口不变，取消语义与本地路径一致。
 - TCP unitId 会话内不动态修改（与 RTU 每表从站地址语义不同），工具栏「当前从站地址」对 TCP 无效
   （宿主 setSlaveAddress 已对 TCP 守卫为 no-op）。
+  **已解决（2026-08-25，ADR-026）**：TCP Unit ID 会话内动态修改落地——每表独立 unitId
+  （复用 `RegisterSheet.slaveAddress`，工具栏按协议切换「Unit ID」label），新增
+  `session-set-unit-id` request kind；渲染端按活动协议路由，宿主按 kind 分发（RTU →
+  `setSlaveAddress` / TCP → `setUnitId`），CommunicationSession 支持动态 `setUnitId`。
 
 ## 后续复审条件
 

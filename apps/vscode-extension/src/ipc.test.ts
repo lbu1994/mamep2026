@@ -44,6 +44,7 @@ function makeSession(
     disconnect: vi.fn(async () => ok(undefined)),
     getConnectionState: vi.fn(() => "disconnected" as ConnectionState),
     setSlaveAddress: vi.fn(),
+    setUnitId: vi.fn(),
     readRow: vi.fn(async () => ok(0x1234)),
     writeRow: vi.fn(async () =>
       ok({ kind: "write-succeeded-no-verify" as const }),
@@ -429,6 +430,16 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     );
     expect(result.type).toBe("response");
     expect(session.setSlaveAddress).toHaveBeenCalledWith(7);
+  });
+
+  it("session-set-unit-id 调用 setUnitId（TCP Unit ID 会话内动态修改，2026-08-25）", async () => {
+    const session = makeSession();
+    const result = await handleVscodeInvoke(
+      request("session-set-unit-id", { unitId: 9 }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.setUnitId).toHaveBeenCalledWith(9);
   });
 
   it("session-trace-start 调用 traceStart", async () => {

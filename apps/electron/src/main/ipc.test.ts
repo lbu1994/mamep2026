@@ -40,6 +40,7 @@ function makeSession(
   return {
     connectTcp: vi.fn(async () => ok(undefined)),
     disconnect: vi.fn(async () => ok(undefined)),
+    setUnitId: vi.fn(),
     getConnectionState: vi.fn(() => "disconnected" as ConnectionState),
     readRow: vi.fn(async () => ok(0x1234)),
     writeRow: vi.fn(async () =>
@@ -384,6 +385,16 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     if (result.type === "response") {
       expect(result.payload).toEqual({ connectionState: "connected" });
     }
+  });
+
+  it("session-set-unit-id 调用主进程会话 setUnitId（TCP Unit ID 会话内动态修改，2026-08-25）", async () => {
+    const session = makeSession();
+    const result = await handleRequest(
+      request("session-set-unit-id", { unitId: 9 }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.setUnitId).toHaveBeenCalledWith(9);
   });
 
   it("session-batch-read 携带 batchId 调用 readAllRows 并返回汇总（ADR-025）", async () => {

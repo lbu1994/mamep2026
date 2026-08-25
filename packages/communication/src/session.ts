@@ -186,7 +186,7 @@ export interface SessionOptions {
   protocol?: SessionProtocol;
   /** 初始从站地址（RTU，默认 1）；连接后可经 setSlaveAddress 动态更新（2026-08-19）。 */
   slaveAddress?: number;
-  /** TCP Unit ID（MBAP 单元标识，默认 0）：连接时由 profile 确定，会话内不做动态修改。 */
+  /** TCP Unit ID（MBAP 单元标识，默认 0）：连接时由 profile 确定，连接后可经 setUnitId 动态更新（2026-08-25）。 */
   unitId?: number;
   onLog?: (event: CommunicationLogEvent) => void;
   onStateChange?: (state: ConnectionState) => void;
@@ -200,8 +200,8 @@ export class CommunicationSession {
   private pendingExchange: PendingExchange | null = null;
   /** 会话协议：rtu / tcp。 */
   private readonly protocol: SessionProtocol;
-  /** TCP Unit ID（MBAP 单元标识，默认 0）。 */
-  private readonly unitId: number;
+  /** TCP Unit ID（MBAP 单元标识，默认 0）：连接后可经 setUnitId 动态更新（2026-08-25）。 */
+  private unitId: number;
   /** 当前从站地址（RTU）：连接后可动态更新（每表独立设置，2026-08-19）。 */
   private slaveAddress: number;
   /** TCP Transaction ID 计数器：16 位递增回绕，连接时重置（§8.7）。 */
@@ -302,10 +302,18 @@ export class CommunicationSession {
 
   /**
    * 动态更新当前从站地址（RTU）：对后续所有请求（读/写/轮询/追踪）生效（2026-08-19）。
-   * TCP 的 Unit ID 连接时由 profile 确定，会话内不做动态修改（2026-08-23）。
+   * TCP 的 Unit ID 由 setUnitId 更新（2026-08-25），两者互不影响。
    */
   setSlaveAddress(slave: number): void {
     this.slaveAddress = slave;
+  }
+
+  /**
+   * 动态更新当前 TCP Unit ID（MBAP 单元标识）：对后续所有请求（读/写/轮询/追踪）生效
+   * （2026-08-25，打通 ADR-022 已知限制）。RTU 从站地址由 setSlaveAddress 更新，两者互不影响。
+   */
+  setUnitId(unitId: number): void {
+    this.unitId = unitId;
   }
 
   getConfig(): RtuConnectionProfile | TcpConnectionProfile {

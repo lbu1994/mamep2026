@@ -152,6 +152,11 @@ export class SessionHostCore {
     this.session?.setSlaveAddress(slave);
   }
 
+  /** 更新会话 TCP Unit ID（协议无关：由协议宿主决定调用 setSlaveAddress / setUnitId）。 */
+  setUnitId(unitId: number): void {
+    this.session?.setUnitId(unitId);
+  }
+
   readRow(row: RegisterRow): Promise<Result<number>> {
     return this.tableService.readRow(row);
   }

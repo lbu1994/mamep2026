@@ -106,6 +106,10 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
+    sessionSetUnitId: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
     sessionReadRow: vi.fn(async (): Promise<Result<number>> => ({
       ok: true,
       value: 0x1234,
@@ -446,6 +450,26 @@ describe("VscodeAppHost TCP 远程会话代理（2026-08-23）", () => {
     const result = await host.connectTcp(createDefaultTcpProfile());
     expect(result.ok).toBe(false);
     expect(host.getConnectionState()).toBe("disconnected");
+  });
+
+  it("TCP 活动时 setSlaveAddress 经 session-set-unit-id 转发（2026-08-25）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    await host.connectTcp(createDefaultTcpProfile());
+
+    host.setSlaveAddress(9);
+    // TCP 路径：Unit ID 会话内动态修改经新 kind 到 Extension Host（不再守卫为 no-op）。
+    expect(bridge.sessionSetUnitId).toHaveBeenCalledWith(9);
+    expect(bridge.sessionSetSlaveAddress).not.toHaveBeenCalled();
+  });
+
+  it("RTU 活动时 setSlaveAddress 仍走 session-set-slave-address（每表从站地址不回归）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    // 未连接（无 TCP profile）：走 RTU 从站地址路径。
+    host.setSlaveAddress(7);
+    expect(bridge.sessionSetSlaveAddress).toHaveBeenCalledWith(7);
+    expect(bridge.sessionSetUnitId).not.toHaveBeenCalled();
   });
 });
 

@@ -270,6 +270,64 @@ async function runTcpLoop(): Promise<void> {
 }
 
 /**
+ * TCP Unit ID 会话内动态修改（2026-08-25，ADR-022 已知限制打通）：经真实 HostMessage
+ * RPC 路径验证 session-set-unit-id 新 kind——连接后改 Unit ID → FC10 写 + FC03 读仍成功
+ * （DevFakeTcpServer 回显请求帧 unitId；帧级 unitId 断言由 communication/application
+ * 单测与 Electron e2e 覆盖，本用例验证新 kind 全链路接线 + 会话改后不破坏读写）。
+ */
+async function runUnitIdLoop(): Promise<void> {
+  // 1. 连接 TCP（profile.unitId=0）。
+  const connect = await rpcEnvelope("session-tcp-connect", {
+    profile: tcpProfile(),
+  });
+  assert.strictEqual(
+    connect.type,
+    "response",
+    "session-tcp-connect should succeed",
+  );
+
+  // 2. 会话内动态修改 Unit ID 为 9（新 kind）。
+  const setUnitId = await rpcEnvelope("session-set-unit-id", { unitId: 9 });
+  assert.strictEqual(
+    setUnitId.type,
+    "response",
+    "session-set-unit-id should succeed",
+  );
+
+  // 3. 写 + 读回：Unit ID 修改后读写闭环不破坏。
+  const write = await rpcEnvelope("session-write-row", {
+    row: registerRow(0x0009, "5A5A"),
+  });
+  assert.strictEqual(
+    write.type,
+    "response",
+    "session-write-row (after set-unit-id) should succeed",
+  );
+  assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
+  const read = await rpcEnvelope("session-read-row", {
+    row: registerRow(0x0009, ""),
+  });
+  assert.strictEqual(
+    read.type,
+    "response",
+    "session-read-row (after set-unit-id) should succeed",
+  );
+  assert.strictEqual(
+    read.payload,
+    0x5a5a,
+    "FC03 read should return the value written after Unit ID change",
+  );
+
+  // 4. 断开。
+  const disconnect = await rpcEnvelope("session-disconnect");
+  assert.strictEqual(
+    disconnect.type,
+    "response",
+    "session-disconnect (after set-unit-id) should succeed",
+  );
+}
+
+/**
  * 远程批任务取消（ADR-025，2026-08-25）：经真实 HostMessage RPC 路径验证
  * session-batch-read（携带 batchId）→ 中途 session-batch-cancel → 汇总 cancelledCount > 0。
  * 扩展宿主消息处理为并发（onDidReceiveMessage void 分发），取消消息在批任务进行中到达；
@@ -429,6 +487,9 @@ export async function run(): Promise<void> {
 
   // 6. VSCode TCP 闭环（2026-08-23）：连接 → 写 → 读 → 断开。
   await runTcpLoop();
+
+  // 6.25 TCP Unit ID 会话内动态修改（2026-08-25）：session-set-unit-id → 写 → 读。
+  await runUnitIdLoop();
 
   // 6.5 远程批任务取消（ADR-025）：session-batch-read → 中途 cancel → cancelledCount > 0。
   await runBatchCancelLoop();

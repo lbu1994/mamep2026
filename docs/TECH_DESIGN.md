@@ -1812,10 +1812,12 @@ TCP 配置：
       autoReconnect
       interRequestDelayMs // 请求间隔，兼作 WP 轮询间隔（内部字段，不入表单）
 
-> **持久化边界（2026-08-23 确认，ADR-022）**：TCP 配置随工作区持久化（host/port/unitId/
-> requestTimeoutMs/retryCount/interRequestDelayMs；connectTimeoutMs/autoReconnect 默认值
-> 随 profile 保存）。恢复后保持离线、不自动连接；unitId 会话内不动态修改（与 RTU 每表从站
-> 地址不同，工具栏从站地址对 TCP 无效）。
+> **持久化边界（2026-08-23 确认，ADR-022；2026-08-25 更新，ADR-026）**：TCP 配置随工作区
+> 持久化（host/port/unitId/requestTimeoutMs/retryCount/interRequestDelayMs；
+> connectTimeoutMs/autoReconnect 默认值随 profile 保存）。恢复后保持离线、不自动连接；
+> **Unit ID 会话内可动态修改（2026-08-25，ADR-026）**：与 RTU 每表从站地址同构——工具栏
+> 按协议切换「Slave Address / Unit ID」，每表独立值经 `session-set-unit-id`（远程端）对
+> 后续请求生效；连接建立时按活动表值覆盖 profile.unitId 初始值。
 
 串口路径不作为必须恢复项。
 
@@ -4137,7 +4139,7 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 
 RTU Slave Address 已确认（ADR-013）：允许范围 0~255，默认 1；地址 0 允许配置（广播语义，按标准无应答）；MVP 不实现广播写入。
 
-TCP Unit ID 已确认（2026-08-23）：允许范围 0~255，允许 255，默认 0。MBAP Header 的 Unit Identifier 是 RTU Slave ID 的 TCP 版本：纯 TCP 通信中常被忽略（默认 0），经网关访问 RTU 从站时才是必要寻址字段。UI 字段名按协议动态显示：RTU 显示 "Slave Address"，TCP 显示 "Unit ID"。
+TCP Unit ID 已确认（2026-08-23）：允许范围 0~255，允许 255，默认 0。MBAP Header 的 Unit Identifier 是 RTU Slave ID 的 TCP 版本：纯 TCP 通信中常被忽略（默认 0），经网关访问 RTU 从站时才是必要寻址字段。UI 字段名按协议动态显示：RTU 显示 "Slave Address"，TCP 显示 "Unit ID"（工具栏按协议切换已落地，2026-08-25，ADR-026；Unit ID 会话内可经工具栏动态修改，每表独立）。
 
 仍待确认：
 

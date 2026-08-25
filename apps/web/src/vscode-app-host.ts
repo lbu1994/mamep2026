@@ -362,9 +362,17 @@ export class VscodeAppHost implements AppHost {
     };
   }
 
+  /**
+   * 从站地址 / TCP Unit ID 会话内动态修改（2026-08-25，ADR-022 已知限制打通）：
+   * 渲染端按活动协议路由——RTU 走 session-set-slave-address，TCP 走 session-set-unit-id。
+   */
   setSlaveAddress(slave: number): void {
     this.currentSlaveAddress = slave;
-    void this.bridge.sessionSetSlaveAddress(slave);
+    if (this.currentProfile?.protocol === "tcp") {
+      void this.bridge.sessionSetUnitId(slave);
+    } else {
+      void this.bridge.sessionSetSlaveAddress(slave);
+    }
   }
 
   // ---- 寄存器读写 / 轮询 / Trace（远程会话 RPC）----

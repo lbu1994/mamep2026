@@ -99,6 +99,9 @@ const api: MamepHostApi = {
   sessionGetState(): Promise<Result<SessionStateResponse>> {
     return invoke<SessionStateResponse>("session-get-state", {});
   },
+  sessionSetUnitId(unitId: number): Promise<Result<null>> {
+    return invoke<null>("session-set-unit-id", { unitId });
+  },
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number>> {
     return invoke<number>("session-read-row", { row });
   },

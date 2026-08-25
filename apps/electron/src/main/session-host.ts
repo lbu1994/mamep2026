@@ -57,6 +57,11 @@ export class ElectronSessionHost {
     return this.tcp.disconnect();
   }
 
+  /** TCP Unit ID 会话内动态修改（2026-08-25）：对后续所有请求生效。 */
+  setUnitId(unitId: number): void {
+    this.tcp.setUnitId(unitId);
+  }
+
   getConnectionState(): ConnectionState {
     return this.tcp.getConnectionState();
   }

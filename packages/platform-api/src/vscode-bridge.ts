@@ -157,6 +157,8 @@ export function createVscodeBridge(
       postRequest<SessionStateResponse>("session-get-state", {}),
     sessionSetSlaveAddress: (slave: number) =>
       postRequest<null>("session-set-slave-address", { slave }),
+    sessionSetUnitId: (unitId: number) =>
+      postRequest<null>("session-set-unit-id", { unitId }),
     sessionReadRow: (row: RegisterRowPayload) =>
       postRequest<number>("session-read-row", { row }),
     sessionWriteRow: (row: RegisterRowPayload) =>

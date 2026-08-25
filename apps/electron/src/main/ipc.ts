@@ -32,6 +32,8 @@ import {
 export interface ElectronSessionLike {
   connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
   disconnect(): Promise<Result<void>>;
+  /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）。 */
+  setUnitId(unitId: number): void;
   getConnectionState(): ConnectionState;
   readRow(row: RegisterRow): Promise<Result<number>>;
   writeRow(row: RegisterRow): Promise<Result<WriteOutcome>>;
@@ -202,6 +204,11 @@ export async function handleRequest(
     }
     case "session-disconnect":
       return sessionResult(message, () => deps.session.disconnect());
+    case "session-set-unit-id":
+      // TCP Unit ID 会话内动态修改（2026-08-25）：Electron TCP 会话在主进程。
+      return sessionVoid(message, () =>
+        deps.session.setUnitId(message.payload.unitId),
+      );
     case "session-get-state":
       return sessionResult(message, () =>
         Promise.resolve({

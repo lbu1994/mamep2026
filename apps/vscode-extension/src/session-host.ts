@@ -115,9 +115,14 @@ export class VscodeSessionHost {
     return this.activeSession.getConnectionState();
   }
 
-  /** RTU 从站地址（TCP Unit ID 连接时确定，会话内不修改，2026-08-23）。 */
+  /** RTU 从站地址（每表独立）：仅 RTU 活动时生效（渲染端按协议路由，2026-08-25）。 */
   setSlaveAddress(slave: number): void {
     if (this.active === "rtu") this.rtu.setSlaveAddress(slave);
+  }
+
+  /** TCP Unit ID 会话内动态修改（2026-08-25）：仅 TCP 活动时生效，对后续请求生效。 */
+  setUnitId(unitId: number): void {
+    if (this.active === "tcp") this.tcp.setUnitId(unitId);
   }
 
   readRow(row: RegisterRow): Promise<Result<number>> {

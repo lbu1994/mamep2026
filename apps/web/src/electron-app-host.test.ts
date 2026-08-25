@@ -109,6 +109,10 @@ function createFakeBridge(): {
         value: { connectionState: "connected" },
       }),
     ),
+    sessionSetUnitId: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
     sessionReadRow: vi.fn(async (): Promise<Result<number>> => ({
       ok: true,
       value: 0xabcd,
@@ -539,6 +543,16 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalled();
     expect(bridge.sessionPollingStart).toHaveBeenCalled();
     expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100);
+  });
+
+  it("TCP 活动时 setSlaveAddress 经 session-set-unit-id 转发主进程（2026-08-25）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeTcpHost(bridge);
+    await host.connectTcp(createDefaultTcpProfile());
+
+    host.setSlaveAddress(9);
+    // TCP 路径：Unit ID 动态修改经远程 RPC 到主进程（不再守卫为 no-op）。
+    expect(bridge.sessionSetUnitId).toHaveBeenCalledWith(9);
   });
 
   it("TCP readAllRows：携带渲染端 batchId，cancel 经 session-batch-cancel 转发（ADR-025）", async () => {

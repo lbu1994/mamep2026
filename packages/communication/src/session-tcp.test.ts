@@ -224,6 +224,23 @@ describe("CommunicationSession over TCP", () => {
     expect(reqLog?.slaveAddress).toBe(5);
   });
 
+  it("setUnitId 后请求帧 Unit ID 变化：动态更新对后续请求生效", async () => {
+    const { session, transport, clock } = makeTcpSession({ unitId: 3 });
+    await session.connect();
+
+    // 动态更新 Unit ID 为 9：后续请求帧 unit 字节 = 9（对齐 RTU setSlaveAddress 语义）。
+    session.setUnitId(9);
+    const promise = session.readRegister(0x0001, { source: "manual-read" });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    expect(transport.sentFrames[0]?.[6]).toBe(9);
+
+    // 响应也必须匹配新 Unit ID 才被接受。
+    transport.simulateData(readResponse(0, 9, 0x0077));
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(0x0077);
+  });
+
   it("异常响应：返回 Modbus 异常错误", async () => {
     const { session, transport, clock } = makeTcpSession();
     await session.connect();

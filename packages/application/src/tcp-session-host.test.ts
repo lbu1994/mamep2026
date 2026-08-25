@@ -169,6 +169,26 @@ describe("TcpSessionHost 读/写", () => {
     }
   });
 
+  it("setUnitId 动态更新 Unit ID：后续请求帧 unit 字节变化", async () => {
+    const h = createHarness(3);
+    await connect(h);
+
+    // 会话内动态修改 Unit ID 为 9（2026-08-25，ADR-022 已知限制打通）。
+    h.host.setUnitId(9);
+    const row = makeRow(0x0001, "");
+    const promise = h.host.readRow(row);
+    await flushMicrotasks();
+    const sent = h.transport.sentFrames[0] ?? new Uint8Array();
+    expect(sent[6]).toBe(9);
+    expect(sent[7]).toBe(0x03);
+
+    // 响应匹配新 Unit ID 才被接受。
+    h.transport.simulateData(readResponse(0, 9, 0x0055));
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(0x0055);
+  });
+
   it("设备拔出（interrupted）停止轮询/追踪并上报消息", async () => {
     const h = createHarness(0);
     await connect(h);

@@ -53,6 +53,7 @@ export const HOST_REQUEST_KINDS = [
   "session-disconnect",
   "session-get-state",
   "session-set-slave-address",
+  "session-set-unit-id",
   "session-read-row",
   "session-write-row",
   "session-batch-read",
@@ -284,6 +285,12 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     ...requestBase,
+    // TCP Unit ID 会话内动态修改（2026-08-25）：渲染端按活动协议路由，TCP 走本 kind。
+    kind: z.literal("session-set-unit-id"),
+    payload: z.object({ unitId: z.number() }),
+  }),
+  z.object({
+    ...requestBase,
     kind: z.literal("session-read-row"),
     payload: z.object({ row: registerRowPayloadSchema }),
   }),
@@ -512,6 +519,8 @@ export interface MamepHostApi {
   sessionDisconnect(): Promise<Result<null>>;
   /** 查询会话状态快照（session-get-state）。 */
   sessionGetState(): Promise<Result<SessionStateResponse>>;
+  /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）：对后续请求生效。 */
+  sessionSetUnitId(unitId: number): Promise<Result<null>>;
   /** 单行读（session-read-row）：经主进程统一调度器 FC03。 */
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number>>;
   /** 单行写（session-write-row）：经主进程统一调度器 FC0x10。 */
@@ -575,6 +584,8 @@ export interface VscodeHostApi
   /** 查询会话状态快照（session-get-state）。 */
   sessionGetState(): Promise<Result<SessionStateResponse>>;
   sessionSetSlaveAddress(slave: number): Promise<Result<null>>;
+  /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）：对后续请求生效。 */
+  sessionSetUnitId(unitId: number): Promise<Result<null>>;
   /** 单行读（session-read-row）：经 Extension Host 统一调度器 FC03。 */
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number>>;
   /** 单行写（session-write-row）：经 Extension Host 统一调度器 FC0x10。 */

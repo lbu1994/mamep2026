@@ -844,6 +844,9 @@ export const RegisterTable = memo(function RegisterTable({
 }: RegisterTableProps): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
+  // 连接状态订阅：连接/断开时刷新（工具栏「从站地址 / Unit ID」label 按活动协议切换，
+  // 2026-08-25 TCP Unit ID 会话内动态修改；协议只在连接时变化）。
+  const connectionState = useAppStore((s) => s.connectionState);
   const cellValidationErrors = useAppStore((s) => s.cellValidationErrors);
   const rows = useAppStore(
     (s) => s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.rows ?? [],
@@ -943,6 +946,12 @@ export const RegisterTable = memo(function RegisterTable({
       defaultConfig.registerTable.slaveAddress,
   );
   const setSheetSlaveAddress = useAppStore((s) => s.setSheetSlaveAddress);
+  // 活动协议（2026-08-25）：TCP 连接时工具栏值语义为 Unit ID（label 随之切换）；
+  // 未连接/RTU 时恒为从站地址。
+  const activeProtocol =
+    host !== null && host !== undefined && connectionState === "connected"
+      ? host.getCommProperties().protocol
+      : "rtu";
 
   const handleReadAll = async (): Promise<void> => {
     if (host === null || host === undefined) return;
@@ -1679,14 +1688,26 @@ export const RegisterTable = memo(function RegisterTable({
               />
             </span>
           </Tooltip>
-          <Tooltip title={t("table.slaveAddressHint")}>
+          <Tooltip
+            title={
+              activeProtocol === "tcp"
+                ? t("table.unitIdHint")
+                : t("table.slaveAddressHint")
+            }
+          >
             <span className="table-toolbar__slave">
               <span className="table-toolbar__slave-label">
-                {t("table.slaveAddress")}
+                {activeProtocol === "tcp"
+                  ? t("table.unitId")
+                  : t("table.slaveAddress")}
               </span>
               <InputNumber
                 size="small"
-                aria-label={t("table.slaveAddress")}
+                aria-label={
+                  activeProtocol === "tcp"
+                    ? t("table.unitId")
+                    : t("table.slaveAddress")
+                }
                 min={0}
                 max={255}
                 value={slaveAddress}

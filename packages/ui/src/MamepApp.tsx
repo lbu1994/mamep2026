@@ -174,11 +174,13 @@ export function MamepApp(): React.ReactNode {
     return unsubscribe;
   }, [host, setConnectionState]);
 
-  // 活动表 Slave Address -> 会话：切换表或修改当前表从站地址时，后续请求使用新值。
+  // 活动表 Slave Address / TCP Unit ID -> 会话：切换表/修改当前表值，或连接建立时，
+  // 后续请求使用新值（2026-08-25：TCP Unit ID 会话内动态修改——连接后按活动表值覆盖
+  // profile.unitId 初始值，与「每表独立」语义一致）。
   useEffect(() => {
     if (host === null || host === undefined) return;
     host.setSlaveAddress(activeSheetSlaveAddress);
-  }, [host, activeSheetSlaveAddress]);
+  }, [host, activeSheetSlaveAddress, connectionState]);
 
   // 主题同步到 <html data-mamep-theme>：index.css 的 --mamep-* 暗色令牌依赖该属性，
   // 与 antd ConfigProvider 的暗色算法一起切换（组件内不得散落主题判断）。

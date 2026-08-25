@@ -162,6 +162,8 @@ export const en = {
     slaveAddress: "Slave Address",
     slaveAddressHint:
       "Slave address used for this table's read/write requests.",
+    unitId: "Unit ID",
+    unitIdHint: "Modbus TCP Unit ID used for this table's read/write requests.",
     noOpenSheets: "No tables are open",
     noOpenSheetsHint: "Select a table from the sidebar to open it.",
     batchSummary:
@@ -469,6 +471,8 @@ export const zh: TranslationResources = {
     restoreColumnLayoutHint: "将本表列宽与列排序恢复为默认。",
     slaveAddress: "从站地址",
     slaveAddressHint: "本表读写请求使用的从站地址。",
+    unitId: "Unit ID",
+    unitIdHint: "本表读写请求使用的 Modbus TCP Unit ID。",
     noOpenSheets: "没有打开的表",
     noOpenSheetsHint: "从侧边栏选择一张表以打开。",
     batchSummary:

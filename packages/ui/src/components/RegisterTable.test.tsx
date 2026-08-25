@@ -15,6 +15,7 @@ import {
   type Result,
   type RowId,
   type SheetId,
+  type Workspace,
 } from "@mamep2026/domain";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
@@ -326,6 +327,22 @@ describe("RegisterTable 全表读取取消（ADR-025）", () => {
             }),
           }) as BatchReadHandle,
       ),
+      // 工具栏「从站地址 / Unit ID」label 需读活动协议（2026-08-25）。
+      getCommProperties: vi.fn(() => ({
+        protocol: "rtu" as const,
+        portLabel: null,
+        unitId: null,
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: 1000,
+        retryCount: 1,
+        rxDelayMs: 50,
+        addressAdjust: "off",
+        connectionState: "connected",
+      })),
     } as unknown as AppHost;
     // 小工作区（jsdom 渲染 50 行过慢易超时）：仅保留首表前 3 行。
     const workspace = createEmptyWorkspace();
@@ -367,5 +384,63 @@ describe("RegisterTable 全表读取取消（ADR-025）", () => {
       const messages = useAppStore.getState().messages;
       expect(messages.at(-1)?.messageKey).toBe("table.batchSummary");
     });
+  });
+});
+
+describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内动态修改）", () => {
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({
+      host: null,
+      workspace: createEmptyWorkspace(),
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  function makeHost(protocol: "rtu" | "tcp"): AppHost {
+    return {
+      getCommProperties: vi.fn(() => ({
+        protocol,
+        portLabel: protocol === "tcp" ? "192.168.1.10:502" : null,
+        unitId: protocol === "tcp" ? 1 : null,
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: 1000,
+        retryCount: 1,
+        rxDelayMs: 50,
+        addressAdjust: "off",
+        connectionState: "connected",
+      })),
+    } as unknown as AppHost;
+  }
+
+  function smallWorkspace(): Workspace {
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet !== undefined) sheet.rows = sheet.rows.slice(0, 3);
+    return workspace;
+  }
+
+  it("TCP 连接时工具栏 label 显示 Unit ID（InputNumber aria-label 同步）", () => {
+    const workspace = smallWorkspace();
+    useAppStore.setState({ host: makeHost("tcp"), workspace });
+    render(<RegisterTable sheetId={sheetId()} />);
+    expect(screen.getByLabelText("Unit ID")).toBeTruthy();
+    expect(screen.queryByLabelText("Slave Address")).toBeNull();
+  });
+
+  it("RTU 连接时工具栏 label 保持 Slave Address", () => {
+    const workspace = smallWorkspace();
+    useAppStore.setState({ host: makeHost("rtu"), workspace });
+    render(<RegisterTable sheetId={sheetId()} />);
+    expect(screen.getByLabelText("Slave Address")).toBeTruthy();
+    expect(screen.queryByLabelText("Unit ID")).toBeNull();
   });
 });
