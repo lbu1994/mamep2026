@@ -172,6 +172,11 @@ test.afterAll(async () => {
 
 test("取消/无可用端口：下拉框空态、无端口标签、无错误", async () => {
   const modal = page.locator(".ant-modal-container:visible");
+  // ADR-023 配置组新增 .ant-select（Load from Config File）：端口下拉须限定在 Port 表单项内。
+  const portSelect = modal
+    .locator(".ant-form-item")
+    .filter({ hasText: "Port" })
+    .locator(".ant-select");
   // 弹窗打开时已自动触发枚举（fake requestPort 挂起）：拒绝它 → 空列表、不自动选中。
   await page.evaluate(() => {
     (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
@@ -179,10 +184,10 @@ test("取消/无可用端口：下拉框空态、无端口标签、无错误", a
   });
   await page.waitForTimeout(300);
 
-  // 打开端口下拉框（弹窗内第一个 Select）：会再次触发枚举（挂起），
+  // 打开端口下拉框：会再次触发枚举（挂起），
   // 列表仍为空 → 空态提示、无端口选项、弹窗内无端口标签与「先选择设备」类错误。
   // 注：antd v6 Select 无 .ant-select-selector 类，点击根元素 .ant-select 打开下拉。
-  await modal.locator(".ant-select").first().click();
+  await portSelect.click();
   const dropdown = page.locator(".ant-select-dropdown:visible");
   await expect(dropdown).toContainText("No serial ports found");
   await expect(
@@ -207,8 +212,14 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   });
 
   const modal = page.locator(".ant-modal-container:visible");
+  // ADR-023 配置组新增 Refresh（title=Refresh）：端口刷新须限定在 Port 表单项内。
+  const portField = modal
+    .locator(".ant-form-item")
+    .filter({ hasText: "Port" });
+  const portSelect = portField.locator(".ant-select");
+  const portRefresh = portField.locator('button[title="Refresh"]');
   // 触发刷新重新枚举并解析为可用端口（下拉框出现选项）。
-  await modal.locator('button[title="Refresh"]').click();
+  await portRefresh.click();
   await page.waitForFunction(() => {
     const fake = (window as unknown as { __mamepFakeSerial: FakeSerialApi })
       .__mamepFakeSerial;
@@ -221,11 +232,11 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   // 等待枚举结果渲染进下拉选项（loading 结束、选项就绪）后再打开下拉框。
   await page.waitForTimeout(400);
 
-  // 打开端口下拉框（弹窗内第一个 Select）并选择端口 → 端口标签出现。
+  // 打开端口下拉框并选择端口 → 端口标签出现。
   // 注：antd v6 Select 无 .ant-select-selector 类，点击根元素 .ant-select 打开下拉；
   // 虚拟列表下可见选项类为 .ant-select-item-option（role="option" 仅存在于隐藏的无障碍列表）。
   // 点开下拉框会再次触发枚举（requestPort 挂起）：先解析它，确保选择走已授权快照路径。
-  await modal.locator(".ant-select").first().click();
+  await portSelect.click();
   await page.waitForFunction(() => {
     const fake = (window as unknown as { __mamepFakeSerial: FakeSerialApi })
       .__mamepFakeSerial;

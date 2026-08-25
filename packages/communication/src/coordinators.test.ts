@@ -80,6 +80,61 @@ describe("BatchReadCoordinator", () => {
       expect(result.value.failureCount).toBe(1);
     }
   });
+
+  it("uses the provided batchId in the summary (remote path, ADR-025)", async () => {
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const session = new CommunicationSession({
+      transport,
+      clock,
+      config: createDefaultRtuProfile(),
+    });
+    await session.connect();
+    const coordinator = new BatchReadCoordinator(session, clock);
+
+    const handle = coordinator.readAll(
+      [{ key: "a", address: 0x0001 }],
+      undefined,
+      "batch-xyz",
+    );
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(readResponse(1, 0x10));
+    const result = await handle.promise;
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.batchId).toBe("batch-xyz");
+  });
+
+  it("cancel() stops queued reads and counts them as cancelled (ADR-025)", async () => {
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const session = new CommunicationSession({
+      transport,
+      clock,
+      config: createDefaultRtuProfile(),
+    });
+    await session.connect();
+    const coordinator = new BatchReadCoordinator(session, clock);
+
+    const handle = coordinator.readAll([
+      { key: "a", address: 0x0001 },
+      { key: "b", address: 0x0002 },
+      { key: "c", address: 0x0003 },
+    ]);
+    // 第一行已发送（在飞）；其余排队未发送。
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    handle.cancel();
+    transport.simulateData(readResponse(1, 0x10));
+    const result = await handle.promise;
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalRows).toBe(3);
+      // 在飞行完成（成功），排队行计为取消。
+      expect(result.value.successCount).toBe(1);
+      expect(result.value.cancelledCount).toBe(2);
+    }
+  });
 });
 
 describe("TraceCoordinator", () => {

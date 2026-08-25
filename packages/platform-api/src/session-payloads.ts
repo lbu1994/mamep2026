@@ -224,6 +224,35 @@ export function toBatchReadRowPayload(row: BatchReadRow): BatchReadRowPayload {
   return { ...row };
 }
 
+// ---- 批量读取请求（远程路径 batchId 由渲染端生成，ADR-025）----
+
+/** session-batch-read 请求载荷：batchId 供 session-batch-cancel 关联取消。 */
+export const sessionBatchReadPayloadSchema = z.object({
+  batchId: z.string().min(1),
+  rows: z.array(batchReadRowPayloadSchema),
+});
+export type SessionBatchReadPayload = z.infer<
+  typeof sessionBatchReadPayloadSchema
+>;
+
+/** session-batch-cancel 请求载荷：按 batchId 取消活动批任务（未知 id 为安全 no-op）。 */
+export const sessionBatchCancelPayloadSchema = z.object({
+  batchId: z.string().min(1),
+});
+export type SessionBatchCancelPayload = z.infer<
+  typeof sessionBatchCancelPayloadSchema
+>;
+
+let batchSeq = 0;
+/** 生成跨边界批任务唯一 batchId（渲染端创建 BatchReadHandle 时使用，ADR-025）。 */
+export function createBatchId(): string {
+  batchSeq += 1;
+  const time = Date.now().toString(36);
+  const seq = batchSeq.toString(36);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `batch-${time}-${seq}-${rand}`;
+}
+
 // ---- WriteOutcome ----
 
 export const writeOutcomePayloadSchema = z.object({

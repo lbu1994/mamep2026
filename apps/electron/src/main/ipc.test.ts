@@ -62,6 +62,7 @@ function makeSession(
       ),
       cancel: vi.fn(),
     })),
+    cancelBatch: vi.fn(),
     updatePollingTargets: vi.fn(),
     startPolling: vi.fn(),
     stopPolling: vi.fn(),
@@ -383,6 +384,35 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     if (result.type === "response") {
       expect(result.payload).toEqual({ connectionState: "connected" });
     }
+  });
+
+  it("session-batch-read 携带 batchId 调用 readAllRows 并返回汇总（ADR-025）", async () => {
+    const session = makeSession();
+    const result = await handleRequest(
+      request("session-batch-read", {
+        batchId: "batch-abc",
+        rows: [{ key: "a", address: 1 }],
+      }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.readAllRows).toHaveBeenCalledWith(
+      [{ key: "a", address: 1 }],
+      "batch-abc",
+    );
+    if (result.type === "response") {
+      expect(result.payload).toMatchObject({ summary: { batchId: "b-1" } });
+    }
+  });
+
+  it("session-batch-cancel 按 batchId 调用 cancelBatch", async () => {
+    const session = makeSession();
+    const result = await handleRequest(
+      request("session-batch-cancel", { batchId: "batch-abc" }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.cancelBatch).toHaveBeenCalledWith("batch-abc");
   });
 
   it("session-tcp-connect 失败时返回结构化错误", async () => {

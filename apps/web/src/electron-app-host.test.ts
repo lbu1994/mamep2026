@@ -120,11 +120,11 @@ function createFakeBridge(): {
       }),
     ),
     sessionBatchRead: vi.fn(
-      async (): Promise<Result<SessionBatchReadResponse>> => ({
+      async (batchId: string): Promise<Result<SessionBatchReadResponse>> => ({
         ok: true,
         value: {
           summary: {
-            batchId: "b-1",
+            batchId,
             totalRows: 1,
             eligibleRows: 1,
             successCount: 1,
@@ -138,6 +138,10 @@ function createFakeBridge(): {
         },
       }),
     ),
+    sessionBatchCancel: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
     sessionUpdatePollingTargets: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
@@ -535,6 +539,28 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalled();
     expect(bridge.sessionPollingStart).toHaveBeenCalled();
     expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100);
+  });
+
+  it("TCP readAllRows：携带渲染端 batchId，cancel 经 session-batch-cancel 转发（ADR-025）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeTcpHost(bridge);
+    await host.connectTcp(createDefaultTcpProfile());
+
+    const handle = host.readAllRows([{ key: "row-a", address: 1 }]);
+    const summary = await handle.promise;
+    expect(summary.ok).toBe(true);
+    if (summary.ok) expect(summary.value.successCount).toBe(1);
+
+    // 渲染端生成唯一 batchId 并随 session-batch-read 请求传入。
+    const call = (bridge.sessionBatchRead as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(call?.[0]).toMatch(/^batch-/);
+    expect(call?.[1]).toEqual([{ key: "row-a", address: 1 }]);
+
+    // cancel 经 session-batch-cancel RPC 转发同一 batchId（幂等、异常安全）。
+    const batchId = call?.[0];
+    handle.cancel();
+    expect(bridge.sessionBatchCancel).toHaveBeenCalledWith(batchId);
   });
 
   it("主进程 session 事件（comm-log/connection-state）转发本地订阅者", () => {

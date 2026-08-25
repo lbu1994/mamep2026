@@ -170,6 +170,7 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
         "platform",
         "readTextFromClipboard",
         "selectSerialPort",
+        "sessionBatchCancel",
         "sessionBatchRead",
         "sessionConnect",
         "sessionDisconnect",

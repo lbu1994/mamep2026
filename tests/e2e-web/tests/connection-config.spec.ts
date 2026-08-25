@@ -65,11 +65,16 @@ test("URL 载入的连接配置：Connection Settings 展示来源并预填表�
   await expect(modal.getByText(/url/)).toBeVisible();
 
   // 打开连接对象下拉并选择 rtu-com4。
+  // 注：antd v6 Select 下拉 portal 到 body（不在 .ant-modal-container 内），
+  // 选项须用 page 级 .ant-select-dropdown 定位（与串口下拉测试一致）。
   const configSelect = modal.getByRole("combobox", {
     name: "Select a connection from config…",
   });
   await configSelect.click();
-  await modal.getByText("COM4 slave").click();
+  const option = page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: "COM4 slave" });
+  await option.click();
 
   // 表单预填：Speed（baudRate）下拉显示 115200。
   await expect(

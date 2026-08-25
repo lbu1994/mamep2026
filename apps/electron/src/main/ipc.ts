@@ -35,7 +35,9 @@ export interface ElectronSessionLike {
   getConnectionState(): ConnectionState;
   readRow(row: RegisterRow): Promise<Result<number>>;
   writeRow(row: RegisterRow): Promise<Result<WriteOutcome>>;
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle;
+  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle;
+  /** 按 batchId 取消活动批任务（ADR-025）：未知 batchId 为安全 no-op。 */
+  cancelBatch(batchId: string): void;
   updatePollingTargets(rows: Array<{ key: string; address: number }>): void;
   startPolling(): void;
   stopPolling(): void;
@@ -221,10 +223,11 @@ export async function handleRequest(
       });
     }
     case "session-batch-read": {
-      const { rows } = message.payload;
+      const { batchId, rows } = message.payload;
       return sessionResult(message, async () => {
         const handle = deps.session.readAllRows(
           rows.map((r) => ({ key: r.key, address: r.address })),
+          batchId,
         );
         const result = await handle.promise;
         return result.ok
@@ -232,6 +235,11 @@ export async function handleRequest(
           : result;
       });
     }
+    case "session-batch-cancel":
+      // 远程批任务取消（ADR-025）：按 batchId 取消活动批任务（未知 id 安全 no-op）。
+      return sessionVoid(message, () =>
+        deps.session.cancelBatch(message.payload.batchId),
+      );
     case "session-update-polling-targets":
       return sessionVoid(message, () =>
         deps.session.updatePollingTargets(message.payload.rows),

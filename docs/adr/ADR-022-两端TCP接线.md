@@ -83,6 +83,11 @@
   比纯远程代理（VSCode）稍复杂；
 - TCP 通信属性摘要复用 RTU 形状字段（baudRate=0 等占位），UI 按 `protocol` 分支渲染；
 - VSCode/Electron TCP 端 `readAllRows` cancel 为 no-op（P0 单次往返）；
+  **补充（2026-08-25）**：UI 无取消入口，用户无感知；保留待办系接口契约一致性
+  （浏览器/Electron RTU 本地为真取消）+ 批任务流式取消前置，见下方复审条件。
+  **已解决（2026-08-25，ADR-025）**：远程批任务取消落地——渲染端生成 batchId 随
+  `session-batch-read` 传入，新增 `session-batch-cancel` kind 取消宿主批任务，UI 提供取消
+  入口；`BatchReadHandle` 接口不变，取消语义与本地路径一致。
 - TCP unitId 会话内不动态修改（与 RTU 每表从站地址语义不同），工具栏「当前从站地址」对 TCP 无效
   （宿主 setSlaveAddress 已对 TCP 守卫为 no-op）。
 
@@ -91,5 +96,7 @@
 - 真机验证：IPv6 / 真实设备 / 大报文 / 长时间轮询 / 打包后运行（Windows 免安装绿色版）；
 - VSCode VSIX 打包发布时 Node TCP 模块分发规则（当前 e2e 走 extensionDevelopmentPath）；
 - 批任务流式取消（batch id + 事件）替代单次往返；
+  **已解决（2026-08-25，ADR-025）**：远程批任务取消已落地（见上方负面影响补充），
+  三端 `readAllRows` 取消语义一致；
 - 自动重连（P1）落地；
 - Electron RTU 迁移 Node Serial（ADR-017 演进）后可整体切主进程远程会话，届时可抽取共享远程代理。

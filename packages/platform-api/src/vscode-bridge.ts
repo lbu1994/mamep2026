@@ -161,8 +161,13 @@ export function createVscodeBridge(
       postRequest<number>("session-read-row", { row }),
     sessionWriteRow: (row: RegisterRowPayload) =>
       postRequest<WriteOutcomePayload>("session-write-row", { row }),
-    sessionBatchRead: (rows: BatchReadRowPayload[]) =>
-      postRequest<SessionBatchReadResponse>("session-batch-read", { rows }),
+    sessionBatchRead: (batchId: string, rows: BatchReadRowPayload[]) =>
+      postRequest<SessionBatchReadResponse>("session-batch-read", {
+        batchId,
+        rows,
+      }),
+    sessionBatchCancel: (batchId: string) =>
+      postRequest<null>("session-batch-cancel", { batchId }),
     sessionUpdatePollingTargets: (
       rows: Array<{ key: string; address: number }>,
     ) => postRequest<null>("session-update-polling-targets", { rows }),

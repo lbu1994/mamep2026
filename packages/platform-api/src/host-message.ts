@@ -17,11 +17,12 @@ import {
 } from "@mamep2026/connection-config";
 import {
   appMessagePayloadSchema,
-  batchReadRowPayloadSchema,
   batchReadSummaryPayloadSchema,
   commLogEventPayloadSchema,
   registerRowPayloadSchema,
   rtuConnectionProfilePayloadSchema,
+  sessionBatchCancelPayloadSchema,
+  sessionBatchReadPayloadSchema,
   sessionTcpConnectPayloadSchema,
   traceSamplePayloadSchema,
   type BatchReadRowPayload,
@@ -55,6 +56,7 @@ export const HOST_REQUEST_KINDS = [
   "session-read-row",
   "session-write-row",
   "session-batch-read",
+  "session-batch-cancel",
   "session-update-polling-targets",
   "session-polling-start",
   "session-polling-stop",
@@ -293,7 +295,14 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   z.object({
     ...requestBase,
     kind: z.literal("session-batch-read"),
-    payload: z.object({ rows: z.array(batchReadRowPayloadSchema) }),
+    // 远程批任务（ADR-025）：batchId 由渲染端生成，供 session-batch-cancel 关联取消。
+    payload: sessionBatchReadPayloadSchema,
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("session-batch-cancel"),
+    // 远程批任务取消（ADR-025）：按 batchId 取消活动批任务（未知 id 为安全 no-op）。
+    payload: sessionBatchCancelPayloadSchema,
   }),
   z.object({
     ...requestBase,
@@ -511,8 +520,11 @@ export interface MamepHostApi {
   ): Promise<Result<WriteOutcomePayload>>;
   /** 全表读取（session-batch-read）：单次往返返回汇总 + 每行结果。 */
   sessionBatchRead(
+    batchId: string,
     rows: BatchReadRowPayload[],
   ): Promise<Result<SessionBatchReadResponse>>;
+  /** 取消远程批任务（session-batch-cancel，ADR-025）：未知 batchId 为安全 no-op。 */
+  sessionBatchCancel(batchId: string): Promise<Result<null>>;
   sessionUpdatePollingTargets(
     rows: Array<{ key: string; address: number }>,
   ): Promise<Result<null>>;
@@ -571,8 +583,11 @@ export interface VscodeHostApi
   ): Promise<Result<WriteOutcomePayload>>;
   /** 全表读取（session-batch-read）：单次往返返回汇总 + 每行结果。 */
   sessionBatchRead(
+    batchId: string,
     rows: BatchReadRowPayload[],
   ): Promise<Result<SessionBatchReadResponse>>;
+  /** 取消远程批任务（session-batch-cancel，ADR-025）：未知 batchId 为安全 no-op。 */
+  sessionBatchCancel(batchId: string): Promise<Result<null>>;
   sessionUpdatePollingTargets(
     rows: Array<{ key: string; address: number }>,
   ): Promise<Result<null>>;

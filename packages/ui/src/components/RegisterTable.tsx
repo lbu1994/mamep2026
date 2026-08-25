@@ -30,6 +30,7 @@ import {
   HolderOutlined,
   PlusOutlined,
   ReloadOutlined,
+  StopOutlined,
 } from "@ant-design/icons";
 import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/core";
 import {
@@ -53,6 +54,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { ColumnType, ColumnsType } from "antd/es/table";
+import type { BatchReadHandle } from "@mamep2026/communication";
 import type { DataType, RegisterRow, RowId, SheetId } from "@mamep2026/domain";
 import { dataTypes, defaultConfig } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
@@ -863,6 +865,10 @@ export const RegisterTable = memo(function RegisterTable({
       null,
   );
   const [readAllRunning, setReadAllRunning] = useState(false);
+  // 全表读取运行态句柄与递增序号（ADR-025）：取消/重新读取的竞态守卫——
+  // 只有最新一次读取的 promise 落定才允许改运行态，过期 promise 不再清状态。
+  const readAllHandleRef = useRef<BatchReadHandle | null>(null);
+  const readAllSeqRef = useRef(0);
   const [menuRowId, setMenuRowId] = useState<RowId | null>(null);
   // 拖拽列宽（每表独立，随 workspace 持久化，IndexedDB 自动保存）：初始化取本表已保存宽度。
   // 拖拽过程仅改本地 state（拖拽帧级渲染只在本表内），mouseup 时一次性提交 store（触发自动保存）。
@@ -940,40 +946,52 @@ export const RegisterTable = memo(function RegisterTable({
 
   const handleReadAll = async (): Promise<void> => {
     if (host === null || host === undefined) return;
+    const seq = ++readAllSeqRef.current;
     setReadAllRunning(true);
-    try {
-      const handle = host.readAllRows(
-        rows.map((row) => ({
-          key: row.rowId,
-          address: row.addressValue?.value ?? null,
-        })),
-      );
-      const result = await handle.promise;
-      if (result.ok) {
-        appendMessage({
-          timestamp: Date.now(),
-          level: "info",
-          messageKey: "table.batchSummary",
-          params: {
-            success: result.value.successCount,
-            failure: result.value.failureCount,
-            skipped: result.value.skippedCount,
-          },
-          detail: null,
-        });
-      } else {
-        // 批次整体失败（如未连接）：给出明确提示；逐行失败经轮询结果通道标记状态点。
-        appendMessage({
-          timestamp: Date.now(),
-          level: "error",
-          messageKey: "messages.readAllFailed",
-          params: { detail: result.error.code },
-          detail: result.error.code,
-        });
-      }
-    } finally {
-      setReadAllRunning(false);
+    const handle = host.readAllRows(
+      rows.map((row) => ({
+        key: row.rowId,
+        address: row.addressValue?.value ?? null,
+      })),
+    );
+    readAllHandleRef.current = handle;
+    const result = await handle.promise;
+    if (result.ok) {
+      appendMessage({
+        timestamp: Date.now(),
+        level: "info",
+        messageKey: "table.batchSummary",
+        params: {
+          success: result.value.successCount,
+          failure: result.value.failureCount,
+          skipped: result.value.skippedCount,
+          cancelled: result.value.cancelledCount,
+        },
+        detail: null,
+      });
+    } else {
+      // 批次整体失败（如未连接）：给出明确提示；逐行失败经轮询结果通道标记状态点。
+      appendMessage({
+        timestamp: Date.now(),
+        level: "error",
+        messageKey: "messages.readAllFailed",
+        params: { detail: result.error.code },
+        detail: result.error.code,
+      });
     }
+    // 竞态守卫：仅最新一次读取负责收尾（取消后重新读取时，过期 promise 不干预新状态）。
+    if (seq === readAllSeqRef.current) {
+      setReadAllRunning(false);
+      readAllHandleRef.current = null;
+    }
+  };
+
+  /** 取消运行中的全表读取（ADR-025）：立即退出运行态，宿主导致 promise 落定后不再改状态。 */
+  const handleCancelReadAll = (): void => {
+    readAllHandleRef.current?.cancel();
+    readAllSeqRef.current += 1;
+    readAllHandleRef.current = null;
+    setReadAllRunning(false);
   };
 
   const moveRowToIndex = useAppStore((s) => s.moveRowToIndex);
@@ -1627,6 +1645,16 @@ export const RegisterTable = memo(function RegisterTable({
           >
             {t("topbar.readAll")}
           </Button>
+          {readAllRunning ? (
+            <Button
+              size="small"
+              icon={<StopOutlined />}
+              onClick={handleCancelReadAll}
+              aria-label={t("table.cancelReadAll")}
+            >
+              {t("table.cancelReadAll")}
+            </Button>
+          ) : null}
         </div>
         <span className="table-toolbar__spacer" />
         <div className="table-toolbar__group">

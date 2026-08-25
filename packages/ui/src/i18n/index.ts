@@ -165,7 +165,8 @@ export const en = {
     noOpenSheets: "No tables are open",
     noOpenSheetsHint: "Select a table from the sidebar to open it.",
     batchSummary:
-      "Read All: {{success}} succeeded, {{failure}} failed, {{skipped}} skipped",
+      "Read All: {{success}} succeeded, {{failure}} failed, {{skipped}} skipped, {{cancelled}} cancelled",
+    cancelReadAll: "Cancel",
   },
   trace: {
     title: "M@MEp2006 Advance [Memory Trace]",
@@ -471,7 +472,8 @@ export const zh: TranslationResources = {
     noOpenSheets: "没有打开的表",
     noOpenSheetsHint: "从侧边栏选择一张表以打开。",
     batchSummary:
-      "全表读取：成功 {{success}}，失败 {{failure}}，跳过 {{skipped}}",
+      "全表读取：成功 {{success}}，失败 {{failure}}，跳过 {{skipped}}，取消 {{cancelled}}",
+    cancelReadAll: "取消",
   },
   trace: {
     title: "M@MEp2006 Advance [Memory Trace]",

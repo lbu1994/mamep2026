@@ -28,6 +28,7 @@ import type { ApplicationMessage } from "@mamep2026/logging";
 import type { ConnectionConfigFile } from "@mamep2026/connection-config";
 import {
   commLogEventFromPayload,
+  createBatchId,
   electronCapabilities,
   fromResultPayload,
   toRegisterRowPayload,
@@ -489,7 +490,10 @@ export class ElectronAppHost implements AppHost {
 
   readAllRows(rows: BatchReadRow[]): BatchReadHandle {
     if (this.activeProtocol === "tcp") {
+      // 远程批任务（ADR-025）：batchId 由渲染端生成，取消经 session-batch-cancel RPC 通知主进程。
+      const batchId = createBatchId();
       const handle = this.bridge.sessionBatchRead(
+        batchId,
         rows.map((r) => ({ key: r.key, address: r.address })),
       );
       return {
@@ -498,7 +502,10 @@ export class ElectronAppHost implements AppHost {
             ? { ok: true as const, value: result.value.summary }
             : result,
         ),
-        cancel: () => undefined,
+        cancel: () => {
+          // 幂等、异常安全：完成/未知 batchId 为 no-op，不抛错。
+          void this.bridge.sessionBatchCancel(batchId);
+        },
       };
     }
     return this.inner.readAllRows(rows);

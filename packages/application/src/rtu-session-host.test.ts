@@ -190,6 +190,49 @@ describe("RtuSessionHost 全表读取", () => {
     expect(h.events.onPollResult).toHaveBeenCalledWith("a", 0, expect.objectContaining({ ok: true }));
     expect(h.events.onPollResult).toHaveBeenCalledWith("b", 0, expect.objectContaining({ ok: true }));
   });
+
+  it("readAllRows(rows, batchId)：汇总 batchId 与传入一致（远程路径，ADR-025）", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.device.setRegister(1, 0x1111);
+    const handle = h.host.readAllRows([{ key: "a", address: 1 }], "batch-xyz");
+    const summary = await handle.promise;
+    expect(summary.ok).toBe(true);
+    if (summary.ok) expect(summary.value.batchId).toBe("batch-xyz");
+  });
+
+  it("cancelBatch 取消排队未发送的行：cancelledCount 计入、在飞行完成", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.device.setRegister(1, 0x1111);
+    const handle = h.host.readAllRows(
+      [
+        { key: "a", address: 1 },
+        { key: "b", address: 2 },
+        { key: "c", address: 3 },
+      ],
+      "batch-cancel-1",
+    );
+    // 第一行已入执行（在飞）；取消令牌使后续排队行取消（ADR-025 语义与本地路径一致）。
+    h.host.cancelBatch("batch-cancel-1");
+    const summary = await handle.promise;
+    expect(summary.ok).toBe(true);
+    if (summary.ok) {
+      expect(summary.value.successCount + summary.value.cancelledCount).toBe(3);
+      expect(summary.value.cancelledCount).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("cancelBatch 未知 batchId / 已完成批任务为安全 no-op", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.device.setRegister(1, 0x1111);
+    const handle = h.host.readAllRows([{ key: "a", address: 1 }], "batch-done");
+    await handle.promise;
+    // 完成后登记已注销：不抛错、无副作用。
+    expect(() => h.host.cancelBatch("batch-done")).not.toThrow();
+    expect(() => h.host.cancelBatch("unknown-batch")).not.toThrow();
+  });
 });
 
 describe("RtuSessionHost WP 轮询 / TM 追踪", () => {

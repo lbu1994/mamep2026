@@ -70,6 +70,8 @@ export class SessionHostCore {
     string,
     { address: number; speedMs: number }
   >();
+  /** 活动批任务登记（远程路径按 batchId 取消，ADR-025）：promise 落定后注销。 */
+  private readonly activeBatches = new Map<string, BatchReadHandle>();
 
   constructor(options: SessionHostCoreOptions) {
     this.clock = options.clock;
@@ -158,7 +160,7 @@ export class SessionHostCore {
     return this.tableService.writeRow(row);
   }
 
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
+  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {
     if (this.session === null) {
       return {
         promise: Promise.resolve(
@@ -175,10 +177,28 @@ export class SessionHostCore {
       };
     }
     const coordinator = new BatchReadCoordinator(this.session, this.clock);
-    return coordinator.readAll(rows, (key, result) => {
-      // 与 BrowserAppHost 既有行为一致：批量读取结果经轮询结果通道上报（address 0）。
-      this.events.onPollResult(key, 0, result);
-    });
+    const handle = coordinator.readAll(
+      rows,
+      (key, result) => {
+        // 与 BrowserAppHost 既有行为一致：批量读取结果经轮询结果通道上报（address 0）。
+        this.events.onPollResult(key, 0, result);
+      },
+      batchId,
+    );
+    if (batchId !== undefined) {
+      // 远程路径（ADR-025）：登记活动批任务，promise 落定后注销，供 cancelBatch 关联取消。
+      this.activeBatches.set(batchId, handle);
+      void handle.promise.then(
+        () => this.activeBatches.delete(batchId),
+        () => this.activeBatches.delete(batchId),
+      );
+    }
+    return handle;
+  }
+
+  /** 按 batchId 取消活动批任务（ADR-025）：未知/已完成/未连接均为安全 no-op。 */
+  cancelBatch(batchId: string): void {
+    this.activeBatches.get(batchId)?.cancel();
   }
 
   updatePollingTargets(rows: Array<{ key: string; address: number }>): void {

@@ -129,8 +129,13 @@ export class VscodeSessionHost {
   }
 
   /** 全表读取：行结果经 poll-result 事件流上报（address 0），返回 BatchReadHandle。 */
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
-    return this.activeSession.readAllRows(rows);
+  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {
+    return this.activeSession.readAllRows(rows, batchId);
+  }
+
+  /** 按 batchId 取消活动批任务（远程路径，ADR-025）：未知/已完成为安全 no-op。 */
+  cancelBatch(batchId: string): void {
+    this.activeSession.cancelBatch(batchId);
   }
 
   updatePollingTargets(rows: Array<{ key: string; address: number }>): void {

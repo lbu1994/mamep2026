@@ -805,6 +805,9 @@ retryCount 表示首次失败后允许的额外尝试次数。
 5. 不合并连续地址
 6. 单行失败后继续
 7. 支持取消尚未执行的任务
+   （实现注记：浏览器/Electron RTU 本地 `BatchReadCoordinator` 真取消；Electron TCP/VSCode
+   远程路径经 `session-batch-cancel`（渲染端生成 batchId 随请求传入，ADR-025）取消宿主
+   批任务，UI 提供取消入口；取消语义见 ADR-025 与 §12.4）
 8. 汇总成功、失败、跳过和取消数量
 9. 将每次请求记录到通信日志
 10. 不修改轮询配置

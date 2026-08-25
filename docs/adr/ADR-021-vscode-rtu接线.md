@@ -87,6 +87,12 @@ FC03 闭环（node 24.18.1 / electron 42.8.1），ADR-020 的 ABI 前置项解�
   （connection-state 事件 + connect 响应刷新），非实时宿主状态；
 - `readAllRows` 在 VSCode 端为单次往返：`BatchReadHandle.cancel()` 为 no-op（无法中途取消宿主
   批任务），P0 可接受，后续可改为批任务流式（batch id + 事件）；
+  **补充（2026-08-25）**：UI 当前无取消入口（`RegisterTable.handleReadAll` 不调用 cancel），
+  此限制不影响现有用户操作；保留待办系保持与浏览器端 `BatchReadCoordinator` 真取消语义的接口
+  契约一致性，并为批量任务/写后回读（PRD §8.3 P1）与批任务流式取消前置。
+  **已解决（2026-08-25，ADR-025）**：远程批任务取消落地——渲染端生成 batchId 随
+  `session-batch-read` 传入，新增 `session-batch-cancel` kind 取消宿主批任务，UI 提供取消
+  入口；`BatchReadHandle` 接口不变，取消语义与本地路径一致。
 - `debug:rpc` dev-only 命令暴露真实 RPC 路径：仅扩展宿主进程内代码可调用（Webview 无法调用），
   isDev 门控，无安全风险但发布前需复核（与 `debug:getPanel` 同级别）。
 

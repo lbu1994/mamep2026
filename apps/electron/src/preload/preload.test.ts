@@ -57,6 +57,7 @@ describe("preload 白名单桥", () => {
       "platform",
       "readTextFromClipboard",
       "selectSerialPort",
+      "sessionBatchCancel",
       "sessionBatchRead",
       "sessionDisconnect",
       "sessionGetState",

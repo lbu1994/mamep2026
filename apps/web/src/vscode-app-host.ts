@@ -27,6 +27,7 @@ import type { ApplicationMessage } from "@mamep2026/logging";
 import type { ConnectionConfigFile } from "@mamep2026/connection-config";
 import {
   commLogEventFromPayload,
+  createBatchId,
   fromResultPayload,
   toRegisterRowPayload,
   toRtuConnectionProfilePayload,
@@ -377,12 +378,14 @@ export class VscodeAppHost implements AppHost {
   }
 
   readAllRows(rows: BatchReadRow[]): BatchReadHandle {
+    // 远程代理：batchId 由渲染端生成（ADR-025），取消经 session-batch-cancel RPC 关联宿主批任务。
+    const batchId = createBatchId();
     // 单次往返：行结果经 poll-result 事件流推送，响应只带汇总。
     let resolvePromise: (result: Result<BatchReadSummary>) => void = () => {};
     const promise = new Promise<Result<BatchReadSummary>>((resolve) => {
       resolvePromise = resolve;
     });
-    void this.bridge.sessionBatchRead(rows).then((result) => {
+    void this.bridge.sessionBatchRead(batchId, rows).then((result) => {
       if (result.ok) {
         resolvePromise(ok(result.value.summary));
       } else {
@@ -391,8 +394,10 @@ export class VscodeAppHost implements AppHost {
     });
     return {
       promise,
-      // 单次往返请求无法中途取消宿主侧批任务（ADR 记录，P0 可接受）。
-      cancel: () => undefined,
+      // 远程批任务取消（ADR-025）：经 session-batch-cancel RPC 通知宿主；幂等、异常安全。
+      cancel: () => {
+        void this.bridge.sessionBatchCancel(batchId);
+      },
     };
   }
 

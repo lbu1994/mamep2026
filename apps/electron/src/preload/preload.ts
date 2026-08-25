@@ -106,9 +106,16 @@ const api: MamepHostApi = {
     return invoke<WriteOutcomePayload>("session-write-row", { row });
   },
   sessionBatchRead(
+    batchId: string,
     rows: BatchReadRowPayload[],
   ): Promise<Result<SessionBatchReadResponse>> {
-    return invoke<SessionBatchReadResponse>("session-batch-read", { rows });
+    return invoke<SessionBatchReadResponse>("session-batch-read", {
+      batchId,
+      rows,
+    });
+  },
+  sessionBatchCancel(batchId: string): Promise<Result<null>> {
+    return invoke<null>("session-batch-cancel", { batchId });
   },
   sessionUpdatePollingTargets(
     rows: Array<{ key: string; address: number }>,

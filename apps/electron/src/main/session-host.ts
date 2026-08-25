@@ -69,8 +69,13 @@ export class ElectronSessionHost {
     return this.tcp.writeRow(row);
   }
 
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
-    return this.tcp.readAllRows(rows);
+  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {
+    return this.tcp.readAllRows(rows, batchId);
+  }
+
+  /** 按 batchId 取消活动批任务（远程路径，ADR-025）：未知/已完成为安全 no-op。 */
+  cancelBatch(batchId: string): void {
+    this.tcp.cancelBatch(batchId);
   }
 
   updatePollingTargets(rows: Array<{ key: string; address: number }>): void {

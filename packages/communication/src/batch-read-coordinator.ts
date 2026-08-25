@@ -49,8 +49,11 @@ export class BatchReadCoordinator {
   readAll(
     rows: BatchReadRow[],
     onRowResult?: BatchRowResultListener,
+    batchId?: string,
   ): BatchReadHandle {
-    const batchId = `batch-${++this.seq}`;
+    // 显式 batchId 用于远程路径（渲染端生成随请求传入，ADR-025），保证汇总 batchId
+    // 与请求关联一致；本地路径缺省时内部自增生成。
+    const resolvedBatchId = batchId ?? `batch-${++this.seq}`;
     const cancelToken = createCancellationToken();
     const eligible = rows.filter((row) => row.address !== null);
     const skippedCount = rows.length - eligible.length;
@@ -67,7 +70,7 @@ export class BatchReadCoordinator {
         const completedAt = this.clock.now();
         resolve(
           ok({
-            batchId,
+            batchId: resolvedBatchId,
             totalRows: rows.length,
             eligibleRows: eligible.length,
             successCount,
@@ -91,7 +94,7 @@ export class BatchReadCoordinator {
           .readRegister(row.address ?? 0, {
             source: "batch-read",
             priority: "batch-read",
-            group: batchId,
+            group: resolvedBatchId,
             cancelToken,
           })
           .then((result) => {

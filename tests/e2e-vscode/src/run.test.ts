@@ -270,6 +270,64 @@ async function runTcpLoop(): Promise<void> {
 }
 
 /**
+ * 远程批任务取消（ADR-025，2026-08-25）：经真实 HostMessage RPC 路径验证
+ * session-batch-read（携带 batchId）→ 中途 session-batch-cancel → 汇总 cancelledCount > 0。
+ * 扩展宿主消息处理为并发（onDidReceiveMessage void 分发），取消消息在批任务进行中到达；
+ * 批任务按 Rx Delay(50ms) 逐行发送，20 行 ≈ 1s，提供可取消窗口。
+ */
+async function runBatchCancelLoop(): Promise<void> {
+  // 1. 连接 TCP（假设备 127.0.0.1:1502）。
+  const connect = await rpcEnvelope("session-tcp-connect", {
+    profile: tcpProfile(),
+  });
+  assert.strictEqual(
+    connect.type,
+    "response",
+    "session-tcp-connect should succeed",
+  );
+
+  // 2. 发起多行全表读取（batchId 由调用方指定；渲染端语义为 createBatchId）。
+  const batchId = "e2e-batch-cancel-1";
+  const rows = Array.from({ length: 20 }, (_, i) => ({
+    key: `row-${i}`,
+    address: 0x0100 + i,
+  }));
+  const batchPromise = rpcEnvelope("session-batch-read", { batchId, rows });
+
+  // 3. 给批任务启动时间，随后取消（取消在批任务进行中到达）。
+  await sleep(80);
+  const cancel = await rpcEnvelope("session-batch-cancel", { batchId });
+  assert.strictEqual(
+    cancel.type,
+    "response",
+    "session-batch-cancel should succeed",
+  );
+
+  // 4. 批任务汇总：cancelledCount > 0（在飞行数有限，其余排队取消）。
+  const batch = await batchPromise;
+  assert.strictEqual(
+    batch.type,
+    "response",
+    "session-batch-read should return summary",
+  );
+  const summary = (
+    batch.payload as { summary: { cancelledCount: number } }
+  ).summary;
+  assert.ok(
+    summary.cancelledCount > 0,
+    `cancelled batch should count cancelled rows, got ${summary.cancelledCount}`,
+  );
+
+  // 5. 断开。
+  const disconnect = await rpcEnvelope("session-disconnect");
+  assert.strictEqual(
+    disconnect.type,
+    "response",
+    "session-disconnect should succeed",
+  );
+}
+
+/**
  * 面板关闭释放（Webview 关闭即断开，用户决策）：连接 → 关闭面板 → 会话释放
  * （串口不残留占用）→ 重新连接成功。
  */
@@ -371,6 +429,9 @@ export async function run(): Promise<void> {
 
   // 6. VSCode TCP 闭环（2026-08-23）：连接 → 写 → 读 → 断开。
   await runTcpLoop();
+
+  // 6.5 远程批任务取消（ADR-025）：session-batch-read → 中途 cancel → cancelledCount > 0。
+  await runBatchCancelLoop();
 
   // 7. 面板关闭释放：连接 → 关闭面板 → 会话释放 → 可重连。
   await runPanelCloseRelease();

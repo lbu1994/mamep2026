@@ -8,13 +8,17 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { BatchReadHandle, BatchReadSummary } from "@mamep2026/communication";
 import {
   createEmptyWorkspace,
+  ok,
+  type Result,
   type RowId,
   type SheetId,
 } from "@mamep2026/domain";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
+import type { AppHost } from "../host";
 import { RegisterTable } from "./RegisterTable";
 
 // jsdom 未实现 ResizeObserver（RegisterTable 用它测量表体高度）；最小 stub。
@@ -286,6 +290,82 @@ describe("RegisterTable 斑马纹（rowClassName 按行号奇偶交替）", () =
       expect(row.classList.contains("register-table__row--striped")).toBe(
         index % 2 === 1,
       );
+    });
+  });
+});
+
+describe("RegisterTable 全表读取取消（ADR-025）", () => {
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({
+      host: null,
+      workspace: createEmptyWorkspace(),
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  it("运行态出现取消按钮，点击调用 handle.cancel 并立即退出运行态；promise 落定后汇总照常追加", async () => {
+    let cancelCalls = 0;
+    const deferred: {
+      resolve: ((r: Result<BatchReadSummary>) => void) | null;
+    } = { resolve: null };
+    const fakeHost = {
+      readAllRows: vi.fn(
+        (): BatchReadHandle =>
+          ({
+            promise: new Promise<Result<BatchReadSummary>>((resolve) => {
+              // 包装一层：Promise resolve 接受 Result | PromiseLike，收窄为目标函数类型。
+              deferred.resolve = (r) => resolve(r);
+            }),
+            cancel: vi.fn(() => {
+              cancelCalls += 1;
+            }),
+          }) as BatchReadHandle,
+      ),
+    } as unknown as AppHost;
+    // 小工作区（jsdom 渲染 50 行过慢易超时）：仅保留首表前 3 行。
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet !== undefined) sheet.rows = sheet.rows.slice(0, 3);
+    useAppStore.setState({ host: fakeHost, workspace });
+
+    render(<RegisterTable sheetId={sheetId()} />);
+    // antd 图标计入可访问名（如 "reload Read All"），用正则匹配。
+    fireEvent.click(screen.getByRole("button", { name: /Read All/ }));
+
+    // 运行态：取消按钮出现。
+    const cancelButton = screen.getByRole("button", { name: /Cancel/ });
+    expect(cancelButton).toBeTruthy();
+
+    // 点击取消：handle.cancel 被调用、取消按钮立即消失（不等 promise resolve）。
+    fireEvent.click(cancelButton);
+    expect(cancelCalls).toBe(1);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Cancel/ })).toBeNull();
+    });
+
+    // 取消后 promise 落定：汇总消息（含 cancelled）照常追加，不抛错、不改运行态。
+    deferred.resolve?.(
+      ok({
+        batchId: "b-1",
+        totalRows: 1,
+        eligibleRows: 1,
+        successCount: 0,
+        failureCount: 0,
+        skippedCount: 0,
+        cancelledCount: 1,
+        startedAt: 0,
+        completedAt: 1,
+        durationMs: 1,
+      }),
+    );
+    await waitFor(() => {
+      const messages = useAppStore.getState().messages;
+      expect(messages.at(-1)?.messageKey).toBe("table.batchSummary");
     });
   });
 });

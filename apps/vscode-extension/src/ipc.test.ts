@@ -65,6 +65,7 @@ function makeSession(
       ),
       cancel: vi.fn(),
     })),
+    cancelBatch: vi.fn(),
     updatePollingTargets: vi.fn(),
     startPolling: vi.fn(),
     stopPolling: vi.fn(),
@@ -375,19 +376,35 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     }
   });
 
-  it("session-batch-read 返回汇总（行结果走 poll-result 事件）", async () => {
+  it("session-batch-read 携带 batchId 调用 readAllRows 并返回汇总（行结果走 poll-result 事件）", async () => {
+    const session = makeSession();
     const result = await handleVscodeInvoke(
       request("session-batch-read", {
+        batchId: "batch-abc",
         rows: [{ key: "a", address: 1 }],
       }),
-      makeDeps(),
+      makeDeps({ session }),
     );
     expect(result.type).toBe("response");
+    expect(session.readAllRows).toHaveBeenCalledWith(
+      [{ key: "a", address: 1 }],
+      "batch-abc",
+    );
     if (result.type === "response") {
       expect(result.payload).toMatchObject({
         summary: { batchId: "b-1", successCount: 1 },
       });
     }
+  });
+
+  it("session-batch-cancel 按 batchId 调用 cancelBatch", async () => {
+    const session = makeSession();
+    const result = await handleVscodeInvoke(
+      request("session-batch-cancel", { batchId: "batch-abc" }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.cancelBatch).toHaveBeenCalledWith("batch-abc");
   });
 
   it("session-get-state 返回连接状态", async () => {
