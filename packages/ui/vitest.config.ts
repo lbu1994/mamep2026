@@ -5,8 +5,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
   },
-  // MamepApp 头部品牌图标导入 AppIcon.svg（Vite 默认内联 data URI）；jsdom 测试
-  // 环境不跑 Vite 资源管线，这里用 pre transform 把 *.svg 替换为纯字符串 stub。
+  // 品牌图标已改为内联 SVG 组件（assets/AppIcon.tsx，不再 import .svg）；jsdom 测试
+  // 环境不跑 Vite 资源管线，这里保留 pre transform 把 *.svg 替换为纯字符串 stub
+  // （防止未来新增 .svg import 时测试环境报错）。
   plugins: [
     {
       name: "mamep-svg-stub",

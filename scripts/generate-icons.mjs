@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 /**
- * 应用图标生成脚本：AppIcon.svg（根目录单一事实源）→ 各端打包所需格式。
+ * 应用图标生成脚本：build/AppIcon.svg（单一事实源）→ 各端打包所需格式。
  *
  * 产出：
  *   - apps/vscode-extension/icon.png   VSCode 扩展图标（VS Code 市场要求 PNG，256×256）
  *   - build/icon.ico                   Electron Windows 图标（多尺寸 PNG 压缩 ICO，
  *                                      electron-builder 的 win.icon 指向，rcedit 写入 exe 资源）
  *
+ * 说明：源 SVG 线条为黑色、背景透明；打包图标（exe/市场/VSIX）需在暗黑模式下可读，
+ *       渲染时统一 flatten 合成白色背景（黑色线条 + 白底）。
+ *
  * 实现说明：
- *   - SVG → PNG 用 sharp（libvips 渲染，含 metadata/rdf 的 SVG 可正常解析）。
+ *   - SVG → PNG 用 sharp（libvips 渲染，含 metadata/rdf 的 SVG 可正常解析）；
+ *     flatten({ background: '#ffffff' }) 把透明背景合成到白色。
  *   - ICO 为容器格式：6 字节头 + 16 字节×N 目录项 + 各尺寸 PNG 数据
  *     （Vista+ 支持 PNG 压缩条目；width/height 0 表示 256），纯 Node 封装，无额外图像依赖。
  *   - 运行：node scripts/generate-icons.mjs
@@ -19,22 +23,30 @@ import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SRC = path.join(ROOT, "AppIcon.svg");
+const SRC = path.join(ROOT, "build", "AppIcon.svg");
 const VSCODE_ICON = path.join(ROOT, "apps", "vscode-extension", "icon.png");
 const ELECTRON_ICO = path.join(ROOT, "build", "icon.ico");
 
 const svg = await readFile(SRC);
 
-// 1. VSCode 扩展图标：256×256 PNG（市场要求 PNG，方形）
+// 1. VSCode 扩展图标：256×256 PNG（市场要求 PNG，方形；白底保证暗黑模式可读）
 await mkdir(path.dirname(VSCODE_ICON), { recursive: true });
-await sharp(svg).resize(256, 256).png().toFile(VSCODE_ICON);
+await sharp(svg)
+  .resize(256, 256)
+  .flatten({ background: "#ffffff" })
+  .png()
+  .toFile(VSCODE_ICON);
 
 // 2. Electron：多尺寸 PNG → ICO（16/24/32/48/64/128/256）
 const sizes = [16, 24, 32, 48, 64, 128, 256];
 const pngs = await Promise.all(
   sizes.map(async (size) => ({
     size,
-    data: await sharp(svg).resize(size, size).png().toBuffer(),
+    data: await sharp(svg)
+      .resize(size, size)
+      .flatten({ background: "#ffffff" })
+      .png()
+      .toBuffer(),
   })),
 );
 

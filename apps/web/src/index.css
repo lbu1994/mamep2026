@@ -1307,7 +1307,8 @@ textarea:focus-visible {
 
 /* ---------------- 1. Header ---------------- */
 
-/* 品牌图标：MamepApp 头部用 antd Avatar 承载 AppIcon.svg（替代原 ::before 小方块） */
+/* 品牌图标：MamepApp 头部用 antd Avatar 承载内联 SVG 组件（assets/AppIcon.tsx，
+   颜色随主题取 colorText：浅=黑、暗=白，替代原 CSS ::before 小方块） */
 .mamep-header__brand-icon {
   flex: none;
   background: var(--ant-color-bg-container);

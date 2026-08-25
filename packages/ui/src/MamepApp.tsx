@@ -22,7 +22,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import appIconUrl from "./assets/AppIcon.svg";
+import { AppIcon } from "./assets/AppIcon";
 import {
   ApiOutlined,
   AppstoreOutlined,
@@ -354,13 +354,12 @@ export function MamepApp(): React.ReactNode {
         <Layout style={{ height: "100vh" }}>
           <Layout.Header className="mamep-header">
             <div className="mamep-header__brand">
-              {/* 品牌图标：共享 UI 资源（AppIcon.svg），替代原 CSS ::before 小方块 */}
+              {/* 品牌图标：内联 SVG 组件（颜色随主题：浅=黑、暗=白，见 assets/AppIcon.tsx） */}
               <Avatar
                 shape="square"
                 size={22}
-                src={appIconUrl}
+                icon={<AppIcon />}
                 className="mamep-header__brand-icon"
-                alt=""
               />
               <Typography.Text className="mamep-header__brand-title">
                 {t("app.title")}

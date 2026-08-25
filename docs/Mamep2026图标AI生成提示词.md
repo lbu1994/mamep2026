@@ -286,10 +286,11 @@ blurry, jpeg artifacts, duplicate, extra fingers
 
 | 场景 | 尺寸 | 说明 |
 | --- | --- | --- |
-| 网页 favicon | 16 / 32 / 48 px | `apps/web/public/favicon.svg`（可替换为生成的 SVG） |
+| 单一事实源 | — | `build/AppIcon.svg`（SVG 矢量源文件；`scripts/generate-icons.mjs` 由此生成各端打包图标，见脚本头注释） |
+| 网页 favicon | 16 / 32 / 48 px | `apps/web/public/favicon.svg`（由 `build/AppIcon.svg` 派生；VSCode 面板图标也复用此文件） |
 | PWA / 浏览器图标 | 192 / 512 px | `apps/web/public/` |
-| Electron 应用图标 | 256 / 512 px（.png / .ico） | `apps/electron/build/`，打包配置见 `electron-builder.yml` |
-| VSCode 扩展图标 | 128×128 px（.png） | `apps/vscode-extension/`，package.json `icon` 字段 |
+| Electron 应用图标 | 256 / 512 px（.ico） | `build/icon.ico`（`scripts/generate-icons.mjs` 生成，`electron-builder.yml` 的 `win.icon` 指向） |
+| VSCode 扩展图标 | 256×256 px（.png） | `apps/vscode-extension/icon.png`（`scripts/generate-icons.mjs` 生成，package.json `icon` 字段） |
 
 ---
 

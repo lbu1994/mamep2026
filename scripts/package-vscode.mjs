@@ -57,7 +57,7 @@ await mkdir(RELEASE_DIR, { recursive: true });
 await cp(path.join(EXT, "dist"), path.join(STAGING, "dist"), { recursive: true });
 
 // 2.5. 拷贝扩展图标（package.json icon 字段指向，vsce 打包进 VSIX 作为市场图标；
-//   由 scripts/generate-icons.mjs 从根 AppIcon.svg 生成）
+//   由 scripts/generate-icons.mjs 从 build/AppIcon.svg 生成）
 await cp(path.join(EXT, "icon.png"), path.join(STAGING, "icon.png"));
 
 // 3. staging package.json：name 显式 mamep2026（市场 name 不允许 @scope；扩展 ID 为
