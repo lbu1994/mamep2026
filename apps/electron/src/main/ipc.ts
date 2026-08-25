@@ -3,7 +3,7 @@
  * 与 electron 运行时解耦：外部能力经 IpcDeps 注入，便于单测校验/分发/拒绝路径
  * （未知 kind、非法 payload、发送者校验、debug 探针打包禁用等）。
  */
-import { createMamepError, ok, type Result } from "@mamep2026/domain";
+import { createMamepError, ok, type MamepError, type Result } from "@mamep2026/domain";
 import type { RegisterRow, TcpConnectionProfile } from "@mamep2026/domain";
 import type {
   BatchReadHandle,
@@ -80,6 +80,8 @@ async function sessionResult<T>(
       message.messageId,
       result.error.code,
       result.error.technicalMessage,
+      result.error.category,
+      result.error.userMessageKey,
     );
   } catch (cause) {
     return errorEnvelope(
@@ -118,6 +120,8 @@ export function errorEnvelope(
   messageId: string,
   code: string,
   technicalMessage: string,
+  category: MamepError["category"] = "internal",
+  userMessageKey = "errors.hostMessageRejected",
 ): HostErrorMessage {
   return {
     protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
@@ -127,8 +131,8 @@ export function errorEnvelope(
     payload: toErrorPayload(
       createMamepError({
         code,
-        category: "internal",
-        userMessageKey: "errors.hostMessageRejected",
+        category,
+        userMessageKey,
         technicalMessage,
       }),
     ),

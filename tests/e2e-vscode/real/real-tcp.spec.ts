@@ -44,26 +44,41 @@ function tcpConfig(): { host: string; port: number; unitId: number } {
   };
 }
 
-/** 等待生产 webview frame（url 前缀 vscode-webview://）出现。 */
+/**
+ * 等待承载共享 UI 的 webview 内容 frame 出现。
+ * VSCode 1.134 webview 为两层：容器 frame（vscode-webview://.../index.html）内嵌
+ * 内容 frame（vscode-webview://.../fake.html，承载 #root/.ant-app 共享 UI）。
+ * 按 url 前缀会误匹配容器 frame，须定位含 UI 的内容 frame（2026-08-25 实测）。
+ */
 async function waitForWebviewFrame(page: Page): Promise<Frame> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    const frame = page
-      .frames()
-      .find((f) => f.url().startsWith("vscode-webview://"));
-    if (frame !== undefined) return frame;
+    for (const f of page.frames()) {
+      if (!f.url().startsWith("vscode-webview://")) continue;
+      try {
+        const hasUi = await f.evaluate(
+          () =>
+            document.querySelector("#root .ant-app, .ant-layout") !== null,
+        );
+        if (hasUi) return f;
+      } catch {
+        // frame 可能尚未就绪，轮询重试。
+      }
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error("webview frame（vscode-webview://）未出现（确认已 pnpm build:vscode）");
+  throw new Error(
+    "webview UI frame 未出现（确认已 pnpm build:vscode 且 webview 已加载共享 UI）",
+  );
 }
 
 /** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。 */
 async function setRadixHex(frame: Frame): Promise<void> {
-  await frame.locator(".table-toolbar__radix .ant-select").first().click();
   await frame
-    .locator(".ant-select-dropdown:visible")
-    .getByText("HEX", { exact: true })
-    .click();
+    .locator(".table-toolbar__radix .ant-segmented-item")
+    .filter({ hasText: "HEX" })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
   await expect(frame.locator(".table-toolbar__radix")).toContainText("HEX", {
     timeout: 5000,
   });
@@ -86,6 +101,8 @@ async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
   const input = frame.getByLabel("Register", { exact: true }).first();
   await input.click();
   await input.fill(addressHex);
+  // React 受控组件竞态防护：fill 后立即 Enter 可能读到旧 draft 导致提交被跳过。
+  await frame.waitForTimeout(50);
   await input.press("Enter");
 }
 
@@ -102,6 +119,8 @@ async function writeRow(frame: Frame, valueHex: string): Promise<void> {
   const data = frame.getByLabel("Data").first();
   await data.click();
   await data.fill(valueHex);
+  // React 受控组件竞态防护：fill 后立即 Enter 可能读到旧 draft 导致提交被跳过。
+  await frame.waitForTimeout(50);
   await data.press("Enter");
   await frame
     .getByRole("button", { name: "Write", exact: true })
@@ -282,7 +301,19 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
   });
 
   await test.step("通信日志：请求/响应/异常帧字节", async () => {
+    // Listy 虚拟列表只渲染视口内的行：共享会话下历史帧已被滚动挤出，
+    // 清空后在测试内重建目标帧（写值门控异常 0x03、只读区异常 0x02、读 0x0000）。
     await frame.getByRole("tab", { name: "Comm Log" }).click();
+    await frame.getByRole("button", { name: /Clear/i }).click();
+    await setRowAddress(frame, "0400");
+    await writeRow(frame, "8000");
+    await setRowAddress(frame, "0100");
+    await writeRow(frame, "0001");
+    await setRowAddress(frame, "0000");
+    await readRow(frame);
+    await expect(frame.getByLabel("Data").first()).toHaveText("04D2", {
+      timeout: CONNECTED_TIMEOUT,
+    });
     await frame.waitForTimeout(300);
     const list = frame.locator(".comm-log .ant-listy-holder");
     await expect(list).toContainText("01 03 00 00 00 01", { timeout: 5000 });

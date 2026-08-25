@@ -41,3 +41,6 @@ catalog:
   vite: ^8.2.0
   "@vitejs/plugin-react": ^6.0.4
   vite-plugin-electron: ^1.1.1
+
+patchedDependencies:
+  vscode-test-playwright@0.0.1-beta2: patches/vscode-test-playwright@0.0.1-beta2.patch

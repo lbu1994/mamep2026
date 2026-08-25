@@ -33,6 +33,7 @@ import {
   EXCEPTION_NAMES,
   FUNCTION_READ_HOLDING,
   FUNCTION_WRITE_MULTIPLE,
+  LOG_LEVELS,
   createLogger,
   matchRule,
   normalizeRules,
@@ -136,11 +137,7 @@ function loadConfig(configPath) {
   assertConfigNumber(config.port, "port", { min: 1, max: 65535 });
   assertConfigNumber(config.unitId, "unitId", { min: 0, max: 255 });
   assertConfigNumber(config.responseDelayMs, "responseDelayMs", { min: 0 });
-  if (!Object.prototype.hasOwnProperty.call(
-    // 共享 LOG_LEVELS 未导出到本文件，直接用 createLogger 的校验键集合
-    { debug: 1, info: 1, warn: 1, error: 1 },
-    config.logLevel,
-  )) {
+  if (!Object.prototype.hasOwnProperty.call(LOG_LEVELS, config.logLevel)) {
     throw new Error(
       `配置 logLevel "${config.logLevel}" 无效（应为 debug/info/warn/error）`,
     );

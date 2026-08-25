@@ -39,8 +39,9 @@
 1. **共享从站核心（`scripts/modbus-slave/lib/modbus-core.mjs`）**：从 `modbus-rtu-slave.mjs`
    提取协议/规则/日志/CRC，供 RTU 与 TCP 从站复用，避免规则漂移；`DEFAULT_RULES` 7 区与
    `DEFAULT_MOCK_RULES` 一一对应。**扩展行为**（真实从站配置用，不在 `DEFAULT_MOCK_RULES` 内）：
-   - `{ "delayedResponse": ms }` — 按区间延迟响应（如 1500ms > 应用超时 1000ms → 主站
-     超时/重试后迟到帧被丢弃，验证 `LATE_RESPONSE_DISCARDED` 路径）；
+   - `{ "delayedResponse": ms }` — 按区间延迟响应（如 2500ms > 应用 1000ms 超时 × 重试总
+     窗口 2000ms → 主站超时/重试后迟到帧被丢弃，验证 `LATE_RESPONSE_DISCARDED` 路径；
+     2026-08-25 由 1500ms 上调——1500ms 落在重试窗口内会被重试消费，RTU 无事务 ID 无法区分）；
    - `{ "splitResponse": { chunkSize, chunkDelayMs } }` — 响应拆段发送（半包/粘包组帧健壮性）。
    RTU 从站重构复用该模块（`--self-test` 保证行为不变）；TCP 从站默认 host/port/unitId 读
    `config/connections.json` 的 `tcp-local-slave`（唯一事实源），`--config`/`--host`/`--port` 可覆盖。
@@ -96,3 +97,15 @@
 - 风险：vscode-test-playwright 为社区 beta（0.0.1-beta2），已 pin 版本并兼容 @playwright/test
   1.62（peer `>=1.41 <2`）；若内部 API 兼容问题，备选为 `@vscode/test-electron` + Playwright
   `_electron.launch` 直接驱动（`evaluateInVSCode` 等价能力用 `debug:rpc` 探针替代）。
+
+## 2026-08-25 补充：落地后首次全量回归（实际状态修正）
+
+- **ADR-024 的「已落地 / 验收通过」结论不成立**：落地后真实端口 e2e **从未真正跑通**。
+  2026-08-25 用户要求全量测试、`pnpm test:e2e:real` 首次完整执行时才暴露多层隐藏问题
+  （从站脚本 bug、测试选择器/断言错误、交互竞态、测试基础设施、以及一个产品 bug——
+  HostMessage 错误投影），修复后三端 real 才首次全绿（web 12 / electron 24 / vscode 3）。
+- 完整问题清单、修复与经验教训见 **ADR-028**（含 errorEnvelope 硬编码 userMessageKey/
+  category 的产品 bug）。
+- 风险段落预判的「vscode-test-playwright 内部 API 兼容问题」实际发生：该库调用已移除的
+  `playwright._toImpl` 且无新版，最终用 pnpm patch（`patchedDependencies`）修复，未启用
+  `@vscode/test-electron` 备选。

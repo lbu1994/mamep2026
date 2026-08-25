@@ -1,0 +1,34 @@
+diff --git a/dist/index.js b/dist/index.js
+index 5570b9fe2a647f8c9d2d0cbafec540421369cac0..67ee30b06f82e6d37ad72f69f6027076b02887e0 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -197,12 +197,15 @@ exports.test = test_1.test.extend({
+     page: ({ workbox }, use) => use(workbox),
+     context: ({ electronApp }, use) => use(electronApp.context()),
+     _evaluator: async ({ playwright, electronApp, workbox, vscodeTrace }, use, testInfo) => {
+-        const electronAppImpl = await playwright._toImpl(electronApp);
+-        const pageImpl = await playwright._toImpl(workbox);
++        // patch: playwright._toImpl 是 Playwright 内部 API，1.62 已移除。
++        // ElectronApplication 公开 process() 提供主进程（stderr 含 VSCodeTestServer
++        // URL）；pageImpl 未被 VSCodeEvaluator 实际使用。
++        const electronAppImpl = { _process: electronApp.process() };
++        const pageImpl = undefined;
+         // check recent logs or wait for URL to access VSCode test server
+         const vscodeTestServerRegExp = /^VSCodeTestServer listening on (http:\/\/.*)$/;
+         const process = electronAppImpl._process;
+-        const recentLogs = electronAppImpl._nodeConnection._browserLogsCollector.recentLogs();
++        const recentLogs = [];
+         let [match] = recentLogs.map(s => s.match(vscodeTestServerRegExp)).filter(Boolean);
+         if (!match) {
+             match = await waitForLine(process, vscodeTestServerRegExp);
+@@ -251,8 +254,8 @@ exports.test = test_1.test.extend({
+                     language: 'playwright-test',
+                     mode: 'recording',
+                 });
+-                const contextImpl = await playwright._toImpl(context);
+-                closePromise = new Promise(resolve => contextImpl.recorderAppForTest.once('close', resolve));
++                // patch: playwright._toImpl 内部 API 在 Playwright 1.62 移除，
++                // 录制关闭监听省略（不影响 recorder 功能本身）。
+             }
+             await use();
+             if (closePromise)

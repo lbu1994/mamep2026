@@ -147,6 +147,8 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       "sessionDisconnect",
       "sessionGetState",
       "sessionReadRow",
+      // TCP Unit ID 会话内动态修改（ADR-026）：preload 桥新增 sessionSetUnitId。
+      "sessionSetUnitId",
       "sessionWriteRow",
       "sessionBatchRead",
       "sessionBatchCancel",

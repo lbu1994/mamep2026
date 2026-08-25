@@ -116,6 +116,7 @@ export function errorEnvelope(
   code: string,
   technicalMessage: string,
   category: HostErrorCategory = "internal",
+  userMessageKey = "errors.hostMessageRejected",
 ): HostErrorMessage {
   return {
     protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
@@ -126,7 +127,7 @@ export function errorEnvelope(
       createMamepError({
         code,
         category,
-        userMessageKey: "errors.hostMessageRejected",
+        userMessageKey,
         technicalMessage,
       }),
     ),
@@ -163,6 +164,7 @@ async function sessionResult<T>(
         result.error.code,
         result.error.technicalMessage,
         result.error.category,
+        result.error.userMessageKey,
       );
     }
     return okResponse(message, result.value);

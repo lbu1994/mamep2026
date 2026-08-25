@@ -11,7 +11,7 @@
     { "start": 1024, "end": 1039, "read": "normal", "write": { "writeValueGate": 32767 } },
     { "start": 1280, "end": 1295, "read": { "exception": 1 }, "write": { "exception": 1 } },
     { "start": 1536, "end": 1551, "read": "no-response", "write": "no-response" },
-    { "start": 1792, "end": 1807, "read": { "delayedResponse": 1500 }, "write": { "delayedResponse": 1500 } },
+    { "start": 1792, "end": 1807, "read": { "delayedResponse": 2500 }, "write": { "delayedResponse": 2500 } },
     { "start": 2048, "end": 2063, "read": { "splitResponse": { "chunkSize": 2, "chunkDelayMs": 5 } }, "write": { "splitResponse": { "chunkSize": 2, "chunkDelayMs": 5 } } }
   ]
 }

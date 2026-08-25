@@ -24,7 +24,8 @@
  * protocol-modbus 包 exports 指向 TS 源，独立 .mjs 无法直接导入）；算法与常量以
  * packages/protocol-modbus/src/crc16.ts、rtu-frame.ts 为唯一权威，修改须同步。
  * 扩展行为（配置文件规则可用，不在 DEFAULT_MOCK_RULES 内）：
- *   { "delayedResponse": ms } —— 按区间延迟响应（如 1500ms > 应用超时 → 迟到/丢弃路径）
+ *   { "delayedResponse": ms } —— 按区间延迟响应（如 2500ms > 应用 1000ms 超时 × 重试总窗口
+ *   2000ms → 迟到/丢弃路径；须落在重试总窗口外，RTU 无事务 ID 落在窗口内会被重试消费）
  *   { "splitResponse": { chunkSize, chunkDelayMs } } —— 响应拆段发送（半包/粘包组帧健壮性）
  *
  * 用法：
@@ -45,6 +46,7 @@ import {
   EXCEPTION_NAMES,
   FUNCTION_READ_HOLDING,
   FUNCTION_WRITE_MULTIPLE,
+  LOG_LEVELS,
   appendCrc,
   createLogger,
   crc16Modbus,

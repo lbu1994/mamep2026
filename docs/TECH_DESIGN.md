@@ -2860,8 +2860,9 @@ TCP: 127.0.0.1:1502，均来自 `config/connections.json` / 从站自身配置�
 - **从站**：`scripts/modbus-slave/lib/modbus-core.mjs`（RTU/TCP 单一事实源：7 区 DEFAULT_RULES、
   行为归一化、CRC、日志、响应投递）+ `modbus-rtu-slave.mjs`（COM5，重构复用 lib，`--self-test`
   保回归）+ `modbus-tcp-slave.mjs`（MBAP，默认 host/port/unitId 取 config tcp-local-slave）。
-  扩展行为（真实从站配置，不在 DEFAULT_MOCK_RULES）：`delayedResponse`（0x0700 延迟 1500ms →
-  超时/迟到丢弃）与 `splitResponse`（0x0800 拆段 2B/5ms → 半包/粘包组帧）。
+  扩展行为（真实从站配置，不在 DEFAULT_MOCK_RULES）：`delayedResponse`（0x0700 延迟 2500ms →
+  超时/迟到丢弃；2026-08-25 从 1500ms 上调——1500ms 落在 1000ms×2 重试窗口内会被重试消费，
+  RTU 无事务 ID 无法区分）与 `splitResponse`（0x0800 拆段 2B/5ms → 半包/粘包组帧）。
 - **浏览器**（`tests/e2e-web/tests-real/real-serial.spec.ts`，系统 Edge 有头）：Connection
   Settings → 系统 Web Serial picker（用户手势，启动时选择 COM4 一次）→ 记录 localStorage
   （`mamep:real-serial-port`）→ `test.describe.serial` 共享 page/连接复用；跨运行打印上次选择。
@@ -2870,8 +2871,10 @@ TCP: 127.0.0.1:1502，均来自 `config/connections.json` / 从站自身配置�
   TCP 走切 Modbus TCP → 按 config tcp-local-slave 填表。
 - **VSCode**（`tests/e2e-vscode/real/real-rtu.spec.ts` / `real-tcp.spec.ts`，
   vscode-test-playwright 0.0.1-beta2，UI 级断言）：extensionDevelopmentPath 加载扩展 → 生产
-  webview（未设 MAMEP_DEV_URL → getProdHtml）→ `workbox.frames()` 定位 `vscode-webview://`
-  frame 驱动共享 UI → RTU 串口下拉 serial-enumerate（RPC）选 COM4；TCP 按 config 填表。
+  webview（未设 MAMEP_DEV_URL → getProdHtml）→ `workbox.frames()` 定位承载共享 UI 的 webview
+  内容 frame（VSCode 1.134 为两层：容器 index.html + 内容 fake.html，2026-08-25 修复；该库
+  经 pnpm patch 绕过已移除的 playwright._toImpl）→ RTU 串口下拉 serial-enumerate（RPC）选
+  COM4；TCP 按 config 填表。
   fixture 每测试新建 VS Code 实例 → 每协议单测试 + `test.step()` 控制启动次数。
 - **场景矩阵（三端一致，RTU/TCP）**：连接 Online → FC03 读（0x0000=0x04D2）/ FC10 写 + 读回
   → 写值门控 0x0400（0x8000 拒/0x1234 成）→ 异常区 0x0100/0x0200/0x0300→0x02、0x0500→0x01
@@ -2879,6 +2882,12 @@ TCP: 127.0.0.1:1502，均来自 `config/connections.json` / 从站自身配置�
   → 通信日志帧字节 → 断开/重连（浏览器仅断开一次，重连稳定性由桌面端覆盖）→ 无 console 错误。
 - 能力矩阵不变（modbusRtu/serialPorts/modbusTcp/connectionConfig 已如实）；无新增 HostMessage
   kind；浏览器不追加 TCP；测试参数不硬编码（读 `config/connections.json`）。
+- **2026-08-25 修正（ADR-028）**：ADR-024 落地后真实端口 e2e 实际从未真正跑通（「已落地」≠
+  「已跑通」），首次全量回归暴露并修复多层问题（从站 LOG_LEVELS 未导入、real 套件 setRadixHex
+  用错 .ant-select、fill+Enter React 受控组件竞态（UI 根治：EditableCellValue 用 draftRef 同步草稿）、通信日志虚拟列表断言、HostMessage 错误投影
+  bug（两端 ipc errorEnvelope 硬编码 userMessageKey/category）、vscode-test-playwright _toImpl
+  补丁、VSCode webview 两层 frame 定位、串口下拉误点连接对象下拉、electron-smoke 白名单等），
+  三端真实端口 e2e 首次全绿（web 12 / electron 24 / vscode 3）。详见 ADR-028。
 
 ---
 

@@ -117,6 +117,10 @@ function EditableCellValue({
   const inputRef = useRef<InputRef>(null);
   // 防重入：Enter 提交后输入框卸载可能再触发 blur，用 ref 跳过重复提交。
   const editingRef = useRef(false);
+  // 同步追踪最新草稿：onChange 的 setState 是异步重渲染，若在渲染完成前提交
+  // （如自动化 fill+立即 Enter / 用户快速输入），commit 闭包读到旧 draft 会误判
+  // "未修改"而跳过提交（2026-08-25 real e2e 发现）。commit 改读 ref 根治。
+  const draftRef = useRef(value);
   useEffect(() => {
     editingRef.current = editing;
   }, [editing]);
@@ -130,6 +134,7 @@ function EditableCellValue({
   const startEdit = (): void => {
     // 进入编辑时以当前显示值初始化草稿。
     setDraft(value);
+    draftRef.current = value;
     setEditing(true);
   };
 
@@ -138,8 +143,8 @@ function EditableCellValue({
     editingRef.current = false;
     setEditing(false);
     // 草稿未变不提交：避免无谓的 store 更新与自动保存。
-    if (draft === value) return;
-    onCommit(draft);
+    if (draftRef.current === value) return;
+    onCommit(draftRef.current);
   };
 
   if (editing) {
@@ -152,7 +157,10 @@ function EditableCellValue({
         value={draft}
         aria-label={ariaLabel}
         {...(error ? { status: "error" as const } : {})}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          draftRef.current = e.target.value;
+        }}
         onPressEnter={commit}
         onBlur={commit}
       />

@@ -17,18 +17,31 @@ test.skip(
   "真实端口测试需显式开启（MAMEP_REAL=1，由 pnpm test:e2e:vscode:real 触发）",
 );
 
-/** 等待生产 webview frame（url 前缀 vscode-webview://）出现。 */
+/**
+ * 等待承载共享 UI 的 webview 内容 frame 出现。
+ * VSCode 1.134 webview 为两层：容器 frame（vscode-webview://.../index.html）内嵌
+ * 内容 frame（vscode-webview://.../fake.html，承载 #root/.ant-app 共享 UI）。
+ * 按 url 前缀会误匹配容器 frame，须定位含 UI 的内容 frame（2026-08-25 实测）。
+ */
 async function waitForWebviewFrame(page: Page): Promise<Frame> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    const frame = page
-      .frames()
-      .find((f) => f.url().startsWith("vscode-webview://"));
-    if (frame !== undefined) return frame;
+    for (const f of page.frames()) {
+      if (!f.url().startsWith("vscode-webview://")) continue;
+      try {
+        const hasUi = await f.evaluate(
+          () =>
+            document.querySelector("#root .ant-app, .ant-layout") !== null,
+        );
+        if (hasUi) return f;
+      } catch {
+        // frame 可能尚未就绪，轮询重试。
+      }
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(
-    "webview frame（vscode-webview://）未出现（确认已 pnpm build:vscode）",
+    "webview UI frame 未出现（确认已 pnpm build:vscode 且 webview 已加载共享 UI）",
   );
 }
 

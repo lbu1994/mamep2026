@@ -67,6 +67,9 @@ catalogs:
 overrides:
   '@electron/get': 5.1.0
 
+patchedDependencies:
+  vscode-test-playwright@0.0.1-beta2: 20bbac47f32a6a360bfa1d50165512a05ca9796b72a13aeabc3033c49f51b84e
+
 importers:
 
   .:
@@ -840,7 +843,7 @@ importers:
         version: 6.0.3
       vscode-test-playwright:
         specifier: 0.0.1-beta2
-        version: 0.0.1-beta2(supports-color@10.2.2)
+        version: 0.0.1-beta2(patch_hash=20bbac47f32a6a360bfa1d50165512a05ca9796b72a13aeabc3033c49f51b84e)(supports-color@10.2.2)
 
   tests/e2e-web:
     devDependencies:
@@ -9507,7 +9510,7 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vscode-test-playwright@0.0.1-beta2(supports-color@10.2.2):
+  vscode-test-playwright@0.0.1-beta2(patch_hash=20bbac47f32a6a360bfa1d50165512a05ca9796b72a13aeabc3033c49f51b84e)(supports-color@10.2.2):
     dependencies:
       '@vscode/test-electron': 2.5.2(supports-color@10.2.2)
       ws: 8.21.3

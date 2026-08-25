@@ -32,11 +32,11 @@ let consoleErrors: string[] = [];
 
 /** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。 */
 async function setRadixHex(p: Page): Promise<void> {
-  await p.locator(".table-toolbar__radix .ant-select").first().click();
   await p
-    .locator(".ant-select-dropdown:visible")
-    .getByText("HEX", { exact: true })
-    .click();
+    .locator(".table-toolbar__radix .ant-segmented-item")
+    .filter({ hasText: "HEX" })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
   await expect(p.locator(".table-toolbar__radix")).toContainText("HEX", {
     timeout: 5000,
   });
@@ -47,6 +47,8 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
   const input = p.getByLabel("Register", { exact: true }).first();
   await input.click();
   await input.fill(addressHex);
+  // React 受控组件竞态防护：fill 后立即 Enter 可能读到旧 draft 导致提交被跳过。
+  await p.waitForTimeout(50);
   await input.press("Enter");
 }
 
@@ -63,6 +65,8 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
   const data = p.getByLabel("Data").first();
   await data.click();
   await data.fill(valueHex);
+  // React 受控组件竞态防护：fill 后立即 Enter 可能读到旧 draft 导致提交被跳过。
+  await p.waitForTimeout(50);
   await data.press("Enter");
   await p
     .getByRole("button", { name: "Write", exact: true })
@@ -291,7 +295,19 @@ test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", 
 });
 
 test("通信日志：请求/响应/异常帧字节", async () => {
+  // Listy 虚拟列表只渲染视口内的行：共享会话下历史帧已被滚动挤出，
+  // 清空后在测试内重建目标帧（写值门控异常 0x03、只读区异常 0x02、读 0x0000）。
   await page.getByRole("tab", { name: "Comm Log" }).click();
+  await page.getByRole("button", { name: /Clear/i }).click();
+  await setRowAddress(page, "0400");
+  await writeRow(page, "8000");
+  await setRowAddress(page, "0100");
+  await writeRow(page, "0001");
+  await setRowAddress(page, "0000");
+  await readRow(page);
+  await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
+    timeout: CONNECTED_TIMEOUT,
+  });
   await page.waitForTimeout(200);
   const list = page.locator(".comm-log .ant-listy-holder");
   // 读 0x0000 请求与响应（值 0x04D2；日志含 CRC，子串断言）。
