@@ -23,6 +23,7 @@ import type {
   ConnectionConfigLoadResponse,
 } from "@mamep2026/platform-api";
 import { vscodeCapabilities } from "@mamep2026/platform-api";
+import { buildTheme, type CssVarSource } from "@mamep2026/ui-theme";
 import { InMemoryWorkspaceRepository } from "@mamep2026/test-kit";
 import { useAppStore } from "@mamep2026/ui";
 import { VscodeAppHost } from "./vscode-app-host";
@@ -177,16 +178,33 @@ function createFakeBridge(): {
   };
 }
 
-function makeHost(bridge: VscodeHostApi): VscodeAppHost {
+function makeHost(
+  bridge: VscodeHostApi,
+  options: {
+    cssVarSource?: CssVarSource;
+    scheduleFrame?: (cb: () => void) => void;
+  } = {},
+): VscodeAppHost {
   return new VscodeAppHost(bridge, {
     repository: new InMemoryWorkspaceRepository(),
+    // node 环境无 DOM：注入空变量源 + 同步帧调度（生产走 getComputedStyle/rAF）。
+    cssVarSource: options.cssVarSource ?? { getPropertyValue: () => "" },
+    scheduleFrame: options.scheduleFrame ?? ((cb) => cb()),
   });
+}
+
+/** 构造带主题 CSS 变量读取源的 fake（可按需修改 map 模拟主题变化）。 */
+function themedCssVarSource(
+  vars: Record<string, string>,
+): CssVarSource {
+  return { getPropertyValue: (name) => vars[name] ?? "" };
 }
 
 describe("VscodeAppHost", () => {
   beforeEach(() => {
-    // 重置共享 store 主题，避免跨测试污染。
+    // 重置共享 store 主题与主题令牌，避免跨测试污染。
     useAppStore.getState().setTheme("light");
+    useAppStore.getState().setThemeConfig(null);
   });
 
   it("能力矩阵如实声明（RTU/TCP 已接线：modbusRtu/modbusTcp true、serialPorts enumerated）", () => {
@@ -218,6 +236,54 @@ describe("VscodeAppHost", () => {
     });
     emit({ kind: "color-theme-changed", payload: { theme: "light" } });
     expect(useAppStore.getState().theme).toBe("light");
+  });
+
+  it("构造后读 --vscode-* 变量装配完整主题令牌到 store（ADR-027）", async () => {
+    const { bridge } = createFakeBridge();
+    makeHost(bridge, {
+      cssVarSource: themedCssVarSource({
+        "--vscode-editor-background": "#1e1e1e",
+        "--vscode-editor-foreground": "#d4d4d4",
+      }),
+    });
+    // 等 get-color-theme（dark）完成后 themeConfig 以暗色重建。
+    await vi.waitFor(() => {
+      const config = useAppStore.getState().themeConfig;
+      expect(config?.token?.colorBgContainer).toBe("#1e1e1e");
+      expect(config?.token?.colorText).toBe("rgb(212, 212, 212)");
+    });
+  });
+
+  it("color-theme-changed 事件重读 CSS 变量并重建主题令牌", async () => {
+    const vars: Record<string, string> = {
+      "--vscode-editor-background": "#1e1e1e",
+      "--vscode-editor-foreground": "#d4d4d4",
+    };
+    const { bridge, emit } = createFakeBridge();
+    makeHost(bridge, { cssVarSource: themedCssVarSource(vars) });
+    await vi.waitFor(() => {
+      expect(useAppStore.getState().theme).toBe("dark");
+    });
+    // 模拟宿主主题切换后 CSS 变量更新：事件触发重读应拿到新背景。
+    vars["--vscode-editor-background"] = "#202020";
+    emit({ kind: "color-theme-changed", payload: { theme: "dark" } });
+    await vi.waitFor(() => {
+      expect(useAppStore.getState().themeConfig?.token?.colorBgContainer).toBe(
+        "#202020",
+      );
+    });
+  });
+
+  it("无 --vscode 变量时 themeConfig 回退 base（buildTheme 两态）", async () => {
+    const { bridge } = createFakeBridge();
+    makeHost(bridge);
+    await vi.waitFor(() => {
+      expect(useAppStore.getState().theme).toBe("dark");
+    });
+    const config = useAppStore.getState().themeConfig;
+    // buildVscodeTheme({}, dark) = merge(buildTheme(dark), {}) → 品牌/状态来自 base。
+    expect(config?.token?.colorPrimary).toBe(buildTheme(true).token?.colorPrimary);
+    expect(config?.token?.colorBgContainer).toBeUndefined();
   });
 
   it("剪贴板透传 VSCode 桥", async () => {

@@ -45,6 +45,7 @@ import {
   type ClipboardIssue,
   type RowClipboardData,
 } from "@mamep2026/register-table";
+import type { ThemeConfig } from "antd";
 import { create } from "zustand";
 import {
   applyCellCommit,
@@ -91,6 +92,11 @@ export interface AppStoreState {
   /** 批量关闭（关闭其他/右侧）确认弹窗状态；null 表示未在确认。 */
   pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null;
   theme: "light" | "dark";
+  /**
+   * 宿主提供的完整 antd 主题（VSCode 完整令牌映射，ui-theme buildVscodeTheme 产出，ADR-027）；
+   * null=回退 buildTheme 两态。运行时派生（随宿主主题事件更新），不持久化。
+   */
+  themeConfig: ThemeConfig | null;
   saveStatus: SaveStatus;
   messages: ApplicationMessage[];
   commLog: CommunicationLogEntry[];
@@ -115,6 +121,8 @@ export interface AppStoreState {
     pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null,
   ) => void;
   setTheme: (theme: "light" | "dark") => void;
+  /** 设置宿主完整主题（VSCode ui-theme；null=回退 buildTheme 两态）。运行时派生，不持久化。 */
+  setThemeConfig: (themeConfig: ThemeConfig | null) => void;
   /** 记录界面语言选择到工作区偏好（随自动保存持久化；i18n 引擎切换由组件层调用）。 */
   setLanguage: (language: "en-US" | "zh-CN") => void;
   /** 更新活动连接配置的持久化设置（除串口/端口选择外的全部参数），随自动保存持久化。 */
@@ -214,6 +222,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   pendingDeleteSheetId: null,
   pendingBulkClose: null,
   theme: "light",
+  themeConfig: null,
   saveStatus: "idle",
   messages: [],
   commLog: [],
@@ -249,6 +258,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         preferences: { ...state.workspace.preferences, theme },
       },
     })),
+  setThemeConfig: (themeConfig) => set({ themeConfig }),
   setLanguage: (language) =>
     set((state) => ({
       workspace: {

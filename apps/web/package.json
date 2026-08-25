@@ -28,6 +28,7 @@
     "@mamep2026/plugin-api": "workspace:*",
     "@mamep2026/register-table": "workspace:*",
     "@mamep2026/ui": "workspace:*",
+    "@mamep2026/ui-theme": "workspace:*",
     "@mamep2026/workspace": "workspace:*"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@
 
 三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具。单表管理不连续保持寄存器，仅功能码 03 读 / 0x10 写，插件隔离厂商私有功能，不以复刻原 M@MEp2006 界面为目标。
 
-当前状态（2026-08-25）：**三端 RTU + TCP 已接线**——浏览器 Web Serial RTU、Electron 主进程承载 TCP（RTU 复用浏览器路径）、VSCode Extension Host 承载 serialport/net；连接对象配置文件化（`config/connections.json`，ADR-023）；具备三端「真实端口」e2e（com0com + 真实 RTU/TCP 从站，ADR-024）；远程批任务取消与 UI 取消入口（`session-batch-cancel`，ADR-025）；TCP Unit ID 会话内动态修改（每表独立 + 工具栏按协议切换，`session-set-unit-id`，ADR-026）。浏览器端不直接支持 Modbus TCP（产品红线，PRD §8.6）。
+当前状态（2026-08-25）：**三端 RTU + TCP 已接线**——浏览器 Web Serial RTU、Electron 主进程承载 TCP（RTU 复用浏览器路径）、VSCode Extension Host 承载 serialport/net；连接对象配置文件化（`config/connections.json`，ADR-023）；具备三端「真实端口」e2e（com0com + 真实 RTU/TCP 从站，ADR-024）；远程批任务取消与 UI 取消入口（`session-batch-cancel`，ADR-025）；TCP Unit ID 会话内动态修改（每表独立 + 工具栏按协议切换，`session-set-unit-id`，ADR-026）；**VSCode 主题完整适配**（`packages/ui-theme` 完整主题令牌映射：中性色跟随 VSCode + 品牌/状态保留，生产 CSS 变量取色 + dev iframe 中继，协议零改动，ADR-027）。浏览器端不直接支持 Modbus TCP（产品红线，PRD §8.6）。
 
 > **面向 AI 编码代理**：工作入口与速览见 [AGENTS.md](AGENTS.md)；完整 43 节开发手册见 [docs/AGENTS.md](docs/AGENTS.md)。
 
@@ -21,7 +21,7 @@
 - `apps/web/` — 浏览器端（Vite + React），装配平台能力与共享 UI（兼作 Electron Renderer）
 - `apps/electron/` — Electron 主进程与 preload（Main/Preload/Renderer 三层 + 版本化安全 IPC，ADR-016）；RTU 复用浏览器 Web Serial、TCP 会话承载主进程（ADR-022）
 - `apps/vscode-extension/` — VSCode 扩展：Extension Host（`extension.ts` + `ipc.ts` + `session-host.ts`）经 Webview 加载共享 UI，HostMessage v1 类型化 RPC（ADR-019/021/022）
-- `packages/` — 分层共享包：`domain`、`protocol-modbus`、`data-conversion`、`communication`、`workspace`、`logging`、`plugin-api`、`register-table`、`platform-api`（HostMessage v1 契约）、`platform-web`、`platform-node`（Node Serial/TCP Adapter）、`application`（三端共享会话编排 RtuSessionHost/TcpSessionHost）、`connection-config`（连接对象配置文件 Zod schema）、`ui`、`test-kit`
+- `packages/` — 分层共享包：`domain`、`protocol-modbus`、`data-conversion`、`communication`、`workspace`、`logging`、`plugin-api`、`register-table`、`platform-api`（HostMessage v1 契约）、`platform-web`、`platform-node`（Node Serial/TCP Adapter）、`application`（三端共享会话编排 RtuSessionHost/TcpSessionHost）、`connection-config`（连接对象配置文件 Zod schema）、`ui`、`ui-theme`（平台主题适配层：base 主题 + VSCode 完整令牌映射，ADR-027）、`test-kit`
 - `config/` — 连接对象配置文件 `connections.json`（真实设备连接参数集中管理，ADR-023）
 - `scripts/` — 构建/打包/开发辅助（`build-vscode.mjs`、`package-electron.mjs`、`package-vscode.mjs`、`e2e-real.mjs`、`dev-vscode.mjs`、`dev-with-slave.mjs`、`generate-icons.mjs` 等）与 Modbus 从站（`modbus-slave/`：RTU/TCP 共享核心 `lib/modbus-core.mjs`）
 - `tests/` — `acceptance`（ATDD 核心闭环）、`e2e-web` / `e2e-electron` / `e2e-vscode`（Playwright，各自含 `tests-real|real` 真实端口套件，ADR-024）
@@ -88,7 +88,7 @@ Electron 免安装版无需安装包、无需任何环境（Node/pnpm），当�
 - [docs/TECH_DESIGN.md](docs/TECH_DESIGN.md) — 技术设计、三端能力矩阵、测试策略
 - [docs/RESEARCH.md](docs/RESEARCH.md) — 调研结论
 - [docs/AGENTS.md](docs/AGENTS.md) — 43 节完整开发手册（架构强制规则、Modbus 协议、调度、持久化、错误模型、TDD、禁止行为、完成自检等）
-- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~026）：monorepo 迁移 / 地址进制 / 行编辑交互 / Electron 骨架与安全 IPC / Web Serial 复用 / 免安装打包 / VSCode 骨架与安全 RPC / 串口库选型 / VSCode RTU 接线 / 两端 TCP 接线 / 连接对象配置文件化 / 三端真实端口 e2e / 远程批任务取消与 UI 取消入口 / TCP Unit ID 会话内动态修改
+- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~027）：monorepo 迁移 / 地址进制 / 行编辑交互 / Electron 骨架与安全 IPC / Web Serial 复用 / 免安装打包 / VSCode 骨架与安全 RPC / 串口库选型 / VSCode RTU 接线 / 两端 TCP 接线 / 连接对象配置文件化 / 三端真实端口 e2e / 远程批任务取消与 UI 取消入口 / TCP Unit ID 会话内动态修改 / VSCode 主题完整适配
 - [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md) — 浏览器 E2E 工作流与踩坑
 - [docs/node-serial-prototype-验证记录.md](docs/node-serial-prototype-验证记录.md) / [docs/node-tcp-adapter-验证记录.md](docs/node-tcp-adapter-验证记录.md) — Node 串口 / TCP Adapter 原型验证记录
 - [config/README.md](config/README.md) — 连接对象配置文件（`config/connections.json`）格式与三端加载方式
@@ -107,8 +107,7 @@ Electron 免安装版无需安装包、无需任何环境（Node/pnpm），当�
 - [x] 远程批任务取消（Electron TCP / VSCode `readAllRows` cancel 语义补全：渲染端生成 batchId + `session-batch-cancel` RPC + UI 取消入口，接口契约不变）— ADR-025（ADR-021/022 已知限制已解决）
 - [x] VSCode 端 `readAllRows` cancel 补全（与 TCP 同一远程路径，ADR-025 一并解决）— ADR-021 已知限制
 - [x] TCP Unit ID 会话内动态修改（每表独立 unitId，工具栏按协议切换 label；新增 `session-set-unit-id` kind）— ADR-026（ADR-022 已知限制已解决）
-- [ ] 浏览器真实端口 e2e 免手动选口（dev-only 自动恢复钩子 `getPorts` 匹配记录，ADR-024 备选方案）— ADR-024
-- [ ] VSCode 主题完整适配（light/dark 两态 → 完整主题令牌映射，ui-theme）— ADR-019 后续复审条件
+- [x] VSCode 主题完整适配（light/dark 两态 → 完整主题令牌映射，ui-theme）— ADR-027（ADR-019 后续复审条件已解决）
 
 ### 阶段二：V1.0 正式版（PRD §8.3 P1）
 

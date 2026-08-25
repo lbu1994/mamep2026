@@ -1085,3 +1085,27 @@ describe("traceWindows（TM 追踪窗口）", () => {
     expect(after.workspace).toBe(before);
   });
 });
+
+describe("themeConfig（VSCode 完整主题注入，ADR-027）", () => {
+  it("默认 null（浏览器/Electron 回退 buildTheme 两态）", () => {
+    expect(useAppStore.getState().themeConfig).toBeNull();
+  });
+
+  it("setThemeConfig 写入完整主题且不触碰工作区（运行时派生，不持久化）", () => {
+    const before = useAppStore.getState().workspace;
+    useAppStore
+      .getState()
+      .setThemeConfig({ token: { colorBgContainer: "#1e1e1e" } });
+    const after = useAppStore.getState();
+    expect(after.themeConfig?.token?.colorBgContainer).toBe("#1e1e1e");
+    expect(after.workspace).toBe(before);
+  });
+
+  it("setThemeConfig(null) 清除宿主主题（回退两态）", () => {
+    useAppStore
+      .getState()
+      .setThemeConfig({ token: { colorBgContainer: "#1e1e1e" } });
+    useAppStore.getState().setThemeConfig(null);
+    expect(useAppStore.getState().themeConfig).toBeNull();
+  });
+});

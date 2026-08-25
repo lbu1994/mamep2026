@@ -101,6 +101,8 @@ export function MamepApp(): React.ReactNode {
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
+  // 宿主完整主题（VSCode ui-theme 装配，ADR-027）；null=回退 buildTheme 两态。
+  const themeConfig = useAppStore((s) => s.themeConfig);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const addSheet = useAppStore((s) => s.addSheet);
   const renameSheet = useAppStore((s) => s.renameSheet);
@@ -351,7 +353,7 @@ export function MamepApp(): React.ReactNode {
   ];
 
   return (
-    <ConfigProvider theme={buildTheme(theme === "dark")}>
+    <ConfigProvider theme={themeConfig ?? buildTheme(theme === "dark")}>
       <AntApp>
         <Layout style={{ height: "100vh" }}>
           <Layout.Header className="mamep-header">

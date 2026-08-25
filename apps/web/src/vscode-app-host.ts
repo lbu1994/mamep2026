@@ -46,6 +46,11 @@ import {
 } from "@mamep2026/platform-api";
 import type { PluginRegistry } from "@mamep2026/plugin-api";
 import {
+  buildVscodeTheme,
+  readVscodeCssVars,
+  type CssVarSource,
+} from "@mamep2026/ui-theme";
+import {
   BrowserPlatformHost,
   createIdbKeyValueStore,
   IndexedDBWorkspaceRepository,
@@ -59,6 +64,25 @@ import { BrowserAppHost } from "./AppHost";
 export interface VscodeAppHostOptions {
   /** 工作区仓储（默认 IndexedDB；测试注入内存仓储）。 */
   repository?: WorkspaceRepositoryPort | undefined;
+  /**
+   * 主题 CSS 变量读取源（默认 getComputedStyle(document.documentElement) 惰性委托；
+   * 测试注入 fake，避免 node 环境触碰 DOM）。
+   */
+  cssVarSource?: CssVarSource | undefined;
+  /**
+   * 帧调度（默认 requestAnimationFrame，测试注入同步执行）。用于主题事件后延迟重读
+   * CSS 变量：生产 Webview 中 color-theme-changed 可能先于变量更新到达。
+   */
+  scheduleFrame?: (cb: () => void) => void;
+}
+
+/** 默认帧调度：requestAnimationFrame，无则回退 setTimeout（测试 node 环境不触发）。 */
+function defaultScheduleFrame(cb: () => void): void {
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => cb());
+  } else {
+    setTimeout(cb, 0);
+  }
 }
 
 /** 从枚举结果中取端口显示标签（未匹配时回退端口 id）。 */
@@ -77,6 +101,11 @@ export class VscodeAppHost implements AppHost {
   private readonly disposeBridgeEvents: () => void;
   /** 工作区持久化复用浏览器路径（IndexedDB 自动保存与会话恢复）。 */
   private readonly inner: BrowserAppHost;
+
+  /** 主题 CSS 变量读取源（惰性委托 getComputedStyle；测试注入 fake）。 */
+  private readonly cssVarSource: CssVarSource;
+  /** 帧调度（主题事件后延迟重读 CSS 变量）。 */
+  private readonly scheduleFrame: (cb: () => void) => void;
 
   // 远程会话本地镜像（RPC 往返前的同步读取缓存）。
   private connectionState: ConnectionState = "disconnected";
@@ -114,9 +143,18 @@ export class VscodeAppHost implements AppHost {
     });
     this.capabilities = vscodeCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;
+    this.cssVarSource =
+      options.cssVarSource ??
+      // 惰性委托：构造时不触碰 DOM（测试 node 环境安全），读取时才访问 document。
+      {
+        getPropertyValue: (name) =>
+          getComputedStyle(document.documentElement).getPropertyValue(name),
+      };
+    this.scheduleFrame = options.scheduleFrame ?? defaultScheduleFrame;
     // 主题：初始化查询 + 订阅宿主 color-theme-changed 事件，映射共享 store 的 antd 主题
-    // （Host 与应用同生命周期，无需退订）。
+    // （完整令牌映射 buildVscodeTheme，ADR-027）；Host 与应用同生命周期，无需退订。
     void this.applyColorThemeFromHost();
+    this.scheduleApplyHostTheme();
     // 桥事件订阅：dispose 时退订（StrictMode 双挂载下避免旧 host 残留订阅重复投递）。
     this.disposeBridgeEvents = bridge.onEvent((event: MamepHostEvent) => {
       this.handleHostEvent(event);
@@ -129,6 +167,8 @@ export class VscodeAppHost implements AppHost {
       case "color-theme-changed": {
         const { theme } = event.payload as { theme: ColorThemeKind };
         useAppStore.getState().setTheme(theme);
+        // 主题变化后重读 CSS 变量并重建完整令牌（生产变量更新可能晚于事件，延迟一帧）。
+        this.scheduleApplyHostTheme();
         break;
       }
       case "connection-state": {
@@ -183,7 +223,26 @@ export class VscodeAppHost implements AppHost {
     const result = await this.bridge.getColorTheme();
     if (result.ok) {
       useAppStore.getState().setTheme(result.value);
+      // getColorTheme 就绪后再装配一次完整令牌（此时 store.theme 已反映宿主主题）。
+      this.scheduleApplyHostTheme();
     }
+  }
+
+  /**
+   * 装配完整主题令牌：立即读一次 + 下一帧再读一次。
+   * - 生产：color-theme-changed 先于 CSS 变量更新到达时，第二帧读到新值；
+   * - dev：主 frame 主题颜色中继（postMessage）可能晚于本方法首读，第二帧兜底。
+   * 幂等：同值 setThemeConfig 无可见变化。
+   */
+  private scheduleApplyHostTheme(): void {
+    this.applyHostTheme();
+    this.scheduleFrame(() => this.applyHostTheme());
+  }
+
+  private applyHostTheme(): void {
+    const colors = readVscodeCssVars(this.cssVarSource);
+    const dark = useAppStore.getState().theme === "dark";
+    useAppStore.getState().setThemeConfig(buildVscodeTheme(colors, dark));
   }
 
   // ---- 工作区（委托 inner：IndexedDB 自动保存与会话恢复，复用浏览器路径）----

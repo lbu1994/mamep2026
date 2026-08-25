@@ -288,7 +288,7 @@ Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置
 
 实际目录尚未创建或与上述结构存在合理差异时，应以当前已确认的工程结构和 ADR 为准，不得为了匹配示意结构进行无关的大规模移动。
 
-当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 [ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）。注：对应目标结构中的 `apps/vscode-extension` 已就位；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
+当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、ui-theme（2026-08-25，ADR-027：平台主题适配层，base 主题 + VSCode 完整令牌映射）、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 [ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）。注：对应目标结构中的 `apps/vscode-extension` 已就位；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
 
 ### 7.1 模块责任
 

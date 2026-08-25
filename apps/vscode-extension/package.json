@@ -50,6 +50,7 @@
     "@mamep2026/logging": "workspace:*",
     "@mamep2026/platform-api": "workspace:*",
     "@mamep2026/platform-node": "workspace:*",
+    "@mamep2026/ui-theme": "workspace:*",
     "serialport": "^13.0.0"
   },
   "devDependencies": {

@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render } from "@testing-library/react";
 import { createEmptyWorkspace } from "@mamep2026/domain";
+import { buildTheme, mergeThemeConfig } from "@mamep2026/ui-theme";
 import { initI18n } from "./i18n";
 import { useAppStore } from "./app-store";
 import { MamepApp } from "./MamepApp";
@@ -128,5 +129,30 @@ describe("Sheet 名重命名编辑态隔离", () => {
         .length,
     ).toBe(0);
     expect(sidebarItemName("Sheet 1")).toBeTruthy();
+  });
+});
+
+describe("themeConfig（VSCode 完整主题注入 ConfigProvider，ADR-027）", () => {
+  it("store.themeConfig 非空时 ConfigProvider 使用它（antd cssVar 输出对应 token）", () => {
+    // 与 VscodeAppHost 装配路径一致：base + 覆盖合并后的完整配置。
+    // 用表面色 token 断言（colorPrimary 会被 antd 色板派生转换，原值不可见）。
+    useAppStore
+      .getState()
+      .setThemeConfig(
+        mergeThemeConfig(buildTheme(true), {
+          token: { colorBgContainer: "#13579b" },
+        }),
+      );
+    render(<MamepApp />);
+    // antd cssVar 把 token 输出到 <head> 的 style（该值仅可能来自 themeConfig 覆盖）。
+    expect(document.head.innerHTML).toContain("--ant-color-bg-container:#13579b");
+  });
+
+  it("store.themeConfig 为 null 时回退 buildTheme 两态（浏览器/Electron 路径）", () => {
+    useAppStore.getState().setThemeConfig(null);
+    useAppStore.getState().setTheme("dark");
+    render(<MamepApp />);
+    // 暗色 base 的布局色只可能来自 buildTheme(dark) 回退路径（此前用例均为浅色）。
+    expect(document.head.innerHTML).toContain("--ant-color-bg-layout:#101014");
   });
 });

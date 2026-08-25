@@ -56,7 +56,7 @@ VSCode 端在骨架阶段的真实能力仅为「加载共享 UI + 桥能力（�
 ## 负面影响
 
 - VSCode 端实际能力（RTU/TCP/串口/文件持久化）尚未实现，骨架阶段仅「共享 UI + 桥」，需后续版本补齐；
-- 主题仅做 `light`/`dark` 两态映射（高对比度映射为 dark），完整的 VSCode Theme Color → antd token 映射适配层（ui-theme 包）未落地；
+- ~~主题仅做 `light`/`dark` 两态映射（高对比度映射为 dark），完整的 VSCode Theme Color → antd token 映射适配层（ui-theme 包）未落地~~ 已解决（2026-08-25，ADR-027：`packages/ui-theme` 完整令牌映射，dev 中继 + 生产 CSS 变量取色，协议零改动，浏览器/Electron 零变化）；
 - dev 探针命令 `debug:getPanel` 暴露面板引用，仅扩展宿主进程内代码可调用（Webview 无法调用），无安全风险但需在正式发布时复核。
 
 ## 后续复审条件
@@ -64,6 +64,6 @@ VSCode 端在骨架阶段的真实能力仅为「加载共享 UI + 桥能力（�
 - Node Serial Adapter（TECH_DESIGN §34.3 原型 + 串口库选型 ADR）落地后：VSCode 串口枚举/打开接线，`vscodeCapabilities` 翻转 `modbusRtu:true` / `serialPorts:"enumerated"`，`select-serial-port` 由 `SERIAL_UNSUPPORTED` 改为真实实现；
 - Node TCP Adapter 落地后：`modbusTcp:true`，新增 TCP request kind；
 - VSCode 文件持久化（workspaceState/globalState 或工作区文件）落地后：`filesystem` 能力翻转；
-- VSCode 主题完整适配（ui-theme）落地后：颜色映射从 light/dark 两态升级为完整主题令牌映射；
+- VSCode 主题完整适配已落地（2026-08-25，ADR-027）：颜色映射从 light/dark 两态升级为完整主题令牌映射（`packages/ui-theme`，中性色跟随 + 品牌/状态保留，dev 中继 + 生产 CSS 变量取色，协议零改动）；
 - 插件装配（nodePlugins）接线后：能力矩阵翻转；
 - `tests/e2e-vscode` 随各能力落地持续扩展覆盖。

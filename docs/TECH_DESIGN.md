@@ -473,7 +473,7 @@ Host 负责装配具体适配器，不实现领域规则。
 
 # 6. 项目结构
 
-> 本节为规划目标结构。当前实际（2026-08）：`apps/` 有 `web/` 与 `electron/`（2026-08-21 迁移，ADR-016；`apps/electron/src/main/main.ts` + `apps/electron/src/preload/preload.ts`）；VSCode 插件仍在根 `vscode-extension/`；`packages/` 现有 domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit（尚未创建 platform-node、platform-electron、platform-vscode、ui-theme、schemas、shared-utils）；`tooling/` 仅 typescript-config；`tests/` 含 acceptance、e2e-web、e2e-electron（2026-08-21）；尚无 `plugins/` 目录。详细现状见 docs/AGENTS.md §7。
+> 本节为规划目标结构。当前实际（2026-08）：`apps/` 有 `web/` 与 `electron/`（2026-08-21 迁移，ADR-016；`apps/electron/src/main/main.ts` + `apps/electron/src/preload/preload.ts`）；VSCode 插件已在 `apps/vscode-extension/`（2026-08-23 迁入）；`packages/` 现有 domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、ui-theme（2026-08-25，ADR-027）、test-kit（尚未创建 platform-node、platform-electron、platform-vscode、schemas、shared-utils）；`tooling/` 仅 typescript-config；`tests/` 含 acceptance、e2e-web、e2e-electron（2026-08-21）、e2e-vscode（2026-08-23）；尚无 `plugins/` 目录。详细现状见 docs/AGENTS.md §7。
 
 建议项目结构如下：
 

@@ -46,5 +46,33 @@ describe("getDevHtml（dev 模式 iframe + 主 frame 中继）", () => {
     expect(html).toContain('src="http://localhost:5173/?mamepVscode=1"');
     expect(html).not.toContain("http://localhost:5173//");
   });
+
+  it("主题颜色中继：内置 --vscode-* 变量清单并随消息下发 iframe", () => {
+    const html = getDevHtml({ devUrl: DEV_URL });
+    // 与 ui-theme VSCODE_CSS_VAR_NAMES 同源的核心变量必须在脚本内。
+    expect(html).toContain('"--vscode-editor-background"');
+    expect(html).toContain('"--vscode-editor-foreground"');
+    expect(html).toContain('"--vscode-focusBorder"');
+    // 中继消息为非 HostMessage Envelope（source/type 自定义），避免被转发回宿主。
+    expect(html).toContain('source: "mamep-theme-relay"');
+    expect(html).toContain('type: "theme-colors"');
+    expect(html).toContain("getComputedStyle(document.documentElement)");
+    // 初始下发 + iframe 请求响应 + color-theme-changed 转发时顺带重下发。
+    expect(html).toContain("relayThemeColors();");
+    expect(html).toContain('e.data.type === "theme-colors-request"');
+    expect(html).toContain('e.data.kind === "color-theme-changed"');
+  });
+
+  it("主题颜色中继请求不转发回宿主（在 vscode.postMessage 之前拦截）", () => {
+    const html = getDevHtml({ devUrl: DEV_URL });
+    // 请求分支的判定出现在 vscode.postMessage 之前（先 return，不触碰宿主）。
+    const idxReq = html.indexOf('e.data.type === "theme-colors-request"');
+    const idxPost = html.indexOf("vscode.postMessage(e.data)");
+    const idxReturn = html.indexOf("return;", idxReq);
+    expect(idxReq).toBeGreaterThan(-1);
+    expect(idxPost).toBeGreaterThan(idxReq);
+    expect(idxReturn).toBeGreaterThan(idxReq);
+    expect(idxReturn).toBeLessThan(idxPost);
+  });
 });
 
