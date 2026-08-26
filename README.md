@@ -2,7 +2,7 @@
 
 三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具。单表管理不连续保持寄存器，仅功能码 03 读 / 0x10 写，插件隔离厂商私有功能，不以复刻原 M@MEp2006 界面为目标。
 
-当前状态（2026-08-25）：**三端 RTU + TCP 已接线**——浏览器 Web Serial RTU、Electron 主进程承载 TCP（RTU 复用浏览器路径）、VSCode Extension Host 承载 serialport/net；连接对象配置文件化（`config/connections.json`，ADR-023）；具备三端「真实端口」e2e（com0com + 真实 RTU/TCP 从站，ADR-024）；远程批任务取消与 UI 取消入口（`session-batch-cancel`，ADR-025）；TCP Unit ID 会话内动态修改（每表独立 + 工具栏按协议切换，`session-set-unit-id`，ADR-026）；**VSCode 主题完整适配**（`packages/ui-theme` 完整主题令牌映射：中性色跟随 VSCode + 品牌/状态保留，生产 CSS 变量取色 + dev iframe 中继，协议零改动，ADR-027）；**真实端口 e2e 首次全绿与 HostMessage 错误投影 bug 修复**（2026-08-25，ADR-028：ADR-024 落地后实际未跑通，全量回归修复多层问题含两端 ipc `errorEnvelope` 硬编码错误 key，web 12 / electron 24 / vscode 3 全绿）；**写后回读及延迟回读**（2026-08-26，ADR-029：每表独立配置 + 工具栏 Select + 默认 ON 立即回读，`WriteOutcome` 扩展 5 种 verify 结果，`WriteVerifyCoordinator`，写入期间暂缓同表行轮询，首个工作区迁移 v1→v2 把全局 `readVerifySettings` 迁移到各表）。浏览器端不直接支持 Modbus TCP（产品红线，PRD §8.6）。
+当前状态（2026-08-25）：**三端 RTU + TCP 已接线**——浏览器 Web Serial RTU、Electron 主进程承载 TCP（RTU 复用浏览器路径）、VSCode Extension Host 承载 serialport/net；连接对象配置文件化（`config/connections.json`，ADR-023）；具备三端「真实端口」e2e（com0com + 真实 RTU/TCP 从站，ADR-024）；远程批任务取消与 UI 取消入口（`session-batch-cancel`，ADR-025）；TCP Unit ID 会话内动态修改（每表独立 + 工具栏按协议切换，`session-set-unit-id`，ADR-026）；**VSCode 主题完整适配**（`packages/ui-theme` 完整主题令牌映射：中性色跟随 VSCode + 品牌/状态保留，生产 CSS 变量取色 + dev iframe 中继，协议零改动，ADR-027）；**真实端口 e2e 首次全绿与 HostMessage 错误投影 bug 修复**（2026-08-25，ADR-028：ADR-024 落地后实际未跑通，全量回归修复多层问题含两端 ipc `errorEnvelope` 硬编码错误 key，web 12 / electron 24 / vscode 3 全绿）；**写后回读及延迟回读**（2026-08-26，ADR-029：每表独立配置 + 工具栏 Select + 默认 ON 立即回读，`WriteOutcome` 扩展 5 种 verify 结果，`WriteVerifyCoordinator`，写入期间暂缓同表行轮询，首个工作区迁移 v1→v2 把全局 `readVerifySettings` 迁移到各表）。**多寄存器连续读写（范围行）设计已确认**（2026-08-27，ADR-030：Register 范围输入 + Type 拆「进制 + scale」两列 + 范围行树形展开子行，支持 32/64 位整数与 ASCII 字符串，三端落地；**设计阶段，实施未开始**，见 README 分阶段 ToDoList）。浏览器端不直接支持 Modbus TCP（产品红线，PRD §8.6）。
 
 > **面向 AI 编码代理**：工作入口与速览见 [AGENTS.md](AGENTS.md)；完整 43 节开发手册见 [docs/AGENTS.md](docs/AGENTS.md)。
 
@@ -25,7 +25,7 @@
 - `config/` — 连接对象配置文件 `connections.json`（真实设备连接参数集中管理，ADR-023）
 - `scripts/` — 构建/打包/开发辅助（`build-vscode.mjs`、`package-electron.mjs`、`package-vscode.mjs`、`e2e-real.mjs`、`dev-vscode.mjs`、`dev-with-slave.mjs`、`generate-icons.mjs` 等）与 Modbus 从站（`modbus-slave/`：RTU/TCP 共享核心 `lib/modbus-core.mjs`）
 - `tests/` — `acceptance`（ATDD 核心闭环）、`e2e-web` / `e2e-electron` / `e2e-vscode`（Playwright，各自含 `tests-real|real` 真实端口套件，ADR-024）
-- `docs/` — PRD、TECH_DESIGN、RESEARCH、ADR（013~024）、界面特征整理、测试指南、验证记录
+- `docs/` — PRD、TECH_DESIGN、RESEARCH、ADR（013~030）、界面特征整理、测试指南、验证记录
 
 ## 常用命令（以根 package.json 实际脚本为准）
 
@@ -88,7 +88,7 @@ Electron 免安装版无需安装包、无需任何环境（Node/pnpm），当�
 - [docs/TECH_DESIGN.md](docs/TECH_DESIGN.md) — 技术设计、三端能力矩阵、测试策略
 - [docs/RESEARCH.md](docs/RESEARCH.md) — 调研结论
 - [docs/AGENTS.md](docs/AGENTS.md) — 43 节完整开发手册（架构强制规则、Modbus 协议、调度、持久化、错误模型、TDD、禁止行为、完成自检等）
-- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~029）：monorepo 迁移 / 地址进制 / 行编辑交互 / Electron 骨架与安全 IPC / Web Serial 复用 / 免安装打包 / VSCode 骨架与安全 RPC / 串口库选型 / VSCode RTU 接线 / 两端 TCP 接线 / 连接对象配置文件化 / 三端真实端口 e2e / 远程批任务取消与 UI 取消入口 / TCP Unit ID 会话内动态修改 / VSCode 主题完整适配 / 真实端口 e2e 首次全量回归与 HostMessage 错误投影修复 / 写后回读及延迟回读（每表独立 + 首个迁移 v1→v2）
+- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~030）：monorepo 迁移 / 地址进制 / 行编辑交互 / Electron 骨架与安全 IPC / Web Serial 复用 / 免安装打包 / VSCode 骨架与安全 RPC / 串口库选型 / VSCode RTU 接线 / 两端 TCP 接线 / 连接对象配置文件化 / 三端真实端口 e2e / 远程批任务取消与 UI 取消入口 / TCP Unit ID 会话内动态修改 / VSCode 主题完整适配 / 真实端口 e2e 首次全量回归与 HostMessage 错误投影修复 / 写后回读及延迟回读（每表独立 + 首个迁移 v1→v2） / 多寄存器连续读写与范围行（Register 范围 + Type 双列 + 展开子行，设计确认，ADR-030）
 - [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md) — 浏览器 E2E 工作流与踩坑
 - [docs/node-serial-prototype-验证记录.md](docs/node-serial-prototype-验证记录.md) / [docs/node-tcp-adapter-验证记录.md](docs/node-tcp-adapter-验证记录.md) — Node 串口 / TCP Adapter 原型验证记录
 - [config/README.md](config/README.md) — 连接对象配置文件（`config/connections.json`）格式与三端加载方式
@@ -112,6 +112,7 @@ Electron 免安装版无需安装包、无需任何环境（Node/pnpm），当�
 ### 阶段二：V1.0 正式版（PRD §8.3 P1）
 
 - [x] 写后回读及延迟回读（每表独立配置，默认 ON 立即回读；工具栏 Select；WriteOutcome 扩展 5 种 verify 结果 + WriteVerifyCoordinator；写入期间暂缓同表行轮询；首个工作区迁移 v1→v2 把全局 readVerifySettings 迁移到各表）— PRD §8.3（ADR-029）
+- [ ] 多寄存器连续读写（范围行：Register 列范围输入 + Type 拆「进制 + scale」两列 + 范围行树形展开子行（每寄存器一子行，只读），支持 32/64 位整数与 ASCII 字符串，三端落地）— PRD §8.3（ADR-030：设计已确认，实施未开始）
 - [ ] 批量任务结果统计 — PRD §8.3
 - [ ] 日志搜索、过滤和导出 — PRD §8.3
 - [ ] 撤销和重做（行编辑基础已在 MVP，ADR-015；撤销/重做未实现）— PRD §8.3（部分完成）
@@ -142,9 +143,9 @@ Electron 免安装版无需安装包、无需任何环境（Node/pnpm），当�
 - [ ] 项目或工作区文件
 - [ ] 寄存器表 CSV 导入导出
 - [ ] 配置差异比较
-- [ ] 32 位整数 / 32 位浮点数
-- [ ] 多寄存器组合类型
-- [ ] 字节序和字序配置
+- [ ] 32 位整数 / 32 位浮点数（32 位/64 位整数已由阶段二「多寄存器连续读写（范围行）」覆盖，ADR-030；32 位浮点数仍待实现）
+- [ ] 多寄存器组合类型（已由阶段二「多寄存器连续读写（范围行）」覆盖：32/64 位整数 + ASCII 字符串，ADR-030）
+- [ ] 字节序和字序配置（范围行默认大端，可配置化待做）
 - [ ] 多活动连接
 - [ ] 每个标签页独立连接
 - [ ] 每行独立从站地址

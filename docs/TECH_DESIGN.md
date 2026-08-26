@@ -820,6 +820,9 @@ Host 负责装配具体适配器，不实现领域规则。
 
 > 实现状态（2026-08-21；2026-08-23 更新）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**VSCode 列 RTU 已接线（2026-08-23，ADR-021）**（Extension Host `NodePlatformHost` + 共享 `RtuSessionHost`，Renderer 远程代理，能力翻转）。**两端 Modbus TCP 已接线（2026-08-23，ADR-022）**：会话层 `CommunicationSession` 支持 `protocol:"tcp"`（`TcpFrameParser` MBAP 分帧 + Transaction ID 管理）；Electron TCP 会话承载主进程（`ElectronSessionHost`，Renderer `ElectronAppHost` 混合远程代理）、VSCode TCP 会话承载 Extension Host（`VscodeSessionHost.connectTcp`），能力矩阵 `electronCapabilities`/`vscodeCapabilities` → `modbusTcp:true`；UI Connection Settings 增加 TCP 分组（协议 Segmented 能力门控，浏览器不显示 TCP 入口）；`tests/e2e-vscode` 走通 TCP 闭环、`tests/e2e-electron` 走通 TCP 配置连接 → FC03 读 → FC10 写闭环。**连接对象配置文件已落地（2026-08-24，ADR-023）**：`config/connections.json`（JSON + Zod 校验，`packages/connection-config`）定义真实设备连接对象（RTU 含串口名/从站地址，TCP 含 host/port/unitId 等），供 UI「从配置载入」预填 + 脚本消费（消除 COM4/COM5/127.0.0.1:1502 硬编码）；三端加载——Electron/VSCode 读文件（`connection-config-load` kind，`connectionConfig:"file"`），浏览器导入 JSON/`?connectionConfig=` URL（`connectionConfig:"import"`）；生效时机为重连/重启重读；MOCK/FAKE 保持显式 dev-only 可选，默认路径即真实设备。VSCode 文件持久化仍为规划目标。
 
+> 多寄存器连续读写（ADR-030，2026-08-27 设计确认）：属协议层共享能力（三端共用同一共享会话层），
+> 不新增能力矩阵字段；三端一致支持，实施未开始。
+
 能力矩阵通过 PlatformCapabilities 对象注入 UI。
 
 UI 根据能力执行：
@@ -842,8 +845,8 @@ MVP 协议核心只实现：
 2. Modbus TCP；
 3. 功能码 03；
 4. 功能码 0x10；
-5. 单个 16 位保持寄存器读取；
-6. 单个 16 位保持寄存器写入；
+5. 单个或多个连续 16 位保持寄存器读取（FC03，quantity 可 >1，范围行，ADR-030）；
+6. 单个或多个连续 16 位保持寄存器写入（FC0x10，多值写，ADR-030）；
 7. Modbus 异常响应；
 8. RTU CRC-16；
 9. TCP MBAP Header；
@@ -1451,6 +1454,10 @@ BatchReadCoordinator 负责全表读取。
    UI 提供取消入口；取消语义见 ADR-025 与 docs/AGENTS.md §12.4）
 10. 输出批次摘要。
 
+> 范围行（多寄存器，ADR-030，2026-08-27 设计确认）：`BatchReadRow` 携带 quantity，范围行在
+> 单次请求内读完全部连续寄存器（不跨行合并）；结果以 `values[]` 回传并按组合类型格式化；
+> 单行失败不中断批次的原则不变。
+
 批次摘要至少包含：
 
 - batchId；
@@ -1498,8 +1505,8 @@ Data 单元格采用单一当前值模型，不再区分读取值与待写草稿
 2. 校验连接；
 3. 校验地址；
 4. 根据 Type 解析 Data 单元格当前文本；
-5. 转换为 16 位原始值；
-6. 创建 0x10 写入请求；
+5. 转换为 16 位原始值（范围行解析为多个原始值，ADR-030）；
+6. 创建 0x10 写入请求（范围行为多值写，一次写全部连续寄存器）；
 7. 进入统一队列；
 8. 记录请求和响应；
 9. 根据 Read Verify 规则决定是否回读；
@@ -1527,6 +1534,9 @@ WriteVerifyCoordinator 将写入和回读视为相关但独立的两个阶段：
 回读失败不能修改写入阶段的成功结论。
 
 等待 100、200 或 500 ms 时使用可取消时钟，不直接使用散落的 setTimeout。
+
+> 范围行（ADR-030）：一次 FC0x10 写全部子寄存器（`values[]`），回读 FC03 读 N 个连续寄存器并
+> 逐项 compare；`WriteOutcome` 的 verify 结果携带 `readValues`/`expectedValues` 数组。
 
 ## 15.4 写入和轮询冲突
 
@@ -1638,6 +1648,27 @@ Type 切换时：
 - 不修改通信报文；
 - 不修改地址。
 
+## 16.7 多寄存器组合类型（ADR-030，2026-08-27 设计确认）
+
+范围行（Register 列 `start-end`，`registerCount>1`）按组合解释，一次请求读写全部连续寄存器：
+
+- 32 位整数：2 个寄存器，大端合并 `values[0]<<16 | values[1]`（有符号按 32 位补码解释）；
+- 64 位整数：4 个寄存器，BigInt 合并（`hi32<<32n | lo32`），输入/显示用 BigInt，超出 2^53 不丢精度；
+- 二进制：1/2/3/4 个寄存器，按位串拼接显示（16/32/48/64 位）；
+- 十六进制：任意数量，显示为空格分隔的 4 位大写组（如 `0400 0401`），解析兼容连续串；
+- 字符串：任意数量，ASCII 编码，每寄存器 2 字符（高字节在前）。
+
+scale 作用于组合十进制值（沿用 §16.3 十进制定点运算，防浮点误差）。
+
+合法寄存器数校验（跨字段：范围长度 × 类型合法集，错误显示在进制列并禁止该行读写）：
+
+- Unsigned/Signed：1 / 2 / 4；
+- Binary：1 / 2 / 3 / 4；
+- HEX 与 String：任意数量；
+- 整体默认 1。
+
+字节序默认大端（高字在前，Modbus 惯例）；「字节序和字序配置」仍为 P2 未来项（PRD §8.4）。
+
 ---
 
 # 17. 寄存器地址设计
@@ -1653,6 +1684,10 @@ UI 使用 4 位大写十六进制字符串显示。
 - 用户输入 1；
 - 提交后显示 0001；
 - 内部值为十进制 1。
+
+范围行（ADR-030，2026-08-27 设计确认）：Register 列支持 `start-end` 范围输入（按当前进制，
+HEX 如 `0400-0401`、DEC 如 `1000-1001`），内部记录起始地址 + `registerCount`，范围 =
+[start, start+count-1]；单地址输入等价于 count=1。
 
 ## 17.2 编辑状态和提交状态
 
@@ -1748,21 +1783,22 @@ type 仍应保留，以支持未来增加其他表类型。
       order
       name
       comment
-      addressDraft
-      addressValue
-      dataType
+      addressDraft        // 支持 "start" 或 "start-end"（范围行，ADR-030）
+      addressValue        // 起始地址；registerCount>1 时范围=[start, start+count-1]
+      registerCount       // 范围长度，默认 1（ADR-030）
+      dataType            // 进制/类型（hex/unsigned/signed 各 scale/binary/string）
       pollingEnabled
       traceEnabled
-      cellText
-      lastKnownRawValue
+      cellText            // 组合值显示文本（范围行为组合解释）
+      registerValues      // 各寄存器原始值数组，单一事实源（ADR-030，替代 lastKnownRawValue）
       createdAt
       updatedAt
 
-是否持久化 lastKnownRawValue 应采用明确策略。
+是否持久化寄存器原始值应采用明确策略。
 
 建议：
 
-- 持久化最近成功值仅用于恢复显示；
+- 持久化最近成功值仅用于恢复显示（单行=`registerValues[0]`，范围行=整组）；
 - 恢复后仅作为普通单元格文本展示，不视为当前设备实时值；
 - 不持久化正在进行的请求状态；
 - 不持久化运行时错误对象；
@@ -2017,6 +2053,10 @@ workspaceState/globalState 保存：
 - 保留未知插件配置；
 - 记录迁移历史；
 - 遇到无法迁移数据时尽可能部分恢复。
+
+既有/规划迁移：v1→v2（ADR-029，全局 readVerifySettings → 各表 writeVerify）；规划 v2→v3
+（ADR-030：`lastKnownRawValue` → `registerValues`、补 `registerCount=1`、`dataType` 新增
+"string"）。
 
 ## 19.7 损坏恢复
 
@@ -2297,6 +2337,11 @@ Electron 和 VSCode 使用消息桥实现。
 8. 消息协议版本可演进；
 9. 错误通过结构化对象传递；
 10. Uint8Array 采用明确可序列化格式传输。
+
+> 多寄存器（ADR-030，2026-08-27 设计确认）：不加新 kind，扩展既有 payload 字段——
+> `registerRowPayloadSchema` 增 `registerCount`（+ "string" 类型）、`batchReadRowPayloadSchema`
+> 增 `quantity`、`poll-result` 结果支持 `values[]`、`writeOutcomePayloadSchema` verify 字段数组化；
+> 三端 AppHost 已收整行对象天然透传。
 
 ## 22.3 Electron IPC
 
