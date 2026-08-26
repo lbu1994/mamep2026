@@ -135,6 +135,11 @@ function EditableCellValue({
     // 进入编辑时以当前显示值初始化草稿。
     setDraft(value);
     draftRef.current = value;
+    // 同步置编辑态标记：useEffect 更新是异步的（浏览器在渲染提交后才运行 effect），
+    // 若在 effect 运行前立即提交（自动化 click+fill+Enter / 用户快速操作），commit 会
+    // 因 editingRef 仍为 false 提前 return 而丢弃输入（2026-08-26 real e2e 竞态，
+    // 与 draftRef 同类）。同步更新根治。
+    editingRef.current = true;
     setEditing(true);
   };
 

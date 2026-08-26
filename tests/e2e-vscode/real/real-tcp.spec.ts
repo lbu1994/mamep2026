@@ -98,11 +98,18 @@ async function fillNumber(
 
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
+  const cell = frame.getByLabel("Register", { exact: true }).first();
+  await cell.click();
+  // 等待进入编辑态（click 触发 React 重渲染渲染出 input；高负载下可能延迟）。
   const input = frame.getByLabel("Register", { exact: true }).first();
-  await input.click();
-  await input.fill(addressHex);
-  // React 受控组件竞态防护：fill 后立即 Enter 可能读到旧 draft 导致提交被跳过。
-  await frame.waitForTimeout(50);
+  await expect(input).toBeEditable({ timeout: 5000 });
+  // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
+  // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
+  // 短路——real e2e 曾致地址提交被跳过）。改 fill("")+pressSequentially 逐字符输入
+  // （真实键盘事件，onChange 必然触发），toHaveValue 确认受控值同步后再 Enter。
+  await input.fill("");
+  await input.pressSequentially(addressHex, { delay: 10 });
+  await expect(input).toHaveValue(addressHex);
   await input.press("Enter");
 }
 
@@ -116,11 +123,14 @@ async function readRow(frame: Frame): Promise<void> {
 
 /** 首行填 Data（HEX）并点击 Write。 */
 async function writeRow(frame: Frame, valueHex: string): Promise<void> {
+  const cell = frame.getByLabel("Data").first();
+  await cell.click();
+  // 同 setRowAddress：等待编辑态 + pressSequentially 逐字符输入 + toHaveValue 同步。
   const data = frame.getByLabel("Data").first();
-  await data.click();
-  await data.fill(valueHex);
-  // React 受控组件竞态防护：fill 后立即 Enter 可能读到旧 draft 导致提交被跳过。
-  await frame.waitForTimeout(50);
+  await expect(data).toBeEditable({ timeout: 5000 });
+  await data.fill("");
+  await data.pressSequentially(valueHex, { delay: 10 });
+  await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
   await frame
     .getByRole("button", { name: "Write", exact: true })
@@ -293,6 +303,12 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await expect(
       frame.locator(".register-table__status-dot--error").first(),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+    // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 1000ms ×
+    // retryCount+1 共 2 次）之后才到达；若此时立即发起新读，RTU 无 Transaction ID 会把
+    // 迟到的 0x0700 响应当作新读的响应（真实串口时序竞态，曾致读 0x0000 返回 0x0700 的
+    // 值 0000）。等待迟到响应在无活动请求时（pendingExchange 为空）到达并被丢弃，再读回
+    // 正常区，验证「迟到丢弃」语义。
+    await frame.waitForTimeout(800);
     await setRowAddress(frame, "0000");
     await readRow(frame);
     await expect(frame.getByLabel("Data").first()).toHaveText("04D2", {
@@ -316,10 +332,21 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     });
     await frame.waitForTimeout(300);
     const list = frame.locator(".comm-log .ant-listy-holder");
+    // Listy 虚拟列表默认停在底部（最新帧可见）；最早帧（写门控异常 01 90 03）可能被
+    // 挤出视口（TCP 帧含 MBAP 头行更高，且延迟响应的迟到帧也会占用视口）。滚动到顶部
+    // 让最早帧渲染后断言，再滚回底部断言最新帧（2026-08-26 real e2e 修复）。
+    await list.evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    await frame.waitForTimeout(300);
+    await expect(list).toContainText("01 90 03", { timeout: 5000 });
+    await list.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await frame.waitForTimeout(300);
+    await expect(list).toContainText("01 90 02", { timeout: 5000 });
     await expect(list).toContainText("01 03 00 00 00 01", { timeout: 5000 });
-    await expect(list).toContainText("01 03 02 04 D2");
-    await expect(list).toContainText("01 90 03");
-    await expect(list).toContainText("01 90 02");
+    await expect(list).toContainText("01 03 02 04 D2", { timeout: 5000 });
   });
 
   await test.step("断开连接 → Offline，重连 → Online（稳定性）", async () => {

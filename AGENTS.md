@@ -42,6 +42,7 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 - `pnpm lint` — ESLint（全仓）
 - `pnpm typecheck` — turbo 全包类型检查（各包 `tsc --noEmit`）
 - `pnpm test` — turbo 全包 vitest（各包单测）
+- `pnpm test:all` — 一条命令跑完全量测试，顺序固定：三端真实端口 e2e（浏览器 `web:real` 最先，其次 `electron:real`、`vscode:real`）→ `pnpm test`（单测）→ `test:acceptance` → 三端 mock e2e（`e2e:web` / `e2e:electron` / `e2e:vscode`）→ `test:serial:virtual` → `pnpm lint` → `pnpm typecheck`。real 环节缺环境 SKIP 不失败（`e2e-real.mjs` 退出码 0）；fail-fast（任一环节失败即中断并返回非 0）；浏览器 real 首次需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）
 - `pnpm test:acceptance` / `pnpm test:e2e:web` / `pnpm test:e2e:electron` / `pnpm test:e2e:vscode` 单独跑对应测试包（e2e:electron 自动先 `build:electron`；e2e:vscode 自动先 `build:vscode`）
 - `pnpm test:e2e:real` / `pnpm test:e2e:web:real` / `pnpm test:e2e:electron:real` / `pnpm test:e2e:vscode:real` — 三端「真实端口」e2e（com0com COM4↔COM5 + 真实 RTU/TCP 从站，ADR-024）：`scripts/e2e-real.mjs` 统一编排（预检 → 启停从站 → 设 `MAMEP_REAL=1` → 跑对应端 `test:real`）；缺环境 SKIP 不失败；浏览器端启动时需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）。VSCode real 需先 `pnpm build:vscode`（runner 已处理）
 - `pnpm format` / `pnpm format:check` — Prettier
