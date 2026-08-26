@@ -125,7 +125,13 @@ test("VSCode 主题完整适配（UI 级）：跟随 + 实时切换 + 面板重�
 }) => {
   const consoleErrors: string[] = [];
   workbox.on("console", (msg) => {
-    if (msg.type() === "error") consoleErrors.push(`CONSOLE: ${msg.text()}`);
+    if (msg.type() !== "error") return;
+    // VS Code 自身基础设施（扩展市场查询 / 网络资源加载）的报错与 webview 应用无关，
+    // 且为网络环境性 flaky，不纳入「无 console 错误」断言；只统计来自共享 UI webview
+    // （vscode-webview://）的 console 错误（2026-08-26 real e2e 修复）。
+    const sourceUrl = msg.location()?.url ?? "";
+    if (!sourceUrl.startsWith("vscode-webview://")) return;
+    consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
   workbox.on("pageerror", (err) =>
     consoleErrors.push(`PAGEERROR: ${String(err)}`),

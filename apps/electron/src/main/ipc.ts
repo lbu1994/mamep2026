@@ -4,7 +4,7 @@
  * （未知 kind、非法 payload、发送者校验、debug 探针打包禁用等）。
  */
 import { createMamepError, ok, type MamepError, type Result } from "@mamep2026/domain";
-import type { RegisterRow, TcpConnectionProfile } from "@mamep2026/domain";
+import type { ReadVerifySettings, RegisterRow, TcpConnectionProfile } from "@mamep2026/domain";
 import type {
   BatchReadHandle,
   BatchReadRow,
@@ -15,6 +15,7 @@ import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   electronCapabilities,
   hostRequestSchema,
+  readVerifySettingsFromPayload,
   registerRowFromPayload,
   tcpConnectionProfileFromPayload,
   toBatchReadSummaryPayload,
@@ -36,7 +37,10 @@ export interface ElectronSessionLike {
   setUnitId(unitId: number): void;
   getConnectionState(): ConnectionState;
   readRow(row: RegisterRow): Promise<Result<number>>;
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>>;
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>>;
   readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle;
   /** 按 batchId 取消活动批任务（ADR-025）：未知 batchId 为安全 no-op。 */
   cancelBatch(batchId: string): void;
@@ -227,9 +231,14 @@ export async function handleRequest(
       );
     }
     case "session-write-row": {
-      const { row } = message.payload;
+      const { row, writeVerify } = message.payload;
       return sessionResult(message, async () => {
-        const result = await deps.session.writeRow(registerRowFromPayload(row));
+        const result = await deps.session.writeRow(
+          registerRowFromPayload(row),
+          writeVerify !== undefined
+            ? { writeVerify: readVerifySettingsFromPayload(writeVerify) }
+            : undefined,
+        );
         return result.ok ? ok(toWriteOutcomePayload(result.value)) : result;
       });
     }

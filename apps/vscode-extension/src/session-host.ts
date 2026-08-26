@@ -24,6 +24,7 @@ import { NodePlatformHost } from "@mamep2026/platform-node";
 import type { SerialPortOption } from "@mamep2026/platform-api";
 import type {
   RegisterRow,
+  ReadVerifySettings,
   Result,
   RtuConnectionProfile,
   TcpConnectionProfile,
@@ -129,8 +130,11 @@ export class VscodeSessionHost {
     return this.activeSession.readRow(row);
   }
 
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
-    return this.activeSession.writeRow(row);
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>> {
+    return this.activeSession.writeRow(row, options);
   }
 
   /** 全表读取：行结果经 poll-result 事件流上报（address 0），返回 BatchReadHandle。 */

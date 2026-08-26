@@ -37,6 +37,7 @@ function makeSheet(name: string, rows: RegisterRow[]): RegisterSheet {
     registerRadix: "dec",
     columnWidths: {},
     columnOrder: null,
+    writeVerify: { mode: "off", delayMs: null },
     createdAt: 0,
     updatedAt: 0,
   };

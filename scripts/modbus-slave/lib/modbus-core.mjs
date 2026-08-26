@@ -5,7 +5,7 @@
  * 提取自 scripts/modbus-slave/modbus-rtu-slave.mjs 的协议/规则/日志部分，供
  * modbus-rtu-slave.mjs 与 modbus-tcp-slave.mjs 共同复用，避免规则漂移：
  * - 功能码 / 异常码常量与 CRC16（算法与 packages/protocol-modbus 一致，唯一权威）；
- * - DEFAULT_RULES：7 个默认地址区间（与 DEFAULT_MOCK_RULES 一一对应）；
+ * - DEFAULT_RULES：8 个默认地址区间（与 DEFAULT_MOCK_RULES 一一对应）；
  * - 规则归一化（normalizeBehavior/normalizeRules）、顺序匹配（matchRule）；
  * - 寄存器解析（parseRegisters）；
  * - 响应投递（sendWithBehavior）：normal / 全局 responseDelayMs / 扩展行为
@@ -99,6 +99,7 @@ export function createLogger(level = "info", logFrames = true) {
  * - 0x0400–0x040f 非法数据值：读成功；写值须 ≤ 0x7FFF，超出回异常 0x03
  * - 0x0500–0x050f 不支持功能：读/写均回异常 0x01
  * - 0x0600–0x060f 设备无响应：读/写均不回任何帧
+ * - 0x0900–0x090f 写忽略区：读/写均成功回执，但写入不实际落盘（读回仍为旧值）
  */
 export const DEFAULT_RULES = [
   {
@@ -143,14 +144,22 @@ export const DEFAULT_RULES = [
     read: { kind: "no-response" },
     write: { kind: "no-response" },
   },
+  {
+    start: 0x0900,
+    end: 0x090f,
+    read: { kind: "normal" },
+    write: { kind: "write-ignore" },
+  },
 ];
 
 /**
  * 归一化配置中的行为描述（read/write 字段）：
  *   "normal"                            → { kind: "normal" }
  *   "no-response"                       → { kind: "no-response" }
+ *   "write-ignore"                      → { kind: "write-ignore" }
  *   { "exception": <code> }             → { kind: "exception", exceptionCode }
  *   { "writeValueGate": n }             → { kind: "write-value-gate", maxValue }
+ *   { "writeIgnore": true }             → { kind: "write-ignore" }
  *   { "delayedResponse": ms }           → { kind: "delayed-response", delayMs }（扩展）
  *   { "splitResponse": { chunkSize, chunkDelayMs } }
  *                                        → { kind: "split-response", ... }（扩展）
@@ -159,8 +168,9 @@ export function normalizeBehavior(value, fieldName) {
   if (typeof value === "string") {
     if (value === "normal") return { kind: "normal" };
     if (value === "no-response") return { kind: "no-response" };
+    if (value === "write-ignore") return { kind: "write-ignore" };
     throw new Error(
-      `${fieldName} 行为 "${value}" 无效（应为 "normal" / "no-response" / { "exception": n } / { "writeValueGate": n } / { "delayedResponse": ms } / { "splitResponse": {...} }）`,
+      `${fieldName} 行为 "${value}" 无效（应为 "normal" / "no-response" / "write-ignore" / { "exception": n } / { "writeValueGate": n } / { "writeIgnore": true } / { "delayedResponse": ms } / { "splitResponse": {...} }）`,
     );
   }
   if (value && typeof value === "object") {
@@ -169,6 +179,9 @@ export function normalizeBehavior(value, fieldName) {
     }
     if (typeof value.writeValueGate === "number") {
       return { kind: "write-value-gate", maxValue: value.writeValueGate };
+    }
+    if (value.writeIgnore === true) {
+      return { kind: "write-ignore" };
     }
     if (typeof value.delayedResponse === "number") {
       return { kind: "delayed-response", delayMs: value.delayedResponse };
@@ -189,7 +202,7 @@ export function normalizeBehavior(value, fieldName) {
     }
   }
   throw new Error(
-    `${fieldName} 行为无效（应为 "normal" / "no-response" / { "exception": n } / { "writeValueGate": n } / { "delayedResponse": ms } / { "splitResponse": {...} }）`,
+    `${fieldName} 行为无效（应为 "normal" / "no-response" / "write-ignore" / { "exception": n } / { "writeValueGate": n } / { "writeIgnore": true } / { "delayedResponse": ms } / { "splitResponse": {...} }）`,
   );
 }
 

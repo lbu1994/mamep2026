@@ -110,6 +110,8 @@ export interface RegisterSheet {
   columnWidths: Record<string, number>;
   /** 各列拖拽后的排列顺序（每表独立，随工作区持久化；null=未拖拽过，使用默认顺序，2026-08-18） */
   columnOrder: string[] | null;
+  /** 写后回读配置（每表独立，随工作区持久化，2026-08-26）：默认立即回读（immediate）。 */
+  writeVerify: ReadVerifySettings;
   createdAt: number;
   updatedAt: number;
 }
@@ -164,7 +166,6 @@ export interface Workspace {
   connectionProfiles: (RtuConnectionProfile | TcpConnectionProfile)[];
   activeConnectionProfileId: ConnectionProfileId | null;
   pollingSettings: PollingSettings;
-  readVerifySettings: ReadVerifySettings;
   panelLayout: PanelLayout;
   preferences: Preferences;
   notes: string;
@@ -173,7 +174,8 @@ export interface Workspace {
 }
 
 /** 当前工作区 Schema 版本。 */
-export const workspaceSchemaVersion = 1;
+/** 当前工作区 Schema 版本（2026-08-26 v2：写后回读配置从 workspace 全局下放到每表 sheet.writeVerify）。 */
+export const workspaceSchemaVersion = 2;
 
 let idCounter = 0;
 
@@ -284,6 +286,8 @@ export function createRegisterSheet(
     slaveAddress: defaultConfig.registerTable.slaveAddress,
     columnWidths: {},
     columnOrder: null,
+    // 写后回读默认 ON（写入后立即回读，2026-08-26）。
+    writeVerify: { mode: "immediate", delayMs: null },
     createdAt: now,
     updatedAt: now,
   };
@@ -308,7 +312,6 @@ export function createEmptyWorkspace(): Workspace {
       enabledBehavior: "manual",
       maxPendingPollingTasks: defaultConfig.polling.maxPendingPollingTasks,
     },
-    readVerifySettings: { mode: "off", delayMs: null },
     panelLayout: {
       sidebarCollapsed: false,
       bottomPanelCollapsed: false,

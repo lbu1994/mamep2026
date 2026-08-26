@@ -6,11 +6,14 @@ export interface CancellationToken {
   readonly cancelled: boolean;
   readonly reason: string | null;
   cancel(reason?: string): void;
+  /** 订阅取消回调（已取消时立即调用）；返回退订函数。2026-08-26 写后回读延迟等待用。 */
+  onCancel(listener: () => void): () => void;
 }
 
 export function createCancellationToken(): CancellationToken {
   let cancelled = false;
   let reason: string | null = null;
+  const listeners = new Set<() => void>();
   return {
     get cancelled() {
       return cancelled;
@@ -22,7 +25,16 @@ export function createCancellationToken(): CancellationToken {
       if (!cancelled) {
         cancelled = true;
         reason = cancelReason;
+        for (const listener of [...listeners]) listener();
       }
+    },
+    onCancel(listener) {
+      if (cancelled) {
+        listener();
+        return () => undefined;
+      }
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
   };
 }

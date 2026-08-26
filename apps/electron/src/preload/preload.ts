@@ -19,6 +19,7 @@ import type {
   SessionBatchReadResponse,
   SessionStateResponse,
   SessionTcpConnectPayload,
+  ReadVerifySettingsPayload,
   WriteOutcomePayload,
 } from "@mamep2026/platform-api";
 import {
@@ -105,8 +106,14 @@ const api: MamepHostApi = {
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number>> {
     return invoke<number>("session-read-row", { row });
   },
-  sessionWriteRow(row: RegisterRowPayload): Promise<Result<WriteOutcomePayload>> {
-    return invoke<WriteOutcomePayload>("session-write-row", { row });
+  sessionWriteRow(
+    row: RegisterRowPayload,
+    writeVerify?: ReadVerifySettingsPayload,
+  ): Promise<Result<WriteOutcomePayload>> {
+    return invoke<WriteOutcomePayload>("session-write-row", {
+      row,
+      ...(writeVerify !== undefined ? { writeVerify } : {}),
+    });
   },
   sessionBatchRead(
     batchId: string,

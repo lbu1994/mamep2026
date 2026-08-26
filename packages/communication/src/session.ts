@@ -40,7 +40,25 @@ import type { CommunicationLogEvent, RequestSource } from "./log-event";
 import { RequestScheduler, type RequestPriority } from "./request-scheduler";
 import type { TransportPort } from "./transport-port";
 
-export type WriteOutcome = { kind: "write-succeeded-no-verify" };
+/**
+ * 写入结果（docs/TECH_DESIGN.md §15.3、docs/AGENTS.md §18.2）。
+ * 写后回读（2026-08-26）：写入与回读为相关但独立的两阶段；
+ * 回读失败不得把已成功的写入显示为写入失败（verify-failed 仍属写入成功）。
+ */
+export type WriteOutcome =
+  | { kind: "write-succeeded-no-verify" }
+  | { kind: "write-succeeded-verify-matched"; readValue: number }
+  | {
+      kind: "write-succeeded-verify-mismatched";
+      expectedValue: number;
+      readValue: number;
+    }
+  | {
+      kind: "write-succeeded-verify-failed";
+      errorCode: string;
+      userMessageKey: string;
+    }
+  | { kind: "cancelled-before-verify" };
 
 interface ExchangeMeta {
   source: RequestSource;

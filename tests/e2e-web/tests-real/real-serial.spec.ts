@@ -69,6 +69,22 @@ async function readRow(p: Page): Promise<void> {
     .evaluate((el) => (el as HTMLElement).click());
 }
 
+/** 切换工具栏「写后回读」配置选项（OFF / ON / ON 100 ms / …，2026-08-26）。 */
+async function setWriteVerify(p: Page, optionText: string): Promise<void> {
+  await p.getByLabel("Write verification").click();
+  await p
+    .locator(".ant-select-item-option")
+    .filter({ hasText: new RegExp(`^${optionText}$`) })
+    .first()
+    .click();
+  // 确认选中值：antd v6 单选选中文本渲染在 Select 内 .ant-select-content
+  // （combobox input 的 value 恒为空），故断言包裹容器 .table-toolbar__verify
+  // 包含所选 label（2026-08-26 real e2e 修复）。
+  await expect(p.locator(".table-toolbar__verify")).toContainText(optionText, {
+    timeout: 5000,
+  });
+}
+
 /** 首行填 Data（HEX）并点击 Write。 */
 async function writeRow(p: Page, valueHex: string): Promise<void> {
   const cell = p.getByLabel("Data").first();
@@ -302,9 +318,11 @@ test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", 
   // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 1000ms ×
   // retryCount+1 共 2 次）之后才到达；若此时立即发起新读，RTU 无 Transaction ID 会把
   // 迟到的 0x0700 响应当作新读的响应（真实串口时序竞态，曾致读 0x0000 返回 0x0700 的
-  // 值 0000）。等待迟到响应在无活动请求时（pendingExchange 为空）到达并被丢弃，再读回
-  // 正常区，验证「迟到丢弃」语义。
-  await page.waitForTimeout(800);
+  // 值 0000）。注意重试会触发**两帧**迟到响应（attempt1 ~超时后 450ms、attempt2
+  // ~超时后 1500ms 到达，后者被 0x0000 新读消费曾致本测试复现失败）。等两帧迟到响应
+  // 都在无活动请求时（pendingExchange 为空）到达并被丢弃，再读回正常区（2026-08-26
+  // 修复：等待 800→2000ms 覆盖 attempt2 迟到响应）。
+  await page.waitForTimeout(2000);
   await setRowAddress(page, "0000");
   await readRow(page);
   await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
@@ -343,6 +361,48 @@ test("通信日志：请求/响应/异常帧字节", async () => {
   await expect(list).toContainText("01 90 02", { timeout: 5000 });
   await expect(list).toContainText("01 03 00 00 00 01", { timeout: 5000 });
   await expect(list).toContainText("01 03 02 04 D2", { timeout: 5000 });
+});
+
+test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成功，但 Data 列显示回读值 0000", async () => {
+  // 写忽略区（0x0900–0x090f）：写入返回正常成功帧，但**不实际写入**——回读仍为旧值 0。
+  // Verify=ON（immediate，本表默认）：写入后立即 FC03 回读 → 值不一致（写 1234 / 读 0000）
+  // → 失败点（红点），且 Data 列被回读值覆盖（§15.1），显示 0000 而非写入的 1234。
+  await setRowAddress(page, "0900");
+  await writeRow(page, "1234");
+  // 写入成功但回读不一致 → 失败态（红点）。
+  await expect(
+    page.locator(".register-table__status-dot--error").first(),
+  ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+  // 关键断言：Data 列显示的是回读值（0000），而不是写入值（1234）。
+  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  await expect(page.getByLabel("Data").first()).not.toHaveText("1234");
+  // 手动读回仍为 0000（设备未落盘）。
+  await readRow(page);
+  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+});
+
+test("写后回读 Verify=OFF：写忽略区 0x0900 写入后 Data 保持写入值 1234（不回读）", async () => {
+  // Verify=OFF：写入成功即成功态（绿点），不回读；Data 保持用户输入值 1234。
+  await setWriteVerify(page, "OFF");
+  await setRowAddress(page, "0900");
+  await writeRow(page, "1234");
+  await expect(
+    page.locator(".register-table__status-dot--success").first(),
+  ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+  await expect(page.getByLabel("Data").first()).toHaveText("1234", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  // 手动读回仍为 0000（设备未落盘）。
+  await readRow(page);
+  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  // 恢复默认 ON（后续测试按默认行为执行）。
+  await setWriteVerify(page, "ON");
 });
 
 test("断开连接 → Offline", async () => {

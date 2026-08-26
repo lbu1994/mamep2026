@@ -341,6 +341,25 @@ test("通信日志：请求/响应/异常帧字节", async () => {
   await expect(list).toContainText("01 03 02 04 D2", { timeout: 5000 });
 });
 
+test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成功，但 Data 列显示回读值 0000", async () => {
+  // 写忽略区（0x0900–0x090f）：写入返回正常成功帧但不落盘——回读仍为旧值 0。
+  // Verify=ON（本表默认）：写入后立即 FC03 回读 → 值不一致 → 失败点（红点），
+  // Data 列被回读值覆盖（§15.1）显示 0000 而非写入的 1234。
+  await setRowAddress(page, "0900");
+  await writeRow(page, "1234");
+  await expect(
+    page.locator(".register-table__status-dot--error").first(),
+  ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  await expect(page.getByLabel("Data").first()).not.toHaveText("1234");
+  await readRow(page);
+  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+});
+
 test("断开连接 → Offline，重连 → Online（稳定性）", async () => {
   await page.getByRole("button", { name: /Disconnect/i }).click();
   await expect(page.locator(".ant-layout-header")).toContainText("Offline", {

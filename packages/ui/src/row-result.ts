@@ -51,16 +51,30 @@ export function createEmptyRowStatusState(): RowStatusState {
 /** §18.2 写后回读结果 → 三态（success/failure/none）。 */
 export type WriteResultStatus = "success" | "failure" | "none";
 
-// MVP 无 verify：写入成功即成功态。未来 WriteOutcome 扩展（§18.2）在此补全，
-// 由 Record<WriteOutcome["kind"], ...> 保证类型完整：
-//   write-failed                      -> failure
+// 写后回读（2026-08-26）：WriteOutcome 扩展为 5 种 kind，由 Record 保证类型穷尽：
+//   write-succeeded-no-verify         -> success
 //   write-succeeded-verify-matched    -> success
 //   write-succeeded-verify-mismatched -> failure
 //   write-succeeded-verify-failed     -> failure
 //   cancelled-before-verify           -> none（写入已成功仅回读取消，不显示失败态）
 const WRITE_OUTCOME_STATUS: Record<WriteOutcome["kind"], WriteResultStatus> = {
   "write-succeeded-no-verify": "success",
+  "write-succeeded-verify-matched": "success",
+  "write-succeeded-verify-mismatched": "failure",
+  "write-succeeded-verify-failed": "failure",
+  "cancelled-before-verify": "none",
 };
+
+/** 写后回读失败态：verify-failed 携带真实错误 key/detail；mismatched 用固定不一致文案。 */
+function writeFailureFromOutcome(
+  outcome: WriteOutcome | undefined,
+): RowFailure {
+  if (outcome?.kind === "write-succeeded-verify-failed") {
+    return { messageKey: outcome.userMessageKey, detail: outcome.errorCode };
+  }
+  // 写入成功但回读值不一致。
+  return { messageKey: "errors.writeVerifyMismatch", detail: null };
+}
 
 export interface ApplyManualResultOptions {
   /** 写入结果（ok 时按 kind 决定成功/失败/保持，§18.2）。 */
@@ -98,8 +112,7 @@ export function applyManualResult(
   // 保持原状态，绝不产生成功点（§18.2 防御，杜绝「失败却绿点」）。
   if (
     kind === "write" &&
-    (writeOutcome === undefined ||
-      (writeStatus !== "success" && writeStatus !== "failure"))
+    (writeOutcome === undefined || writeStatus !== "success" && writeStatus !== "failure")
   ) {
     return state;
   }
@@ -110,11 +123,8 @@ export function applyManualResult(
     ? setSuccess(state.rowSuccess, rowId, kind)
     : removeSuccess(state.rowSuccess, rowId);
   const rowResults = isFailure
-    ? // 写入成功但回读不一致/回读失败：显示失败态（未来 WriteOutcome 扩展后可达）。
-      setFailure(state.rowResults, rowId, {
-        messageKey: "errors.writeVerifyMismatch",
-        detail: null,
-      })
+    ? // 写入成功但回读不一致/回读失败：显示失败态（§18.2）。
+      setFailure(state.rowResults, rowId, writeFailureFromOutcome(writeOutcome))
     : removeFailure(state.rowResults, rowId);
   if (
     rowResults === state.rowResults &&

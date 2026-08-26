@@ -55,10 +55,16 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { ColumnType, ColumnsType } from "antd/es/table";
 import type { BatchReadHandle } from "@mamep2026/communication";
-import type { DataType, RegisterRow, RowId, SheetId } from "@mamep2026/domain";
+import type {
+  DataType,
+  ReadVerifySettings,
+  RegisterRow,
+  RowId,
+  SheetId,
+} from "@mamep2026/domain";
 import { dataTypes, defaultConfig } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
-import { applyColumnOrder } from "@mamep2026/register-table";
+import { applyColumnOrder, applyReadValueToRow } from "@mamep2026/register-table";
 import { useAppStore } from "../app-store";
 import type { RowFailure } from "../row-result";
 import { clampColumnWidth } from "./column-resize";
@@ -78,6 +84,38 @@ const TYPE_LABELS: Record<DataType, string> = {
   "signed-0.0001": "Signed 0.0001",
   binary: "table.binary",
 };
+
+/** 写后回读配置选项（PRD §6.5.12，2026-08-26）：Select value ↔ ReadVerifySettings。 */
+type WriteVerifyOptionValue = "off" | "immediate" | "100" | "200" | "500";
+
+const WRITE_VERIFY_OPTIONS: Array<{
+  value: WriteVerifyOptionValue;
+  settings: ReadVerifySettings;
+}> = [
+  { value: "off", settings: { mode: "off", delayMs: null } },
+  { value: "immediate", settings: { mode: "immediate", delayMs: null } },
+  { value: "100", settings: { mode: "delayed", delayMs: 100 } },
+  { value: "200", settings: { mode: "delayed", delayMs: 200 } },
+  { value: "500", settings: { mode: "delayed", delayMs: 500 } },
+];
+
+function writeVerifyToValue(settings: ReadVerifySettings): WriteVerifyOptionValue {
+  if (settings.mode === "off") return "off";
+  if (settings.mode === "immediate") return "immediate";
+  return String(settings.delayMs) as WriteVerifyOptionValue;
+}
+
+function writeVerifyOptionLabel(value: WriteVerifyOptionValue): string {
+  if (value === "off") return "table.writeVerifyOff";
+  if (value === "immediate") return "table.writeVerifyOn";
+  return "table.writeVerifyOnDelay";
+}
+
+function writeVerifyOptionMs(value: WriteVerifyOptionValue): number | null {
+  return value === "100" || value === "200" || value === "500"
+    ? Number(value)
+    : null;
+}
 
 // ---- 可编辑单元格（antd 可编辑单元格模式，2026-08-15）----
 // 非编辑态：值以无边框文本显示（hover 出现边框提示可编辑），点击或 Enter/Space 进入编辑；
@@ -501,9 +539,11 @@ function RowStatusDot({
 }
 
 const WriteCell = memo(function WriteCell({
+  sheetId,
   rowId,
   hasAddress,
 }: {
+  sheetId: SheetId;
   rowId: RowId;
   hasAddress: boolean;
 }) {
@@ -511,9 +551,27 @@ const WriteCell = memo(function WriteCell({
   const host = useAppStore((s) => s.host);
   const appendMessage = useAppStore((s) => s.appendMessage);
   const recordManualResult = useAppStore((s) => s.recordManualResult);
+  const updateRow = useAppStore((s) => s.updateRow);
   const connected = useAppStore((s) => s.connectionState) === "connected";
+  // 本表写后回读配置（每表独立，2026-08-26）。
+  const writeVerify = useAppStore(
+    (s) =>
+      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.writeVerify ?? {
+        mode: "immediate" as const,
+        delayMs: null,
+      },
+  );
   // 离线或未配置合法地址时禁用；无地址时提供 Tooltip 说明原因。
   const disabled = !connected || !hasAddress;
+
+  /** 回读成功（一致/不一致）：按读取规则（Type 格式化）强制覆盖单元格（§15.1）。 */
+  const applyReadBackValue = (raw: number): void => {
+    updateRow(rowId, (row) => {
+      const applied = applyReadValueToRow(row, raw);
+      return applied.ok ? applied.value : row;
+    });
+  };
+
   const handleWrite = async (): Promise<void> => {
     if (host === null || host === undefined) return;
     const state = useAppStore.getState();
@@ -521,7 +579,7 @@ const WriteCell = memo(function WriteCell({
       .flatMap((sh) => sh.rows)
       .find((r) => r.rowId === rowId);
     if (row === undefined) return;
-    const result = await host.writeRow(row);
+    const result = await host.writeRow(row, { writeVerify });
     // 手动写结果 → 三态状态点（writeOutcome 支持 §18.2 verify 结果映射）。
     recordManualResult(
       rowId,
@@ -530,13 +588,47 @@ const WriteCell = memo(function WriteCell({
       result.ok ? { writeOutcome: result.value } : undefined,
     );
     if (result.ok) {
-      appendMessage({
-        timestamp: Date.now(),
-        level: "info",
-        messageKey: "messages.writeSucceeded",
-        params: { address: row.addressDraft },
-        detail: null,
-      });
+      const outcome = result.value;
+      if (outcome.kind === "write-succeeded-verify-matched") {
+        applyReadBackValue(outcome.readValue);
+        appendMessage({
+          timestamp: Date.now(),
+          level: "info",
+          messageKey: "messages.writeVerifyMatched",
+          params: { address: row.addressDraft },
+          detail: null,
+        });
+      } else if (outcome.kind === "write-succeeded-verify-mismatched") {
+        applyReadBackValue(outcome.readValue);
+        appendMessage({
+          timestamp: Date.now(),
+          level: "warning",
+          messageKey: "messages.writeVerifyMismatch",
+          params: {
+            address: row.addressDraft,
+            expected: outcome.expectedValue,
+            read: outcome.readValue,
+          },
+          detail: null,
+        });
+      } else if (outcome.kind === "write-succeeded-verify-failed") {
+        // 回读失败：写入成功结论不变（§18.2），提示回读失败原因。
+        appendMessage({
+          timestamp: Date.now(),
+          level: "warning",
+          messageKey: outcome.userMessageKey,
+          params: { detail: outcome.errorCode },
+          detail: outcome.errorCode,
+        });
+      } else {
+        appendMessage({
+          timestamp: Date.now(),
+          level: "info",
+          messageKey: "messages.writeSucceeded",
+          params: { address: row.addressDraft },
+          detail: null,
+        });
+      }
     } else {
       appendMessage({
         timestamp: Date.now(),
@@ -959,6 +1051,15 @@ export const RegisterTable = memo(function RegisterTable({
       defaultConfig.registerTable.slaveAddress,
   );
   const setSheetSlaveAddress = useAppStore((s) => s.setSheetSlaveAddress);
+  // 本表写后回读配置（每表独立，2026-08-26）：默认立即回读。
+  const writeVerifyValue = useAppStore(
+    (s) =>
+      writeVerifyToValue(
+        s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.writeVerify ??
+          { mode: "immediate" as const, delayMs: null },
+      ),
+  );
+  const setSheetWriteVerify = useAppStore((s) => s.setSheetWriteVerify);
   // 活动协议（2026-08-25）：TCP 连接时工具栏值语义为 Unit ID（label 随之切换）；
   // 未连接/RTU 时恒为从站地址。
   const activeProtocol =
@@ -1376,7 +1477,11 @@ export const RegisterTable = memo(function RegisterTable({
         width: 64,
         align: "center",
         render: (_, row) => (
-          <WriteCell rowId={row.rowId} hasAddress={row.addressValue !== null} />
+          <WriteCell
+            sheetId={sheetId}
+            rowId={row.rowId}
+            hasAddress={row.addressValue !== null}
+          />
         ),
       },
       {
@@ -1414,7 +1519,7 @@ export const RegisterTable = memo(function RegisterTable({
         render: () => <DragHandle ariaLabel={t("table.dragHandle")} />,
       },
     ],
-    [t, registerRadix, cellValidationErrors],
+    [t, registerRadix, cellValidationErrors, sheetId],
   );
 
   // 合并拖拽列宽、按持久化列顺序重排，并挂载 onHeaderCell（供 HeaderCell 接收 id/width/onResize）。
@@ -1726,6 +1831,36 @@ export const RegisterTable = memo(function RegisterTable({
                 value={slaveAddress}
                 onChange={(v) => setSheetSlaveAddress(sheetId, v ?? 1)}
                 style={{ width: 64 }}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title={t("table.writeVerifyHint")}>
+            <span className="table-toolbar__verify">
+              <span className="table-toolbar__verify-label">
+                {t("table.writeVerifyLabel")}
+              </span>
+              <Select
+                size="small"
+                aria-label={t("table.writeVerify")}
+                style={{ width: 116 }}
+                value={writeVerifyValue}
+                onChange={(value) => {
+                  const option = WRITE_VERIFY_OPTIONS.find(
+                    (o) => o.value === value,
+                  );
+                  if (option !== undefined) {
+                    setSheetWriteVerify(sheetId, option.settings);
+                  }
+                }}
+                options={WRITE_VERIFY_OPTIONS.map((o) => ({
+                  value: o.value,
+                  label:
+                    o.value === "off" || o.value === "immediate"
+                      ? t(writeVerifyOptionLabel(o.value))
+                      : t(writeVerifyOptionLabel(o.value), {
+                          ms: writeVerifyOptionMs(o.value),
+                        }),
+                }))}
               />
             </span>
           </Tooltip>

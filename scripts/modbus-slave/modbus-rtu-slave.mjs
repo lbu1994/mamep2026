@@ -288,6 +288,24 @@ class ModbusRtuSlave {
         );
         return;
       }
+      if (behavior.kind === "write-ignore") {
+        // 写忽略区：回执成功但**不实际写入**（模拟设备「写不生效」——写入后回读仍为旧值）。
+        this.log.warn(
+          `写 ${addrHex} = 0x${value.toString(16).toUpperCase()}（写忽略区：回执成功但不落盘）`,
+        );
+        this.respond(
+          Uint8Array.from([
+            slave,
+            FUNCTION_WRITE_MULTIPLE,
+            (address >> 8) & 0xff,
+            address & 0xff,
+            0x00,
+            0x01,
+          ]),
+          behavior,
+        );
+        return;
+      }
       this.registers.set(address & 0xffff, value & 0xffff);
       this.log.debug(
         `写 ${addrHex} ← 0x${value.toString(16).toUpperCase().padStart(4, "0")}（寄存器 ${this.registers.size} 个）`,
@@ -567,7 +585,18 @@ async function runSelfTest(masterPort) {
     encodeReadRequest(slaveAddr, 0x0400),
     "01 03 02 12 34",
   );
-  // ⑦ 不支持功能：读/写均异常 0x01
+  // ⑦ 写忽略区：写入回执成功但不落盘（读回仍为旧值 0）
+  await run(
+    "写 0x0900=0x1234（写忽略区）→ 回执成功",
+    encodeWriteRequest(slaveAddr, 0x0900, 0x1234),
+    "01 10 09 00 00 01",
+  );
+  await run(
+    "读 0x0900（写忽略区）→ 仍为旧值 0（写入未落盘）",
+    encodeReadRequest(slaveAddr, 0x0900),
+    "01 03 02 00 00",
+  );
+  // ⑧ 不支持功能：读/写均异常 0x01
   await run(
     "读 0x0500（不支持功能区）→ 异常 0x01",
     encodeReadRequest(slaveAddr, 0x0500),
@@ -578,7 +607,7 @@ async function runSelfTest(masterPort) {
     encodeWriteRequest(slaveAddr, 0x0500, 1),
     "01 90 01",
   );
-  // ⑧ 未知功能码 0x06 → 异常 0x01
+  // ⑨ 未知功能码 0x06 → 异常 0x01
   await run(
     "未知功能码 0x06 → 异常 0x01",
     appendCrc(Uint8Array.from([slaveAddr, 0x06, 0x00, 0x00, 0x00, 0x01])),
@@ -637,6 +666,7 @@ function printHelp() {
   0x0200–0x020f  只写区（读回异常 0x02）    0x0300–0x030f  不存在（读/写异常 0x02）
   0x0400–0x040f  非法值（写须 ≤ 0x7FFF，超限异常 0x03）
   0x0500–0x050f  不支持功能（读/写异常 0x01）  0x0600–0x060f  无响应（不回帧）
+  0x0900–0x090f  写忽略区（读/写均回执成功，但写入不落盘——回读仍为旧值）
   规则外地址回退为正常行为。
 
 扩展行为（配置文件规则可选，真实从站验证用，与 dev Mock 无关）:

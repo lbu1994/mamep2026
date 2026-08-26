@@ -292,6 +292,36 @@ describe("workspace schema round-trip", () => {
     expect(parsed.value.sheets[0]?.registerRadix).toBe("hex");
   });
 
+  it("defaults sheet writeVerify to immediate for legacy data without the field", () => {
+    const legacy = JSON.parse(serializeWorkspace(createEmptyWorkspace()));
+    // 模拟老版本数据：sheet 无 writeVerify 字段。
+    for (const sheet of legacy.sheets) {
+      delete sheet.writeVerify;
+    }
+    const parsed = parseWorkspace(legacy);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.writeVerify).toEqual({
+      mode: "immediate",
+      delayMs: null,
+    });
+  });
+
+  it("preserves per-sheet writeVerify across a round-trip", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      const sheet = w.sheets[0];
+      if (sheet === undefined) return;
+      sheet.writeVerify = { mode: "delayed", delayMs: 200 };
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.writeVerify).toEqual({
+      mode: "delayed",
+      delayMs: 200,
+    });
+  });
+
   it("defaults sheet columnWidths to {} for legacy data without the field", () => {
     const legacy = JSON.parse(serializeWorkspace(createEmptyWorkspace()));
     // 模拟老版本数据：sheet 无 columnWidths 字段。

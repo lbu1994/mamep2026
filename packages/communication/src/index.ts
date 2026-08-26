@@ -9,3 +9,4 @@ export * from "./session";
 export * from "./tcp-frame-parser";
 export * from "./trace-coordinator";
 export * from "./transport-port";
+export * from "./write-verify-coordinator";

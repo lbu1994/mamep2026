@@ -6,13 +6,17 @@
 import { describe, expect, it } from "vitest";
 import {
   commLogEventFromPayload,
+  readVerifySettingsFromPayload,
   registerRowFromPayload,
   rtuConnectionProfileFromPayload,
+  sessionWriteRowPayloadSchema,
   tcpConnectionProfileFromPayload,
   toCommLogEventPayload,
+  toReadVerifySettingsPayload,
   toRegisterRowPayload,
   toRtuConnectionProfilePayload,
   toTcpConnectionProfilePayload,
+  toWriteOutcomePayload,
 } from "./session-payloads";
 import {
   createDefaultRtuProfile,
@@ -21,7 +25,10 @@ import {
   RegisterAddress,
   type RegisterRow,
 } from "@mamep2026/domain";
-import type { CommunicationLogEvent } from "@mamep2026/communication";
+import type {
+  CommunicationLogEvent,
+  WriteOutcome,
+} from "@mamep2026/communication";
 
 function makeRow(address: number, cellText = ""): RegisterRow {
   const row = createEmptyRow();
@@ -120,5 +127,57 @@ describe("CommunicationLogEvent payload 往返", () => {
     expect(Array.from(restored.bytes)).toEqual(Array.from(event.bytes));
     expect(restored.status).toBe("success");
     expect(restored.source).toBe("manual-read");
+  });
+});
+
+describe("WriteOutcome payload（写后回读，2026-08-26）", () => {
+  it("5 种 kind 往返：no-verify / matched / mismatched / failed / cancelled", () => {
+    const outcomes: WriteOutcome[] = [
+      { kind: "write-succeeded-no-verify" },
+      { kind: "write-succeeded-verify-matched", readValue: 0x1234 },
+      {
+        kind: "write-succeeded-verify-mismatched",
+        expectedValue: 0x1234,
+        readValue: 0x5678,
+      },
+      {
+        kind: "write-succeeded-verify-failed",
+        errorCode: "MODBUS_EXCEPTION_02",
+        userMessageKey: "errors.modbusException",
+      },
+      { kind: "cancelled-before-verify" },
+    ];
+    for (const outcome of outcomes) {
+      // 投影后经 JSON 往返模拟跨边界（Zod 判别联合在 host-message 校验）。
+      const payload = toWriteOutcomePayload(outcome);
+      const restored = JSON.parse(JSON.stringify(payload)) as WriteOutcome;
+      expect(restored).toEqual(outcome);
+    }
+  });
+
+  it("readVerifySettings 往返保留 mode/delayMs", () => {
+    const settings = { mode: "delayed" as const, delayMs: 200 };
+    const restored = readVerifySettingsFromPayload(
+      toReadVerifySettingsPayload(settings),
+    );
+    expect(restored).toEqual(settings);
+  });
+
+  it("session-write-row payload 接受可选 writeVerify", () => {
+    const rowPayload = toRegisterRowPayload(makeRow(0x1000, "04D2"));
+    const parsed = sessionWriteRowPayloadSchema.safeParse({
+      row: rowPayload,
+      writeVerify: { mode: "immediate", delayMs: null },
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.writeVerify).toEqual({
+        mode: "immediate",
+        delayMs: null,
+      });
+    }
+    // 缺省 writeVerify 合法（保持既有行为）。
+    const without = sessionWriteRowPayloadSchema.safeParse({ row: rowPayload });
+    expect(without.success).toBe(true);
   });
 });

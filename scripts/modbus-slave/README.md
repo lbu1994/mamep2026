@@ -9,7 +9,7 @@
   unitId 取自 `config/connections.json` 的 `tcp-local-slave`），让桌面端走真实 TCP 闭环。
 
 两者行为与仓库 dev Mock 模拟设备（`packages/platform-web/src/mock-transport.ts` +
-`mock-scenarios.ts`）**完全一致**（7 个默认地址区间），并额外支持扩展行为（分片/延迟，
+`mock-scenarios.ts`）**完全一致**（8 个默认地址区间），并额外支持扩展行为（分片/延迟，
 见下），供真实端口 e2e 验证半包/粘包与迟到响应路径。
 
 ## 共享核心
@@ -90,6 +90,9 @@ TCP 从站（`modbus-tcp-slave.config.json`）字段：
 - `"normal"` — 正常：返回成功响应
 - `{ "exception": <code> }` — 返回指定 Modbus 异常码（0x01 非法功能 / 0x02 非法数据地址 / 0x03 非法数据值）
 - `{ "writeValueGate": <max> }` — 写专用：值 ≤ max 成功，超出回异常 0x03；读按正常处理
+- `"write-ignore"`（或 `{ "writeIgnore": true }`）— **写专用**：写回执成功但**不实际写入**
+  （模拟设备「写不生效」——写入后回读仍为旧值）；读按正常处理。用于写后回读（Verify）校验：
+  写 0x0100 返回成功帧，再读仍为旧值
 - `"no-response"` — 不回任何帧（触发请求超时/重试路径）
 - `{ "delayedResponse": <ms> }` — **扩展**：该区间响应延迟 ms 后再发（如 2500ms > 应用
   1000ms 超时 × 重试（retryCount=1）总窗口 2000ms → 主站超时/重试后迟到帧被丢弃，验证迟到
@@ -110,6 +113,7 @@ TCP 从站（`modbus-tcp-slave.config.json`）字段：
 | `0x0600–0x060f` | 无响应 | 无响应 | 设备无响应（超时/重试） |
 | `0x0700–0x070f` | 延迟 2500ms | 延迟 2500ms | 扩展：延迟/迟到响应（须 > 重试总窗口） |
 | `0x0800–0x080f` | 拆段 2B/5ms | 拆段 2B/5ms | 扩展：半包/粘包 |
+| `0x0900–0x090f` | 成功 | 回执成功但不落盘 | 写忽略区（写入后回读仍为旧值，写后回读 Verify 校验） |
 
 规则按数组顺序匹配，第一条命中生效；规则外地址回退为正常行为。
 

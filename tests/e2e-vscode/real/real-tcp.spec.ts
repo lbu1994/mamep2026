@@ -144,7 +144,13 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
 }) => {
   const consoleErrors: string[] = [];
   workbox.on("console", (msg) => {
-    if (msg.type() === "error") consoleErrors.push(`CONSOLE: ${msg.text()}`);
+    if (msg.type() !== "error") return;
+    // VS Code 自身基础设施（扩展市场查询 / 网络资源加载）的报错与 webview 应用无关，
+    // 且为网络环境性 flaky，不纳入「无 console 错误」断言；只统计来自共享 UI webview
+    // （vscode-webview://）的 console 错误（2026-08-26 real e2e 修复）。
+    const sourceUrl = msg.location()?.url ?? "";
+    if (!sourceUrl.startsWith("vscode-webview://")) return;
+    consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
   workbox.on("pageerror", (err) => consoleErrors.push(`PAGEERROR: ${String(err)}`));
 
@@ -347,6 +353,25 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await expect(list).toContainText("01 90 02", { timeout: 5000 });
     await expect(list).toContainText("01 03 00 00 00 01", { timeout: 5000 });
     await expect(list).toContainText("01 03 02 04 D2", { timeout: 5000 });
+  });
+
+  await test.step("写后回读 Verify=ON（默认）：写忽略区 0x0900 → Data 显示回读值 0000", async () => {
+    // 写忽略区（0x0900–0x090f）：写入返回正常成功帧但不落盘——回读仍为旧值 0。
+    // Verify=ON（本表默认）：写入后立即 FC03 回读 → 值不一致 → 失败点（红点），
+    // Data 列被回读值覆盖（§15.1）显示 0000 而非写入的 1234。
+    await setRowAddress(frame, "0900");
+    await writeRow(frame, "1234");
+    await expect(
+      frame.locator(".register-table__status-dot--error").first(),
+    ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+    await expect(frame.getByLabel("Data").first()).toHaveText("0000", {
+      timeout: CONNECTED_TIMEOUT,
+    });
+    await expect(frame.getByLabel("Data").first()).not.toHaveText("1234");
+    await readRow(frame);
+    await expect(frame.getByLabel("Data").first()).toHaveText("0000", {
+      timeout: CONNECTED_TIMEOUT,
+    });
   });
 
   await test.step("断开连接 → Offline，重连 → Online（稳定性）", async () => {

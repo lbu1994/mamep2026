@@ -21,6 +21,8 @@ export class PollingCoordinator {
   private targets: PollingTarget[] = [];
   private readonly inFlight = new Set<string>();
   private readonly skippedTicks = new Map<string, number>();
+  /** 暂缓的轮询 key（写入+回读期间，§18.3）：tick 时与 inFlight 同语义跳过。 */
+  private readonly deferred = new Set<string>();
   private timer: TimeoutHandle | null = null;
   private runningFlag = false;
   private readonly listeners = new Set<
@@ -59,6 +61,16 @@ export class PollingCoordinator {
     this.targets = [...targets];
   }
 
+  /** 暂缓指定 key 的轮询（写入+回读期间，§18.3）；已暂缓为幂等 no-op。 */
+  defer(key: string): void {
+    this.deferred.add(key);
+  }
+
+  /** 恢复指定 key 的轮询；未暂缓为幂等 no-op。 */
+  resume(key: string): void {
+    this.deferred.delete(key);
+  }
+
   start(): void {
     if (this.runningFlag) return;
     this.runningFlag = true;
@@ -81,7 +93,10 @@ export class PollingCoordinator {
   private tick(): void {
     if (!this.runningFlag) return;
     for (const target of this.targets) {
-      if (this.inFlight.has(target.key)) {
+      if (
+        this.inFlight.has(target.key) ||
+        this.deferred.has(target.key)
+      ) {
         this.skippedTicks.set(
           target.key,
           (this.skippedTicks.get(target.key) ?? 0) + 1,

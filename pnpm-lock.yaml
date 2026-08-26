@@ -617,6 +617,9 @@ importers:
         specifier: workspace:*
         version: link:../logging
     devDependencies:
+      '@mamep2026/protocol-modbus':
+        specifier: workspace:*
+        version: link:../protocol-modbus
       '@mamep2026/test-kit':
         specifier: workspace:*
         version: link:../test-kit

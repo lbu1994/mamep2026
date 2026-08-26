@@ -146,6 +146,36 @@ describe("RtuSessionHost 读/写", () => {
     expect(h.device.getRegister(0x1000)).toBe(0x04d2);
   });
 
+  it("writeRow + writeVerify immediate：写后 FC03 回读一致 → verify-matched", async () => {
+    const h = createHarness();
+    await connect(h);
+    const row = makeRow(0x1000, "04D2");
+    const result = await h.host.writeRow(row, {
+      writeVerify: { mode: "immediate", delayMs: null },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        kind: "write-succeeded-verify-matched",
+        readValue: 0x04d2,
+      });
+    }
+    expect(h.device.getRegister(0x1000)).toBe(0x04d2);
+  });
+
+  it("writeRow + writeVerify OFF：不回读 → no-verify", async () => {
+    const h = createHarness();
+    await connect(h);
+    const row = makeRow(0x1000, "04D2");
+    const result = await h.host.writeRow(row, {
+      writeVerify: { mode: "off", delayMs: null },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ kind: "write-succeeded-no-verify" });
+    }
+  });
+
   it("Address Adjust ON：用户地址 1 发送到 0（发送 = 用户 − 1）", async () => {
     const h = createHarness();
     const profile = createDefaultRtuProfile();
@@ -249,6 +279,47 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
       0x2000,
       expect.objectContaining({ ok: true, value: 0xabcd }),
     );
+    h.host.stopPolling();
+  });
+
+  it("写入+回读期间暂缓同一行轮询（§18.3），完成后恢复", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.device.setRegister(0x2000, 0x1234);
+    const row = makeRow(0x2000, "1234");
+    // 写入行 rowId 与轮询 key 一致，才能被 defer 暂缓。
+    (row as unknown as { rowId: string }).rowId = "row-a";
+    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.startPolling();
+    // 先消费一轮正常轮询结果。
+    h.clock.advance(100);
+    await flushMicrotasks();
+    h.events.onPollResult.mockClear();
+
+    // 延迟回读窗口（500ms）内分步推进（链式定时器需逐步触发）：row-a 应被暂缓。
+    const promise = h.host.writeRow(row, {
+      writeVerify: { mode: "delayed", delayMs: 500 },
+    });
+    for (let t = 0; t < 300; t += 50) {
+      h.clock.advance(50);
+      await flushMicrotasks();
+    }
+    expect(h.events.onPollResult).not.toHaveBeenCalled();
+
+    // 继续分步推进直到写入+回读完成，之后轮询恢复。
+    for (let t = 0; t < 900; t += 50) {
+      h.clock.advance(50);
+      await flushMicrotasks();
+    }
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        kind: "write-succeeded-verify-matched",
+        readValue: 0x1234,
+      });
+    }
+    expect(h.events.onPollResult).toHaveBeenCalled();
     h.host.stopPolling();
   });
 

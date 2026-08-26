@@ -32,6 +32,7 @@ import {
   fail,
   ok,
   type AddressAdjustMode,
+  type ReadVerifySettings,
   type RegisterRow,
   type Result,
 } from "@mamep2026/domain";
@@ -80,6 +81,7 @@ export class SessionHostCore {
     this.tableService = new RegisterTableService({
       getSession: () => this.session,
       getAddressAdjustMode: options.getAddressAdjustMode,
+      clock: options.clock,
     });
   }
 
@@ -161,8 +163,20 @@ export class SessionHostCore {
     return this.tableService.readRow(row);
   }
 
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
-    return this.tableService.writeRow(row);
+  /**
+   * 单行写入（2026-08-26 支持写后回读）：
+   * - options.writeVerify 非 off 时经 TableService 组合「写入 → 可选延迟 → FC03 回读」；
+   * - §18.3：写入（及回读）期间暂缓同一行的普通轮询，完成后恢复；
+   *   其他行轮询不受影响；用户已停止轮询时不得自动重新启用（defer/resume 只作用于当前实例）。
+   */
+  writeRow(
+    row: RegisterRow,
+    options: { writeVerify?: ReadVerifySettings } = {},
+  ): Promise<Result<WriteOutcome>> {
+    this.polling?.defer(row.rowId);
+    const promise = this.tableService.writeRow(row, options);
+    void promise.finally(() => this.polling?.resume(row.rowId));
+    return promise;
   }
 
   readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {

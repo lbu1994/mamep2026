@@ -18,6 +18,7 @@ import {
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import { z } from "zod";
+import { migrateData, migrations } from "./migrations";
 
 const dataTypeSchema = z.enum([
   "hex",
@@ -67,8 +68,13 @@ const sheetSchema = z.object({
   /** 各列拖拽后的排列顺序（随表持久化，2026-08-18）；老数据缺省补 null（默认顺序），无需迁移 */
   columnOrder: z.array(z.string()).nullable().default(null),
   /** Slave Address（每表独立，随表持久化，2026-08-19）；老数据缺省补默认 1，无需迁移 */
-  slaveAddress: z.number().int().min(0).max(255).default(1),
-  createdAt: z.number(),
+  slaveAddress: z.number().int().min(0).max(255).default(1),  /** 写后回读配置（每表独立，随工作区持久化，2026-08-26）；老数据由 v1→v2 迁移补齐，缺省再补默认立即回读 */
+  writeVerify: z
+    .object({
+      mode: z.enum(["off", "immediate", "delayed"]),
+      delayMs: z.number().nullable(),
+    })
+    .default({ mode: "immediate", delayMs: null }),  createdAt: z.number(),
   updatedAt: z.number(),
 });
 
@@ -152,10 +158,6 @@ export const workspaceSchema = z.object({
     enabledBehavior: z.literal("manual"),
     maxPendingPollingTasks: z.number().int(),
   }),
-  readVerifySettings: z.object({
-    mode: z.enum(["off", "immediate", "delayed"]),
-    delayMs: z.number().nullable(),
-  }),
   panelLayout: z.object({
     sidebarCollapsed: z.boolean(),
     bottomPanelCollapsed: z.boolean(),
@@ -209,7 +211,17 @@ export function serializeWorkspace(workspace: Workspace): string {
 
 /** 解析并校验持久化数据，重建领域对象（受控工厂恢复值对象）。 */
 export function parseWorkspace(input: unknown): Result<Workspace> {
-  const validated = workspaceSchema.safeParse(input);
+  // 迁移框架（docs/AGENTS.md §19.6）：先按版本链迁移再校验。v1→v2（2026-08-26）：
+  // 写后回读配置从 workspace 全局 readVerifySettings 迁移到各 sheet.writeVerify。
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return fail(schemaInvalidError("workspace data must be an object"));
+  }
+  const migrated = migrateData(
+    input as Record<string, unknown>,
+    migrations,
+  );
+  if (!migrated.ok) return migrated;
+  const validated = workspaceSchema.safeParse(migrated.value);
   if (!validated.success) {
     return fail(schemaInvalidError(validated.error.message));
   }

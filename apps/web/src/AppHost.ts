@@ -4,6 +4,7 @@
  */
 import type {
   PlatformCapabilities,
+  ReadVerifySettings,
   RegisterRow,
   Result,
   RtuConnectionProfile,
@@ -451,8 +452,11 @@ export class BrowserAppHost implements AppHost {
     return this.rtu.readRow(row);
   }
 
-  async writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
-    return this.rtu.writeRow(row);
+  async writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>> {
+    return this.rtu.writeRow(row, options);
   }
 
   readAllRows(rows: BatchReadRow[]): BatchReadHandle {

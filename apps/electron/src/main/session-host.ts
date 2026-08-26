@@ -19,6 +19,7 @@ import type {
 } from "@mamep2026/communication";
 import { NodeTcpPlatformHost } from "@mamep2026/platform-node/tcp";
 import type {
+  ReadVerifySettings,
   RegisterRow,
   Result,
   TcpConnectionProfile,
@@ -70,8 +71,11 @@ export class ElectronSessionHost {
     return this.tcp.readRow(row);
   }
 
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
-    return this.tcp.writeRow(row);
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>> {
+    return this.tcp.writeRow(row, options);
   }
 
   readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {

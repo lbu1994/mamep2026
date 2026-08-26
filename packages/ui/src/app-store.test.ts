@@ -408,6 +408,45 @@ describe("setSheetRegisterRadix", () => {
   });
 });
 
+describe("setSheetWriteVerify（2026-08-26）", () => {
+  it("默认 immediate（ON，写入后立即回读）；setSheetWriteVerify 只改目标表", () => {
+    const first = firstSheetId();
+    expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
+      mode: "immediate",
+      delayMs: null,
+    });
+    useAppStore.getState().addSheet(); // Sheet 2
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (second === undefined) throw new Error("missing second sheet");
+
+    useAppStore.getState().setSheetWriteVerify(first, {
+      mode: "delayed",
+      delayMs: 200,
+    });
+    const after = useAppStore.getState().workspace.sheets;
+    expect(after.find((s) => s.sheetId === first)?.writeVerify).toEqual({
+      mode: "delayed",
+      delayMs: 200,
+    });
+    expect(after.find((s) => s.sheetId === second)?.writeVerify).toEqual({
+      mode: "immediate",
+      delayMs: null,
+    });
+  });
+
+  it("setSheetWriteVerify 到 OFF 持久化到工作区", () => {
+    const first = firstSheetId();
+    useAppStore.getState().setSheetWriteVerify(first, {
+      mode: "off",
+      delayMs: null,
+    });
+    expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
+      mode: "off",
+      delayMs: null,
+    });
+  });
+});
+
 describe("commitRowAddress radix", () => {
   function rowInSheet(sheetId: SheetId) {
     const sheet = useAppStore

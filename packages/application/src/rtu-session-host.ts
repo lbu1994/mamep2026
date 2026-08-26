@@ -20,6 +20,7 @@ import type {
 import { CommunicationSession } from "@mamep2026/communication";
 import type {
   RegisterRow,
+  ReadVerifySettings,
   Result,
   RtuConnectionProfile,
 } from "@mamep2026/domain";
@@ -102,8 +103,11 @@ export class RtuSessionHost {
     return this.core.readRow(row);
   }
 
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
-    return this.core.writeRow(row);
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>> {
+    return this.core.writeRow(row, options);
   }
 
   readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {

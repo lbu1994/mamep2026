@@ -16,6 +16,7 @@ import type {
 } from "@mamep2026/communication";
 import type {
   PlatformCapabilities,
+  ReadVerifySettings,
   RegisterRow,
   Result,
   RtuConnectionProfile,
@@ -29,6 +30,7 @@ import {
   commLogEventFromPayload,
   createBatchId,
   fromResultPayload,
+  toReadVerifySettingsPayload,
   toRegisterRowPayload,
   toRtuConnectionProfilePayload,
   toTcpConnectionProfilePayload,
@@ -440,8 +442,16 @@ export class VscodeAppHost implements AppHost {
     return this.bridge.sessionReadRow(toRegisterRowPayload(row));
   }
 
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
-    return this.bridge.sessionWriteRow(toRegisterRowPayload(row));
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>> {
+    return this.bridge.sessionWriteRow(
+      toRegisterRowPayload(row),
+      options?.writeVerify !== undefined
+        ? toReadVerifySettingsPayload(options.writeVerify)
+        : undefined,
+    );
   }
 
   readAllRows(rows: BatchReadRow[]): BatchReadHandle {

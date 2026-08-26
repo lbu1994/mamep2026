@@ -18,6 +18,7 @@ import type {
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type {
   PlatformCapabilities,
+  ReadVerifySettings,
   RegisterRow,
   Result,
   RtuConnectionProfile,
@@ -31,6 +32,7 @@ import {
   createBatchId,
   electronCapabilities,
   fromResultPayload,
+  toReadVerifySettingsPayload,
   toRegisterRowPayload,
   toTcpConnectionProfilePayload,
   type AppMessagePayload,
@@ -488,11 +490,19 @@ export class ElectronAppHost implements AppHost {
     return this.inner.readRow(row);
   }
 
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>> {
     if (this.activeProtocol === "tcp") {
-      return this.bridge.sessionWriteRow(toRegisterRowPayload(row));
+      return this.bridge.sessionWriteRow(
+        toRegisterRowPayload(row),
+        options?.writeVerify !== undefined
+          ? toReadVerifySettingsPayload(options.writeVerify)
+          : undefined,
+      );
     }
-    return this.inner.writeRow(row);
+    return this.inner.writeRow(row, options);
   }
 
   readAllRows(rows: BatchReadRow[]): BatchReadHandle {

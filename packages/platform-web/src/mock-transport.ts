@@ -131,6 +131,20 @@ export class MockTransport implements TransportPort {
         );
         return;
       }
+      if (behavior.kind === "write-ignore") {
+        // 写忽略区：回执成功但不写入（模拟「写不生效」——回读仍为旧值）。
+        this.respond(
+          Uint8Array.from([
+            slave,
+            0x10,
+            (address >> 8) & 0xff,
+            address & 0xff,
+            0x00,
+            0x01,
+          ]),
+        );
+        return;
+      }
       this.registers.set(address, value);
       this.respond(
         Uint8Array.from([

@@ -444,3 +444,88 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
     expect(screen.queryByLabelText("Unit ID")).toBeNull();
   });
 });
+
+describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({
+      host: null,
+      workspace: createEmptyWorkspace(),
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  it("默认渲染 ON（立即回读）；切换「ON 200 ms」更新本表 writeVerify", async () => {
+    const sid = sheetId();
+    expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
+      mode: "immediate",
+      delayMs: null,
+    });
+    render(<RegisterTable sheetId={sid} />);
+    // aria-label 来自 i18n table.writeVerify。
+    const verifySelect = screen.getByLabelText("Write verification");
+    expect(verifySelect).toBeTruthy();
+    // 打开下拉，选择「ON 200 ms」。
+    fireEvent.mouseDown(verifySelect);
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll(".ant-select-item-option").length,
+      ).toBeGreaterThanOrEqual(5);
+    });
+    const option = Array.from(
+      document.querySelectorAll(".ant-select-item-option"),
+    ).find((o) => o.textContent?.includes("ON 200 ms"));
+    if (option === undefined) throw new Error("missing ON 200 ms option");
+    fireEvent.click(option);
+    await waitFor(() => {
+      expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
+        mode: "delayed",
+        delayMs: 200,
+      });
+    });
+  });
+
+  it("写后回读配置随表隔离：切换 A 表不影响 B 表", async () => {
+    useAppStore.getState().addSheet();
+    const first = useAppStore.getState().workspace.sheets[0]?.sheetId;
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (first === undefined || second === undefined) {
+      throw new Error("missing sheets");
+    }
+    useAppStore.getState().setSheetWriteVerify(first, {
+      mode: "delayed",
+      delayMs: 500,
+    });
+    render(<RegisterTable sheetId={first} />);
+    // 打开下拉，选择「ON 200 ms」只影响当前表。
+    const verifySelect = screen.getByLabelText("Write verification");
+    fireEvent.mouseDown(verifySelect);
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll(".ant-select-item-option").length,
+      ).toBeGreaterThanOrEqual(5);
+    });
+    const option = Array.from(
+      document.querySelectorAll(".ant-select-item-option"),
+    ).find((o) => o.textContent?.includes("ON 200 ms"));
+    if (option === undefined) throw new Error("missing ON 200 ms option");
+    fireEvent.click(option);
+    await waitFor(() => {
+      expect(
+        useAppStore
+          .getState()
+          .workspace.sheets.find((s) => s.sheetId === first)?.writeVerify,
+      ).toEqual({ mode: "delayed", delayMs: 200 });
+    });
+    // 第二张表仍为默认 immediate。
+    expect(
+      useAppStore
+        .getState()
+        .workspace.sheets.find((s) => s.sheetId === second)?.writeVerify,
+    ).toEqual({ mode: "immediate", delayMs: null });
+  });
+});

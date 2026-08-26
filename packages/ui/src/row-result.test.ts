@@ -78,6 +78,96 @@ describe("applyManualResult（手动读/写结果）", () => {
     expect(next.rowSuccess["r1"]).toEqual({ kind: "write" });
   });
 
+  it("写后回读一致(verify-matched)：写成功点并清除失败态（§18.2）", () => {
+    const state: RowStatusState = {
+      ...createEmptyRowStatusState(),
+      rowResults: { r1: { messageKey: "errors.requestTimeout", detail: null } },
+    };
+    const next = applyManualResult(
+      state,
+      "r1",
+      ok({ kind: "write-succeeded-verify-matched" as const, readValue: 0x1234 }),
+      "write",
+      {
+        writeOutcome: {
+          kind: "write-succeeded-verify-matched",
+          readValue: 0x1234,
+        },
+      },
+    );
+    expect(next.rowResults["r1"]).toBeUndefined();
+    expect(next.rowSuccess["r1"]).toEqual({ kind: "write" });
+  });
+
+  it("写后回读不一致(verify-mismatched)：失败态(messageKey=writeVerifyMismatch)并清成功点", () => {
+    const state: RowStatusState = {
+      ...createEmptyRowStatusState(),
+      rowSuccess: { r1: { kind: "write" } },
+    };
+    const next = applyManualResult(
+      state,
+      "r1",
+      ok({
+        kind: "write-succeeded-verify-mismatched" as const,
+        expectedValue: 0x1234,
+        readValue: 0x5678,
+      }),
+      "write",
+      {
+        writeOutcome: {
+          kind: "write-succeeded-verify-mismatched",
+          expectedValue: 0x1234,
+          readValue: 0x5678,
+        },
+      },
+    );
+    expect(next.rowResults["r1"]).toEqual({
+      messageKey: "errors.writeVerifyMismatch",
+      detail: null,
+    });
+    expect(next.rowSuccess["r1"]).toBeUndefined();
+  });
+
+  it("写后回读失败(verify-failed)：失败态携带真实错误 key/detail（写入成功结论不变）", () => {
+    const state: RowStatusState = createEmptyRowStatusState();
+    const next = applyManualResult(
+      state,
+      "r1",
+      ok({
+        kind: "write-succeeded-verify-failed" as const,
+        errorCode: "MODBUS_EXCEPTION_02",
+        userMessageKey: "errors.modbusException",
+      }),
+      "write",
+      {
+        writeOutcome: {
+          kind: "write-succeeded-verify-failed",
+          errorCode: "MODBUS_EXCEPTION_02",
+          userMessageKey: "errors.modbusException",
+        },
+      },
+    );
+    expect(next.rowResults["r1"]).toEqual({
+      messageKey: "errors.modbusException",
+      detail: "MODBUS_EXCEPTION_02",
+    });
+    expect(next.rowSuccess["r1"]).toBeUndefined();
+  });
+
+  it("回读取消(cancelled-before-verify)：保持原状态，不产生成功/失败点（写入已成功仅回读取消）", () => {
+    const state: RowStatusState = createEmptyRowStatusState();
+    const next = applyManualResult(
+      state,
+      "r1",
+      ok({ kind: "cancelled-before-verify" as const }),
+      "write",
+      { writeOutcome: { kind: "cancelled-before-verify" } },
+    );
+    expect(next).toBe(state);
+    expect(next.rowSuccess["r1"]).toBeUndefined();
+    expect(next.rowResults["r1"]).toBeUndefined();
+  });
+
   it("写入失败：写失败态并清除成功点，保留编辑完成态（失败值未同步，红点优先显示）", () => {
     const state: RowStatusState = {
       ...createEmptyRowStatusState(),
@@ -155,9 +245,9 @@ describe("applyManualResult（手动读/写结果）", () => {
 
   it("防御：writeOutcome.kind 未被 WRITE_OUTCOME_STATUS 覆盖（未来扩展遗漏）不产生成功点，保持原状态", () => {
     const state: RowStatusState = createEmptyRowStatusState();
-    // 模拟未来 WriteOutcome 扩展但映射未同步的运行时情形（§18.2 注释列举的候选 kind）。
+    // 模拟未来 WriteOutcome 扩展但映射未同步的运行时情形（§18.2 防御）。
     const unknownOutcome = {
-      kind: "write-succeeded-verify-mismatched",
+      kind: "write-succeeded-future-kind",
     } as unknown as WriteOutcome;
     const next = applyManualResult(state, "r1", ok(unknownOutcome), "write", {
       writeOutcome: unknownOutcome,

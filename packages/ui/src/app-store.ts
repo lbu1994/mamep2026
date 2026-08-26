@@ -5,6 +5,7 @@
 import type {
   DataType,
   PanelLayout,
+  ReadVerifySettings,
   RegisterRadix,
   RegisterRow,
   RowId,
@@ -173,6 +174,11 @@ export interface AppStoreState {
   setSheetRegisterRadix: (sheetId: SheetId, radix: RegisterRadix) => void;
   /** 设置某张表的 Slave Address（每表独立，随表持久化，IndexedDB 自动保存，2026-08-19）。 */
   setSheetSlaveAddress: (sheetId: SheetId, slave: number) => void;
+  /** 设置某张表的写后回读配置（每表独立，随表持久化，2026-08-26）。 */
+  setSheetWriteVerify: (
+    sheetId: SheetId,
+    settings: ReadVerifySettings,
+  ) => void;
   /** 设置某张表的列宽（每表独立，随表持久化，IndexedDB 自动保存）。 */
   setSheetColumnWidths: (
     sheetId: SheetId,
@@ -921,6 +927,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         sheets: state.workspace.sheets.map((sheet) =>
           sheet.sheetId === sheetId
             ? { ...sheet, slaveAddress: slave, updatedAt: Date.now() }
+            : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
+    })),
+
+  setSheetWriteVerify: (sheetId, settings) =>
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId
+            ? { ...sheet, writeVerify: settings, updatedAt: Date.now() }
             : sheet,
         ),
         updatedAt: Date.now(),

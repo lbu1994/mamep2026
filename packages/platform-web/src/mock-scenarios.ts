@@ -23,6 +23,8 @@ export type MockOpBehavior =
   | { kind: "exception"; exceptionCode: number }
   /** 写行为专用：value ≤ maxValue 成功，超出返回异常 0x03；读按正常处理 */
   | { kind: "write-value-gate"; maxValue: number }
+  /** 写行为专用：回执成功但**不实际写入**（模拟「写不生效」——回读仍为旧值）；读按正常处理 */
+  | { kind: "write-ignore" }
   /** 不回任何帧（供测试请求超时/重试路径） */
   | { kind: "no-response" };
 
@@ -113,6 +115,16 @@ export const DEFAULT_MOCK_SCENARIOS: readonly MockScenario[] = [
     write: { kind: "no-response" },
     namePrefix: "NoResponse",
     comment: "设备无响应：读/写均不回帧（触发请求超时/重试路径）",
+    seedRows: 2,
+  },
+  {
+    start: 0x0900,
+    end: 0x090f,
+    read: { kind: "normal" },
+    write: { kind: "write-ignore" },
+    namePrefix: "WriteIgnore",
+    comment:
+      "写忽略区：读/写均回执成功，但写入不落盘（回读仍为旧值）——用于写后回读（Verify）校验",
     seedRows: 2,
   },
 ];

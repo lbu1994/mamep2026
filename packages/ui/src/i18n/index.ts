@@ -164,6 +164,14 @@ export const en = {
       "Slave address used for this table's read/write requests.",
     unitId: "Unit ID",
     unitIdHint: "Modbus TCP Unit ID used for this table's read/write requests.",
+    // 写后回读（2026-08-26）：每表独立配置。
+    writeVerify: "Write verification",
+    writeVerifyLabel: "Verify:",
+    writeVerifyHint:
+      "Read back (FC03) after a write for this table. ON = read back immediately; ON 100/200/500 ms = wait before reading back.",
+    writeVerifyOff: "OFF",
+    writeVerifyOn: "ON",
+    writeVerifyOnDelay: "ON {{ms}} ms",
     noOpenSheets: "No tables are open",
     noOpenSheetsHint: "Select a table from the sidebar to open it.",
     batchSummary:
@@ -258,6 +266,9 @@ export const en = {
     deviceDisconnected: "Serial device disconnected.",
     writeSucceeded: "Write succeeded ({{address}}).",
     writeFailed: "Write failed: {{detail}}",
+    writeVerifyMatched: "Write verified: read-back matches ({{address}}).",
+    writeVerifyMismatch:
+      "Write succeeded but read-back differs ({{address}}): expected {{expected}}, read {{read}}.",
     readAllFailed: "Read All failed: {{detail}}",
     clipboardWriteFailed: "System clipboard write failed: {{detail}}",
     pasteIssues: "{{count}} pasted row(s) contain invalid data.",
@@ -275,6 +286,7 @@ export const en = {
   errors: {
     notConnected: "Not connected to a device.",
     requestTimeout: "No response from the device within the timeout.",
+    writeVerifyMismatch: "Write succeeded but the read-back value differs.",
     modbusException: "The device returned a Modbus exception.",
     cancelled: "Cancelled.",
     registerAddressEmpty: "Register address is empty.",
@@ -473,6 +485,14 @@ export const zh: TranslationResources = {
     slaveAddressHint: "本表读写请求使用的从站地址。",
     unitId: "Unit ID",
     unitIdHint: "本表读写请求使用的 Modbus TCP Unit ID。",
+    // 写后回读（2026-08-26）：每表独立配置。
+    writeVerify: "写后回读",
+    writeVerifyLabel: "回读:",
+    writeVerifyHint:
+      "本表写入后回读（FC03）校验。ON = 写入后立即回读；ON 100/200/500 ms = 等待后再回读。",
+    writeVerifyOff: "关闭",
+    writeVerifyOn: "开启",
+    writeVerifyOnDelay: "开启 {{ms}} ms",
     noOpenSheets: "没有打开的表",
     noOpenSheetsHint: "从侧边栏选择一张表以打开。",
     batchSummary:
@@ -566,6 +586,9 @@ export const zh: TranslationResources = {
     deviceDisconnected: "串口设备已断开。",
     writeSucceeded: "写入成功（{{address}}）。",
     writeFailed: "写入失败：{{detail}}",
+    writeVerifyMatched: "写入校验通过：回读一致（{{address}}）。",
+    writeVerifyMismatch:
+      "写入成功但回读不一致（{{address}}）：期望 {{expected}}，回读 {{read}}。",
     readAllFailed: "全表读取失败：{{detail}}",
     clipboardWriteFailed: "系统剪贴板写入失败：{{detail}}",
     pasteIssues: "{{count}} 行粘贴数据包含无效内容。",
@@ -583,6 +606,7 @@ export const zh: TranslationResources = {
   errors: {
     notConnected: "未连接设备。",
     requestTimeout: "设备在超时时间内未响应。",
+    writeVerifyMismatch: "写入成功但回读值不一致。",
     modbusException: "设备返回 Modbus 异常。",
     cancelled: "已取消。",
     registerAddressEmpty: "寄存器地址为空。",

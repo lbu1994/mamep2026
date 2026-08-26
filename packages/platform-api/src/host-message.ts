@@ -24,8 +24,10 @@ import {
   sessionBatchCancelPayloadSchema,
   sessionBatchReadPayloadSchema,
   sessionTcpConnectPayloadSchema,
+  sessionWriteRowPayloadSchema,
   traceSamplePayloadSchema,
   type BatchReadRowPayload,
+  type ReadVerifySettingsPayload,
   type RegisterRowPayload,
   type SessionTcpConnectPayload,
   type WriteOutcomePayload,
@@ -297,7 +299,8 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   z.object({
     ...requestBase,
     kind: z.literal("session-write-row"),
-    payload: z.object({ row: registerRowPayloadSchema }),
+    // 写后回读（2026-08-26）：payload 可携带每表 writeVerify 配置。
+    payload: sessionWriteRowPayloadSchema,
   }),
   z.object({
     ...requestBase,
@@ -523,9 +526,10 @@ export interface MamepHostApi {
   sessionSetUnitId(unitId: number): Promise<Result<null>>;
   /** 单行读（session-read-row）：经主进程统一调度器 FC03。 */
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number>>;
-  /** 单行写（session-write-row）：经主进程统一调度器 FC0x10。 */
+  /** 单行写（session-write-row）：经主进程统一调度器 FC0x10；writeVerify 为每表写后回读配置（2026-08-26）。 */
   sessionWriteRow(
     row: RegisterRowPayload,
+    writeVerify?: ReadVerifySettingsPayload,
   ): Promise<Result<WriteOutcomePayload>>;
   /** 全表读取（session-batch-read）：单次往返返回汇总 + 每行结果。 */
   sessionBatchRead(
@@ -588,9 +592,10 @@ export interface VscodeHostApi
   sessionSetUnitId(unitId: number): Promise<Result<null>>;
   /** 单行读（session-read-row）：经 Extension Host 统一调度器 FC03。 */
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number>>;
-  /** 单行写（session-write-row）：经 Extension Host 统一调度器 FC0x10。 */
+  /** 单行写（session-write-row）：经 Extension Host 统一调度器 FC0x10；writeVerify 为每表写后回读配置（2026-08-26）。 */
   sessionWriteRow(
     row: RegisterRowPayload,
+    writeVerify?: ReadVerifySettingsPayload,
   ): Promise<Result<WriteOutcomePayload>>;
   /** 全表读取（session-batch-read）：单次往返返回汇总 + 每行结果。 */
   sessionBatchRead(

@@ -130,4 +130,39 @@ describe("PollingCoordinator", () => {
     const addresses = transport.sentFrames.map((f) => f[3]);
     expect(addresses).toEqual([0x01]);
   });
+
+  it("defer 暂缓指定 key 的轮询、resume 恢复（§18.3 写入+回读期间）", async () => {
+    const { clock, transport, session } = setup(50);
+    await connect(session);
+    const coordinator = new PollingCoordinator(session, clock, {
+      getIntervalMs: () => 50,
+    });
+    coordinator.setTargets([{ key: "a", address: 0x0001 }]);
+    const results: number[] = [];
+    coordinator.onResult((_key, _address, result) => {
+      if (result.ok) results.push(result.value);
+    });
+
+    coordinator.start();
+    // 第一轮正常轮询。
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(readResponse(1, 1));
+    await advanceUntil(clock, () => results.length === 1);
+
+    // 暂缓 a：推进多个周期，不得发出 a 的请求（幂等）。
+    coordinator.defer("a");
+    coordinator.defer("a");
+    const countAtDefer = transport.sentFrames.length;
+    clock.advance(300);
+    await Promise.resolve();
+    expect(transport.sentFrames.length).toBe(countAtDefer);
+
+    // 恢复 a：下一周期恢复轮询。
+    coordinator.resume("a");
+    await advanceUntil(clock, () => transport.sentFrames.length === countAtDefer + 1);
+    transport.simulateData(readResponse(1, 2));
+    await advanceUntil(clock, () => results.length === 2);
+    coordinator.stop();
+    expect(results).toEqual([1, 2]);
+  });
 });

@@ -8,13 +8,16 @@
 import {
   createEmptyRow,
   createMamepError,
+  type ReadVerifySettings,
   type RegisterRow,
   type Result,
 } from "@mamep2026/domain";
 import { fail } from "@mamep2026/domain";
-import type {
-  CommunicationSession,
-  WriteOutcome,
+import {
+  WriteVerifyCoordinator,
+  type Clock,
+  type CommunicationSession,
+  type WriteOutcome,
 } from "@mamep2026/communication";
 import { parseCellText } from "@mamep2026/data-conversion";
 import { computeSentAddress } from "./address";
@@ -23,6 +26,8 @@ import { applyReadValueToRow } from "./row-operations";
 export interface TableServiceDeps {
   getSession: () => CommunicationSession | null;
   getAddressAdjustMode: () => "off" | "on";
+  /** 时钟（写后回读延迟用，2026-08-26）：由调用方注入（测试用 Virtual Clock）。 */
+  clock: Clock;
 }
 
 function notConnectedError() {
@@ -69,8 +74,15 @@ export class RegisterTableService {
     return applyReadValueToRow(row, raw);
   }
 
-  /** 单行写入：校验连接/地址/输入值，转 16 位原始值后发送 FC0x10。 */
-  async writeRow(row: RegisterRow): Promise<Result<WriteOutcome>> {
+  /**
+   * 单行写入：校验连接/地址/输入值，转 16 位原始值后发送 FC0x10。
+   * options.writeVerify（2026-08-26）：非 off 时经 WriteVerifyCoordinator 组合
+   * 「写入 → 可选延迟 → FC03 回读 → 比较」，返回扩展的 WriteOutcome（§18.2）。
+   */
+  async writeRow(
+    row: RegisterRow,
+    options: { writeVerify?: ReadVerifySettings } = {},
+  ): Promise<Result<WriteOutcome>> {
     const session = this.deps.getSession();
     if (session === null) return fail(notConnectedError());
     const address = row.addressValue?.value;
@@ -79,10 +91,24 @@ export class RegisterTableService {
     if (!sent.ok) return sent;
     const parsed = parseCellText(row.cellText, row.dataType);
     if (!parsed.ok) return parsed;
-    return session.writeRegister(sent.value, parsed.value, {
-      source: "manual-write",
-      userAddress: address,
-    });
+    const writeVerify = options.writeVerify;
+    if (writeVerify === undefined || writeVerify.mode === "off") {
+      // 未启用回读：保持既有单次写入路径。
+      return session.writeRegister(sent.value, parsed.value, {
+        source: "manual-write",
+        userAddress: address,
+      });
+    }
+    const coordinator = new WriteVerifyCoordinator(
+      session,
+      this.deps.clock,
+    );
+    return coordinator.writeWithVerify(
+      sent.value,
+      parsed.value,
+      writeVerify,
+      { userAddress: address },
+    );
   }
 
   /** 新建空行（供 UI 便捷调用）。 */

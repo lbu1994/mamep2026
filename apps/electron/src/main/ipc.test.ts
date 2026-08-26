@@ -373,6 +373,46 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     if (result.type === "response") expect(result.payload).toBe(0x1234);
   });
 
+  it("session-write-row 携带 writeVerify 调用会话 writeRow 并投影 WriteOutcome（2026-08-26）", async () => {
+    const session = makeSession({
+      writeRow: vi.fn(async () =>
+        ok({ kind: "write-succeeded-verify-matched" as const, readValue: 0x04d2 }),
+      ),
+    });
+    const result = await handleRequest(
+      request("session-write-row", {
+        row: {
+          rowId: "row-1",
+          order: 1,
+          name: "",
+          comment: "",
+          addressDraft: "",
+          addressValue: { value: 0x1000 },
+          dataType: "hex",
+          pollingEnabled: false,
+          traceEnabled: false,
+          cellText: "04D2",
+          lastKnownRawValue: null,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+        writeVerify: { mode: "immediate", delayMs: null },
+      }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.writeRow).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: "row-1", cellText: "04D2" }),
+      { writeVerify: { mode: "immediate", delayMs: null } },
+    );
+    if (result.type === "response") {
+      expect(result.payload).toEqual({
+        kind: "write-succeeded-verify-matched",
+        readValue: 0x04d2,
+      });
+    }
+  });
+
   it("session-get-state 返回主进程会话连接状态", async () => {
     const session = makeSession({
       getConnectionState: vi.fn(() => "connected" as ConnectionState),

@@ -373,6 +373,26 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     if (write.ok) expect(write.value).toEqual({ kind: "write-succeeded-no-verify" });
   });
 
+  it("writeRow 携带 writeVerify 经 sessionWriteRow 转发（2026-08-26）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const row = createEmptyRow();
+    const address = RegisterAddress.create(0x1000);
+    if (address.ok) row.addressValue = address.value;
+    row.cellText = "1234";
+    const write = await host.writeRow(row, {
+      writeVerify: { mode: "delayed", delayMs: 100 },
+    });
+    expect(write.ok).toBe(true);
+    expect(bridge.sessionWriteRow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rowId: row.rowId,
+        addressValue: { value: 0x1000 },
+      }),
+      { mode: "delayed", delayMs: 100 },
+    );
+  });
+
   it("connection-state 事件更新缓存并通知订阅者", () => {
     const { bridge, emit } = createFakeBridge();
     const host = makeHost(bridge);

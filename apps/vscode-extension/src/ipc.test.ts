@@ -377,6 +377,37 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     }
   });
 
+  it("session-write-row 携带 writeVerify 转发给会话 writeRow（2026-08-26）", async () => {
+    const session = makeSession({
+      writeRow: vi.fn(async () =>
+        ok({
+          kind: "write-succeeded-verify-mismatched" as const,
+          expectedValue: 0x1234,
+          readValue: 0x5678,
+        }),
+      ),
+    });
+    const result = await handleVscodeInvoke(
+      request("session-write-row", {
+        row,
+        writeVerify: { mode: "delayed", delayMs: 200 },
+      }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.writeRow).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: "row-1" }),
+      { writeVerify: { mode: "delayed", delayMs: 200 } },
+    );
+    if (result.type === "response") {
+      expect(result.payload).toEqual({
+        kind: "write-succeeded-verify-mismatched",
+        expectedValue: 0x1234,
+        readValue: 0x5678,
+      });
+    }
+  });
+
   it("session-batch-read 携带 batchId 调用 readAllRows 并返回汇总（行结果走 poll-result 事件）", async () => {
     const session = makeSession();
     const result = await handleVscodeInvoke(

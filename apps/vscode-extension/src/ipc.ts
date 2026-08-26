@@ -15,12 +15,14 @@ import type {
 } from "@mamep2026/communication";
 import type {
   RegisterRow,
+  ReadVerifySettings,
   RtuConnectionProfile,
   TcpConnectionProfile,
 } from "@mamep2026/domain";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   hostRequestSchema,
+  readVerifySettingsFromPayload,
   registerRowFromPayload,
   rtuConnectionProfileFromPayload,
   tcpConnectionProfileFromPayload,
@@ -70,7 +72,10 @@ export interface VscodeSessionLike {
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）。 */
   setUnitId(unitId: number): void;
   readRow(row: RegisterRow): Promise<Result<number>>;
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>>;
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>>;
   readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle;
   /** 按 batchId 取消活动批任务（ADR-025）：未知 batchId 为安全 no-op。 */
   cancelBatch(batchId: string): void;
@@ -272,9 +277,14 @@ export async function handleVscodeRequest(
       );
     }
     case "session-write-row": {
-      const { row } = message.payload;
+      const { row, writeVerify } = message.payload;
       return sessionResult(message, async () => {
-        const result = await deps.session.writeRow(registerRowFromPayload(row));
+        const result = await deps.session.writeRow(
+          registerRowFromPayload(row),
+          writeVerify !== undefined
+            ? { writeVerify: readVerifySettingsFromPayload(writeVerify) }
+            : undefined,
+        );
         return result.ok ? ok(toWriteOutcomePayload(result.value)) : result;
       });
     }

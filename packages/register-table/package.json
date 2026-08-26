@@ -20,6 +20,7 @@
   "devDependencies": {
     "@mamep2026/typescript-config": "workspace:*",
     "@mamep2026/test-kit": "workspace:*",
+    "@mamep2026/protocol-modbus": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

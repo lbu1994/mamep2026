@@ -536,13 +536,32 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     expect(write.ok).toBe(true);
     expect(bridge.sessionWriteRow).toHaveBeenCalled();
 
-    host.updatePollingTargets([{ key: "row-a", address: 1 }]);
-    host.startPolling();
+    host.updatePollingTargets([{ key: "row-a", address: 1 }]);    host.startPolling();
     host.traceStart("row-a", 1, 100);
     host.traceStop("row-a");
     expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalled();
     expect(bridge.sessionPollingStart).toHaveBeenCalled();
     expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100);
+  });
+
+  it("TCP writeRow 携带 writeVerify 经 sessionWriteRow 转发（2026-08-26）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeTcpHost(bridge);
+    await host.connectTcp(createDefaultTcpProfile());
+
+    const row = makeRow(0x0002);
+    row.cellText = "1234";
+    const write = await host.writeRow(row, {
+      writeVerify: { mode: "immediate", delayMs: null },
+    });
+    expect(write.ok).toBe(true);
+    expect(bridge.sessionWriteRow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rowId: row.rowId,
+        addressValue: { value: 0x0002 },
+      }),
+      { mode: "immediate", delayMs: null },
+    );
   });
 
   it("TCP 活动时 setSlaveAddress 经 session-set-unit-id 转发主进程（2026-08-25）", async () => {

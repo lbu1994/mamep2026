@@ -5,6 +5,7 @@
 export type RequestSource =
   | "manual-read"
   | "manual-write"
+  | "write-verify"
   | "batch-read"
   | "polling"
   | "trace"

@@ -55,6 +55,7 @@ describe("acceptance: browser RTU core loop", () => {
     const service = new RegisterTableService({
       getSession: () => session,
       getAddressAdjustMode: () => profile.addressAdjust,
+      clock,
     });
 
     const connectResult = await session.connect();
@@ -92,6 +93,7 @@ describe("acceptance: browser RTU core loop", () => {
     const service = new RegisterTableService({
       getSession: () => session,
       getAddressAdjustMode: () => profile.addressAdjust,
+      clock,
     });
     await session.connect();
 

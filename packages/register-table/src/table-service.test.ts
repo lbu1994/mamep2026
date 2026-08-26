@@ -13,6 +13,7 @@ import {
   ScriptedModbusRtuDevice,
   VirtualClock,
 } from "@mamep2026/test-kit";
+import { appendCrc } from "@mamep2026/protocol-modbus";
 import { RegisterTableService } from "./table-service";
 
 function setup(addressAdjust: "off" | "on" = "off") {
@@ -32,6 +33,7 @@ function setup(addressAdjust: "off" | "on" = "off") {
   const service = new RegisterTableService({
     getSession: () => session,
     getAddressAdjustMode: () => profile.addressAdjust,
+    clock,
   });
   return { clock, transport, device, session, service, logs, profile };
 }
@@ -40,6 +42,18 @@ async function flush(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+}
+
+/** 分步推进虚拟时钟（每步间 flush microtask），让链式定时器（延迟→Rx Delay）逐个触发。 */
+async function advanceVirtual(
+  clock: VirtualClock,
+  totalMs: number,
+  step = 25,
+): Promise<void> {
+  for (let t = 0; t < totalMs; t += step) {
+    clock.advance(step);
+    await flush();
+  }
 }
 
 function makeRow(address: number, dataType: DataType = "unsigned") {
@@ -131,5 +145,119 @@ describe("RegisterTableService", () => {
     const result = await service.readRow(row);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("CONNECTION_NOT_CONNECTED");
+  });
+});
+
+describe("RegisterTableService 写后回读（2026-08-26）", () => {
+  it("writeVerify immediate：写入后 FC03 回读一致 → verify-matched", async () => {
+    const { session, service, clock } = setup();
+    await session.connect();
+    const row = makeRow(0x0002, "hex");
+    row.cellText = "1234";
+    const result = await service.writeRow(row, {
+      writeVerify: { mode: "immediate", delayMs: null },
+    });
+    await flush();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        kind: "write-succeeded-verify-matched",
+        readValue: 0x1234,
+      });
+    }
+    void clock;
+  });
+
+  it("writeVerify OFF：仅写入、不回读 → no-verify", async () => {
+    const { session, service } = setup();
+    await session.connect();
+    const row = makeRow(0x0002, "hex");
+    row.cellText = "1234";
+    const result = await service.writeRow(row, {
+      writeVerify: { mode: "off", delayMs: null },
+    });
+    await flush();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ kind: "write-succeeded-no-verify" });
+    }
+  });
+
+  it("writeVerify delayed 100：延迟后回读一致 → verify-matched", async () => {
+    const { session, service, clock } = setup();
+    await session.connect();
+    const row = makeRow(0x0002, "hex");
+    row.cellText = "1234";
+    const promise = service.writeRow(row, {
+      writeVerify: { mode: "delayed", delayMs: 100 },
+    });
+    await flush();
+    // 延迟未满（<100ms）时回读不应发生。
+    clock.advance(60);
+    await flush();
+    // 分步推进：延迟 100ms 期满 → 回读入队 → Rx Delay 50ms 期满 → 发送读帧。
+    await advanceVirtual(clock, 200);
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        kind: "write-succeeded-verify-matched",
+        readValue: 0x1234,
+      });
+    }
+  });
+
+  it("设备写入未生效（写后回读值不一致）→ verify-mismatched", async () => {
+    const { session, service, transport } = setup();
+    await session.connect();
+    // 自定义设备：FC10 只回 ack 不存储（写入不生效），FC03 返回预置值。
+    const ignoring = new ScriptedModbusRtuDevice();
+    ignoring.handleFrame = (frame: Uint8Array) => {
+      const slave = frame[0] ?? 1;
+      const functionCode = frame[1] ?? 0;
+      const address = ((frame[2] ?? 0) << 8) | (frame[3] ?? 0);
+      if (functionCode === 0x10) {
+        return appendCrc(
+          Uint8Array.from([
+            slave,
+            0x10,
+            (address >> 8) & 0xff,
+            address & 0xff,
+            0x00,
+            0x01,
+          ]),
+        );
+      }
+      if (functionCode === 0x03) {
+        const value = ignoring.getRegister(address) ?? 0;
+        return appendCrc(
+          Uint8Array.from([
+            slave,
+            0x03,
+            0x02,
+            (value >> 8) & 0xff,
+            value & 0xff,
+          ]),
+        );
+      }
+      return appendCrc(Uint8Array.from([slave, functionCode | 0x80, 0x01]));
+    };
+    ignoring.setRegister(0x0002, 0x5678);
+    transport.device = ignoring;
+
+    const row = makeRow(0x0002, "hex");
+    row.cellText = "1234";
+    const result = await service.writeRow(row, {
+      writeVerify: { mode: "immediate", delayMs: null },
+    });
+    await flush();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        kind: "write-succeeded-verify-mismatched",
+        expectedValue: 0x1234,
+        readValue: 0x5678,
+      });
+    }
   });
 });

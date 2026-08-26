@@ -31,6 +31,7 @@ import type {
 } from "./host-message";
 import type {
   BatchReadRowPayload,
+  ReadVerifySettingsPayload,
   RegisterRowPayload,
   SessionTcpConnectPayload,
   WriteOutcomePayload,
@@ -161,8 +162,14 @@ export function createVscodeBridge(
       postRequest<null>("session-set-unit-id", { unitId }),
     sessionReadRow: (row: RegisterRowPayload) =>
       postRequest<number>("session-read-row", { row }),
-    sessionWriteRow: (row: RegisterRowPayload) =>
-      postRequest<WriteOutcomePayload>("session-write-row", { row }),
+    sessionWriteRow: (
+      row: RegisterRowPayload,
+      writeVerify?: ReadVerifySettingsPayload,
+    ) =>
+      postRequest<WriteOutcomePayload>("session-write-row", {
+        row,
+        ...(writeVerify !== undefined ? { writeVerify } : {}),
+      }),
     sessionBatchRead: (batchId: string, rows: BatchReadRowPayload[]) =>
       postRequest<SessionBatchReadResponse>("session-batch-read", {
         batchId,

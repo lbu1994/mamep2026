@@ -13,6 +13,7 @@ import {
   RawRegisterValue,
   RegisterAddress,
   type ConnectionProfileId,
+  type ReadVerifySettings,
   type RegisterRow,
   type RowId,
   type RtuConnectionProfile,
@@ -189,6 +190,37 @@ export function registerRowFromPayload(
   };
 }
 
+// ---- 写后回读配置（每表独立，2026-08-26）----
+
+export const readVerifySettingsPayloadSchema = z.object({
+  mode: z.enum(["off", "immediate", "delayed"]),
+  delayMs: z.number().nullable(),
+});
+export type ReadVerifySettingsPayload = z.infer<
+  typeof readVerifySettingsPayloadSchema
+>;
+
+export function toReadVerifySettingsPayload(
+  settings: ReadVerifySettings,
+): ReadVerifySettingsPayload {
+  return { ...settings };
+}
+
+export function readVerifySettingsFromPayload(
+  payload: ReadVerifySettingsPayload,
+): ReadVerifySettings {
+  return { ...payload };
+}
+
+/** session-write-row 请求载荷：writeVerify 缺省=不回读（保持既有行为）。 */
+export const sessionWriteRowPayloadSchema = z.object({
+  row: registerRowPayloadSchema,
+  writeVerify: readVerifySettingsPayloadSchema.optional(),
+});
+export type SessionWriteRowPayload = z.infer<
+  typeof sessionWriteRowPayloadSchema
+>;
+
 // ---- 批量读取 ----
 
 export const batchReadRowPayloadSchema = z.object({
@@ -255,9 +287,28 @@ export function createBatchId(): string {
 
 // ---- WriteOutcome ----
 
-export const writeOutcomePayloadSchema = z.object({
-  kind: z.literal("write-succeeded-no-verify"),
-});
+/**
+ * 写入结果投影（docs/TECH_DESIGN.md §15.3、docs/AGENTS.md §18.2，2026-08-26）：
+ * 写后回读扩展为 5 种 kind 判别联合，与 communication WriteOutcome 一一对应。
+ */
+export const writeOutcomePayloadSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("write-succeeded-no-verify") }),
+  z.object({
+    kind: z.literal("write-succeeded-verify-matched"),
+    readValue: z.number(),
+  }),
+  z.object({
+    kind: z.literal("write-succeeded-verify-mismatched"),
+    expectedValue: z.number(),
+    readValue: z.number(),
+  }),
+  z.object({
+    kind: z.literal("write-succeeded-verify-failed"),
+    errorCode: z.string(),
+    userMessageKey: z.string(),
+  }),
+  z.object({ kind: z.literal("cancelled-before-verify") }),
+]);
 export type WriteOutcomePayload = z.infer<typeof writeOutcomePayloadSchema>;
 
 export function toWriteOutcomePayload(
@@ -292,6 +343,7 @@ export const commLogEventPayloadSchema = z.object({
   source: z.enum([
     "manual-read",
     "manual-write",
+    "write-verify",
     "batch-read",
     "polling",
     "trace",

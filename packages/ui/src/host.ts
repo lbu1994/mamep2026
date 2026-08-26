@@ -5,6 +5,7 @@
 import type {
   FlowControl,
   PlatformCapabilities,
+  ReadVerifySettings,
   RegisterRow,
   Result,
   RtuConnectionProfile,
@@ -121,7 +122,14 @@ export interface AppHost {
   ): () => void;
 
   readRow(row: RegisterRow): Promise<Result<number>>;
-  writeRow(row: RegisterRow): Promise<Result<WriteOutcome>>;
+  /**
+   * 单行写（FC0x10）。options.writeVerify（2026-08-26）：每表写后回读配置，
+   * 非 off 时写入后按配置（立即/延迟）FC03 回读，返回扩展的 WriteOutcome（§18.2）。
+   */
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>>;
   readAllRows(rows: BatchReadRow[]): BatchReadHandle;
 
   /** WP 轮询：传入当前启用轮询的有效行；连接状态变化时由 UI 调用 start/stop。 */
