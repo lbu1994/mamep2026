@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatRegisterAddress,
+  formatRegisterAddressRange,
   parseRegisterAddressDraft,
 } from "./address-format";
 
@@ -34,7 +35,7 @@ describe("parseRegisterAddressDraft (hex)", () => {
     for (const [input, expected] of cases) {
       const result = parseRegisterAddressDraft(input, "hex");
       expect(result.ok, `input=${input}`).toBe(true);
-      if (result.ok) expect(result.value).toBe(expected);
+      if (result.ok) expect(result.value?.value).toBe(expected);
     }
   });
 
@@ -84,7 +85,7 @@ describe("parseRegisterAddressDraft (dec)", () => {
     for (const [input, expected] of cases) {
       const result = parseRegisterAddressDraft(input, "dec");
       expect(result.ok, `input=${input}`).toBe(true);
-      if (result.ok) expect(result.value).toBe(expected);
+      if (result.ok) expect(result.value?.value).toBe(expected);
     }
   });
 
@@ -111,5 +112,62 @@ describe("parseRegisterAddressDraft (dec)", () => {
       expect(result.ok, `input=${input}`).toBe(false);
       if (!result.ok) expect(result.error.code).toBe("ADDRESS_OUT_OF_RANGE");
     }
+  });
+});
+
+describe("parseRegisterAddressDraft 范围行（ADR-030）", () => {
+  it("parses DEC range start-end → { value, count }", () => {
+    const result = parseRegisterAddressDraft("1000-1001", "dec");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ value: 1000, count: 2 });
+  });
+
+  it("parses HEX range with 4-digit groups", () => {
+    const result = parseRegisterAddressDraft("0400-0401", "hex");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ value: 0x400, count: 2 });
+  });
+
+  it("parses a 3-register range (count = end - start + 1)", () => {
+    const result = parseRegisterAddressDraft("0400-0402", "hex");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ value: 0x400, count: 3 });
+  });
+
+  it("allows a range whose start equals end (count 1)", () => {
+    const result = parseRegisterAddressDraft("1000-1000", "dec");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ value: 1000, count: 1 });
+  });
+
+  it("rejects reversed ranges", () => {
+    const result = parseRegisterAddressDraft("0402-0400", "hex");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("ADDRESS_RANGE_REVERSED");
+  });
+
+  it("rejects more than one hyphen", () => {
+    const result = parseRegisterAddressDraft("1000-1001-1002", "dec");
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error.code).toBe("ADDRESS_INVALID_CHARACTERS");
+  });
+
+  it("rejects a range part that exceeds 4 hex digits", () => {
+    const result = parseRegisterAddressDraft("04000-04001", "hex");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("ADDRESS_TOO_LONG");
+  });
+});
+
+describe("formatRegisterAddressRange（ADR-030）", () => {
+  it("formats hex range as 4-digit groups", () => {
+    expect(formatRegisterAddressRange(0x400, 2, "hex")).toBe("0400-0401");
+  });
+  it("formats dec range", () => {
+    expect(formatRegisterAddressRange(1000, 2, "dec")).toBe("1000-1001");
+  });
+  it("formats count 1 as single address", () => {
+    expect(formatRegisterAddressRange(0x400, 1, "hex")).toBe("0400");
   });
 });

@@ -85,6 +85,7 @@ describe("pasteClipboardRows", () => {
     {
       name: "X",
       addressValue: 0x10,
+      registerCount: 1,
       dataType: "hex",
       cellText: "1234",
       comment: "c1",
@@ -92,6 +93,7 @@ describe("pasteClipboardRows", () => {
     {
       name: "Y",
       addressValue: null,
+      registerCount: 1,
       dataType: "unsigned",
       cellText: "",
       comment: "",
@@ -147,6 +149,7 @@ describe("clipboard CSV encode/decode", () => {
       {
         name: 'A, "quoted"',
         addressValue: 31,
+        registerCount: 1,
         dataType: "hex",
         cellText: "001F",
         comment: "line1\nline2",
@@ -154,6 +157,7 @@ describe("clipboard CSV encode/decode", () => {
       {
         name: "B",
         addressValue: null,
+        registerCount: 1,
         dataType: "binary",
         cellText: "",
         comment: "",
@@ -172,6 +176,7 @@ describe("clipboard CSV encode/decode", () => {
       {
         name: "Speed",
         addressValue: 1,
+        registerCount: 1,
         dataType: "unsigned-0.1",
         cellText: "12.3",
         comment: "rpm",
@@ -179,6 +184,7 @@ describe("clipboard CSV encode/decode", () => {
       {
         name: "B",
         addressValue: null,
+        registerCount: 1,
         dataType: "binary",
         cellText: "0000000000000001",
         comment: "",
@@ -211,5 +217,63 @@ describe("clipboard CSV encode/decode", () => {
     expect(decoded.rows).toHaveLength(2);
     expect(decoded.rows[0]?.name).toBe("A");
     expect(decoded.rows[1]?.name).toBe("B");
+  });
+
+  it("encodes range rows as start-end and decodes registerCount", () => {
+    const payload: RowClipboardData[] = [
+      {
+        name: "Range",
+        addressValue: 1000,
+        registerCount: 2,
+        dataType: "unsigned",
+        cellText: "65535,1",
+        comment: "",
+      },
+    ];
+    const csv = encodeClipboardCsv(payload);
+    expect(csv).toContain("1000-1001");
+    const decoded = decodeClipboardCsv(csv);
+    expect(decoded.issues).toEqual([]);
+    expect(decoded.rows).toEqual(payload);
+  });
+
+  it("decodes single register from CSV as registerCount 1", () => {
+    const csv = "Name,Register,Data,Type,Comment\nSingle,50,00FF,hex,";
+    const decoded = decodeClipboardCsv(csv);
+    expect(decoded.rows[0]?.addressValue).toBe(50);
+    expect(decoded.rows[0]?.registerCount).toBe(1);
+  });
+
+  it("reports INVALID_ADDRESS for reversed or non-numeric ranges", () => {
+    const csv = [
+      "Name,Register,Data,Type,Comment",
+      "Rev,10-5,00FF,hex,",
+      "Garbage,a-b,00FF,hex,",
+      "Ok,5-6,00FF,hex,",
+    ].join("\n");
+    const decoded = decodeClipboardCsv(csv);
+    expect(decoded.rows[0]?.addressValue).toBeNull();
+    expect(decoded.rows[0]?.registerCount).toBe(1);
+    expect(decoded.rows[1]?.addressValue).toBeNull();
+    expect(decoded.rows[2]?.addressValue).toBe(5);
+    expect(decoded.rows[2]?.registerCount).toBe(2);
+    expect(decoded.issues.length).toBe(2);
+  });
+
+  it("toClipboardData carries registerCount and paste restores it", () => {
+    const sheet = sheetWithRows(1);
+    const src = sheet.rows[0];
+    expect(src).toBeDefined();
+    (src as RegisterRow).registerCount = 3;
+    (src as RegisterRow).addressDraft = "1000-1002";
+    const data = toClipboardData(src as RegisterRow);
+    expect(data.registerCount).toBe(3);
+    const { sheet: updated } = pasteClipboardRows(
+      sheet,
+      "missing",
+      [data],
+      "dec",
+    );
+    expect(updated.rows[0]?.registerCount).toBe(3);
   });
 });

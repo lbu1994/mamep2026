@@ -95,7 +95,11 @@ export class BrowserAppHost implements AppHost {
   >();
   private readonly saveListeners = new Set<(status: SaveStatus) => void>();
   private readonly pollResultListeners = new Set<
-    (key: string, address: number, result: Result<number>) => void
+    (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void
   >();
   private readonly traceListeners = new Set<
     (sample: TraceSampleEvent) => void
@@ -448,7 +452,7 @@ export class BrowserAppHost implements AppHost {
     this.rtu.setSlaveAddress(slave);
   }
 
-  async readRow(row: RegisterRow): Promise<Result<number>> {
+  async readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     return this.rtu.readRow(row);
   }
 
@@ -463,7 +467,9 @@ export class BrowserAppHost implements AppHost {
     return this.rtu.readAllRows(rows);
   }
 
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
+  updatePollingTargets(
+    rows: Array<{ key: string; address: number; quantity?: number }>,
+  ): void {
     this.rtu.updatePollingTargets(rows);
   }
 
@@ -476,14 +482,18 @@ export class BrowserAppHost implements AppHost {
   }
 
   subscribePollResult(
-    listener: (key: string, address: number, result: Result<number>) => void,
+    listener: (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void,
   ): () => void {
     this.pollResultListeners.add(listener);
     return () => this.pollResultListeners.delete(listener);
   }
 
-  traceStart(key: string, address: number, speedMs: number): void {
-    this.rtu.traceStart(key, address, speedMs);
+  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+    this.rtu.traceStart(key, address, speedMs, quantity);
   }
 
   traceStop(key: string): void {

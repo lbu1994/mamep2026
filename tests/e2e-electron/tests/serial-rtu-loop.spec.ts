@@ -47,22 +47,42 @@ const FAKE_SERIAL_SOURCE = String.raw`
     return out;
   }
   const registers = new Map();
+  // must-multi 区起始地址（ADR-030）：该地址起单读/单写返回异常 0x02，多读/多写正常。
+  const mustMultiStart = 0x0800;
   function handleFrame(frame) {
     if (frame.length < 8) return null;
     const slave = frame[0];
     const fc = frame[1];
     const address = ((frame[2] << 8) | frame[3]) & 0xffff;
     if (fc === 0x03) {
-      const value = registers.get(address) || 0;
+      const quantity = ((frame[4] << 8) | frame[5]) & 0xffff;
+      if (quantity === 1 && address >= mustMultiStart) {
+        return appendCrc(new Uint8Array([slave, 0x83, 0x02]));
+      }
+      const values = [];
+      for (let i = 0; i < quantity; i++) {
+        values.push(registers.get((address + i) & 0xffff) || 0);
+      }
       return appendCrc(new Uint8Array([
-        slave, 0x03, 0x02, (value >> 8) & 0xff, value & 0xff,
+        slave, 0x03, quantity * 2,
+        ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
       ]));
     }
     if (fc === 0x10) {
-      const value = ((frame[7] << 8) | frame[8]) & 0xffff;
-      registers.set(address, value);
+      const quantity = ((frame[4] << 8) | frame[5]) & 0xffff;
+      if (quantity === 1 && address >= mustMultiStart) {
+        return appendCrc(new Uint8Array([slave, 0x90, 0x02]));
+      }
+      const values = [];
+      for (let i = 0; i < quantity; i++) {
+        values.push(((frame[7 + i * 2] << 8) | frame[8 + i * 2]) & 0xffff);
+      }
+      for (let i = 0; i < quantity; i++) {
+        registers.set((address + i) & 0xffff, values[i]);
+      }
       return appendCrc(new Uint8Array([
-        slave, 0x10, (address >> 8) & 0xff, address & 0xff, 0x00, 0x01,
+        slave, 0x10, (address >> 8) & 0xff, address & 0xff,
+        (quantity >> 8) & 0xff, quantity & 0xff,
       ]));
     }
     return appendCrc(new Uint8Array([slave, fc | 0x80, 0x01]));
@@ -302,6 +322,71 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
       ),
     )
     .toBe(0x12ab);
+});
+
+test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
+  // 预置设备寄存器 0x0001 / 0x0002。
+  await page.evaluate(() => {
+    const fake = (window as unknown as { __mamepFakeSerial: FakeSerialApi })
+      .__mamepFakeSerial;
+    fake.setRegister(0x0001, 0x1111);
+    fake.setRegister(0x0002, 0x2222);
+  });
+
+  // 首行地址改为范围 "0001-0002"（DEC 表），展开箭头出现。
+  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  await addressInput.click();
+  await addressInput.fill("0001-0002");
+  await addressInput.press("Enter");
+  const firstRow = page
+    .locator(
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key]",
+    )
+    .first();
+  await expect(
+    firstRow.locator('button[aria-label="Expand row"]'),
+  ).toBeVisible();
+  await firstRow.locator('button[aria-label="Expand row"]').click();
+
+  // 多寄存器读（FC03 quantity=2）：父行组合值 + 子行各值。
+  await page
+    .getByRole("button", { name: "Read", exact: true })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
+  await expect(page.getByLabel("Data").first()).toHaveText("1111 2222", {
+    timeout: 8000,
+  });
+  const childDatas = await page.$$eval(
+    '.register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=":c"]',
+    (trs) =>
+      trs.map((tr) =>
+        (Array.from(tr.querySelectorAll("td"))[7] as HTMLElement | undefined)
+          ?.textContent?.trim(),
+      ),
+  );
+  expect(childDatas).toEqual(["1111", "2222"]);
+
+  // 多寄存器写（FC0x10 quantity=2 + 写后回读）：写入 fake 设备寄存器。
+  const dataInput = page.getByLabel("Data").first();
+  await dataInput.click();
+  await dataInput.fill("AAAA BBBB");
+  await dataInput.press("Enter");
+  await page
+    .getByRole("button", { name: "Write", exact: true })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const fake = (window as unknown as { __mamepFakeSerial: FakeSerialApi })
+          .__mamepFakeSerial;
+        return [
+          fake.getRegister(0x0001),
+          fake.getRegister(0x0002),
+        ];
+      }),
+    )
+    .toEqual([0xaaaa, 0xbbbb]);
 });
 
 test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {

@@ -99,7 +99,7 @@ export class RtuSessionHost {
     this.core.setSlaveAddress(slave);
   }
 
-  readRow(row: RegisterRow): Promise<Result<number>> {
+  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     return this.core.readRow(row);
   }
 
@@ -131,8 +131,8 @@ export class RtuSessionHost {
     this.core.stopPolling();
   }
 
-  traceStart(key: string, address: number, speedMs: number): void {
-    this.core.traceStart(key, address, speedMs);
+  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+    this.core.traceStart(key, address, speedMs, quantity);
   }
 
   traceStop(key: string): void {

@@ -86,12 +86,15 @@ describe("applyManualResult（手动读/写结果）", () => {
     const next = applyManualResult(
       state,
       "r1",
-      ok({ kind: "write-succeeded-verify-matched" as const, readValue: 0x1234 }),
+      ok({
+        kind: "write-succeeded-verify-matched" as const,
+        readValues: [0x1234],
+      }),
       "write",
       {
         writeOutcome: {
           kind: "write-succeeded-verify-matched",
-          readValue: 0x1234,
+          readValues: [0x1234],
         },
       },
     );
@@ -109,15 +112,15 @@ describe("applyManualResult（手动读/写结果）", () => {
       "r1",
       ok({
         kind: "write-succeeded-verify-mismatched" as const,
-        expectedValue: 0x1234,
-        readValue: 0x5678,
+        expectedValues: [0x1234],
+        readValues: [0x5678],
       }),
       "write",
       {
         writeOutcome: {
           kind: "write-succeeded-verify-mismatched",
-          expectedValue: 0x1234,
-          readValue: 0x5678,
+          expectedValues: [0x1234],
+          readValues: [0x5678],
         },
       },
     );

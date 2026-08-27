@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   decodeRtuResponse,
   encodeReadHoldingRegistersRequest,
+  encodeWriteMultipleRegistersRequest,
   encodeWriteSingleRegisterRequest,
   expectedResponseLength,
+  MAX_READ_QUANTITY,
+  MAX_WRITE_QUANTITY,
   type ExpectedResponse,
 } from "./rtu-frame";
 
@@ -217,5 +220,83 @@ describe("expectedResponseLength", () => {
       normal: 8,
       exception: 5,
     });
+  });
+});
+
+describe("encodeWriteMultipleRegistersRequest (ADR-030)", () => {
+  it("encodes FC0x10 multi-register write with quantity and byte count", () => {
+    const bytes = encodeWriteMultipleRegistersRequest({
+      slaveAddress: 1,
+      startAddress: 0x0001,
+      values: [0x1234, 0xabcd],
+    });
+    expect(Array.from(bytes.slice(0, 9))).toEqual([
+      0x01, 0x10, 0x00, 0x01, 0x00, 0x02, 0x04, 0x12, 0x34,
+    ]);
+    expect(bytes[9]).toBe(0xab);
+    expect(bytes[10]).toBe(0xcd);
+  });
+
+  it("encodes a 3-register write (binary 48-bit use case)", () => {
+    const bytes = encodeWriteMultipleRegistersRequest({
+      slaveAddress: 0x11,
+      startAddress: 0x0000,
+      values: [0x0001, 0x0002, 0x0003],
+    });
+    expect(Array.from(bytes.slice(0, 9))).toEqual([
+      0x11, 0x10, 0x00, 0x00, 0x00, 0x03, 0x06, 0x00, 0x01,
+    ]);
+    expect(bytes[12]).toBe(0x03);
+  });
+});
+
+describe("decodeRtuResponse write-multiple (ADR-030)", () => {
+  function withCrc(payload: number[]): Uint8Array {
+    const body = Uint8Array.from(payload);
+    const frame = new Uint8Array(body.length + 2);
+    frame.set(body, 0);
+    let crc = 0xffff;
+    for (const byte of body) {
+      crc ^= byte;
+      for (let i = 0; i < 8; i++) {
+        crc = crc & 1 ? (crc >> 1) ^ 0xa001 : crc >> 1;
+      }
+    }
+    frame[body.length] = crc & 0xff;
+    frame[body.length + 1] = (crc >> 8) & 0xff;
+    return frame;
+  }
+
+  it("decodes a write-multiple echo with quantity 2", () => {
+    const expectMulti: ExpectedResponse = {
+      kind: "write-multiple",
+      slaveAddress: 1,
+      address: 0x0001,
+      quantity: 2,
+    };
+    const frame = withCrc([0x01, 0x10, 0x00, 0x01, 0x00, 0x02]);
+    const result = decodeRtuResponse(frame, expectMulti);
+    expectOk(result);
+    expect(result.value.kind).toBe("write-multiple");
+  });
+
+  it("rejects write-multiple quantity mismatch", () => {
+    const expectMulti: ExpectedResponse = {
+      kind: "write-multiple",
+      slaveAddress: 1,
+      address: 0x0001,
+      quantity: 2,
+    };
+    const frame = withCrc([0x01, 0x10, 0x00, 0x01, 0x00, 0x03]);
+    const result = decodeRtuResponse(frame, expectMulti);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("RTU_QUANTITY_MISMATCH");
+  });
+});
+
+describe("quantity limits (ADR-030)", () => {
+  it("exposes RTU read/write quantity ceilings", () => {
+    expect(MAX_READ_QUANTITY).toBe(125);
+    expect(MAX_WRITE_QUANTITY).toBe(123);
   });
 });

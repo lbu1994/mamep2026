@@ -11,6 +11,8 @@ export interface BatchReadRow {
   key: string;
   /** null 表示地址为空或非法，将被跳过。 */
   address: number | null;
+  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
+  quantity?: number;
 }
 
 export interface BatchReadSummary {
@@ -33,7 +35,7 @@ export interface BatchReadHandle {
 
 export type BatchRowResultListener = (
   key: string,
-  result: Result<number>,
+  result: Result<number | number[]>,
 ) => void;
 
 export class BatchReadCoordinator {
@@ -90,21 +92,30 @@ export class BatchReadCoordinator {
       }
 
       for (const row of eligible) {
-        void this.session
-          .readRegister(row.address ?? 0, {
-            source: "batch-read",
-            priority: "batch-read",
-            group: resolvedBatchId,
-            cancelToken,
-          })
-          .then((result) => {
-            onRowResult?.(row.key, result);
-            if (result.ok) successCount += 1;
-            else if (result.error.code === "CANCELLED") cancelledCount += 1;
-            else failureCount += 1;
-            completed += 1;
-            finish();
-          });
+        const quantity = row.quantity ?? 1;
+        // 多寄存器行（ADR-030）：一次 FC03 读全部连续寄存器，结果携带 values[]。
+        const request =
+          quantity > 1
+            ? this.session.readRegisters(row.address ?? 0, quantity, {
+                source: "batch-read",
+                priority: "batch-read",
+                group: resolvedBatchId,
+                cancelToken,
+              })
+            : this.session.readRegister(row.address ?? 0, {
+                source: "batch-read",
+                priority: "batch-read",
+                group: resolvedBatchId,
+                cancelToken,
+              });
+        void request.then((result) => {
+          onRowResult?.(row.key, result);
+          if (result.ok) successCount += 1;
+          else if (result.error.code === "CANCELLED") cancelledCount += 1;
+          else failureCount += 1;
+          completed += 1;
+          finish();
+        });
       }
     });
 

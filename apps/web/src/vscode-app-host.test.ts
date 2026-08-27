@@ -408,7 +408,12 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const host = makeHost(bridge);
     const results: Array<[string, number, number]> = [];
     host.subscribePollResult((key, _address, result) => {
-      if (result.ok) results.push([key, _address, result.value]);
+      if (result.ok)
+        results.push([
+          key,
+          _address,
+          Array.isArray(result.value) ? (result.value[0] ?? 0) : result.value,
+        ]);
     });
     emit({ kind: "poll-result", payload: { key: "row-a", address: 1, result: { ok: true, value: 0xabcd } } });
     expect(results).toEqual([["row-a", 1, 0xabcd]]);
@@ -482,7 +487,7 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
     host.traceStart("row-a", 1, 100);
-    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100);
+    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100, 1);
     host.traceStop("row-a");
     expect(bridge.sessionTraceStop).toHaveBeenCalledWith("row-a");
     host.updatePollingTargets([{ key: "row-a", address: 1 }]);

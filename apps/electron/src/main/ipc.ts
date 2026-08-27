@@ -36,7 +36,7 @@ export interface ElectronSessionLike {
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）。 */
   setUnitId(unitId: number): void;
   getConnectionState(): ConnectionState;
-  readRow(row: RegisterRow): Promise<Result<number>>;
+  readRow(row: RegisterRow): Promise<Result<number | number[]>>;
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },

@@ -7,11 +7,13 @@
  */
 import type { RegisterRow, RegisterSheet } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
-import { applyReadValueToRow } from "./row-operations";
+import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 
 export interface PollingTarget {
   key: string;
   address: number;
+  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
+  quantity?: number;
 }
 
 /** 从工作区表格构建轮询目标（Address Adjust 已应用到发送地址）。 */
@@ -29,6 +31,8 @@ export function buildPollingTargets(
       targets.push({
         key: row.rowId,
         address: addressAdjust === "on" ? address - 1 : address,
+        // 多寄存器行（ADR-030）：一次 FC03 轮询全部连续寄存器。
+        quantity: row.registerCount,
       });
     }
   }
@@ -52,7 +56,7 @@ export function pollResultAddressMatches(
 /**
  * 应用轮询/全表读取结果：定位行 → generation 校验 → 按 Type 格式化并更新原始值。
  * 行不存在或地址已失效时返回 null（调用方忽略）。
- * 性能优化：设备值未变化（lastKnownRawValue 相同）且显示文本与当前 Type 格式化一致时，
+ * 性能优化：设备值未变化（registerValues 相同）且显示文本与当前 Type 格式化一致时，
  * 返回原行引用——调用方（store.updateRow）据此短路，不重建 rows/sheet/workspace，
  * 避免高频轮询触发无谓的重渲染、自动保存与轮询目标重建。
  */
@@ -60,16 +64,21 @@ export function applyPollResult(
   sheets: readonly RegisterSheet[],
   key: string,
   address: number,
-  raw: number,
+  raw: number | number[],
   addressAdjust: "off" | "on",
 ): RegisterRow | null {
   for (const sheet of sheets) {
     const row = sheet.rows.find((r) => r.rowId === key);
     if (row === undefined) continue;
     if (!pollResultAddressMatches(row, address, addressAdjust)) return null;
+    // 多寄存器行（ADR-030）：一次请求读回 values[]，按组合类型格式化。
+    if (Array.isArray(raw)) {
+      const applied = applyReadValuesToRow(row, raw);
+      return applied.ok ? applied.value : null;
+    }
     if (
-      row.lastKnownRawValue !== null &&
-      row.lastKnownRawValue.value === raw &&
+      row.registerValues !== null &&
+      row.registerValues[0]?.value === raw &&
       row.cellText === formatRawValue(raw, row.dataType)
     ) {
       return row;

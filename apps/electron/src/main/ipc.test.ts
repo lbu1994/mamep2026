@@ -362,7 +362,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
           pollingEnabled: false,
           traceEnabled: false,
           cellText: "",
-          lastKnownRawValue: null,
+          registerValues: null,
           createdAt: 0,
           updatedAt: 0,
         },
@@ -376,7 +376,10 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
   it("session-write-row 携带 writeVerify 调用会话 writeRow 并投影 WriteOutcome（2026-08-26）", async () => {
     const session = makeSession({
       writeRow: vi.fn(async () =>
-        ok({ kind: "write-succeeded-verify-matched" as const, readValue: 0x04d2 }),
+        ok({
+          kind: "write-succeeded-verify-matched" as const,
+          readValues: [0x04d2],
+        }),
       ),
     });
     const result = await handleRequest(
@@ -392,7 +395,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
           pollingEnabled: false,
           traceEnabled: false,
           cellText: "04D2",
-          lastKnownRawValue: null,
+          registerValues: null,
           createdAt: 0,
           updatedAt: 0,
         },
@@ -408,7 +411,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     if (result.type === "response") {
       expect(result.payload).toEqual({
         kind: "write-succeeded-verify-matched",
-        readValue: 0x04d2,
+        readValues: [0x04d2],
       });
     }
   });

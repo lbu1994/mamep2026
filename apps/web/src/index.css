@@ -755,6 +755,14 @@ body {
   font-family: var(--mamep-font-ui);
 }
 
+/* No 列（行号 + antd 树形展开图标，2026-08-27）：列宽按本表最大行号位数自适应
+   （见 packages/ui/src/no-column-width.ts），此处 nowrap 兜底防换行——
+   换行会把行高从 29px 撑到 47px（两行）。列级 className 同时作用于 th 与 td，
+   表头 nowrap 无副作用。 */
+.register-table-tabs .register-table__cell--no {
+  white-space: nowrap;
+}
+
 /* WP 开关 + 轮询指示：无合法地址时禁用；开启且在线时显示品牌色脉冲点
    （非纯颜色状态，配 Tooltip 与 aria-label 表达「正在轮询」）。 */
 .register-table__wp {

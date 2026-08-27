@@ -33,6 +33,7 @@ const dataTypeSchema = z.enum([
   "signed-0.001",
   "signed-0.0001",
   "binary",
+  "string",
 ]);
 
 const rowSchema = z.object({
@@ -42,11 +43,25 @@ const rowSchema = z.object({
   comment: z.string(),
   addressDraft: z.string(),
   addressValue: z.number().int().min(0).max(65535).nullable(),
+  /** 覆盖的连续寄存器数（ADR-030）：默认 1（单寄存器）；老数据缺省补默认，由 v2→v3 迁移补齐 */
+  registerCount: z.number().int().min(1).default(1),
   dataType: dataTypeSchema,
   pollingEnabled: z.boolean(),
   traceEnabled: z.boolean(),
   cellText: z.string(),
-  lastKnownRawValue: z.number().int().min(0).max(65535).nullable(),
+  /** 各寄存器原始值（ADR-030，替代 lastKnownRawValue）：null=未读 */
+  registerValues: z.array(z.number().int().min(0).max(65535)).nullable(),
+  /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据；范围行长度=registerCount，缺省补默认 */
+  registers: z
+    .array(
+      z.object({
+        name: z.string(),
+        comment: z.string(),
+        dataType: dataTypeSchema,
+      }),
+    )
+    .nullable()
+    .default(null),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -202,7 +217,8 @@ export function serializeWorkspace(workspace: Workspace): string {
       rows: sheet.rows.map((row) => ({
         ...row,
         addressValue: row.addressValue?.value ?? null,
-        lastKnownRawValue: row.lastKnownRawValue?.value ?? null,
+        registerValues:
+          row.registerValues?.map((value) => value.value) ?? null,
       })),
     })),
   };
@@ -236,20 +252,21 @@ export function parseWorkspace(input: unknown): Result<Workspace> {
       if (addressResult !== null && !addressResult.ok) {
         throw new Error(`stored address invalid: ${String(row.addressValue)}`);
       }
-      const rawResult =
-        row.lastKnownRawValue === null
+      const registerValues =
+        row.registerValues === null
           ? null
-          : RawRegisterValue.create(row.lastKnownRawValue);
-      if (rawResult !== null && !rawResult.ok) {
-        throw new Error(
-          `stored raw value invalid: ${String(row.lastKnownRawValue)}`,
-        );
-      }
+          : row.registerValues.map((value) => {
+              const created = RawRegisterValue.create(value);
+              if (!created.ok) {
+                throw new Error(`stored raw value invalid: ${String(value)}`);
+              }
+              return created.value;
+            });
       return {
         ...row,
         rowId: row.rowId as RowId,
         addressValue: addressResult === null ? null : addressResult.value,
-        lastKnownRawValue: rawResult === null ? null : rawResult.value,
+        registerValues,
       };
     });
     return { ...sheet, sheetId: sheet.sheetId as SheetId, rows };

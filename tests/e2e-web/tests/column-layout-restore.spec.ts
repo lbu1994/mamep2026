@@ -13,6 +13,7 @@ const DEFAULT_ORDER = [
   "Data",
   "Write",
   "Type",
+  "Scale",
   "Comment",
 ];
 
@@ -27,6 +28,7 @@ const HEADER_TO_KEY: Record<string, string> = {
   Data: "data",
   Write: "write",
   Type: "type",
+  Scale: "scale",
   Comment: "comment",
 };
 
@@ -41,6 +43,7 @@ const BODY_LABEL_BY_COLUMN: Record<string, string> = {
   data: "Data",
   write: "Write",
   type: "Type",
+  scale: "Scale",
   comment: "Comment",
   drag: "Drag to reorder",
 };
@@ -195,6 +198,7 @@ test("clicking restore resets column order and widths for the current sheet", as
       "Data",
       "Write",
       "Type",
+      "Scale",
       "Comment",
     ]);
   await dragHeaderHandle(page, "Name", 60);

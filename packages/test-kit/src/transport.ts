@@ -8,9 +8,15 @@ import { fail, ok } from "@mamep2026/domain";
 import type { Clock, TransportPort } from "@mamep2026/communication";
 import { appendCrc } from "@mamep2026/protocol-modbus";
 
-/** 可编程 Modbus RTU 模拟设备：寄存器表 + 自动应答 FC03/FC0x10。 */
+/** 可编程 Modbus RTU 模拟设备：寄存器表 + 自动应答 FC03/FC0x10（含多寄存器，ADR-030）。 */
 export class ScriptedModbusRtuDevice {
   readonly registers = new Map<number, number>();
+  /**
+   * 「must-multi」区起始地址（null=关闭，ADR-030）：该地址起，
+   * 单寄存器读/写（quantity===1）返回异常 0x02，多寄存器读/写（quantity>1）正常——
+   * 模拟真实设备「某些寄存器必须连续读写」的约束，供测试断言。
+   */
+  mustMultiStart: number | null = null;
 
   setRegister(address: number, value: number): void {
     this.registers.set(address & 0xffff, value & 0xffff);
@@ -27,22 +33,51 @@ export class ScriptedModbusRtuDevice {
     const functionCode = frame[1] ?? 0;
     const address = ((frame[2] ?? 0) << 8) | (frame[3] ?? 0);
     if (functionCode === 0x03) {
-      const value = this.registers.get(address) ?? 0;
-      return appendCrc(
-        Uint8Array.from([slave, 0x03, 0x02, (value >> 8) & 0xff, value & 0xff]),
-      );
+      const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
+      // must-multi 区：单读返回非法数据地址异常。
+      if (
+        this.mustMultiStart !== null &&
+        address >= this.mustMultiStart &&
+        quantity === 1
+      ) {
+        return appendCrc(Uint8Array.from([slave, 0x83, 0x02]));
+      }
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(this.registers.get((address + i) & 0xffff) ?? 0);
+      }
+      const byteCount = quantity * 2;
+      const body = Uint8Array.from([
+        slave,
+        0x03,
+        byteCount,
+        ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+      ]);
+      return appendCrc(body);
     }
     if (functionCode === 0x10) {
-      const value = ((frame[7] ?? 0) << 8) | (frame[8] ?? 0);
-      this.registers.set(address, value);
+      const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
+      // must-multi 区：单写返回非法数据地址异常。
+      if (
+        this.mustMultiStart !== null &&
+        address >= this.mustMultiStart &&
+        quantity === 1
+      ) {
+        return appendCrc(Uint8Array.from([slave, 0x90, 0x02]));
+      }
+      for (let i = 0; i < quantity; i += 1) {
+        const hi = frame[7 + i * 2] ?? 0;
+        const lo = frame[8 + i * 2] ?? 0;
+        this.registers.set((address + i) & 0xffff, (hi << 8) | lo);
+      }
       return appendCrc(
         Uint8Array.from([
           slave,
           0x10,
           (address >> 8) & 0xff,
           address & 0xff,
-          0x00,
-          0x01,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
         ]),
       );
     }

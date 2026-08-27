@@ -17,6 +17,8 @@ interface TraceEntry {
   key: string;
   address: number;
   speedMs: number;
+  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时采样组合数值。 */
+  quantity: number;
   timer: TimeoutHandle | null;
   inFlight: boolean;
   sequence: number;
@@ -38,12 +40,13 @@ export class TraceCoordinator {
     return () => this.listeners.delete(listener);
   }
 
-  start(key: string, address: number, speedMs: number): void {
+  start(key: string, address: number, speedMs: number, quantity = 1): void {
     this.stop(key);
     const entry: TraceEntry = {
       key,
       address,
       speedMs,
+      quantity,
       timer: null,
       inFlight: false,
       sequence: 0,
@@ -77,21 +80,39 @@ export class TraceCoordinator {
       return;
     }
     entry.inFlight = true;
-    void this.session
-      .readRegister(entry.address, { source: "trace", priority: "polling" })
-      .then((result: Result<number>) => {
-        entry.inFlight = false;
-        if (this.entries.has(entry.key) && result.ok) {
-          entry.sequence += 1;
-          const sample: TraceSample = {
-            key: entry.key,
-            sequence: entry.sequence,
-            rawValue: result.value,
-            timestamp: this.clock.now(),
-          };
-          for (const listener of this.listeners) listener(sample);
-        }
-      });
+    // 多寄存器行（ADR-030）：一次读全部并按大端组合为数值采样（字符串行由 UI 禁用 TM）。
+    const request =
+      entry.quantity > 1
+        ? this.session.readRegisters(entry.address, entry.quantity, {
+            source: "trace",
+            priority: "polling",
+          })
+        : this.session.readRegister(entry.address, {
+            source: "trace",
+            priority: "polling",
+          });
+    void request.then((result: Result<number | number[]>) => {
+      entry.inFlight = false;
+      if (this.entries.has(entry.key) && result.ok) {
+        entry.sequence += 1;
+        const sample: TraceSample = {
+          key: entry.key,
+          sequence: entry.sequence,
+          rawValue: Array.isArray(result.value)
+            ? combinedNumeric(result.value)
+            : result.value,
+          timestamp: this.clock.now(),
+        };
+        for (const listener of this.listeners) listener(sample);
+      }
+    });
     this.schedule(entry);
   }
+}
+
+/** 多寄存器组合数值（大端，ADR-030）：用于 Trace 采样（可视化用，不保证 2^53 以上精度）。 */
+function combinedNumeric(values: number[]): number {
+  let combined = 0;
+  for (const value of values) combined = combined * 0x10000 + value;
+  return combined;
 }

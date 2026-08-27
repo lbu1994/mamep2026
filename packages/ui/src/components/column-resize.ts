@@ -19,6 +19,7 @@ export const COLUMN_MIN_WIDTHS: Record<string, number> = {
   write: 40,
   data: 80,
   type: 72,
+  scale: 80,
   comment: 80,
   actions: 96,
 };

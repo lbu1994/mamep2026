@@ -126,7 +126,7 @@ export class VscodeSessionHost {
     if (this.active === "tcp") this.tcp.setUnitId(unitId);
   }
 
-  readRow(row: RegisterRow): Promise<Result<number>> {
+  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     return this.activeSession.readRow(row);
   }
 

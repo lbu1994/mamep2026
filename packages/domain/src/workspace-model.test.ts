@@ -4,6 +4,8 @@ import {
   createEmptyRow,
   createEmptyWorkspace,
   createRegisterSheet,
+  createRegisterSubRowMeta,
+  createRegisterSubRowMetas,
   type RegisterRow,
 } from "./workspace-model";
 
@@ -24,7 +26,8 @@ describe("createRegisterSheet 默认行（新建表默认填充 defaultRowCount 
       expect(row.addressDraft).toBe("");
       expect(row.addressValue).toBeNull();
       expect(row.cellText).toBe("");
-      expect(row.lastKnownRawValue).toBeNull();
+      expect(row.registerValues).toBeNull();
+      expect(row.registerCount).toBe(1);
       expect(row.pollingEnabled).toBe(false);
       expect(row.traceEnabled).toBe(false);
       expect(row.dataType).toBe(empty.dataType);
@@ -86,5 +89,29 @@ describe("createEmptyWorkspace 初始表", () => {
       expect(row.addressValue).toBeNull();
       expect(row.name).toBe("");
     }
+  });
+});
+
+describe("范围行子行元数据（2026-08-27）", () => {
+  it("createEmptyRow 的 registers 为 null（单寄存器行）", () => {
+    const row = createEmptyRow();
+    expect(row.registerCount).toBe(1);
+    expect(row.registers).toBeNull();
+  });
+
+  it("createRegisterSubRowMeta 生成默认空元数据（继承父行 dataType）", () => {
+    const meta = createRegisterSubRowMeta("unsigned-0.1");
+    expect(meta).toEqual({ name: "", comment: "", dataType: "unsigned-0.1" });
+  });
+
+  it("createRegisterSubRowMetas 按长度生成且每项独立", () => {
+    const metas = createRegisterSubRowMetas(3, "hex");
+    expect(metas).toHaveLength(3);
+    expect(metas.every((m) => m.name === "" && m.comment === "")).toBe(true);
+    expect(metas.every((m) => m.dataType === "hex")).toBe(true);
+    // 独立引用：修改一项不影响其他项。
+    metas[1] = { ...metas[1] ?? { name: "", comment: "", dataType: "hex" }, name: "x" };
+    expect(metas[0]?.name).toBe("");
+    expect(metas[1]?.name).toBe("x");
   });
 });

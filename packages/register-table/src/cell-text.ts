@@ -7,14 +7,18 @@
  */
 import type { RegisterRow, Result } from "@mamep2026/domain";
 import { ok } from "@mamep2026/domain";
-import { parseCellText } from "@mamep2026/data-conversion";
+import { parseCellText, parseCompositeText } from "@mamep2026/data-conversion";
 
-/** 提交 Data 单元格草稿：按 Type 校验；失败返回结构化错误，成功更新 cellText（保留原文）。 */
+/** 提交 Data 单元格草稿：按 Type 校验；失败返回结构化错误，成功更新 cellText（保留原文）。
+ *  多寄存器行（ADR-030）：组合文本按 parseCompositeText 校验（范围长度 × 类型合法集）。 */
 export function commitCellText(
   row: RegisterRow,
   text: string,
 ): Result<RegisterRow> {
-  const parsed = parseCellText(text, row.dataType);
+  const parsed =
+    row.registerCount > 1
+      ? parseCompositeText(text, row.dataType, row.registerCount)
+      : parseCellText(text, row.dataType);
   if (!parsed.ok) return parsed;
   return ok({ ...row, cellText: text, updatedAt: Date.now() });
 }

@@ -34,6 +34,8 @@ const DATA_ERROR_MESSAGE_KEY: Record<string, string> = {
   DATA_INVALID_NUMBER: "errors.dataInvalidNumber",
   DATA_TOO_MANY_DECIMALS: "errors.dataTooManyDecimals",
   DATA_OUT_OF_RANGE: "errors.dataOutOfRange",
+  DATA_STRING_TOO_LONG: "errors.dataOutOfRange",
+  DATA_STRING_NON_ASCII: "errors.dataInvalidNumber",
   DATA_UNSUPPORTED_TYPE: "errors.internal",
 };
 
@@ -46,12 +48,17 @@ function dataError(code: string, technicalMessage: string) {
   });
 }
 
-function isScaled(type: DataType): boolean {
+export function isScaled(type: DataType): boolean {
   return SCALE_DIGITS[type] !== undefined;
 }
 
-function isSigned(type: DataType): boolean {
+export function isSigned(type: DataType): boolean {
   return type === "signed" || type.startsWith("signed-");
+}
+
+/** 缩放位数（0.1→1 … 0.0001→4）；非缩放类型返回 0（ADR-030 导出供组合转换复用）。 */
+export function getScaleDigits(type: DataType): number {
+  return SCALE_DIGITS[type] ?? 0;
 }
 
 /** 把原始值按类型格式化为单元格显示文本。 */
@@ -61,6 +68,8 @@ export function formatRawValue(raw: number, type: DataType): string {
       return raw.toString(16).toUpperCase().padStart(4, "0");
     case "binary":
       return raw.toString(2).padStart(16, "0");
+    case "string":
+      return String.fromCharCode((raw >> 8) & 0xff, raw & 0xff);
     case "unsigned":
       return String(raw);
     case "signed": {
@@ -99,6 +108,8 @@ export function parseCellText(text: string, type: DataType): Result<number> {
       return parseHex(trimmed);
     case "binary":
       return parseBinary(trimmed);
+    case "string":
+      return parseSingleString(trimmed);
     case "unsigned":
       return parseInteger(trimmed, false);
     case "signed":
@@ -157,6 +168,30 @@ function parseBinary(text: string): Result<number> {
     );
   }
   return ok(Number.parseInt(text, 2));
+}
+
+/** 单寄存器字符串（registerCount=1，ADR-030）：最多 2 字符，高字节在前，不足补空格。 */
+function parseSingleString(text: string): Result<number> {
+  if (text.length > 2) {
+    return fail(
+      dataError(
+        "DATA_STRING_TOO_LONG",
+        `string exceeds 2 characters for a single register: ${JSON.stringify(text)}`,
+      ),
+    );
+  }
+  const padded = text.padEnd(2, " ");
+  const hi = padded.charCodeAt(0);
+  const lo = padded.charCodeAt(1);
+  if (hi > 0xff || lo > 0xff) {
+    return fail(
+      dataError(
+        "DATA_STRING_NON_ASCII",
+        `non-ASCII characters are not supported: ${JSON.stringify(text)}`,
+      ),
+    );
+  }
+  return ok((hi << 8) | lo);
 }
 
 function parseInteger(text: string, signed: boolean): Result<number> {

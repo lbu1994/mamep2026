@@ -38,6 +38,12 @@ export interface MockRangeRule {
   read: MockOpBehavior;
   /** FC0x10 写行为 */
   write: MockOpBehavior;
+  /**
+   * 「must-multi」区（ADR-030）：true 时该区间单寄存器读写（quantity===1）
+   * 返回异常 0x02（非法数据地址），多寄存器读写（quantity>1）按行为正常处理——
+   * 模拟真实设备「某些寄存器必须连续读写」的约束。
+   */
+  mustMulti?: boolean;
 }
 
 /** 完整场景定义：规则 + 默认表预填的展示信息。 */
@@ -118,6 +124,17 @@ export const DEFAULT_MOCK_SCENARIOS: readonly MockScenario[] = [
     seedRows: 2,
   },
   {
+    start: 0x0800,
+    end: 0x080f,
+    read: { kind: "normal" },
+    write: { kind: "normal" },
+    // ADR-030：单寄存器读/写返回异常 0x02；多寄存器读/写正常（必须连续读写）。
+    mustMulti: true,
+    namePrefix: "MustMulti",
+    comment: "多寄存器区：单读/单写返回异常 0x02；多读/多写正常（必须连续读写）",
+    seedRows: 3,
+  },
+  {
     start: 0x0900,
     end: 0x090f,
     read: { kind: "normal" },
@@ -131,11 +148,12 @@ export const DEFAULT_MOCK_SCENARIOS: readonly MockScenario[] = [
 
 /** 传输层使用的默认规则（与默认场景同一数据源）。 */
 export const DEFAULT_MOCK_RULES: readonly MockRangeRule[] =
-  DEFAULT_MOCK_SCENARIOS.map(({ start, end, read, write }) => ({
+  DEFAULT_MOCK_SCENARIOS.map(({ start, end, read, write, mustMulti }) => ({
     start,
     end,
     read,
     write,
+    ...(mustMulti === true ? { mustMulti: true } : {}),
   }));
 
 /** 命中地址所在规则（顺序匹配，第一条命中生效）；未配置返回 null（回退正常行为）。 */

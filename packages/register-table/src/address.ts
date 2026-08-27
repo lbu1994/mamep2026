@@ -1,8 +1,9 @@
 /**
- * 地址提交与 Address Adjust（docs/AGENTS.md §17.2、ADR-013、ADR-014）。
+ * 地址提交与 Address Adjust（docs/AGENTS.md §17.2、ADR-013、ADR-014、ADR-030）。
  * - 编辑态 addressDraft 与提交值 addressValue 分离；
  * - 校验失败保留用户输入并返回结构化错误；
  * - 成功提交后按进制归一化：HEX 4 位大写补零；DEC 去首尾空格（不补零）；
+ * - 范围行（ADR-030）：draft 支持 `start-end`，提交后更新 registerCount（覆盖寄存器数）；
  * - Address Adjust ON 时发送地址 = 用户地址 − 1，日志记录双地址。
  */
 import {
@@ -14,11 +15,13 @@ import {
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import {
-  formatRegisterAddress,
+  formatRegisterAddressRange,
+  isValidRegisterCount,
   parseRegisterAddressDraft,
 } from "@mamep2026/data-conversion";
+import { resizeRegisters } from "./child-register";
 
-/** 提交地址草稿：更新 addressValue；draft 保留（不因校验清空），成功提交按进制归一化。 */
+/** 提交地址草稿：更新 addressValue + registerCount；draft 保留（不因校验清空），成功提交按进制归一化。 */
 export function commitAddress(
   row: RegisterRow,
   draft: string,
@@ -26,21 +29,47 @@ export function commitAddress(
 ): Result<RegisterRow> {
   const parsed = parseRegisterAddressDraft(draft, radix);
   if (!parsed.ok) return parsed;
-  const value = parsed.value;
-  const addressResult = value === null ? null : RegisterAddress.create(value);
+  const parsedValue = parsed.value;
+  const addressResult =
+    parsedValue === null ? null : RegisterAddress.create(parsedValue.value);
   if (addressResult !== null && !addressResult.ok) return addressResult;
+  const count = parsedValue === null ? 1 : parsedValue.count;
   const normalizedDraft =
-    value === null
+    parsedValue === null
       ? draft
       : radix === "hex"
-        ? formatRegisterAddress(value, "hex")
+        ? formatRegisterAddressRange(parsedValue.value, count, radix)
         : draft.trim();
   return ok({
     ...row,
     addressDraft: normalizedDraft,
     addressValue: addressResult === null ? null : addressResult.value,
+    registerCount: count,
+    // 范围长度变化时旧读值不再对齐，清空 registerValues（ADR-030）。
+    registerValues:
+      count === row.registerCount ? row.registerValues : null,
+    // 子行元数据按索引保留/截断/补齐（2026-08-27，不随值清空）。
+    registers: resizeRegisters(row, count),
     updatedAt: Date.now(),
   });
+}
+
+/** 校验行「范围长度 × 类型合法集」（ADR-030 决策 7/8/10）：不匹配时禁止读写并在类型列报错。 */
+export function isRowTypeCountValid(
+  row: Pick<RegisterRow, "dataType" | "registerCount">,
+): boolean {
+  return isValidRegisterCount(row.dataType, row.registerCount);
+}
+
+/** 类型列校验错误（范围长度与类型合法集不匹配）：null=合法。 */
+export function rowTypeCountError(
+  row: Pick<RegisterRow, "dataType" | "registerCount">,
+): { messageKey: string; detail: string } | null {
+  if (isRowTypeCountValid(row)) return null;
+  return {
+    messageKey: "errors.dataInvalidRegisterCount",
+    detail: "DATA_INVALID_REGISTER_COUNT",
+  };
 }
 
 /** 计算实际发送地址（Address Adjust）。用户地址 0 且 ON 时下溢报错。 */

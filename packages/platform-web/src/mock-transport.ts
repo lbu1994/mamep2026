@@ -13,6 +13,7 @@ import type { TransportPort } from "@mamep2026/communication";
 import {
   appendCrc,
   crc16Modbus,
+  EXCEPTION_ILLEGAL_DATA_ADDRESS,
   EXCEPTION_ILLEGAL_DATA_VALUE,
 } from "@mamep2026/protocol-modbus";
 import {
@@ -110,22 +111,56 @@ export class MockTransport implements TransportPort {
         this.respond(this.exceptionFrame(slave, 0x03, behavior.exceptionCode));
         return;
       }
-      // normal / write-value-gate（读按正常处理）：返回当前寄存器值。
-      const value = this.registers.get(address) ?? 0;
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      if (rule?.mustMulti === true && quantity === 1) {
+        this.respond(
+          this.exceptionFrame(slave, 0x03, EXCEPTION_ILLEGAL_DATA_ADDRESS),
+        );
+        return;
+      }
+      // normal / write-value-gate（读按正常处理）：返回 quantity 个寄存器值。
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(this.registers.get((address + i) & 0xffff) ?? 0);
+      }
       this.respond(
-        Uint8Array.from([slave, 0x03, 0x02, (value >> 8) & 0xff, value & 0xff]),
+        Uint8Array.from([
+          slave,
+          0x03,
+          quantity * 2,
+          ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+        ]),
       );
       return;
     }
     if (functionCode === 0x10) {
       const behavior = rule?.write ?? { kind: "normal" };
-      const value = ((bytes[7] ?? 0) << 8) | (bytes[8] ?? 0);
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      const byteCount = bytes[6] ?? 0;
+      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      if (rule?.mustMulti === true && quantity === 1) {
+        this.respond(
+          this.exceptionFrame(slave, 0x10, EXCEPTION_ILLEGAL_DATA_ADDRESS),
+        );
+        return;
+      }
       if (behavior.kind === "no-response") return;
       if (behavior.kind === "exception") {
         this.respond(this.exceptionFrame(slave, 0x10, behavior.exceptionCode));
         return;
       }
-      if (behavior.kind === "write-value-gate" && value > behavior.maxValue) {
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(
+          (((bytes[7 + i * 2] ?? 0) << 8) | (bytes[8 + i * 2] ?? 0)) & 0xffff,
+        );
+      }
+      void byteCount;
+      if (
+        behavior.kind === "write-value-gate" &&
+        values.some((v) => v > behavior.maxValue)
+      ) {
         this.respond(
           this.exceptionFrame(slave, 0x10, EXCEPTION_ILLEGAL_DATA_VALUE),
         );
@@ -139,21 +174,23 @@ export class MockTransport implements TransportPort {
             0x10,
             (address >> 8) & 0xff,
             address & 0xff,
-            0x00,
-            0x01,
+            (quantity >> 8) & 0xff,
+            quantity & 0xff,
           ]),
         );
         return;
       }
-      this.registers.set(address, value);
+      for (let i = 0; i < quantity; i += 1) {
+        this.registers.set((address + i) & 0xffff, values[i] ?? 0);
+      }
       this.respond(
         Uint8Array.from([
           slave,
           0x10,
           (address >> 8) & 0xff,
           address & 0xff,
-          0x00,
-          0x01,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
         ]),
       );
       return;

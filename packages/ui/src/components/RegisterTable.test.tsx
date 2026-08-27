@@ -20,6 +20,7 @@ import {
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import type { AppHost } from "../host";
+import { computeNoColumnWidth } from "../no-column-width";
 import { RegisterTable } from "./RegisterTable";
 
 // jsdom 未实现 ResizeObserver（RegisterTable 用它测量表体高度）；最小 stub。
@@ -527,5 +528,196 @@ describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
         .getState()
         .workspace.sheets.find((s) => s.sheetId === second)?.writeVerify,
     ).toEqual({ mode: "immediate", delayMs: null });
+  });
+});
+
+describe("RegisterTable No 列宽度自适应（2026-08-27）", () => {
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({
+      host: null,
+      workspace: createEmptyWorkspace(),
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  /** No 列宽（colgroup 内 col index 1 的 inline width；列序默认时 index 0=选择列、1=No）。 */
+  function noColumnWidth(): number | null {
+    const col = document.querySelectorAll("table colgroup col")[1];
+    const match = col?.getAttribute("style")?.match(/width:\s*(\d+)px/);
+    return match !== undefined && match !== null ? Number(match[1]) : null;
+  }
+
+  /** 构造 maxOrder=order 的工作区（首行 order 改为指定值，其余保持 1..n）。 */
+  function workspaceWithMaxOrder(order: number): Workspace {
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet === undefined) throw new Error("missing sheet");
+    const rows = sheet.rows.map((row, index) =>
+      index === 0 ? { ...row, order } : row,
+    );
+    return { ...workspace, sheets: [{ ...sheet, rows }] };
+  }
+
+  it("默认 50 行（maxOrder=50，2 位）：No 列宽 = computeNoColumnWidth(50)", () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+    expect(noColumnWidth()).toBe(computeNoColumnWidth(50));
+  });
+
+  it("范围行场景：No 单元格 = 行号 + antd 展开图标（加号）共存，td 带 nowrap 类", () => {
+    // 构造范围行（registerCount=2）触发 antd 树形模式 → 首列注入展开图标
+    // （ADR-030「加号按钮」，折叠态即 +；无范围行的纯普通表不渲染该图标）。
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet === undefined) throw new Error("missing sheet");
+    const rows = sheet.rows.map((row, index) =>
+      index === 0
+        ? {
+            ...row,
+            registerCount: 2,
+            registerValues: [{ value: 0 }, { value: 0 }],
+          }
+        : row,
+    );
+    useAppStore.setState({
+      workspace: { ...workspace, sheets: [{ ...sheet, rows }] },
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+    const firstRowTd = document.querySelector(
+      ".ant-table-tbody tr.ant-table-row td:nth-child(2)",
+    );
+    expect(firstRowTd).toBeTruthy();
+    // 行号（第一行 order=1）与 antd 树形展开图标（ADR-030「加号按钮」）同格。
+    expect(firstRowTd?.textContent?.trim()).toBe("1");
+    expect(firstRowTd?.querySelector(".ant-table-row-expand-icon")).toBeTruthy();
+    // nowrap 类（防换行），配合自适应宽度保证单行。
+    expect(firstRowTd?.classList.contains("register-table__cell--no")).toBe(
+      true,
+    );
+  });
+
+  it("行号位数增长到 3 位：No 列宽随 maxOrder 增大（rerender 响应）", () => {
+    const { rerender } = render(<RegisterTable sheetId={sheetId()} />);
+    expect(noColumnWidth()).toBe(50);
+    useAppStore.setState({ workspace: workspaceWithMaxOrder(1000) });
+    rerender(<RegisterTable sheetId={sheetId()} />);
+    expect(noColumnWidth()).toBe(computeNoColumnWidth(1000));
+  });
+
+  it("小表（maxOrder=3，1 位）：No 列宽回落到最小自适应值", () => {
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet === undefined) throw new Error("missing sheet");
+    useAppStore.setState({
+      workspace: {
+        ...workspace,
+        sheets: [{ ...sheet, rows: sheet.rows.slice(0, 3) }],
+      },
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+    expect(noColumnWidth()).toBe(computeNoColumnWidth(3));
+  });
+});
+
+describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
+  beforeEach(() => {
+    initI18n();
+    // 构造范围行：首行 registerCount=2 + registers 元数据 + registerValues。
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet === undefined) throw new Error("missing sheet");
+    const rows = sheet.rows.map((row, index) =>
+      index === 0
+        ? {
+            ...row,
+            registerCount: 2,
+            registerValues: [{ value: 0x12 }, { value: 0x34 }],
+            cellText: "0012 0034",
+            registers: [
+              { name: "Hi", comment: "high", dataType: "hex" as const },
+              { name: "Lo", comment: "low", dataType: "unsigned" as const },
+            ],
+          }
+        : row,
+    );
+    useAppStore.setState({
+      host: null,
+      workspace: { ...workspace, sheets: [{ ...sheet, rows }] },
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  /** 展开首行（范围行）→ 子行渲染。 */
+  function expandRangeRow(): void {
+    const expandIcon = document.querySelector(".ant-table-row-expand-icon");
+    if (expandIcon === null) throw new Error("missing expand icon");
+    fireEvent.click(expandIcon);
+    // 展开后 2 个子行出现（各列 aria-label 数量 +2）。
+    expect(screen.getAllByLabelText("Data").length).toBeGreaterThanOrEqual(3);
+  }
+
+  it("子行 Name 可编辑并写回父行 registers[0].name", () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandRangeRow();
+    // Name 单元格：父行 1 + 子行 2；子行第一个是 index 1。
+    const cells = screen.getAllByLabelText("Name");
+    expect(cells.length).toBeGreaterThanOrEqual(3);
+    const childName = cells[1];
+    if (childName === undefined) throw new Error("missing child name cell");
+    expect(childName.textContent).toBe("Hi");
+    fireEvent.click(childName);
+    const input = screen.getAllByLabelText("Name")[1];
+    if (input === undefined) throw new Error("missing child name input");
+    fireEvent.change(input, { target: { value: "H1" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[0]
+        ?.name,
+    ).toBe("H1");
+  });
+
+  it("子行 Data 可编辑并同步父行 registerValues 与组合文本", () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandRangeRow();
+    // 子行 0 显示自身 Type（hex）格式化的值 "0012"。
+    const cells = screen.getAllByLabelText("Data");
+    expect(cells.length).toBeGreaterThanOrEqual(3);
+    const childData = cells[1];
+    if (childData === undefined) throw new Error("missing child data cell");
+    fireEvent.click(childData);
+    const input = screen.getAllByLabelText("Data")[1];
+    if (input === undefined) throw new Error("missing child data input");
+    fireEvent.change(input, { target: { value: "AB" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    expect(row?.registerValues?.map((v) => v.value)).toEqual([0xab, 0x34]);
+    expect(row?.cellText).toBe("00AB 0034");
+  });
+
+  it("子行 Comment 可编辑并写回父行 registers[1].comment", () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandRangeRow();
+    const cells = screen.getAllByLabelText("Comment");
+    expect(cells.length).toBeGreaterThanOrEqual(3);
+    const childComment = cells[2];
+    if (childComment === undefined) throw new Error("missing child comment");
+    expect(childComment.textContent).toBe("low");
+    fireEvent.click(childComment);
+    const input = screen.getAllByLabelText("Comment")[2];
+    if (input === undefined) throw new Error("missing child comment input");
+    fireEvent.change(input, { target: { value: "L2" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[1]
+        ?.comment,
+    ).toBe("L2");
   });
 });

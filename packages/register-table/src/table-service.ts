@@ -19,9 +19,9 @@ import {
   type CommunicationSession,
   type WriteOutcome,
 } from "@mamep2026/communication";
-import { parseCellText } from "@mamep2026/data-conversion";
+import { parseCellText, parseCompositeText } from "@mamep2026/data-conversion";
 import { computeSentAddress } from "./address";
-import { applyReadValueToRow } from "./row-operations";
+import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 
 export interface TableServiceDeps {
   getSession: () => CommunicationSession | null;
@@ -55,23 +55,34 @@ export class RegisterTableService {
     this.deps = deps;
   }
 
-  /** 单行读取：校验连接/地址/Address Adjust 后经统一调度器发送 FC03。 */
-  async readRow(row: RegisterRow): Promise<Result<number>> {
+  /** 单行读取（多寄存器行一次 FC03 读全部，ADR-030）：校验连接/地址/Address Adjust 后经统一调度器。 */
+  async readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     const session = this.deps.getSession();
     if (session === null) return fail(notConnectedError());
     const address = row.addressValue?.value;
     if (address === undefined) return fail(addressEmptyError());
     const sent = computeSentAddress(address, this.deps.getAddressAdjustMode());
     if (!sent.ok) return sent;
+    if (row.registerCount > 1) {
+      return session.readRegisters(sent.value, row.registerCount, {
+        source: "manual-read",
+        userAddress: address,
+      });
+    }
     return session.readRegister(sent.value, {
       source: "manual-read",
       userAddress: address,
     });
   }
 
-  /** 读取成功后应用结果：按 Type 格式化并强制覆盖单元格文本（单一当前值模型）。 */
-  applyReadResult(row: RegisterRow, raw: number): Result<RegisterRow> {
-    return applyReadValueToRow(row, raw);
+  /** 读取成功后应用结果（多寄存器按组合类型格式化）：覆盖单元格文本（单一当前值模型）。 */
+  applyReadResult(
+    row: RegisterRow,
+    raw: number | number[],
+  ): Result<RegisterRow> {
+    return Array.isArray(raw)
+      ? applyReadValuesToRow(row, raw)
+      : applyReadValueToRow(row, raw);
   }
 
   /**
@@ -89,9 +100,34 @@ export class RegisterTableService {
     if (address === undefined) return fail(addressEmptyError());
     const sent = computeSentAddress(address, this.deps.getAddressAdjustMode());
     if (!sent.ok) return sent;
+    const writeVerify = options.writeVerify;
+
+    // 多寄存器行（ADR-030）：组合值一次 FC0x10 写全部连续寄存器。
+    if (row.registerCount > 1) {
+      const parsed = parseCompositeText(
+        row.cellText,
+        row.dataType,
+        row.registerCount,
+      );
+      if (!parsed.ok) return parsed;
+      const values = parsed.value;
+      if (writeVerify === undefined || writeVerify.mode === "off") {
+        return session.writeRegisters(sent.value, values, {
+          source: "manual-write",
+          userAddress: address,
+        });
+      }
+      const coordinator = new WriteVerifyCoordinator(
+        session,
+        this.deps.clock,
+      );
+      return coordinator.writeWithVerifyMany(sent.value, values, writeVerify, {
+        userAddress: address,
+      });
+    }
+
     const parsed = parseCellText(row.cellText, row.dataType);
     if (!parsed.ok) return parsed;
-    const writeVerify = options.writeVerify;
     if (writeVerify === undefined || writeVerify.mode === "off") {
       // 未启用回读：保持既有单次写入路径。
       return session.writeRegister(sent.value, parsed.value, {
@@ -99,16 +135,10 @@ export class RegisterTableService {
         userAddress: address,
       });
     }
-    const coordinator = new WriteVerifyCoordinator(
-      session,
-      this.deps.clock,
-    );
-    return coordinator.writeWithVerify(
-      sent.value,
-      parsed.value,
-      writeVerify,
-      { userAddress: address },
-    );
+    const coordinator = new WriteVerifyCoordinator(session, this.deps.clock);
+    return coordinator.writeWithVerify(sent.value, parsed.value, writeVerify, {
+      userAddress: address,
+    });
   }
 
   /** 新建空行（供 UI 便捷调用）。 */

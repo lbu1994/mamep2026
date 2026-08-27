@@ -11,6 +11,8 @@ import type { CommunicationSession } from "./session";
 export interface PollingTarget {
   key: string;
   address: number;
+  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
+  quantity?: number;
 }
 
 export interface PollingCoordinatorOptions {
@@ -26,7 +28,7 @@ export class PollingCoordinator {
   private timer: TimeoutHandle | null = null;
   private runningFlag = false;
   private readonly listeners = new Set<
-    (key: string, address: number, result: Result<number>) => void
+    (key: string, address: number, result: Result<number | number[]>) => void
   >();
   private readonly session: CommunicationSession;
   private readonly clock: Clock;
@@ -51,7 +53,11 @@ export class PollingCoordinator {
   }
 
   onResult(
-    listener: (key: string, address: number, result: Result<number>) => void,
+    listener: (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void,
   ): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -106,16 +112,23 @@ export class PollingCoordinator {
       this.inFlight.add(target.key);
       // 捕获请求时的地址快照：上层据此丢弃旧地址的迟到结果（generation 失效）。
       const requestedAddress = target.address;
-      void this.session
-        .readRegister(target.address, {
-          source: "polling",
-          priority: "polling",
-        })
-        .then((result) => {
-          this.inFlight.delete(target.key);
-          for (const listener of this.listeners)
-            listener(target.key, requestedAddress, result);
-        });
+      const quantity = target.quantity ?? 1;
+      // 多寄存器行（ADR-030）：一次 FC03 读全部，结果携带 values[]。
+      const request =
+        quantity > 1
+          ? this.session.readRegisters(target.address, quantity, {
+              source: "polling",
+              priority: "polling",
+            })
+          : this.session.readRegister(target.address, {
+              source: "polling",
+              priority: "polling",
+            });
+      void request.then((result) => {
+        this.inFlight.delete(target.key);
+        for (const listener of this.listeners)
+          listener(target.key, requestedAddress, result);
+      });
     }
     this.scheduleNext();
   }

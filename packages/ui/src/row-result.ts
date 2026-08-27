@@ -253,6 +253,27 @@ export function applyCellValidation(
   return { ...state, cellValidationErrors };
 }
 
+/**
+ * 类型列校验错误状态（ADR-030）：范围长度与类型合法集不匹配时记录、匹配时清除；
+ * 不触碰三态状态点。键 = `${rowId}:type`，与地址/数据列独立。
+ */
+export function applyTypeValidation(
+  state: RowStatusState,
+  rowId: string,
+  error: { messageKey: string; detail: string } | null,
+): RowStatusState {
+  const key = `${rowId}:type`;
+  const cellValidationErrors =
+    error === null
+      ? removeValidationError(state.cellValidationErrors, key)
+      : setValidationError(state.cellValidationErrors, key, {
+          messageKey: error.messageKey,
+          detail: error.detail,
+        });
+  if (cellValidationErrors === state.cellValidationErrors) return state;
+  return { ...state, cellValidationErrors };
+}
+
 // ---- 内部：幂等 set/remove（同态返回原引用，zustand 不触发订阅更新）----
 
 function setFailure(

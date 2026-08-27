@@ -290,7 +290,7 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     pollingEnabled: false,
     traceEnabled: false,
     cellText: "",
-    lastKnownRawValue: null,
+    registerValues: null,
     createdAt: 0,
     updatedAt: 0,
   };
@@ -382,8 +382,8 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
       writeRow: vi.fn(async () =>
         ok({
           kind: "write-succeeded-verify-mismatched" as const,
-          expectedValue: 0x1234,
-          readValue: 0x5678,
+          expectedValues: [0x1234],
+          readValues: [0x5678],
         }),
       ),
     });
@@ -402,8 +402,8 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     if (result.type === "response") {
       expect(result.payload).toEqual({
         kind: "write-succeeded-verify-mismatched",
-        expectedValue: 0x1234,
-        readValue: 0x5678,
+        expectedValues: [0x1234],
+        readValues: [0x5678],
       });
     }
   });

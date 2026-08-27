@@ -58,32 +58,35 @@ import type { BatchReadHandle } from "@mamep2026/communication";
 import type {
   DataType,
   ReadVerifySettings,
+  RegisterRadix,
   RegisterRow,
   RowId,
   SheetId,
 } from "@mamep2026/domain";
-import { dataTypes, defaultConfig } from "@mamep2026/domain";
-import { formatRawValue } from "@mamep2026/data-conversion";
-import { applyColumnOrder, applyReadValueToRow } from "@mamep2026/register-table";
+import { defaultConfig } from "@mamep2026/domain";
+import { formatRegisterAddress } from "@mamep2026/data-conversion";
+import { applyColumnOrder, applyReadValueToRow, applyReadValuesToRow, isRowTypeCountValid } from "@mamep2026/register-table";
+import {
+  combineRadixScale,
+  dataTypeToRadix,
+  dataTypeToScale,
+  isScaleApplicable,
+  RADIX_LABEL_KEYS,
+  RADIX_OPTIONS,
+  SCALE_OPTIONS,
+  type DataRadix,
+  type ScaleValue,
+} from "../type-split";
+import {
+  buildTreeRows,
+  isVirtualChildRow,
+  type VirtualChildRow,
+} from "../tree-rows";
 import { useAppStore } from "../app-store";
 import type { RowFailure } from "../row-result";
+import { computeNoColumnWidth } from "../no-column-width";
 import { clampColumnWidth } from "./column-resize";
 import { buildRowMenuItems, type RowMenuActions } from "./RegisterRowMenu";
-
-const TYPE_LABELS: Record<DataType, string> = {
-  hex: "table.hex",
-  unsigned: "table.unsigned",
-  "unsigned-0.1": "Unsigned 0.1",
-  "unsigned-0.01": "Unsigned 0.01",
-  "unsigned-0.001": "Unsigned 0.001",
-  "unsigned-0.0001": "Unsigned 0.0001",
-  signed: "table.signed",
-  "signed-0.1": "Signed 0.1",
-  "signed-0.01": "Signed 0.01",
-  "signed-0.001": "Signed 0.001",
-  "signed-0.0001": "Signed 0.0001",
-  binary: "table.binary",
-};
 
 /** 写后回读配置选项（PRD §6.5.12，2026-08-26）：Select value ↔ ReadVerifySettings。 */
 type WriteVerifyOptionValue = "off" | "immediate" | "100" | "200" | "500";
@@ -258,9 +261,14 @@ const NoCell = memo(function NoCell({ order }: { order: number }) {
 const TmCell = memo(function TmCell({
   rowId,
   traceEnabled,
+  dataType,
+  registerCount,
 }: {
   rowId: RowId;
   traceEnabled: boolean;
+  /** 多寄存器字符串行（ADR-030）：Trace 对组合数值采样，字符串行禁用。 */
+  dataType: DataType;
+  registerCount: number;
 }) {
   const updateRow = useAppStore((s) => s.updateRow);
   const openTraceWindow = useAppStore((s) => s.openTraceWindow);
@@ -270,9 +278,11 @@ const TmCell = memo(function TmCell({
   const traceWindowOpen = useAppStore(
     (s) => s.traceWindows[rowId] !== undefined,
   );
+  const traceDisabled = registerCount > 1 && dataType === "string";
   return (
     <Checkbox
       checked={traceEnabled}
+      disabled={traceDisabled}
       aria-label="TM"
       onChange={(e) => {
         if (!e.target.checked && traceWindowOpen) {
@@ -401,17 +411,20 @@ const WpCell = memo(function WpCell({
 const ReadCell = memo(function ReadCell({
   rowId,
   hasAddress,
+  typeCountValid,
 }: {
   rowId: RowId;
   hasAddress: boolean;
+  /** 范围长度与类型合法集匹配（ADR-030）：不匹配时禁用读写。 */
+  typeCountValid: boolean;
 }) {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   const updateRow = useAppStore((s) => s.updateRow);
   const recordManualResult = useAppStore((s) => s.recordManualResult);
   const connected = useAppStore((s) => s.connectionState) === "connected";
-  // 离线或未配置合法地址时禁用；无地址时提供 Tooltip 说明原因。
-  const disabled = !connected || !hasAddress;
+  // 离线、未配置合法地址或范围长度与类型合法集不匹配时禁用；无地址时提供 Tooltip 说明原因。
+  const disabled = !connected || !hasAddress || !typeCountValid;
   const handleRead = async (): Promise<void> => {
     if (host === null || host === undefined) return;
     const state = useAppStore.getState();
@@ -423,11 +436,14 @@ const ReadCell = memo(function ReadCell({
     // 手动读结果 → 三态状态点（成功清失败态写成功点；失败写失败态并带错误码）。
     recordManualResult(rowId, result, "read");
     if (result.ok) {
-      updateRow(rowId, () => ({
-        ...row,
-        cellText: formatRawValue(result.value, row.dataType),
-        updatedAt: Date.now(),
-      }));
+      // 多寄存器行（ADR-030）：applyReadValuesToRow 更新 registerValues（子行数据源）
+      // + cellText（组合文本）；单寄存器行走原路径。
+      updateRow(rowId, (r) => {
+        const applied = Array.isArray(result.value)
+          ? applyReadValuesToRow(r, result.value)
+          : applyReadValueToRow(r, result.value);
+        return applied.ok ? applied.value : r;
+      });
     }
     // 读取失败不改变 Data 单元格内容（§17/§25），失败原因经状态点 Tooltip 展示。
   };
@@ -542,10 +558,13 @@ const WriteCell = memo(function WriteCell({
   sheetId,
   rowId,
   hasAddress,
+  typeCountValid,
 }: {
   sheetId: SheetId;
   rowId: RowId;
   hasAddress: boolean;
+  /** 范围长度与类型合法集匹配（ADR-030）：不匹配时禁用读写。 */
+  typeCountValid: boolean;
 }) {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
@@ -561,13 +580,17 @@ const WriteCell = memo(function WriteCell({
         delayMs: null,
       },
   );
-  // 离线或未配置合法地址时禁用；无地址时提供 Tooltip 说明原因。
-  const disabled = !connected || !hasAddress;
+  // 离线、未配置合法地址或范围长度与类型合法集不匹配时禁用；无地址时提供 Tooltip 说明原因。
+  const disabled = !connected || !hasAddress || !typeCountValid;
 
-  /** 回读成功（一致/不一致）：按读取规则（Type 格式化）强制覆盖单元格（§15.1）。 */
-  const applyReadBackValue = (raw: number): void => {
+  /** 回读成功（一致/不一致）：按读取规则（Type 格式化）强制覆盖单元格（§15.1）。
+   *  多寄存器行（ADR-030）：回读值数组全量应用（逐寄存器原始值）。 */
+  const applyReadBackValue = (raws: readonly number[]): void => {
     updateRow(rowId, (row) => {
-      const applied = applyReadValueToRow(row, raw);
+      const applied =
+        raws.length === 1
+          ? applyReadValueToRow(row, raws[0] ?? 0)
+          : applyReadValuesToRow(row, raws);
       return applied.ok ? applied.value : row;
     });
   };
@@ -590,7 +613,7 @@ const WriteCell = memo(function WriteCell({
     if (result.ok) {
       const outcome = result.value;
       if (outcome.kind === "write-succeeded-verify-matched") {
-        applyReadBackValue(outcome.readValue);
+        applyReadBackValue(outcome.readValues);
         appendMessage({
           timestamp: Date.now(),
           level: "info",
@@ -599,15 +622,15 @@ const WriteCell = memo(function WriteCell({
           detail: null,
         });
       } else if (outcome.kind === "write-succeeded-verify-mismatched") {
-        applyReadBackValue(outcome.readValue);
+        applyReadBackValue(outcome.readValues);
         appendMessage({
           timestamp: Date.now(),
           level: "warning",
           messageKey: "messages.writeVerifyMismatch",
           params: {
             address: row.addressDraft,
-            expected: outcome.expectedValue,
-            read: outcome.readValue,
+            expected: outcome.expectedValues.join(", "),
+            read: outcome.readValues.join(", "),
           },
           detail: null,
         });
@@ -662,34 +685,80 @@ const WriteCell = memo(function WriteCell({
 const TypeCell = memo(function TypeCell({
   rowId,
   dataType,
+  error,
+}: {
+  rowId: RowId;
+  dataType: DataType;
+  /** 类型列校验错误（ADR-030）：范围长度与类型合法集不匹配时红框 + Tooltip。 */
+  error?: RowFailure | undefined;
+}) {
+  const { t, i18n } = useTranslation();
+  const setRowDataType = useAppStore((s) => s.setRowDataType);
+  // Type 双列拆分（ADR-030）：进制列 + scale 列，组合映射回 dataType。
+  const radix = dataTypeToRadix(dataType);
+  const scale = dataTypeToScale(dataType);
+  const errorTip =
+    error !== undefined
+      ? i18n.exists(error.messageKey)
+        ? t(error.messageKey)
+        : error.messageKey
+      : undefined;
+  return (
+    <Tooltip
+      title={errorTip}
+      placement="topLeft"
+      open={error !== undefined ? undefined : false}
+    >
+      <Select
+        size="small"
+        style={{ width: "100%" }}
+        value={radix}
+        aria-label="Type"
+        placement="bottomLeft"
+        variant="borderless"
+        {...(error !== undefined ? { status: "error" as const } : {})}
+        onChange={(value: DataRadix) =>
+          setRowDataType(rowId, combineRadixScale(value, scale))
+        }
+        options={RADIX_OPTIONS.map((r) => ({ value: r, label: t(RADIX_LABEL_KEYS[r]) }))}
+      />
+    </Tooltip>
+  );
+});
+
+/** Type scale 列（ADR-030）：仅 unsigned/signed 可用，其余进制禁用。 */
+const ScaleCell = memo(function ScaleCell({
+  rowId,
+  dataType,
 }: {
   rowId: RowId;
   dataType: DataType;
 }) {
   const { t } = useTranslation();
   const setRowDataType = useAppStore((s) => s.setRowDataType);
-  const options = useMemo(
-    () =>
-      dataTypes.map((type) => {
-        const label = TYPE_LABELS[type];
-        return {
-          value: type,
-          label: label.startsWith("table.") ? t(label) : label,
-        };
-      }),
-    [t],
-  );
+  const radix = dataTypeToRadix(dataType);
+  const scale = dataTypeToScale(dataType);
+  const applicable = isScaleApplicable(radix);
   return (
-    <Select
-      size="small"
-      style={{ width: "100%" }}
-      value={dataType}
-      aria-label="Type"
-      placement="bottomLeft"
-      variant="borderless"
-      onChange={(value: DataType) => setRowDataType(rowId, value)}
-      options={options}
-    />
+    <Tooltip
+      title={t("table.scaleHint")}
+      placement="topLeft"
+      open={applicable ? undefined : false}
+    >
+      <Select
+        size="small"
+        style={{ width: "100%" }}
+        value={scale}
+        aria-label="Scale"
+        placement="bottomLeft"
+        variant="borderless"
+        disabled={!applicable}
+        onChange={(value: ScaleValue) =>
+          setRowDataType(rowId, combineRadixScale(radix, value))
+        }
+        options={SCALE_OPTIONS.map((s) => ({ value: s, label: s }))}
+      />
+    </Tooltip>
   );
 });
 
@@ -711,6 +780,157 @@ const CommentCell = memo(function CommentCell({
           comment: value,
           updatedAt: Date.now(),
         }))
+      }
+    />
+  );
+});
+
+// ---- 范围行虚拟子行（ADR-030 + 2026-08-27 子行可编辑化）----
+// 子行=每寄存器一行：Register 列只读展示实际地址；Name/Data/Type/Scale/Comment 五列
+// 可编辑，经 app-store 的 commitChildCellText / setChildMeta 路由回父行（registers[i] +
+// registerValues[i] 落盘）；其余列（No/TM/WP/Read/Write/拖拽/多选/右键菜单）维持不可用。
+
+/** 子行 Register 列：实际地址（按表进制格式化），只读。 */
+const ChildAddressCell = memo(function ChildAddressCell({
+  row,
+  radix,
+}: {
+  row: VirtualChildRow;
+  radix: RegisterRadix;
+}) {
+  return (
+    <span className="register-table__cell--mono">
+      {formatRegisterAddress(row.__virtualChild.address, radix)}
+    </span>
+  );
+});
+
+/** 子行 Name 列：可编辑（写回父行 registers[i].name）。 */
+const ChildNameCell = memo(function ChildNameCell({
+  row,
+}: {
+  row: VirtualChildRow;
+}) {
+  const setChildMeta = useAppStore((s) => s.setChildMeta);
+  return (
+    <EditableCellValue
+      value={row.name}
+      ariaLabel="Name"
+      onCommit={(value) =>
+        setChildMeta(row.__virtualChild.parentRowId, row.__virtualChild.index, {
+          name: value,
+        })
+      }
+    />
+  );
+});
+
+/** 子行 Data 列：可编辑（按子行自身 Type 解析，回写父行 registerValues[i] 并同步组合文本）。 */
+const ChildDataCell = memo(function ChildDataCell({
+  row,
+}: {
+  row: VirtualChildRow;
+}) {
+  const commitChildCellText = useAppStore((s) => s.commitChildCellText);
+  return (
+    <EditableCellValue
+      value={row.cellText}
+      ariaLabel="Data"
+      // 空值占位「—」：区分「尚未读取/无值」与「有值」。
+      emptyText="—"
+      onCommit={(value) =>
+        commitChildCellText(
+          row.__virtualChild.parentRowId,
+          row.__virtualChild.index,
+          value,
+        )
+      }
+    />
+  );
+});
+
+/** 子行 Type 列：可下拉选择（写回父行 registers[i].dataType，仅影响该子行展示与编辑解析）。 */
+const ChildTypeCell = memo(function ChildTypeCell({
+  row,
+}: {
+  row: VirtualChildRow;
+}) {
+  const { t } = useTranslation();
+  const setChildMeta = useAppStore((s) => s.setChildMeta);
+  const radix = dataTypeToRadix(row.dataType);
+  const scale = dataTypeToScale(row.dataType);
+  return (
+    <Select
+      size="small"
+      style={{ width: "100%" }}
+      value={radix}
+      aria-label="Type"
+      placement="bottomLeft"
+      variant="borderless"
+      onChange={(value: DataRadix) =>
+        setChildMeta(row.__virtualChild.parentRowId, row.__virtualChild.index, {
+          dataType: combineRadixScale(value, scale),
+        })
+      }
+      options={RADIX_OPTIONS.map((r) => ({
+        value: r,
+        label: t(RADIX_LABEL_KEYS[r]),
+      }))}
+    />
+  );
+});
+
+/** 子行 Scale 列：可下拉选择（仅 unsigned/signed 可用），写回父行 registers[i].dataType。 */
+const ChildScaleCell = memo(function ChildScaleCell({
+  row,
+}: {
+  row: VirtualChildRow;
+}) {
+  const { t } = useTranslation();
+  const setChildMeta = useAppStore((s) => s.setChildMeta);
+  const radix = dataTypeToRadix(row.dataType);
+  const scale = dataTypeToScale(row.dataType);
+  const applicable = isScaleApplicable(radix);
+  return (
+    <Tooltip
+      title={t("table.scaleHint")}
+      placement="topLeft"
+      open={applicable ? undefined : false}
+    >
+      <Select
+        size="small"
+        style={{ width: "100%" }}
+        value={scale}
+        aria-label="Scale"
+        placement="bottomLeft"
+        variant="borderless"
+        disabled={!applicable}
+        onChange={(value: ScaleValue) =>
+          setChildMeta(row.__virtualChild.parentRowId, row.__virtualChild.index, {
+            dataType: combineRadixScale(radix, value),
+          })
+        }
+        options={SCALE_OPTIONS.map((s) => ({ value: s, label: s }))}
+      />
+    </Tooltip>
+  );
+});
+
+/** 子行 Comment 列：可编辑（写回父行 registers[i].comment）。 */
+const ChildCommentCell = memo(function ChildCommentCell({
+  row,
+}: {
+  row: VirtualChildRow;
+}) {
+  const setChildMeta = useAppStore((s) => s.setChildMeta);
+  return (
+    <EditableCellValue
+      value={row.comment}
+      ariaLabel="Comment"
+      onCommit={(value) =>
+        setChildMeta(row.__virtualChild.parentRowId, row.__virtualChild.index, {
+          comment: value,
+        })
       }
     />
   );
@@ -956,6 +1176,20 @@ export const RegisterTable = memo(function RegisterTable({
   const rows = useAppStore(
     (s) => s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.rows ?? [],
   );
+  // 范围行树形数据（ADR-030）：registerCount>1 的行带 children（虚拟子行，只读展示）。
+  const treeRows = useMemo(() => buildTreeRows(rows), [rows]);
+  // 本表最大行号（No 列宽度自适应，2026-08-27）：No 列内容 = antd 树形展开图标 +
+  // 行号，虚拟表列宽须静态确定，故按最大行号位数计算列宽（见 no-column-width.ts）。
+  // 虚拟子行在 No 列渲染 null，不计入；rows 为父行集合。
+  const maxOrder = useMemo(
+    () => rows.reduce((max, row) => Math.max(max, row.order), 0),
+    [rows],
+  );
+  // 表内是否存在范围行：有则禁用虚拟滚动（antd tree 数据 + virtual 不兼容，ADR-030 风险 1 回退）。
+  const hasRangeRows = useMemo(
+    () => rows.some((r) => r.registerCount > 1),
+    [rows],
+  );
   const addRow = useAppStore((s) => s.addRow);
   const appendMessage = useAppStore((s) => s.appendMessage);
   const setSheetRegisterRadix = useAppStore((s) => s.setSheetRegisterRadix);
@@ -1075,6 +1309,8 @@ export const RegisterTable = memo(function RegisterTable({
       rows.map((row) => ({
         key: row.rowId,
         address: row.addressValue?.value ?? null,
+        // 多寄存器范围行（ADR-030）：一次 FC03 批量读取全部连续寄存器。
+        ...(row.registerCount > 1 ? { quantity: row.registerCount } : {}),
       })),
     );
     readAllHandleRef.current = handle;
@@ -1387,18 +1623,29 @@ export const RegisterTable = memo(function RegisterTable({
       {
         title: t("table.no"),
         key: "no",
-        width: 40,
+        // 宽度自适应（2026-08-27）：No 单元格 = antd 树形展开图标（ADR-030 范围行「加号按钮」）
+        // + 行号，按本表最大行号位数计算，保证单行完整显示（固定宽 40 时两位数换行撑高行）。
+        // 仍属 FIXED_WIDTH_COLUMNS：不可表头拖拽、忽略 colWidths 持久化覆盖。
+        width: computeNoColumnWidth(maxOrder),
         align: "center",
-        render: (_, row) => <NoCell order={row.order} />,
+        className: "register-table__cell--no",
+        render: (_, row) =>
+          isVirtualChildRow(row) ? null : <NoCell order={row.order} />,
       },
       {
         title: t("table.tm"),
         key: "tm",
         width: 40,
         align: "center",
-        render: (_, row) => (
-          <TmCell rowId={row.rowId} traceEnabled={row.traceEnabled} />
-        ),
+        render: (_, row) =>
+          isVirtualChildRow(row) ? null : (
+            <TmCell
+              rowId={row.rowId}
+              traceEnabled={row.traceEnabled}
+              dataType={row.dataType}
+              registerCount={row.registerCount}
+            />
+          ),
       },
       {
         title: t("table.name"),
@@ -1406,7 +1653,12 @@ export const RegisterTable = memo(function RegisterTable({
         width: 150,
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
-        render: (_, row) => <NameCell rowId={row.rowId} name={row.name} />,
+        render: (_, row) =>
+          isVirtualChildRow(row) ? (
+            <ChildNameCell row={row} />
+          ) : (
+            <NameCell rowId={row.rowId} name={row.name} />
+          ),
       },
       {
         title:
@@ -1421,37 +1673,46 @@ export const RegisterTable = memo(function RegisterTable({
         className: "register-table__cell--center register-table__cell--mono",
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
-        render: (_, row) => (
-          <RegisterCell
-            rowId={row.rowId}
-            addressDraft={row.addressDraft}
-            {...(cellValidationErrors[`${row.rowId}:address`] !== undefined
-              ? { error: cellValidationErrors[`${row.rowId}:address`] }
-              : {})}
-          />
-        ),
+        render: (_, row) =>
+          isVirtualChildRow(row) ? (
+            <ChildAddressCell row={row} radix={registerRadix} />
+          ) : (
+            <RegisterCell
+              rowId={row.rowId}
+              addressDraft={row.addressDraft}
+              {...(cellValidationErrors[`${row.rowId}:address`] !== undefined
+                ? { error: cellValidationErrors[`${row.rowId}:address`] }
+                : {})}
+            />
+          ),
       },
       {
         title: t("table.wp"),
         key: "wp",
         width: 56,
         align: "center",
-        render: (_, row) => (
-          <WpCell
-            rowId={row.rowId}
-            pollingEnabled={row.pollingEnabled}
-            hasAddress={row.addressValue !== null}
-          />
-        ),
+        render: (_, row) =>
+          isVirtualChildRow(row) ? null : (
+            <WpCell
+              rowId={row.rowId}
+              pollingEnabled={row.pollingEnabled}
+              hasAddress={row.addressValue !== null}
+            />
+          ),
       },
       {
         title: t("table.read"),
         key: "read",
         width: 64,
         align: "center",
-        render: (_, row) => (
-          <ReadCell rowId={row.rowId} hasAddress={row.addressValue !== null} />
-        ),
+        render: (_, row) =>
+          isVirtualChildRow(row) ? null : (
+            <ReadCell
+              rowId={row.rowId}
+              hasAddress={row.addressValue !== null}
+              typeCountValid={isRowTypeCountValid(row)}
+            />
+          ),
       },
       {
         title: t("table.data"),
@@ -1461,49 +1722,80 @@ export const RegisterTable = memo(function RegisterTable({
         className: "register-table__cell--center register-table__cell--mono",
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
-        render: (_, row) => (
-          <DataCell
-            rowId={row.rowId}
-            cellText={row.cellText}
-            {...(cellValidationErrors[`${row.rowId}:data`] !== undefined
-              ? { error: cellValidationErrors[`${row.rowId}:data`] }
-              : {})}
-          />
-        ),
+        render: (_, row) =>
+          isVirtualChildRow(row) ? (
+            <ChildDataCell row={row} />
+          ) : (
+            <DataCell
+              rowId={row.rowId}
+              cellText={row.cellText}
+              {...(cellValidationErrors[`${row.rowId}:data`] !== undefined
+                ? { error: cellValidationErrors[`${row.rowId}:data`] }
+                : {})}
+            />
+          ),
       },
       {
         title: t("table.write"),
         key: "write",
         width: 64,
         align: "center",
-        render: (_, row) => (
-          <WriteCell
-            sheetId={sheetId}
-            rowId={row.rowId}
-            hasAddress={row.addressValue !== null}
-          />
-        ),
+        render: (_, row) =>
+          isVirtualChildRow(row) ? null : (
+            <WriteCell
+              sheetId={sheetId}
+              rowId={row.rowId}
+              hasAddress={row.addressValue !== null}
+              typeCountValid={isRowTypeCountValid(row)}
+            />
+          ),
       },
       {
         title: t("table.type"),
         key: "type",
-        // 默认宽 72：为原默认宽（144）的一半（用户需求）。Type 下拉在窄列下省略显示；
+        // 默认宽 72：为原默认宽（144）的一半（用户需求）。进制下拉在窄列下省略显示；
         // 拖拽仍可自由调整（COLUMN_MIN_WIDTHS.type 已同步下调为 72，保证默认宽不被钳制）。
         width: 72,
         align: "center",
         className: "register-table__cell--center",
-        render: (_, row) => (
-          <TypeCell rowId={row.rowId} dataType={row.dataType} />
-        ),
+        render: (_, row) =>
+          isVirtualChildRow(row) ? (
+            <ChildTypeCell row={row} />
+          ) : (
+            <TypeCell
+              rowId={row.rowId}
+              dataType={row.dataType}
+              {...(cellValidationErrors[`${row.rowId}:type`] !== undefined
+                ? { error: cellValidationErrors[`${row.rowId}:type`] }
+                : {})}
+            />
+          ),
+      },
+      {
+        // Type scale 列（ADR-030）：进制+scale 两列表达类型。
+        title: t("table.scale"),
+        key: "scale",
+        width: 80,
+        align: "center",
+        className: "register-table__cell--center",
+        render: (_, row) =>
+          isVirtualChildRow(row) ? (
+            <ChildScaleCell row={row} />
+          ) : (
+            <ScaleCell rowId={row.rowId} dataType={row.dataType} />
+          ),
       },
       {
         title: t("table.comment"),
         key: "comment",
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
-        render: (_, row) => (
-          <CommentCell rowId={row.rowId} comment={row.comment} />
-        ),
+        render: (_, row) =>
+          isVirtualChildRow(row) ? (
+            <ChildCommentCell row={row} />
+          ) : (
+            <CommentCell rowId={row.rowId} comment={row.comment} />
+          ),
       },
       {
         title: "",
@@ -1512,14 +1804,20 @@ export const RegisterTable = memo(function RegisterTable({
         align: "center",
         // 仅最后一列（drag 列）响应右键打开行级菜单：preventDefault 抑制系统菜单并记录目标行；
         // 不 stopPropagation，放行冒泡到 Dropdown trigger 以记录鼠标点坐标（alignPoint 定位）。
+        // 虚拟子行（ADR-030）不响应右键菜单（不可交互）。
         onCell: (record) => ({
-          onContextMenu: (event) =>
-            rowHandlersRef.current.onRowContextMenu(record.rowId, event),
+          onContextMenu: isVirtualChildRow(record)
+            ? undefined
+            : (event) =>
+                rowHandlersRef.current.onRowContextMenu(record.rowId, event),
         }),
-        render: () => <DragHandle ariaLabel={t("table.dragHandle")} />,
+        render: (_, row) =>
+          isVirtualChildRow(row) ? null : (
+            <DragHandle ariaLabel={t("table.dragHandle")} />
+          ),
       },
     ],
-    [t, registerRadix, cellValidationErrors, sheetId],
+    [t, registerRadix, cellValidationErrors, sheetId, maxOrder],
   );
 
   // 合并拖拽列宽、按持久化列顺序重排，并挂载 onHeaderCell（供 HeaderCell 接收 id/width/onResize）。
@@ -1663,68 +1961,94 @@ export const RegisterTable = memo(function RegisterTable({
   // （onRow 事件闭包每次新建，经 rowHandlersRef 始终指向最新处理器；style 每次新建对象引用，
   // 本表不设行样式，选中/悬停类经 className 按字符串值比较传递）。
   // 依赖与 columns useMemo 一致：任一外部渲染依赖变化时重建行组件，强制全行重渲染，避免陈旧内容。
+  // 虚拟子行（ADR-030）不注册 useSortable：不可拖拽（不在 SortableContext items 中），
+  // 用无 dnd-kit 的普通 <tr>（hooks 规则：useSortable 只在 SortableRow 内部无条件调用）。
   const MemoRow = useMemo(() => {
+    const SortableRow = forwardRef<HTMLTableRowElement, MemoTableRowProps>(
+      function SortableRow(props, ref) {
+        const { _record, _index, _selection, _colOrder, ...rest } = props;
+        void _index;
+        void _selection;
+        void _colOrder;
+        // rc-table 在空数据时也会用自定义行组件渲染空态占位行（record 为 undefined）。
+        // 此时无真实数据行，dnd-kit 用占位 id（不参与 SortableContext 排序），
+        // 避免 useSortable 的 _record.rowId 崩溃；hooks 保持无条件调用（Hooks 规则）。
+        const isEmpty = _record === undefined || _record === null;
+        // dnd-kit 可排序行：id 用 rowId（稳定，行数据更新不重建 droppable）。
+        // useSortable 内部状态（transform/isDragging）变化会自渲染，不受外层 memo 影响。
+        const {
+          attributes,
+          listeners,
+          setNodeRef,
+          setActivatorNodeRef,
+          transform,
+          transition,
+          isDragging,
+        } = useSortable({
+          id: isEmpty ? "__mamep_empty_row__" : _record.rowId,
+        });
+        // 组合 dnd-kit 的 setNodeRef 与 rc-table 转发的 ref（虚拟滚动测量依赖转发 ref）。
+        const setRefs = useCallback(
+          (node: HTMLTableRowElement | null) => {
+            setNodeRef(node);
+            if (ref !== null && ref !== undefined) {
+              if (typeof ref === "function") {
+                ref(node);
+              } else {
+                ref.current = node;
+              }
+            }
+          },
+          [ref, setNodeRef],
+        );
+        const contextValue = useMemo<RowContextProps>(
+          () => ({ setActivatorNodeRef, listeners }),
+          [setActivatorNodeRef, listeners],
+        );
+        // 拖拽中行浮起；transform/transition 来自 dnd-kit，虚拟滚动下行渲染不受影响。
+        const style: React.CSSProperties = {
+          ...rest.style,
+          transform: CSS.Translate.toString(transform),
+          transition,
+          ...(isDragging ? { position: "relative", zIndex: 9999 } : {}),
+        };
+        return (
+          <RowContext.Provider value={contextValue}>
+            <tr
+              {...rest}
+              {...(isEmpty ? {} : attributes)}
+              ref={setRefs}
+              style={style}
+              role="row"
+              tabIndex={-1}
+            />
+          </RowContext.Provider>
+        );
+      },
+    );
+    SortableRow.displayName = "RegisterTableSortableRow";
+
+    /** 虚拟子行：普通 <tr>，无 dnd-kit（不可拖拽），只读展示。 */
+    const ChildRow = forwardRef<HTMLTableRowElement, MemoTableRowProps>(
+      function ChildRow(props, ref) {
+        const { _record, _index, _selection, _colOrder, ...rest } = props;
+        void _record;
+        void _index;
+        void _selection;
+        void _colOrder;
+        return <tr {...rest} ref={ref} role="row" tabIndex={-1} />;
+      },
+    );
+    ChildRow.displayName = "RegisterTableChildRow";
+
     const MemoizedTr = memo(
       forwardRef<HTMLTableRowElement, MemoTableRowProps>(
         function RegisterTableRow(props, ref) {
-          const { _record, _index, _selection, _colOrder, ...rest } = props;
-          void _index;
-          void _selection;
-          void _colOrder;
-          // rc-table 在空数据时也会用自定义行组件渲染空态占位行（record 为 undefined）。
-          // 此时无真实数据行，dnd-kit 用占位 id（不参与 SortableContext 排序），
-          // 避免 useSortable 的 _record.rowId 崩溃；hooks 保持无条件调用（Hooks 规则）。
-          const isEmpty = _record === undefined || _record === null;
-          // dnd-kit 可排序行：id 用 rowId（稳定，行数据更新不重建 droppable）。
-          // useSortable 内部状态（transform/isDragging）变化会自渲染，不受外层 memo 影响。
-          const {
-            attributes,
-            listeners,
-            setNodeRef,
-            setActivatorNodeRef,
-            transform,
-            transition,
-            isDragging,
-          } = useSortable({
-            id: isEmpty ? "__mamep_empty_row__" : _record.rowId,
-          });
-          // 组合 dnd-kit 的 setNodeRef 与 rc-table 转发的 ref（虚拟滚动测量依赖转发 ref）。
-          const setRefs = useCallback(
-            (node: HTMLTableRowElement | null) => {
-              setNodeRef(node);
-              if (ref !== null && ref !== undefined) {
-                if (typeof ref === "function") {
-                  ref(node);
-                } else {
-                  ref.current = node;
-                }
-              }
-            },
-            [ref, setNodeRef],
-          );
-          const contextValue = useMemo<RowContextProps>(
-            () => ({ setActivatorNodeRef, listeners }),
-            [setActivatorNodeRef, listeners],
-          );
-          // 拖拽中行浮起；transform/transition 来自 dnd-kit，虚拟滚动下行渲染不受影响。
-          const style: React.CSSProperties = {
-            ...rest.style,
-            transform: CSS.Translate.toString(transform),
-            transition,
-            ...(isDragging ? { position: "relative", zIndex: 9999 } : {}),
-          };
-          return (
-            <RowContext.Provider value={contextValue}>
-              <tr
-                {...rest}
-                {...(isEmpty ? {} : attributes)}
-                ref={setRefs}
-                style={style}
-                role="row"
-                tabIndex={-1}
-              />
-            </RowContext.Provider>
-          );
+          // 虚拟子行走普通 <tr>（无 useSortable）；父行/普通行走 SortableRow。
+          if (isVirtualChildRow(props._record)) {
+            return <ChildRow {...props} ref={ref} />;
+          }
+          return <SortableRow {...props} ref={ref} />;
         },
       ),
       (prev, next) =>
@@ -1907,13 +2231,20 @@ export const RegisterTable = memo(function RegisterTable({
                 size="small"
                 rowKey="rowId"
                 columns={columns}
-                dataSource={rows}
+                dataSource={treeRows}
                 pagination={false}
                 bordered
                 rowClassName={(_record, index) =>
-                  index % 2 === 1 ? "register-table__row--striped" : ""
+                  isVirtualChildRow(_record)
+                    ? "register-table__row--child"
+                    : index % 2 === 1
+                      ? "register-table__row--striped"
+                      : ""
                 }
-                virtual={rows.length > VIRTUAL_SCROLL_THRESHOLD}
+                // 范围行（ADR-030）：tree 数据 + virtual 不兼容 → 禁用虚拟滚动（风险 1 回退）。
+                virtual={
+                  rows.length > VIRTUAL_SCROLL_THRESHOLD && !hasRangeRows
+                }
                 {...(tableBodyHeight > 0 ||
                 rows.length > VIRTUAL_SCROLL_THRESHOLD
                   ? ({
@@ -1941,6 +2272,10 @@ export const RegisterTable = memo(function RegisterTable({
                   selectedRowKeys: selectedRowIds,
                   onChange: (keys) =>
                     setSelectedRowIds(keys.map((k) => String(k)) as RowId[]),
+                  // 虚拟子行（ADR-030）：不可多选（复选框禁用）。
+                  getCheckboxProps: (record) => ({
+                    disabled: isVirtualChildRow(record),
+                  }),
                   selections: [
                     Table.SELECTION_ALL,
                     Table.SELECTION_INVERT,

@@ -1,5 +1,6 @@
 export * from "./address";
 export * from "./cell-text";
+export * from "./child-register";
 export * from "./column-order";
 export * from "./polling";
 export * from "./row-clipboard";

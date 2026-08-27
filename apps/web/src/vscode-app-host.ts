@@ -127,7 +127,11 @@ export class VscodeAppHost implements AppHost {
     (message: ApplicationMessage) => void
   >();
   private readonly pollResultListeners = new Set<
-    (key: string, address: number, result: Result<number>) => void
+    (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void
   >();
   private readonly traceListeners = new Set<
     (sample: TraceSampleEvent) => void
@@ -438,7 +442,7 @@ export class VscodeAppHost implements AppHost {
 
   // ---- 寄存器读写 / 轮询 / Trace（远程会话 RPC）----
 
-  readRow(row: RegisterRow): Promise<Result<number>> {
+  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     return this.bridge.sessionReadRow(toRegisterRowPayload(row));
   }
 
@@ -478,7 +482,9 @@ export class VscodeAppHost implements AppHost {
     };
   }
 
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
+  updatePollingTargets(
+    rows: Array<{ key: string; address: number; quantity?: number }>,
+  ): void {
     void this.bridge.sessionUpdatePollingTargets(rows);
   }
 
@@ -490,8 +496,8 @@ export class VscodeAppHost implements AppHost {
     void this.bridge.sessionPollingStop();
   }
 
-  traceStart(key: string, address: number, speedMs: number): void {
-    void this.bridge.sessionTraceStart(key, address, speedMs);
+  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+    void this.bridge.sessionTraceStart(key, address, speedMs, quantity);
   }
 
   traceStop(key: string): void {
@@ -506,7 +512,11 @@ export class VscodeAppHost implements AppHost {
   }
 
   subscribePollResult(
-    listener: (key: string, address: number, result: Result<number>) => void,
+    listener: (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void,
   ): () => void {
     this.pollResultListeners.add(listener);
     return () => this.pollResultListeners.delete(listener);

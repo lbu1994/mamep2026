@@ -247,16 +247,36 @@ class ModbusRtuSlave {
         );
         return;
       }
-      // normal / write-value-gate（读按正常处理）：返回当前寄存器值（默认 0）。
-      const value = this.getRegister(address);
-      this.log.debug(`读 ${addrHex} → 0x${value.toString(16).toUpperCase().padStart(4, "0")}`);
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      if (rule?.mustMulti === true && quantity === 1) {
+        this.logException(functionCode, EXCEPTION_ILLEGAL_DATA_ADDRESS, addrHex);
+        this.respond(
+          this.exceptionFrame(
+            slave,
+            FUNCTION_READ_HOLDING,
+            EXCEPTION_ILLEGAL_DATA_ADDRESS,
+          ),
+          behavior,
+        );
+        return;
+      }
+      // normal / write-value-gate（读按正常处理）：返回 quantity 个寄存器值（默认 0）。
+      const values = [];
+      for (let i = 0; i < quantity; i++) {
+        values.push(this.getRegister(address + i));
+      }
+      this.log.debug(
+        `读 ${addrHex} × ${quantity} → [${values
+          .map((v) => `0x${v.toString(16).toUpperCase().padStart(4, "0")}`)
+          .join(", ")}]`,
+      );
       this.respond(
         Uint8Array.from([
           slave,
           FUNCTION_READ_HOLDING,
-          0x02,
-          (value >> 8) & 0xff,
-          value & 0xff,
+          quantity * 2,
+          ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
         ]),
         behavior,
       );
@@ -265,7 +285,12 @@ class ModbusRtuSlave {
 
     if (functionCode === FUNCTION_WRITE_MULTIPLE) {
       const behavior = rule?.write ?? { kind: "normal" };
-      const value = ((bytes[7] ?? 0) << 8) | (bytes[8] ?? 0);
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      const values = [];
+      for (let i = 0; i < quantity; i++) {
+        values.push(((bytes[7 + i * 2] ?? 0) << 8) | (bytes[8 + i * 2] ?? 0));
+      }
+      const value = values[0] ?? 0;
       if (behavior.kind === "no-response") {
         this.log.info(`no-response：写 ${addrHex} 不回帧`);
         return;
@@ -278,7 +303,23 @@ class ModbusRtuSlave {
         );
         return;
       }
-      if (behavior.kind === "write-value-gate" && value > behavior.maxValue) {
+      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      if (rule?.mustMulti === true && quantity === 1) {
+        this.logException(functionCode, EXCEPTION_ILLEGAL_DATA_ADDRESS, addrHex);
+        this.respond(
+          this.exceptionFrame(
+            slave,
+            FUNCTION_WRITE_MULTIPLE,
+            EXCEPTION_ILLEGAL_DATA_ADDRESS,
+          ),
+          behavior,
+        );
+        return;
+      }
+      if (
+        behavior.kind === "write-value-gate" &&
+        values.some((v) => v > behavior.maxValue)
+      ) {
         this.log.warn(
           `写 ${addrHex} = 0x${value.toString(16).toUpperCase()} 超出上限 0x${behavior.maxValue.toString(16).toUpperCase()}，回异常 0x03`,
         );
@@ -291,7 +332,7 @@ class ModbusRtuSlave {
       if (behavior.kind === "write-ignore") {
         // 写忽略区：回执成功但**不实际写入**（模拟设备「写不生效」——写入后回读仍为旧值）。
         this.log.warn(
-          `写 ${addrHex} = 0x${value.toString(16).toUpperCase()}（写忽略区：回执成功但不落盘）`,
+          `写 ${addrHex} × ${quantity}（写忽略区：回执成功但不落盘）`,
         );
         this.respond(
           Uint8Array.from([
@@ -299,16 +340,20 @@ class ModbusRtuSlave {
             FUNCTION_WRITE_MULTIPLE,
             (address >> 8) & 0xff,
             address & 0xff,
-            0x00,
-            0x01,
+            (quantity >> 8) & 0xff,
+            quantity & 0xff,
           ]),
           behavior,
         );
         return;
       }
-      this.registers.set(address & 0xffff, value & 0xffff);
+      for (let i = 0; i < quantity; i++) {
+        this.registers.set((address + i) & 0xffff, (values[i] ?? 0) & 0xffff);
+      }
       this.log.debug(
-        `写 ${addrHex} ← 0x${value.toString(16).toUpperCase().padStart(4, "0")}（寄存器 ${this.registers.size} 个）`,
+        `写 ${addrHex} × ${quantity} ← [${values
+          .map((v) => `0x${v.toString(16).toUpperCase().padStart(4, "0")}`)
+          .join(", ")}]（寄存器 ${this.registers.size} 个）`,
       );
       this.respond(
         Uint8Array.from([
@@ -316,8 +361,8 @@ class ModbusRtuSlave {
           FUNCTION_WRITE_MULTIPLE,
           (address >> 8) & 0xff,
           address & 0xff,
-          0x00,
-          0x01,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
         ]),
         behavior,
       );

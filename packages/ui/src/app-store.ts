@@ -31,6 +31,7 @@ import {
   addRowAfter,
   commitAddress,
   commitCellText as commitCellTextUseCase,
+  commitChildCellText as commitChildCellTextUseCase,
   copyRowsToClipboard,
   cutRowsFromSheet,
   decodeClipboardCsv,
@@ -43,6 +44,9 @@ import {
   moveRows,
   pasteClipboardRows,
   renumberRows,
+  rowTypeCountError,
+  setChildMeta as setChildMetaUseCase,
+  type ChildMetaPatch,
   type ClipboardIssue,
   type RowClipboardData,
 } from "@mamep2026/register-table";
@@ -54,6 +58,7 @@ import {
   applyManualResult,
   applyPollResultStatus,
   applyRowEdit,
+  applyTypeValidation,
   createEmptyRowStatusState,
   type ApplyManualResultOptions,
   type RowFailure,
@@ -137,6 +142,18 @@ export interface AppStoreState {
   commitRowAddress: (rowId: RowId, draft: string) => Result<RegisterRow>;
   /** 提交 Data 单元格文本：按 Type 校验；失败保留输入并记录校验错误（§17/§23）。 */
   commitCellText: (rowId: RowId, text: string) => Result<RegisterRow>;
+  /** 提交范围行子行 Data：按子行自身 Type 校验/解析，回写父行 registerValues[i] 并重算父行组合文本（2026-08-27）。 */
+  commitChildCellText: (
+    parentRowId: RowId,
+    index: number,
+    text: string,
+  ) => Result<RegisterRow>;
+  /** 更新范围行子行独立元数据（name/comment/dataType），随父行持久化（2026-08-27）。 */
+  setChildMeta: (
+    parentRowId: RowId,
+    index: number,
+    patch: ChildMetaPatch,
+  ) => void;
   addRow: (sheetId: SheetId) => void;
   deleteRow: (sheetId: SheetId, rowId: RowId) => void;
   moveRow: (sheetId: SheetId, rowId: RowId, direction: "up" | "down") => void;
@@ -380,11 +397,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         rowId,
         result,
       );
+      // 范围长度 × 类型合法集校验（ADR-030）：不匹配在类型列报错（禁止读写）。
+      const withType = applyTypeValidation(
+        next,
+        rowId,
+        result.ok ? rowTypeCountError(result.value) : null,
+      );
       return {
-        rowResults: next.rowResults,
-        rowDirty: next.rowDirty,
-        rowSuccess: next.rowSuccess,
-        cellValidationErrors: next.cellValidationErrors,
+        rowResults: withType.rowResults,
+        rowDirty: withType.rowDirty,
+        rowSuccess: withType.rowSuccess,
+        cellValidationErrors: withType.cellValidationErrors,
       };
     });
     return result;
@@ -436,6 +459,49 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     });
     return result;
+  },
+
+  commitChildCellText: (parentRowId, index, text) => {
+    const sheets = get().workspace.sheets;
+    const sheet = sheets.find((s) =>
+      s.rows.some((r) => r.rowId === parentRowId),
+    );
+    const row = sheet?.rows.find((r) => r.rowId === parentRowId);
+    if (row === undefined || sheet === undefined) {
+      return {
+        ok: false as const,
+        error: {
+          code: "ROW_NOT_FOUND",
+          category: "validation" as const,
+          severity: "error" as const,
+          retryable: false,
+          userMessageKey: "errors.rowNotFound",
+          technicalMessage: "row not found",
+        },
+      };
+    }
+    const result = commitChildCellTextUseCase(row, index, text);
+    // 成功：回写父行（registerValues[i] + 重算 cellText）；失败：子行草稿回退（不写坏父行组合文本）。
+    if (result.ok) {
+      get().updateRow(parentRowId, (r) =>
+        r.rowId === result.value.rowId ? result.value : r,
+      );
+    }
+    return result;
+  },
+
+  setChildMeta: (parentRowId, index, patch) => {
+    const sheets = get().workspace.sheets;
+    const sheet = sheets.find((s) =>
+      s.rows.some((r) => r.rowId === parentRowId),
+    );
+    const row = sheet?.rows.find((r) => r.rowId === parentRowId);
+    if (row === undefined || sheet === undefined) return;
+    const result = setChildMetaUseCase(row, index, patch);
+    if (!result.ok) return;
+    get().updateRow(parentRowId, (r) =>
+      r.rowId === result.value.rowId ? result.value : r,
+    );
   },
 
   addRow: (sheetId) =>
@@ -900,12 +966,25 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     }),
 
-  setRowDataType: (rowId, dataType) =>
+  setRowDataType: (rowId, dataType) => {
     get().updateRow(rowId, (row) => ({
       ...row,
       dataType,
       updatedAt: Date.now(),
-    })),
+    }));
+    // 范围长度 × 类型合法集校验（ADR-030）：类型切换后按当前 registerCount 重算类型列错误。
+    const sheets = get().workspace.sheets;
+    const row = sheets.flatMap((sh) => sh.rows).find((r) => r.rowId === rowId);
+    if (row === undefined) return;
+    set((state) => {
+      const next = applyTypeValidation(
+        { ...state, cellValidationErrors: state.cellValidationErrors },
+        rowId,
+        rowTypeCountError(row),
+      );
+      return { cellValidationErrors: next.cellValidationErrors };
+    });
+  },
 
   setSheetRegisterRadix: (sheetId, radix) =>
     set((state) => ({

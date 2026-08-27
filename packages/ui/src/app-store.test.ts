@@ -520,6 +520,78 @@ describe("commitRowAddress radix", () => {
   });
 });
 
+describe("commitChildCellText / setChildMeta（范围行子行可编辑化，2026-08-27）", () => {
+  function rangeRowId(): RowId {
+    const store = useAppStore.getState();
+    const id = firstSheetId();
+    store.addRow(id);
+    const sheet = useAppStore
+      .getState()
+      .workspace.sheets.find((s) => s.sheetId === id);
+    const row = sheet?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    store.commitRowAddress(row.rowId, "1000-1001");
+    return row.rowId;
+  }
+
+  function rowOf(rowId: RowId) {
+    return useAppStore
+      .getState()
+      .workspace.sheets.flatMap((s) => s.rows)
+      .find((r) => r.rowId === rowId);
+  }
+
+  it("commitChildCellText 回写父行 registerValues[i] 并重算组合文本", () => {
+    const rowId = rangeRowId();
+    const result = useAppStore.getState().commitChildCellText(rowId, 0, "12");
+    expect(result.ok).toBe(true);
+    const row = rowOf(rowId);
+    expect(row?.registerValues?.map((v) => v.value)).toEqual([0x12, 0]);
+    expect(row?.cellText).toBe("0012 0000");
+    expect(row?.registers).toHaveLength(2);
+  });
+
+  it("commitChildCellText 按子行自身 dataType 解析（Type 列独立生效）", () => {
+    const rowId = rangeRowId();
+    useAppStore.getState().setChildMeta(rowId, 0, { dataType: "unsigned" });
+    const result = useAppStore.getState().commitChildCellText(rowId, 0, "300");
+    expect(result.ok).toBe(true);
+    const row = rowOf(rowId);
+    expect(row?.registerValues?.[0]?.value).toBe(300);
+    // 父行组合文本仍按父行 dataType（hex）格式化。
+    expect(row?.cellText).toBe("012C 0000");
+  });
+
+  it("commitChildCellText 非法值失败且不改父行", () => {
+    const rowId = rangeRowId();
+    const before = rowOf(rowId);
+    const result = useAppStore.getState().commitChildCellText(rowId, 0, "zz");
+    expect(result.ok).toBe(false);
+    const after = rowOf(rowId);
+    expect(after?.registerValues).toEqual(before?.registerValues);
+  });
+
+  it("setChildMeta 更新子行元数据且不碰值", () => {
+    const rowId = rangeRowId();
+    useAppStore.getState().setChildMeta(rowId, 1, {
+      name: "Lo",
+      comment: "low",
+      dataType: "signed",
+    });
+    const row = rowOf(rowId);
+    expect(row?.registers?.[1]).toEqual({
+      name: "Lo",
+      comment: "low",
+      dataType: "signed",
+    });
+    expect(row?.registers?.[0]).toEqual({
+      name: "",
+      comment: "",
+      dataType: "hex",
+    });
+  });
+});
+
 describe("setSheetColumnWidths", () => {
   it("只修改目标表的 columnWidths，不影响其他表（每表独立不共享）", () => {
     const store = useAppStore.getState();

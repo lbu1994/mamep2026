@@ -18,10 +18,13 @@ export const FAKE_TCP_PORT = 1502;
 /** e2e 可访问的共享寄存器状态（仅测试用）。 */
 export const devFakeTcpState = {
   registers: new Map<number, number>(),
+  /** must-multi 区起始地址（ADR-030）：null=关闭；该地址起单读/单写返回异常 0x02。 */
+  mustMultiStart: null as number | null,
 };
 
 export function resetDevFakeTcp(): void {
   devFakeTcpState.registers.clear();
+  devFakeTcpState.mustMultiStart = null;
 }
 
 /** 组 MBAP 帧（tid/proto=0/length/unit + pdu），无 CRC。 */
@@ -92,18 +95,64 @@ export class DevFakeTcpServer {
     const functionCode = frame[7] ?? 0;
     const address = ((frame[8] ?? 0) << 8) | (frame[9] ?? 0);
     if (functionCode === 0x03) {
-      const value = devFakeTcpState.registers.get(address) ?? 0;
+      // FC03 读：PDU 从 frame[7]：fc + addr(2) + qty(2)。
+      const quantity = ((frame[10] ?? 0) << 8) | (frame[11] ?? 0);
+      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      if (
+        devFakeTcpState.mustMultiStart !== null &&
+        address >= devFakeTcpState.mustMultiStart &&
+        quantity === 1
+      ) {
+        return buildTcpFrame(
+          tid,
+          unitId,
+          Uint8Array.from([0x83, 0x02]),
+        );
+      }
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(
+          devFakeTcpState.registers.get((address + i) & 0xffff) ?? 0,
+        );
+      }
       return buildTcpFrame(
         tid,
         unitId,
-        Uint8Array.from([0x03, 0x02, (value >> 8) & 0xff, value & 0xff]),
+        Uint8Array.from([
+          0x03,
+          quantity * 2,
+          ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+        ]),
       );
     }
     if (functionCode === 0x10) {
-      // FC10 写多寄存器请求 PDU：FC + addr(2) + qty(2) + byteCount(1) + data(2)。
-      // MBAP 7B 后：frame[7]=fc、[8..9]=addr、[10..11]=qty、[12]=byteCount、[13..14]=值。
-      const value = ((frame[13] ?? 0) << 8) | (frame[14] ?? 0);
-      devFakeTcpState.registers.set(address, value);
+      // FC10 写多寄存器请求 PDU：FC + addr(2) + qty(2) + byteCount(1) + data(2N)。
+      // MBAP 7B 后：frame[7]=fc、[8..9]=addr、[10..11]=qty、[12]=byteCount、[13..]=值。
+      const quantity = ((frame[10] ?? 0) << 8) | (frame[11] ?? 0);
+      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      if (
+        devFakeTcpState.mustMultiStart !== null &&
+        address >= devFakeTcpState.mustMultiStart &&
+        quantity === 1
+      ) {
+        return buildTcpFrame(
+          tid,
+          unitId,
+          Uint8Array.from([0x90, 0x02]),
+        );
+      }
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(
+          (((frame[13 + i * 2] ?? 0) << 8) | (frame[14 + i * 2] ?? 0)) & 0xffff,
+        );
+      }
+      for (let i = 0; i < quantity; i += 1) {
+        devFakeTcpState.registers.set(
+          (address + i) & 0xffff,
+          values[i] ?? 0,
+        );
+      }
       return buildTcpFrame(
         tid,
         unitId,
@@ -111,8 +160,8 @@ export class DevFakeTcpServer {
           0x10,
           (address >> 8) & 0xff,
           address & 0xff,
-          0x00,
-          0x01,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
         ]),
       );
     }

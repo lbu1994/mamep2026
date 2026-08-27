@@ -35,15 +35,28 @@ export class WriteVerifyCoordinator {
     this.clock = clock;
   }
 
-  /** 写后回读全流程。settings.mode==="off" 时不回读（默认写入成功即成功态）。 */
+  /** 写后回读全流程（单寄存器，ADR-030 后委托多值实现，values=[rawValue]）。 */
   async writeWithVerify(
     sentAddress: number,
     rawValue: number,
     settings: ReadVerifySettings,
     meta: WriteVerifyMeta = {},
   ): Promise<Result<WriteOutcome>> {
-    // 阶段 1：写入（FC0x10）。
-    const writeResult = await this.session.writeRegister(sentAddress, rawValue, {
+    return this.writeWithVerifyMany(sentAddress, [rawValue], settings, meta);
+  }
+
+  /**
+   * 写后回读全流程（多寄存器，ADR-030）：一次 FC0x10 写 values 全部，回读 FC03 读 N 个
+   * 连续寄存器并逐项比较。settings.mode==="off" 时不回读（默认写入成功即成功态）。
+   */
+  async writeWithVerifyMany(
+    sentAddress: number,
+    values: number[],
+    settings: ReadVerifySettings,
+    meta: WriteVerifyMeta = {},
+  ): Promise<Result<WriteOutcome>> {
+    // 阶段 1：写入（FC0x10，多值）。
+    const writeResult = await this.session.writeRegisters(sentAddress, values, {
       source: "manual-write",
       ...(meta.userAddress !== undefined
         ? { userAddress: meta.userAddress }
@@ -67,7 +80,7 @@ export class WriteVerifyCoordinator {
     try {
       return await this.runVerify(
         sentAddress,
-        rawValue,
+        values,
         settings,
         cancelToken,
         meta,
@@ -80,7 +93,7 @@ export class WriteVerifyCoordinator {
   /** 写成功后执行可选延迟与回读比较（settings.mode 已排除 off）。 */
   private async runVerify(
     sentAddress: number,
-    rawValue: number,
+    values: number[],
     settings: ReadVerifySettings,
     cancelToken: CancellationToken,
     meta: WriteVerifyMeta,
@@ -100,14 +113,18 @@ export class WriteVerifyCoordinator {
       }
     }
 
-    // 阶段 3：回读（FC03，同一 sentAddress；来源 write-verify 便于通信日志区分）。
-    const readResult = await this.session.readRegister(sentAddress, {
-      source: "write-verify",
-      ...(meta.userAddress !== undefined
-        ? { userAddress: meta.userAddress }
-        : {}),
-      cancelToken,
-    });
+    // 阶段 3：回读（FC03，同一 sentAddress，quantity=values.length；来源 write-verify）。
+    const readResult = await this.session.readRegisters(
+      sentAddress,
+      values.length,
+      {
+        source: "write-verify",
+        ...(meta.userAddress !== undefined
+          ? { userAddress: meta.userAddress }
+          : {}),
+        cancelToken,
+      },
+    );
     if (!readResult.ok) {
       // 回读被取消（disconnect / 调度器取消）：写入已成功仅回读取消。
       if (readResult.error.code === "CANCELLED") {
@@ -121,15 +138,18 @@ export class WriteVerifyCoordinator {
       });
     }
 
-    // 阶段 4：比较。
-    const readValue = readResult.value;
-    if (readValue === rawValue) {
-      return ok({ kind: "write-succeeded-verify-matched", readValue });
+    // 阶段 4：逐项比较。
+    const readValues = readResult.value;
+    const matched =
+      readValues.length === values.length &&
+      readValues.every((value, index) => value === values[index]);
+    if (matched) {
+      return ok({ kind: "write-succeeded-verify-matched", readValues });
     }
     return ok({
       kind: "write-succeeded-verify-mismatched",
-      expectedValue: rawValue,
-      readValue,
+      expectedValues: values,
+      readValues,
     });
   }
 

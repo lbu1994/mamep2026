@@ -206,11 +206,13 @@ describe("workspace schema round-trip", () => {
         comment: "unit: rpm",
         addressDraft: "0001",
         addressValue: { value: 1 } as never,
+        registerCount: 1,
         dataType: "unsigned-0.1",
         pollingEnabled: true,
         traceEnabled: true,
         cellText: "12.3",
-        lastKnownRawValue: { value: 123 } as never,
+        registerValues: [{ value: 123 }] as never,
+        registers: null,
         createdAt: 1,
         updatedAt: 1,
       });
@@ -226,7 +228,7 @@ describe("workspace schema round-trip", () => {
     expect(row?.pollingEnabled).toBe(true);
     expect(row?.traceEnabled).toBe(true);
     expect(row?.addressValue?.value).toBe(1);
-    expect(row?.lastKnownRawValue?.value).toBe(123);
+    expect(row?.registerValues?.[0]?.value).toBe(123);
     expect(row?.cellText).toBe("12.3");
     expect(row?.dataType).toBe("unsigned-0.1");
   });
@@ -246,6 +248,42 @@ describe("workspace schema round-trip", () => {
     const result = parseWorkspace({ schemaVersion: 1 });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("WORKSPACE_SCHEMA_INVALID");
+  });
+
+  it("round-trips range-row child metadata (registers)", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      const sheet = w.sheets[0];
+      if (sheet === undefined) return;
+      sheet.rows.push({
+        rowId: "row-range" as never,
+        order: 0,
+        name: "R",
+        comment: "",
+        addressDraft: "1000-1001",
+        addressValue: { value: 1000 } as never,
+        registerCount: 2,
+        dataType: "hex",
+        pollingEnabled: false,
+        traceEnabled: false,
+        cellText: "12 34",
+        registerValues: [{ value: 0x12 }, { value: 0x34 }] as never,
+        registers: [
+          { name: "Hi", comment: "high", dataType: "unsigned" },
+          { name: "Lo", comment: "low", dataType: "hex" },
+        ],
+        createdAt: 1,
+        updatedAt: 1,
+      });
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const row = parsed.value.sheets[0]?.rows.at(-1);
+    expect(row?.registerCount).toBe(2);
+    expect(row?.registers).toEqual([
+      { name: "Hi", comment: "high", dataType: "unsigned" },
+      { name: "Lo", comment: "low", dataType: "hex" },
+    ]);
   });
 
   it("preserves unknown plugin settings", () => {

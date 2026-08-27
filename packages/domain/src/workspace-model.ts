@@ -16,7 +16,7 @@ export type ConnectionProfileId = string & {
 };
 export type PluginId = string & { readonly __brand: "PluginId" };
 
-/** 16 位数据类型（字符串联合，不用 enum 作序列化格式）。 */
+/** 16 位数据类型（字符串联合，不用 enum 作序列化格式）。string 为多寄存器组合类型（ADR-030）。 */
 export type DataType =
   | "hex"
   | "unsigned"
@@ -29,7 +29,8 @@ export type DataType =
   | "signed-0.01"
   | "signed-0.001"
   | "signed-0.0001"
-  | "binary";
+  | "binary"
+  | "string";
 
 export const dataTypes: readonly DataType[] = [
   "hex",
@@ -44,6 +45,7 @@ export const dataTypes: readonly DataType[] = [
   "signed-0.001",
   "signed-0.0001",
   "binary",
+  "string",
 ];
 
 export type Parity = "none" | "even" | "odd";
@@ -72,6 +74,28 @@ export interface RtuConnectionProfile {
   recentPortHint: string | null;
 }
 
+/** 范围行子行独立元数据（2026-08-27）：每寄存器独立 Name/Comment/Type+Scale。 */
+export interface RegisterSubRowMeta {
+  name: string;
+  comment: string;
+  dataType: DataType;
+}
+
+/** 创建单个子行默认元数据（name/comment 为空，dataType 继承父行）。 */
+export function createRegisterSubRowMeta(
+  dataType: DataType,
+): RegisterSubRowMeta {
+  return { name: "", comment: "", dataType };
+}
+
+/** 按长度构建范围行子行元数据数组（缺省继承父行 dataType）。 */
+export function createRegisterSubRowMetas(
+  count: number,
+  dataType: DataType,
+): RegisterSubRowMeta[] {
+  return Array.from({ length: count }, () => createRegisterSubRowMeta(dataType));
+}
+
 /** 寄存器行。addressDraft / addressValue / 校验状态分离（§17.2）。 */
 export interface RegisterRow {
   rowId: RowId;
@@ -82,6 +106,8 @@ export interface RegisterRow {
   addressDraft: string;
   /** 已提交的合法地址；为空表示未配置 */
   addressValue: RegisterAddress | null;
+  /** 覆盖的连续寄存器数（ADR-030）：1=单寄存器；范围行 >1 */
+  registerCount: number;
   dataType: DataType;
   /** WP：周期轮询开关 */
   pollingEnabled: boolean;
@@ -89,7 +115,10 @@ export interface RegisterRow {
   traceEnabled: boolean;
   /** Data 单元格单一当前值（§15.1） */
   cellText: string;
-  lastKnownRawValue: RawRegisterValue | null;
+  /** 各寄存器原始值（ADR-030，单一事实源，替代 lastKnownRawValue）：null=未读；长度=registerCount */
+  registerValues: RawRegisterValue[] | null;
+  /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据；范围行（registerCount>1）为长度=registerCount 的数组。 */
+  registers: RegisterSubRowMeta[] | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -173,9 +202,8 @@ export interface Workspace {
   migrationHistory: MigrationRecord[];
 }
 
-/** 当前工作区 Schema 版本。 */
-/** 当前工作区 Schema 版本（2026-08-26 v2：写后回读配置从 workspace 全局下放到每表 sheet.writeVerify）。 */
-export const workspaceSchemaVersion = 2;
+/** 当前工作区 Schema 版本（2026-08-27 v4：范围行子行元数据 registers 落盘）。 */
+export const workspaceSchemaVersion = 4;
 
 let idCounter = 0;
 
@@ -250,11 +278,13 @@ export function createEmptyRow(): RegisterRow {
     comment: "",
     addressDraft: "",
     addressValue: null,
+    registerCount: 1,
     dataType: "hex",
     pollingEnabled: false,
     traceEnabled: false,
     cellText: "",
-    lastKnownRawValue: null,
+    registerValues: null,
+    registers: null,
     createdAt: now,
     updatedAt: now,
   };

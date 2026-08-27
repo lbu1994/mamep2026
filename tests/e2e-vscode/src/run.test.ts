@@ -83,7 +83,11 @@ function rtuProfile(): Record<string, unknown> {
   };
 }
 
-function registerRow(addressValue: number | null, cellText: string): unknown {
+function registerRow(
+  addressValue: number | null,
+  cellText: string,
+  registerCount = 1,
+): unknown {
   return {
     rowId: "e2e-row",
     order: 1,
@@ -95,7 +99,8 @@ function registerRow(addressValue: number | null, cellText: string): unknown {
     pollingEnabled: false,
     traceEnabled: false,
     cellText,
-    lastKnownRawValue: null,
+    registerCount,
+    registerValues: null,
     createdAt: 0,
     updatedAt: 0,
   };
@@ -421,6 +426,55 @@ async function runPanelCloseRelease(): Promise<void> {
   await rpcEnvelope("session-disconnect");
 }
 
+/**
+ * VSCode 多寄存器范围行闭环（ADR-030）：经真实 HostMessage RPC 路径验证
+ * 连接 → FC0x10 多值写（registerCount 2）→ FC03 多值读（返回数组）→ 断开。
+ * DevFakeSerial 支持 quantity>1（mustMultiStart 默认 null，地址 0x0000 读写正常）。
+ */
+async function runRangeMultiLoop(): Promise<void> {
+  const enumerate = await rpcEnvelope("serial-enumerate");
+  assert.strictEqual(enumerate.type, "response", "serial-enumerate");
+  const ports = enumerate.payload as Array<{ portId: string }>;
+  assert.ok(
+    ports.some((p) => p.portId === "FAKE-1"),
+    "FAKE-1 should be enumerated",
+  );
+
+  const connect = await rpcEnvelope("session-connect", {
+    portId: "FAKE-1",
+    profile: rtuProfile(),
+    slaveAddress: 1,
+  });
+  assert.strictEqual(connect.type, "response", "session-connect");
+
+  // 多值写（registerCount 2）：一次 FC0x10 写 0x0000/0x0001 = 0xAAAA/0xBBBB。
+  const write = await rpcEnvelope("session-write-row", {
+    row: registerRow(0x0000, "AAAA BBBB", 2),
+  });
+  assert.strictEqual(write.type, "response", "session-write-row");
+  assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
+
+  // 多值读（registerCount 2）：一次 FC03 返回 [0xAAAA, 0xBBBB]。
+  const read = await rpcEnvelope("session-read-row", {
+    row: registerRow(0x0000, "", 2),
+  });
+  assert.strictEqual(read.type, "response", "session-read-row");
+  assert.deepStrictEqual(
+    read.payload,
+    [0xaaaa, 0xbbbb],
+    "FC03 multi read should return both registers",
+  );
+
+  // 单读单值不回归：读 0x0000 返回单值 0xAAAA。
+  const single = await rpcEnvelope("session-read-row", {
+    row: registerRow(0x0000, "", 1),
+  });
+  assert.strictEqual(single.type, "response");
+  assert.strictEqual(single.payload, 0xaaaa);
+
+  await rpcEnvelope("session-disconnect");
+}
+
 export async function run(): Promise<void> {
   // 1. 命令打开主面板。
   await vscode.commands.executeCommand("mamep2026.openMainPanel");
@@ -484,6 +538,9 @@ export async function run(): Promise<void> {
 
   // 5. VSCode RTU 闭环（硬性 P0）：枚举 → 连接 → 写 → 读 → 断开。
   await runRtuLoop();
+
+  // 5.25 多寄存器范围行闭环（ADR-030）：连接 → 多值写 → 多值读 → 断开。
+  await runRangeMultiLoop();
 
   // 6. VSCode TCP 闭环（2026-08-23）：连接 → 写 → 读 → 断开。
   await runTcpLoop();

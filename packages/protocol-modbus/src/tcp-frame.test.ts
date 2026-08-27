@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeTcpResponse,
   encodeTcpReadHoldingRegistersRequest,
+  encodeTcpWriteMultipleRegistersRequest,
   encodeTcpWriteSingleRegisterRequest,
   type TcpExpectedResponse,
 } from "./tcp-frame";
@@ -62,6 +63,49 @@ describe("encodeTcpWriteSingleRegisterRequest", () => {
       0x02, // byte count
       0x12, 0x34, // value
     ]);
+  });
+});
+
+describe("encodeTcpWriteMultipleRegistersRequest (ADR-030)", () => {
+  it("builds MBAP header + PDU for FC0x10 multi-register write", () => {
+    const frame = encodeTcpWriteMultipleRegistersRequest({
+      transactionId: 0x0001,
+      unitId: 2,
+      startAddress: 0x0001,
+      values: [0x1234, 0xabcd],
+    });
+    expect(Array.from(frame)).toEqual([
+      0x00, 0x01, // transaction id
+      0x00, 0x00, // protocol id
+      0x00, 0x0b, // length = unitId(1) + pdu(10)
+      0x02, // unit id
+      0x10, // function write multiple
+      0x00, 0x01, // start address
+      0x00, 0x02, // quantity = 2
+      0x04, // byte count
+      0x12, 0x34, // value 1
+      0xab, 0xcd, // value 2
+    ]);
+  });
+});
+
+describe("decodeTcpResponse write-multiple (ADR-030)", () => {
+  it("decodes a write-multiple echo with quantity 2", () => {
+    const expectMulti: TcpExpectedResponse = {
+      kind: "write-multiple",
+      transactionId: 0x1234,
+      unitId: 1,
+      address: 0x0001,
+      quantity: 2,
+    };
+    const response = Uint8Array.from([
+      0x12, 0x34, 0x00, 0x00, 0x00, 0x06, 0x01, 0x10, 0x00, 0x01, 0x00, 0x02,
+    ]);
+    const result = decodeTcpResponse(response, expectMulti);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({ kind: "write-multiple" });
+    }
   });
 });
 

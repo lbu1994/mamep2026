@@ -11,9 +11,9 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import { ok } from "@mamep2026/domain";
-import { formatRawValue } from "@mamep2026/data-conversion";
+import { formatRawValue, formatRawValues } from "@mamep2026/data-conversion";
 
-/** 应用读取成功结果：按 Type 格式化并强制覆盖单元格（单一当前值模型，§15.1）。 */
+/** 应用读取成功结果（单寄存器）：按 Type 格式化并强制覆盖单元格（单一当前值模型，§15.1）。 */
 export function applyReadValueToRow(
   row: RegisterRow,
   raw: number,
@@ -23,7 +23,26 @@ export function applyReadValueToRow(
   return ok({
     ...row,
     cellText: formatRawValue(raw, row.dataType),
-    lastKnownRawValue: rawValue.value,
+    registerValues: [rawValue.value],
+    updatedAt: Date.now(),
+  });
+}
+
+/** 应用读取成功结果（多寄存器，ADR-030）：按组合类型格式化并覆盖单元格。 */
+export function applyReadValuesToRow(
+  row: RegisterRow,
+  values: readonly number[],
+): Result<RegisterRow> {
+  const registerValues: RawRegisterValue[] = [];
+  for (const value of values) {
+    const created = RawRegisterValue.create(value);
+    if (!created.ok) return created;
+    registerValues.push(created.value);
+  }
+  return ok({
+    ...row,
+    cellText: formatRawValues([...values], row.dataType),
+    registerValues,
     updatedAt: Date.now(),
   });
 }
@@ -88,7 +107,7 @@ export function duplicateRow(
     pollingEnabled: false,
     traceEnabled: false,
     cellText: "",
-    lastKnownRawValue: null,
+    registerValues: null,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };

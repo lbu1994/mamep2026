@@ -265,4 +265,109 @@ describe("MockTransport 成功/失败场景（按地址区间规则）", () => {
       0;
     expect(actual).toBe(expected);
   });
+
+  // ---- 多寄存器（ADR-030）----
+
+  /** 发送多寄存器读请求（FC03, quantity）。 */
+  async function readMany(
+    transport: MockTransport,
+    address: number,
+    quantity: number,
+  ): Promise<void> {
+    await transport.write(
+      appendCrc(
+        Uint8Array.from([
+          0x01,
+          0x03,
+          (address >> 8) & 0xff,
+          address & 0xff,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
+        ]),
+      ),
+    );
+    await flush();
+  }
+
+  /** 发送多寄存器写请求（FC0x10, values）。 */
+  async function writeMany(
+    transport: MockTransport,
+    address: number,
+    values: readonly number[],
+  ): Promise<void> {
+    await transport.write(
+      appendCrc(
+        Uint8Array.from([
+          0x01,
+          0x10,
+          (address >> 8) & 0xff,
+          address & 0xff,
+          (values.length >> 8) & 0xff,
+          values.length & 0xff,
+          values.length * 2,
+          ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+        ]),
+      ),
+    );
+    await flush();
+  }
+
+  it("FC03 多寄存器读：返回 quantity 个寄存器值（byteCount=2N）", async () => {
+    const { transport, received } = await openTransport();
+    transport.setRegister(0x0000, 0x1111);
+    transport.setRegister(0x0001, 0x2222);
+    transport.setRegister(0x0002, 0x3333);
+    await readMany(transport, 0x0000, 3);
+    expect(body(received[0])).toEqual([
+      0x01, 0x03, 0x06, 0x11, 0x11, 0x22, 0x22, 0x33, 0x33,
+    ]);
+  });
+
+  it("FC0x10 多寄存器写：写入全部值并回执 quantity", async () => {
+    const { transport, received } = await openTransport();
+    await writeMany(transport, 0x0000, [0xaaaa, 0xbbbb]);
+    expect(transport.getRegister(0x0000)).toBe(0xaaaa);
+    expect(transport.getRegister(0x0001)).toBe(0xbbbb);
+    expect(body(received[0])).toEqual([0x01, 0x10, 0x00, 0x00, 0x00, 0x02]);
+  });
+
+  it("write-value-gate 多值写：任一值超限即返回异常 0x03 且不写入", async () => {
+    const { transport, received } = await openTransport();
+    await writeMany(transport, 0x0400, [0x1000, 0x8000]);
+    expect(Array.from(received[0] ?? [])).toEqual(
+      Array.from(appendCrc(Uint8Array.from([0x01, 0x90, 0x03]))),
+    );
+    expect(transport.getRegister(0x0400)).toBeNull();
+    expect(transport.getRegister(0x0401)).toBeNull();
+  });
+
+  it("must-multi 区（0x0800）：单读/单写返回异常 0x02，多读/多写正常", async () => {
+    const { transport, received } = await openTransport();
+    // 单读 → 异常 0x02
+    await read(transport, 0x0800);
+    expect(Array.from(received[0] ?? [])).toEqual(
+      Array.from(appendCrc(Uint8Array.from([0x01, 0x83, 0x02]))),
+    );
+    // 单写 → 异常 0x02
+    await write(transport, 0x0800, 0x0001);
+    expect(Array.from(received[1] ?? [])).toEqual(
+      Array.from(appendCrc(Uint8Array.from([0x01, 0x90, 0x02]))),
+    );
+    expect(transport.getRegister(0x0800)).toBeNull();
+    // 多读 → 正常（未设置返回 0）
+    await readMany(transport, 0x0800, 2);
+    expect(body(received[2])).toEqual([0x01, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]);
+    // 多写 → 正常
+    await writeMany(transport, 0x0800, [0x1234, 0x5678]);
+    expect(transport.getRegister(0x0800)).toBe(0x1234);
+    expect(transport.getRegister(0x0801)).toBe(0x5678);
+    expect(body(received[3])).toEqual([0x01, 0x10, 0x08, 0x00, 0x00, 0x02]);
+  });
+
+  it("非 must-multi 区单寄存器行为不变（回归）", async () => {
+    const { transport, received } = await openTransport();
+    transport.setRegister(0x0002, 0x1234);
+    await read(transport, 0x0002);
+    expect(body(received[0])).toEqual([0x01, 0x03, 0x02, 0x12, 0x34]);
+  });
 });

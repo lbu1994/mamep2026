@@ -157,7 +157,7 @@ describe("RtuSessionHost 读/写", () => {
     if (result.ok) {
       expect(result.value).toEqual({
         kind: "write-succeeded-verify-matched",
-        readValue: 0x04d2,
+        readValues: [0x04d2],
       });
     }
     expect(h.device.getRegister(0x1000)).toBe(0x04d2);
@@ -316,7 +316,7 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
     if (result.ok) {
       expect(result.value).toEqual({
         kind: "write-succeeded-verify-matched",
-        readValue: 0x1234,
+        readValues: [0x1234],
       });
     }
     expect(h.events.onPollResult).toHaveBeenCalled();

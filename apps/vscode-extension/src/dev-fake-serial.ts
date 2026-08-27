@@ -22,10 +22,13 @@ export const FAKE_SERIAL_PORT = "FAKE-1";
 /** e2e 可访问的共享状态（仅测试用）。 */
 export const devFakeSerialState = {
   registers: new Map<number, number>(),
+  /** must-multi 区起始地址（ADR-030）：null=关闭；该地址起单读/单写返回异常 0x02。 */
+  mustMultiStart: null as number | null,
 };
 
 export function resetDevFakeSerial(): void {
   devFakeSerialState.registers.clear();
+  devFakeSerialState.mustMultiStart = null;
 }
 
 /** CRC16（Modbus RTU）。权威实现见 packages/protocol-modbus/src/crc16.ts。 */
@@ -83,22 +86,57 @@ class DevFakeSerialPort implements SerialPortLike {
     const functionCode = frame[1] ?? 0;
     const address = ((frame[2] ?? 0) << 8) | (frame[3] ?? 0);
     if (functionCode === 0x03) {
-      const value = devFakeSerialState.registers.get(address) ?? 0;
+      const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
+      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      if (
+        devFakeSerialState.mustMultiStart !== null &&
+        address >= devFakeSerialState.mustMultiStart &&
+        quantity === 1
+      ) {
+        return appendCrc(Uint8Array.from([slave, 0x83, 0x02]));
+      }
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(
+          devFakeSerialState.registers.get((address + i) & 0xffff) ?? 0,
+        );
+      }
       return appendCrc(
-        Uint8Array.from([slave, 0x03, 0x02, (value >> 8) & 0xff, value & 0xff]),
+        Uint8Array.from([
+          slave,
+          0x03,
+          quantity * 2,
+          ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+        ]),
       );
     }
     if (functionCode === 0x10) {
-      const value = ((frame[7] ?? 0) << 8) | (frame[8] ?? 0);
-      devFakeSerialState.registers.set(address, value);
+      const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
+      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      if (
+        devFakeSerialState.mustMultiStart !== null &&
+        address >= devFakeSerialState.mustMultiStart &&
+        quantity === 1
+      ) {
+        return appendCrc(Uint8Array.from([slave, 0x90, 0x02]));
+      }
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(
+          (((frame[7 + i * 2] ?? 0) << 8) | (frame[8 + i * 2] ?? 0)) & 0xffff,
+        );
+      }
+      for (let i = 0; i < quantity; i += 1) {
+        devFakeSerialState.registers.set((address + i) & 0xffff, values[i] ?? 0);
+      }
       return appendCrc(
         Uint8Array.from([
           slave,
           0x10,
           (address >> 8) & 0xff,
           address & 0xff,
-          0x00,
-          0x01,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
         ]),
       );
     }

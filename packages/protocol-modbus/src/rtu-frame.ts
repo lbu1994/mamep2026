@@ -1,10 +1,14 @@
 /**
- * Modbus RTU ADU 编解码（仅 MVP 范围：FC03 读单个保持寄存器、FC0x10 写单个保持寄存器）。
+ * Modbus RTU ADU 编解码（FC03 读保持寄存器（quantity 可 >1）、FC0x10 写保持寄存器（单值或多值））。
  *
  * 帧结构：
- * - FC03 正常响应：slave(1) + fc(1) + byteCount(1) + data(2) + crc(2) = 7 字节
+ * - FC03 正常响应：slave(1) + fc(1) + byteCount(1) + data(quantity*2) + crc(2)
  * - FC0x10 正常响应：slave(1) + fc(1) + startAddr(2) + quantity(2) + crc(2) = 8 字节
  * - 异常响应：slave(1) + fc|0x80(1) + exceptionCode(1) + crc(2) = 5 字节
+ *
+ * 多寄存器（ADR-030，2026-08-27）：读路径 quantity 任意（≤ MAX_READ_QUANTITY）；写路径支持
+ * 单值（WriteSingleRegisterRequest，FC0x10 quantity=1）与多值（WriteMultipleRegistersRequest，
+ * FC0x10 quantity=N、byteCount=2N、值大端）。
  *
  * 本包只处理最终已验证的实际发送地址，不了解 Address Adjust（docs/TECH_DESIGN.md §17.3）。
  */
@@ -20,6 +24,11 @@ export const EXCEPTION_ILLEGAL_FUNCTION = 0x01;
 export const EXCEPTION_ILLEGAL_DATA_ADDRESS = 0x02;
 export const EXCEPTION_ILLEGAL_DATA_VALUE = 0x03;
 
+/** RTU 单次请求最大读取寄存器数（ADU≤256B → PDU≤253B：1+1+2q+2 ≤ 253 → q ≤ 125，ADR-030）。 */
+export const MAX_READ_QUANTITY = 125;
+/** RTU 单次请求最大写入寄存器数（1+1+2+2+1+2q ≤ 253 → q ≤ 123，ADR-030）。 */
+export const MAX_WRITE_QUANTITY = 123;
+
 export interface ReadHoldingRegistersRequest {
   slaveAddress: number;
   startAddress: number;
@@ -30,6 +39,13 @@ export interface WriteSingleRegisterRequest {
   slaveAddress: number;
   address: number;
   rawValue: number;
+}
+
+/** FC0x10 多寄存器写入（ADR-030）：一次请求写多个连续寄存器（quantity = values.length）。 */
+export interface WriteMultipleRegistersRequest {
+  slaveAddress: number;
+  startAddress: number;
+  values: number[];
 }
 
 /** 期望的响应类型：解码时据此做一致性校验（docs/AGENTS.md §10.2）。 */
@@ -45,11 +61,18 @@ export type ExpectedResponse =
       slaveAddress: number;
       address: number;
       quantity: number;
+    }
+  | {
+      kind: "write-multiple";
+      slaveAddress: number;
+      address: number;
+      quantity: number;
     };
 
 export type DecodedRtuResponse =
   | { kind: "read-holding"; values: number[] }
   | { kind: "write-single" }
+  | { kind: "write-multiple" }
   | { kind: "exception"; exceptionCode: number };
 
 export function encodeReadHoldingRegistersRequest(
@@ -81,6 +104,28 @@ export function encodeWriteSingleRegisterRequest(
     (request.rawValue >> 8) & 0xff,
     request.rawValue & 0xff,
   ]);
+  return appendCrc(body);
+}
+
+/** FC0x10 多寄存器写入（ADR-030）：quantity = values.length、byteCount = 2N、值大端。 */
+export function encodeWriteMultipleRegistersRequest(
+  request: WriteMultipleRegistersRequest,
+): Uint8Array {
+  const quantity = request.values.length;
+  const byteCount = quantity * 2;
+  const body = new Uint8Array(7 + byteCount);
+  body[0] = request.slaveAddress & 0xff;
+  body[1] = FUNCTION_WRITE_MULTIPLE;
+  body[2] = (request.startAddress >> 8) & 0xff;
+  body[3] = request.startAddress & 0xff;
+  body[4] = (quantity >> 8) & 0xff;
+  body[5] = quantity & 0xff;
+  body[6] = byteCount & 0xff;
+  for (let i = 0; i < quantity; i++) {
+    const value = request.values[i] ?? 0;
+    body[7 + i * 2] = (value >> 8) & 0xff;
+    body[8 + i * 2] = value & 0xff;
+  }
   return appendCrc(body);
 }
 
@@ -208,7 +253,7 @@ export function decodeRtuResponse(
     return ok({ kind: "read-holding", values });
   }
 
-  // write-single 响应。
+  // write-single / write-multiple 响应：回执 address + quantity（固定 8 字节）。
   if (frame.length !== 8) {
     return fail(
       protocolError(
@@ -235,5 +280,7 @@ export function decodeRtuResponse(
       ),
     );
   }
-  return ok({ kind: "write-single" });
+  return ok({
+    kind: expected.kind === "write-multiple" ? "write-multiple" : "write-single",
+  });
 }

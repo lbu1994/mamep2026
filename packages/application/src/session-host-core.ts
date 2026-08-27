@@ -43,7 +43,11 @@ import { RegisterTableService } from "@mamep2026/register-table";
 export interface SessionHostEvents {
   onLog(event: CommunicationLogEvent): void;
   onStateChange(state: ConnectionState): void;
-  onPollResult(key: string, address: number, result: Result<number>): void;
+  onPollResult(
+    key: string,
+    address: number,
+    result: Result<number | number[]>,
+  ): void;
   onTraceSample(sample: TraceSample): void;
   onMessage(message: ApplicationMessage): void;
 }
@@ -66,10 +70,10 @@ export class SessionHostCore {
   private polling: PollingCoordinator | null = null;
   private trace: TraceCoordinator | null = null;
   private portLabel: string | null = null;
-  private pollingTargets: Array<{ key: string; address: number }> = [];
+  private pollingTargets: Array<{ key: string; address: number; quantity?: number }> = [];
   private readonly activeTraces = new Map<
     string,
-    { address: number; speedMs: number }
+    { address: number; speedMs: number; quantity: number }
   >();
   /** 活动批任务登记（远程路径按 batchId 取消，ADR-025）：promise 落定后注销。 */
   private readonly activeBatches = new Map<string, BatchReadHandle>();
@@ -120,7 +124,7 @@ export class SessionHostCore {
       this.polling.start();
     }
     for (const [key, entry] of this.activeTraces) {
-      this.trace.start(key, entry.address, entry.speedMs);
+      this.trace.start(key, entry.address, entry.speedMs, entry.quantity);
     }
     return ok(undefined);
   }
@@ -159,7 +163,7 @@ export class SessionHostCore {
     this.session?.setUnitId(unitId);
   }
 
-  readRow(row: RegisterRow): Promise<Result<number>> {
+  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     return this.tableService.readRow(row);
   }
 
@@ -220,7 +224,9 @@ export class SessionHostCore {
     this.activeBatches.get(batchId)?.cancel();
   }
 
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
+  updatePollingTargets(
+    rows: Array<{ key: string; address: number; quantity?: number }>,
+  ): void {
     this.pollingTargets = rows;
     this.polling?.setTargets(rows);
     if (rows.length > 0 && this.session !== null) {
@@ -240,9 +246,9 @@ export class SessionHostCore {
     this.polling?.stop();
   }
 
-  traceStart(key: string, address: number, speedMs: number): void {
-    this.activeTraces.set(key, { address, speedMs });
-    this.trace?.start(key, address, speedMs);
+  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+    this.activeTraces.set(key, { address, speedMs, quantity });
+    this.trace?.start(key, address, speedMs, quantity);
   }
 
   traceStop(key: string): void {

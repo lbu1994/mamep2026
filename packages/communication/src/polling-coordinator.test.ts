@@ -43,7 +43,13 @@ describe("PollingCoordinator", () => {
 
     const results: Array<{ key: string; value: number }> = [];
     coordinator.onResult((key, _address, result) => {
-      if (result.ok) results.push({ key, value: result.value });
+      if (result.ok)
+        results.push({
+          key,
+          value: Array.isArray(result.value)
+            ? (result.value[0] ?? 0)
+            : result.value,
+        });
     });
 
     coordinator.start();
@@ -72,7 +78,10 @@ describe("PollingCoordinator", () => {
     coordinator.setTargets([{ key: "a", address: 0x0001 }]);
     const results: number[] = [];
     coordinator.onResult((_key, _address, result) => {
-      if (result.ok) results.push(result.value);
+      if (result.ok)
+        results.push(
+          Array.isArray(result.value) ? (result.value[0] ?? 0) : result.value,
+        );
     });
 
     coordinator.start();
@@ -140,7 +149,10 @@ describe("PollingCoordinator", () => {
     coordinator.setTargets([{ key: "a", address: 0x0001 }]);
     const results: number[] = [];
     coordinator.onResult((_key, _address, result) => {
-      if (result.ok) results.push(result.value);
+      if (result.ok)
+        results.push(
+          Array.isArray(result.value) ? (result.value[0] ?? 0) : result.value,
+        );
     });
 
     coordinator.start();

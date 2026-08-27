@@ -131,6 +131,7 @@ const dataTypeEnumSchema = z.enum([
   "signed-0.001",
   "signed-0.0001",
   "binary",
+  "string",
 ]);
 
 export const registerAddressPayloadSchema = z.object({
@@ -140,6 +141,16 @@ export type RegisterAddressPayload = z.infer<
   typeof registerAddressPayloadSchema
 >;
 
+/** 范围行子行元数据（2026-08-27）：每寄存器独立 name/comment/dataType。 */
+export const registerSubRowMetaPayloadSchema = z.object({
+  name: z.string(),
+  comment: z.string(),
+  dataType: dataTypeEnumSchema,
+});
+export type RegisterSubRowMetaPayload = z.infer<
+  typeof registerSubRowMetaPayloadSchema
+>;
+
 export const registerRowPayloadSchema = z.object({
   rowId: z.string(),
   order: z.number(),
@@ -147,11 +158,19 @@ export const registerRowPayloadSchema = z.object({
   comment: z.string(),
   addressDraft: z.string(),
   addressValue: registerAddressPayloadSchema.nullable(),
+  /** 覆盖的连续寄存器数（ADR-030）：1=单寄存器；范围行 >1 */
+  registerCount: z.number().int().min(1).default(1),
   dataType: dataTypeEnumSchema,
   pollingEnabled: z.boolean(),
   traceEnabled: z.boolean(),
   cellText: z.string(),
-  lastKnownRawValue: registerAddressPayloadSchema.nullable(),
+  /** 各寄存器原始值（ADR-030，替代 lastKnownRawValue）：null=未读 */
+  registerValues: z.array(z.number().int().min(0).max(65535)).nullable(),
+  /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据 */
+  registers: z
+    .array(registerSubRowMetaPayloadSchema)
+    .nullable()
+    .default(null),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -162,10 +181,9 @@ export function toRegisterRowPayload(row: RegisterRow): RegisterRowPayload {
     ...row,
     addressValue:
       row.addressValue === null ? null : { value: row.addressValue.value },
-    lastKnownRawValue:
-      row.lastKnownRawValue === null
-        ? null
-        : { value: row.lastKnownRawValue.value },
+    registerValues:
+      row.registerValues?.map((value) => value.value) ?? null,
+    registers: row.registers ?? null,
   };
 }
 
@@ -176,17 +194,25 @@ export function registerRowFromPayload(
     payload.addressValue === null
       ? null
       : RegisterAddress.create(payload.addressValue.value);
-  const lastKnown =
-    payload.lastKnownRawValue === null
+  const registerValues =
+    payload.registerValues === null
       ? null
-      : RawRegisterValue.create(payload.lastKnownRawValue.value);
+      : payload.registerValues.map((value) => {
+          const created = RawRegisterValue.create(value);
+          return created.ok ? created.value : null;
+        });
   return {
     ...payload,
     rowId: payload.rowId as RowId,
     addressValue:
       address === null ? null : address.ok ? address.value : null,
-    lastKnownRawValue:
-      lastKnown === null ? null : lastKnown.ok ? lastKnown.value : null,
+    registerValues:
+      registerValues === null
+        ? null
+        : registerValues.filter(
+            (value): value is RawRegisterValue => value !== null,
+          ),
+    registers: payload.registers ?? null,
   };
 }
 
@@ -227,6 +253,8 @@ export const batchReadRowPayloadSchema = z.object({
   key: z.string(),
   /** null 表示地址为空或非法，将被跳过。 */
   address: z.number().nullable(),
+  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
+  quantity: z.number().int().min(1).optional(),
 });
 export type BatchReadRowPayload = z.infer<typeof batchReadRowPayloadSchema>;
 
@@ -290,17 +318,18 @@ export function createBatchId(): string {
 /**
  * 写入结果投影（docs/TECH_DESIGN.md §15.3、docs/AGENTS.md §18.2，2026-08-26）：
  * 写后回读扩展为 5 种 kind 判别联合，与 communication WriteOutcome 一一对应。
+ * 多寄存器（ADR-030，2026-08-27）：verify 结果携带 readValues/expectedValues 数组。
  */
 export const writeOutcomePayloadSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("write-succeeded-no-verify") }),
   z.object({
     kind: z.literal("write-succeeded-verify-matched"),
-    readValue: z.number(),
+    readValues: z.array(z.number()),
   }),
   z.object({
     kind: z.literal("write-succeeded-verify-mismatched"),
-    expectedValue: z.number(),
-    readValue: z.number(),
+    expectedValues: z.array(z.number()),
+    readValues: z.array(z.number()),
   }),
   z.object({
     kind: z.literal("write-succeeded-verify-failed"),

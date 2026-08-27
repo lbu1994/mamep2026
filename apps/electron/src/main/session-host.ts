@@ -67,7 +67,7 @@ export class ElectronSessionHost {
     return this.tcp.getConnectionState();
   }
 
-  readRow(row: RegisterRow): Promise<Result<number>> {
+  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     return this.tcp.readRow(row);
   }
 

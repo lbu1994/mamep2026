@@ -54,14 +54,18 @@ describe("buildPollingTargets", () => {
       [makeSheet("s", [on, off, noAddr])],
       "off",
     );
-    expect(targets).toEqual([{ key: on.rowId, address: 0x0001 }]);
+    expect(targets).toEqual([
+      { key: on.rowId, address: 0x0001, quantity: 1 },
+    ]);
   });
 
   it("applies the Address Adjust offset when on", () => {
     const row = makeRow(0x0003);
     row.pollingEnabled = true;
     const targets = buildPollingTargets([makeSheet("s", [row])], "on");
-    expect(targets).toEqual([{ key: row.rowId, address: 0x0002 }]);
+    expect(targets).toEqual([
+      { key: row.rowId, address: 0x0002, quantity: 1 },
+    ]);
   });
 
   it("skips address 0 rows when Address Adjust is on", () => {
@@ -72,7 +76,7 @@ describe("buildPollingTargets", () => {
 });
 
 describe("applyPollResult", () => {
-  it("formats by data type and updates lastKnownRawValue", () => {
+  it("formats by data type and updates registerValues", () => {
     const row = makeRow(0x0001, "hex");
     row.pollingEnabled = true;
     const updated = applyPollResult(
@@ -84,7 +88,7 @@ describe("applyPollResult", () => {
     );
     expect(updated).not.toBeNull();
     expect(updated?.cellText).toBe("00AB");
-    expect(updated?.lastKnownRawValue?.value).toBe(0x00ab);
+    expect(updated?.registerValues?.[0]?.value).toBe(0x00ab);
   });
 
   it("returns null when the row is missing", () => {
@@ -128,7 +132,7 @@ describe("applyPollResult", () => {
   it("returns the same row reference when the device value is unchanged (polling perf)", () => {
     const row = makeRow(0x0001, "hex");
     row.pollingEnabled = true;
-    // 首轮轮询建立 lastKnownRawValue 与 cellText（结果对象将写回 store）。
+    // 首轮轮询建立 registerValues 与 cellText（结果对象将写回 store）。
     const first = applyPollResult(
       [makeSheet("s", [row])],
       row.rowId,
@@ -137,7 +141,7 @@ describe("applyPollResult", () => {
       "off",
     );
     expect(first?.cellText).toBe("00AB");
-    expect(first?.lastKnownRawValue?.value).toBe(0x00ab);
+    expect(first?.registerValues?.[0]?.value).toBe(0x00ab);
     // 模拟首轮结果已写回 store：后续轮询以 first 为行对象。
     // 相同值再次轮询：返回原行引用，调用方（updateRow）据此短路，不产生状态变更。
     const second = applyPollResult(

@@ -1,6 +1,7 @@
 /**
  * Modbus TCP ADU（MBAP + PDU）编解码（docs/TECH_DESIGN.md §34.3.16、ADR-020 后续 Node TCP Adapter）。
- * 仅 MVP 范围：FC03 读单个保持寄存器、FC0x10 写单个保持寄存器（与 rtu-frame.ts 对齐）。
+ * FC03 读保持寄存器（quantity 可 >1）、FC0x10 写保持寄存器（单值或多值，与 rtu-frame.ts 对齐，
+ * ADR-030）。
  *
  * MBAP 头（7 字节）：
  * - transactionId(2) + protocolId(2, 恒为 0x0000) + length(2, 其后字节数 = unitId+PDU) + unitId(1)
@@ -32,6 +33,14 @@ export interface TcpWriteSingleRegisterRequest {
   rawValue: number;
 }
 
+/** FC0x10 多寄存器写入（TCP，ADR-030）：一次请求写多个连续寄存器（quantity = values.length）。 */
+export interface TcpWriteMultipleRegistersRequest {
+  transactionId: number;
+  unitId: number;
+  startAddress: number;
+  values: number[];
+}
+
 /** 期望的响应类型：解码时据此做一致性校验（与 rtu-frame 的 ExpectedResponse 对齐）。 */
 export type TcpExpectedResponse =
   | {
@@ -47,11 +56,19 @@ export type TcpExpectedResponse =
       unitId: number;
       address: number;
       quantity: number;
+    }
+  | {
+      kind: "write-multiple";
+      transactionId: number;
+      unitId: number;
+      address: number;
+      quantity: number;
     };
 
 export type DecodedTcpResponse =
   | { kind: "read-holding"; values: number[] }
   | { kind: "write-single" }
+  | { kind: "write-multiple" }
   | { kind: "exception"; exceptionCode: number };
 
 function protocolError(code: string, technicalMessage: string): MamepError {
@@ -111,6 +128,27 @@ export function encodeTcpWriteSingleRegisterRequest(
     (request.rawValue >> 8) & 0xff,
     request.rawValue & 0xff,
   ]);
+  return buildTcpFrame(request.transactionId, request.unitId, pdu);
+}
+
+/** FC0x10 多寄存器写入（TCP，ADR-030）：quantity = values.length、byteCount = 2N、值大端。 */
+export function encodeTcpWriteMultipleRegistersRequest(
+  request: TcpWriteMultipleRegistersRequest,
+): Uint8Array {
+  const quantity = request.values.length;
+  const byteCount = quantity * 2;
+  const pdu = new Uint8Array(6 + byteCount);
+  pdu[0] = FUNCTION_WRITE_MULTIPLE;
+  pdu[1] = (request.startAddress >> 8) & 0xff;
+  pdu[2] = request.startAddress & 0xff;
+  pdu[3] = (quantity >> 8) & 0xff;
+  pdu[4] = quantity & 0xff;
+  pdu[5] = byteCount & 0xff;
+  for (let i = 0; i < quantity; i++) {
+    const value = request.values[i] ?? 0;
+    pdu[6 + i * 2] = (value >> 8) & 0xff;
+    pdu[7 + i * 2] = value & 0xff;
+  }
   return buildTcpFrame(request.transactionId, request.unitId, pdu);
 }
 
@@ -238,7 +276,7 @@ export function decodeTcpResponse(
     return ok({ kind: "read-holding", values });
   }
 
-  // write-single 响应：MBAP(7) + fc(1) + address(2) + quantity(2) = 12 字节。
+  // write-single / write-multiple 响应：MBAP(7) + fc(1) + address(2) + quantity(2) = 12 字节。
   if (frame.length !== 12) {
     return fail(
       protocolError(
@@ -265,5 +303,7 @@ export function decodeTcpResponse(
       ),
     );
   }
-  return ok({ kind: "write-single" });
+  return ok({
+    kind: expected.kind === "write-multiple" ? "write-multiple" : "write-single",
+  });
 }

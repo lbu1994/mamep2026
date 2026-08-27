@@ -95,6 +95,7 @@ test("register table has the fixed column set and full READ/WRITE labels", async
     "Data",
     "Write",
     "Type",
+    "Scale",
     "Comment",
   ]) {
     await expect(header).toContainText(label);

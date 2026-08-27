@@ -17,10 +17,12 @@ import {
   decodeRtuResponse,
   encodeReadHoldingRegistersRequest,
   encodeTcpReadHoldingRegistersRequest,
-  encodeTcpWriteSingleRegisterRequest,
-  encodeWriteSingleRegisterRequest,
+  encodeTcpWriteMultipleRegistersRequest,
+  encodeWriteMultipleRegistersRequest,
   FUNCTION_READ_HOLDING,
   FUNCTION_WRITE_MULTIPLE,
+  MAX_READ_QUANTITY,
+  MAX_WRITE_QUANTITY,
   type DecodedRtuResponse,
   type DecodedTcpResponse,
   type ExpectedResponse,
@@ -44,14 +46,16 @@ import type { TransportPort } from "./transport-port";
  * 写入结果（docs/TECH_DESIGN.md §15.3、docs/AGENTS.md §18.2）。
  * 写后回读（2026-08-26）：写入与回读为相关但独立的两阶段；
  * 回读失败不得把已成功的写入显示为写入失败（verify-failed 仍属写入成功）。
+ * 多寄存器（ADR-030，2026-08-27）：verify 结果携带 readValues/expectedValues 数组
+ * （单寄存器写入为长度 1 的数组）。
  */
 export type WriteOutcome =
   | { kind: "write-succeeded-no-verify" }
-  | { kind: "write-succeeded-verify-matched"; readValue: number }
+  | { kind: "write-succeeded-verify-matched"; readValues: number[] }
   | {
       kind: "write-succeeded-verify-mismatched";
-      expectedValue: number;
-      readValue: number;
+      expectedValues: number[];
+      readValues: number[];
     }
   | {
       kind: "write-succeeded-verify-failed";
@@ -59,6 +63,21 @@ export type WriteOutcome =
       userMessageKey: string;
     }
   | { kind: "cancelled-before-verify" };
+
+/** 读请求元数据（多寄存器 quantity 由 readRegisters 单独传入，ADR-030）。 */
+export interface ReadRegistersMeta {
+  source: RequestSource;
+  userAddress?: number;
+  priority?: RequestPriority;
+  group?: string;
+  cancelToken?: CancellationToken;
+}
+
+/** 写请求元数据（多寄存器 values 由 writeRegisters 传入，ADR-030）。 */
+export interface WriteRegistersMeta {
+  source: RequestSource;
+  userAddress?: number;
+}
 
 interface ExchangeMeta {
   source: RequestSource;
@@ -113,6 +132,21 @@ function timeoutError(timeoutMs: number): MamepError {
     retryable: true,
     userMessageKey: "errors.requestTimeout",
     technicalMessage: `no response within ${timeoutMs}ms`,
+  });
+}
+
+/** quantity 越界守卫（ADR-030）：读 ≤125、写 ≤123，由会话层统一校验。 */
+function quantityOutOfRangeError(
+  operation: "read" | "write",
+  quantity: number,
+): MamepError {
+  return createMamepError({
+    code: "QUANTITY_OUT_OF_RANGE",
+    category: "validation",
+    severity: "error",
+    retryable: false,
+    userMessageKey: "errors.internal",
+    technicalMessage: `invalid ${operation} quantity: ${quantity}`,
   });
 }
 
@@ -377,19 +411,33 @@ export class CommunicationSession {
 
   readRegister(
     sentAddress: number,
-    meta: {
-      source: RequestSource;
-      userAddress?: number;
-      priority?: RequestPriority;
-      group?: string;
-      cancelToken?: CancellationToken;
-    },
+    meta: ReadRegistersMeta,
   ): Promise<Result<number>> {
+    return this.readRegisters(sentAddress, 1, meta).then((result) =>
+      result.ok ? ok(result.value[0] ?? 0) : result,
+    );
+  }
+
+  /** 多寄存器读取（ADR-030）：一次 FC03 读 quantity 个连续寄存器。 */
+  readRegisters(
+    sentAddress: number,
+    quantity: number,
+    meta: ReadRegistersMeta,
+  ): Promise<Result<number[]>> {
     if (this.stateMachine.getState() !== "connected") {
       return Promise.resolve(fail(notConnectedError()));
     }
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > MAX_READ_QUANTITY
+    ) {
+      return Promise.resolve(
+        fail(quantityOutOfRangeError("read", quantity)),
+      );
+    }
     return this.scheduler
-      .enqueue(() => this.executeRead(sentAddress, meta), {
+      .enqueue(() => this.executeRead(sentAddress, quantity, meta), {
         priority: meta.priority ?? "manual-read",
         group: meta.group,
         cancelToken: meta.cancelToken,
@@ -400,29 +448,44 @@ export class CommunicationSession {
   writeRegister(
     sentAddress: number,
     rawValue: number,
-    meta: { source: RequestSource; userAddress?: number },
+    meta: WriteRegistersMeta,
+  ): Promise<Result<WriteOutcome>> {
+    return this.writeRegisters(sentAddress, [rawValue], meta);
+  }
+
+  /** 多寄存器写入（ADR-030）：一次 FC0x10 写 values.length 个连续寄存器。 */
+  writeRegisters(
+    sentAddress: number,
+    values: number[],
+    meta: WriteRegistersMeta,
   ): Promise<Result<WriteOutcome>> {
     if (this.stateMachine.getState() !== "connected") {
       return Promise.resolve(fail(notConnectedError()));
     }
+    if (values.length < 1 || values.length > MAX_WRITE_QUANTITY) {
+      return Promise.resolve(
+        fail(quantityOutOfRangeError("write", values.length)),
+      );
+    }
     return this.scheduler.enqueue(
-      () => this.executeWrite(sentAddress, rawValue, meta),
+      () => this.executeWrite(sentAddress, values, meta),
       { priority: "manual-write" },
     );
   }
 
   private async executeRead(
     sentAddress: number,
-    meta: { source: RequestSource; userAddress?: number },
-  ): Promise<Result<number>> {
+    quantity: number,
+    meta: ReadRegistersMeta,
+  ): Promise<Result<number[]>> {
     const decoded = await this.executeExchange(
-      () => this.buildReadAttempt(sentAddress),
+      () => this.buildReadAttempt(sentAddress, quantity),
       {
         source: meta.source,
         userAddress: meta.userAddress ?? null,
         sentAddress,
         functionCode: FUNCTION_READ_HOLDING,
-        quantity: 1,
+        quantity,
       },
     );
     if (!decoded.ok) return decoded;
@@ -430,7 +493,7 @@ export class CommunicationSession {
       return fail(modbusExceptionError(decoded.value.exceptionCode));
     }
     if (decoded.value.kind === "read-holding") {
-      return ok(decoded.value.values[0] ?? 0);
+      return ok(decoded.value.values);
     }
     return fail(
       createMamepError({
@@ -446,17 +509,17 @@ export class CommunicationSession {
 
   private async executeWrite(
     sentAddress: number,
-    rawValue: number,
-    meta: { source: RequestSource; userAddress?: number },
+    values: number[],
+    meta: WriteRegistersMeta,
   ): Promise<Result<WriteOutcome>> {
     const decoded = await this.executeExchange(
-      () => this.buildWriteAttempt(sentAddress, rawValue),
+      () => this.buildWriteAttempt(sentAddress, values),
       {
         source: meta.source,
         userAddress: meta.userAddress ?? null,
         sentAddress,
         functionCode: FUNCTION_WRITE_MULTIPLE,
-        quantity: 1,
+        quantity: values.length,
       },
     );
     if (!decoded.ok) return decoded;
@@ -464,7 +527,7 @@ export class CommunicationSession {
     if (decoded.value.kind === "exception") {
       return fail(modbusExceptionError(decoded.value.exceptionCode));
     }
-    if (decoded.value.kind === "write-single") {
+    if (decoded.value.kind === "write-multiple") {
       return ok({ kind: "write-succeeded-no-verify" });
     }
     return fail(
@@ -590,7 +653,10 @@ export class CommunicationSession {
   }
 
   /** 构建单次读尝试（frame + expect）：TCP 每次尝试（含重试）使用新 Transaction ID（§12.2）。 */
-  private buildReadAttempt(sentAddress: number): {
+  private buildReadAttempt(
+    sentAddress: number,
+    quantity: number,
+  ): {
     frame: Uint8Array;
     expect: ExpectedResponse | TcpExpectedResponse;
   } {
@@ -601,14 +667,14 @@ export class CommunicationSession {
           transactionId,
           unitId: this.unitId,
           startAddress: sentAddress,
-          quantity: 1,
+          quantity,
         }),
         expect: {
           kind: "read-holding",
           transactionId,
           unitId: this.unitId,
           startAddress: sentAddress,
-          quantity: 1,
+          quantity,
         },
       };
     }
@@ -616,51 +682,51 @@ export class CommunicationSession {
       frame: encodeReadHoldingRegistersRequest({
         slaveAddress: this.slaveAddress,
         startAddress: sentAddress,
-        quantity: 1,
+        quantity,
       }),
       expect: {
         kind: "read-holding",
         slaveAddress: this.slaveAddress,
         startAddress: sentAddress,
-        quantity: 1,
+        quantity,
       },
     };
   }
 
-  /** 构建单次写尝试（frame + expect）：TCP 每次尝试（含重试）使用新 Transaction ID（§12.2）。 */
-  private buildWriteAttempt(sentAddress: number, rawValue: number): {
+  /** 构建单次写尝试（frame + expect，FC0x10 多值，ADR-030）：TCP 每次尝试使用新 Transaction ID。 */
+  private buildWriteAttempt(sentAddress: number, values: number[]): {
     frame: Uint8Array;
     expect: ExpectedResponse | TcpExpectedResponse;
   } {
     if (this.protocol === "tcp") {
       const transactionId = this.allocateTransactionId();
       return {
-        frame: encodeTcpWriteSingleRegisterRequest({
+        frame: encodeTcpWriteMultipleRegistersRequest({
           transactionId,
           unitId: this.unitId,
-          address: sentAddress,
-          rawValue,
+          startAddress: sentAddress,
+          values,
         }),
         expect: {
-          kind: "write-single",
+          kind: "write-multiple",
           transactionId,
           unitId: this.unitId,
           address: sentAddress,
-          quantity: 1,
+          quantity: values.length,
         },
       };
     }
     return {
-      frame: encodeWriteSingleRegisterRequest({
+      frame: encodeWriteMultipleRegistersRequest({
         slaveAddress: this.slaveAddress,
-        address: sentAddress,
-        rawValue,
+        startAddress: sentAddress,
+        values,
       }),
       expect: {
-        kind: "write-single",
+        kind: "write-multiple",
         slaveAddress: this.slaveAddress,
         address: sentAddress,
-        quantity: 1,
+        quantity: values.length,
       },
     };
   }

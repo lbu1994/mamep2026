@@ -541,7 +541,7 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     host.traceStop("row-a");
     expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalled();
     expect(bridge.sessionPollingStart).toHaveBeenCalled();
-    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100);
+    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100, 1);
   });
 
   it("TCP writeRow 携带 writeVerify 经 sessionWriteRow 转发（2026-08-26）", async () => {

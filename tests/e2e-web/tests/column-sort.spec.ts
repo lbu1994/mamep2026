@@ -13,6 +13,7 @@ const DEFAULT_ORDER = [
   "Data",
   "Write",
   "Type",
+  "Scale",
   "Comment",
 ];
 
@@ -36,6 +37,7 @@ const HEADER_TO_KEY: Record<string, string> = {
   Data: "data",
   Write: "write",
   Type: "type",
+  Scale: "scale",
   Comment: "comment",
 };
 
@@ -50,6 +52,7 @@ const BODY_LABEL_BY_COLUMN: Record<string, string> = {
   data: "Data",
   write: "Write",
   type: "Type",
+  scale: "Scale",
   comment: "Comment",
   drag: "Drag to reorder",
 };
@@ -179,6 +182,7 @@ test("dragging a column header reorders the columns", async ({ page }) => {
       "Data",
       "Write",
       "Type",
+      "Scale",
       "Comment",
     ]);
   // body 数据列必须同步跟随表头（不允许表头/数据错位）。
@@ -236,6 +240,7 @@ test("column order persists across a page reload", async ({ page }) => {
       "Data",
       "Write",
       "Type",
+      "Scale",
       "Comment",
     ]);
   // 等待 IndexedDB 自动保存落盘（AppHost 防抖 500ms + 异步写入），避免刷新竞态。
@@ -255,6 +260,7 @@ test("column order persists across a page reload", async ({ page }) => {
     "Data",
     "Write",
     "Type",
+    "Scale",
     "Comment",
   ]);
 });
@@ -275,6 +281,7 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
       "Data",
       "Write",
       "Type",
+      "Scale",
       "Comment",
     ]);
   // 新建表 2（侧边栏添加入口，自动激活）。
@@ -305,6 +312,7 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
     "Data",
     "Write",
     "Type",
+    "Scale",
     "Comment",
   ]);
 });

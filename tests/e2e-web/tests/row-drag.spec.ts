@@ -13,6 +13,7 @@ const DEFAULT_ORDER = [
   "Data",
   "Write",
   "Type",
+  "Scale",
   "Comment",
 ];
 

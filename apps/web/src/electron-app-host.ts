@@ -110,7 +110,11 @@ export class ElectronAppHost implements AppHost {
     (message: ApplicationMessage) => void
   >();
   private readonly pollResultListeners = new Set<
-    (key: string, address: number, result: Result<number>) => void
+    (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void
   >();
   private readonly traceListeners = new Set<(sample: TraceSampleEvent) => void>();
 
@@ -483,7 +487,7 @@ export class ElectronAppHost implements AppHost {
 
   // ---- 设备请求（统一调度器）：RTU 复用浏览器路径（inner）/ TCP 走主进程远程会话 ----
 
-  readRow(row: RegisterRow): Promise<Result<number>> {
+  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     if (this.activeProtocol === "tcp") {
       return this.bridge.sessionReadRow(toRegisterRowPayload(row));
     }
@@ -511,7 +515,13 @@ export class ElectronAppHost implements AppHost {
       const batchId = createBatchId();
       const handle = this.bridge.sessionBatchRead(
         batchId,
-        rows.map((r) => ({ key: r.key, address: r.address })),
+        rows.map((r) => ({
+          key: r.key,
+          address: r.address,
+          ...(r.quantity !== undefined && r.quantity > 1
+            ? { quantity: r.quantity }
+            : {}),
+        })),
       );
       return {
         promise: handle.then((result) =>
@@ -531,7 +541,7 @@ export class ElectronAppHost implements AppHost {
   // ---- 轮询 / Trace / 日志：RTU 复用浏览器路径（inner）/ TCP 走主进程远程会话 ----
 
   updatePollingTargets(
-    rows: Array<{ key: string; address: number }>,
+    rows: Array<{ key: string; address: number; quantity?: number }>,
   ): void {
     if (this.activeProtocol === "tcp") {
       void this.bridge.sessionUpdatePollingTargets(rows);
@@ -557,7 +567,11 @@ export class ElectronAppHost implements AppHost {
   }
 
   subscribePollResult(
-    listener: (key: string, address: number, result: Result<number>) => void,
+    listener: (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void,
   ): () => void {
     this.pollResultListeners.add(listener);
     return () => {
@@ -565,12 +579,12 @@ export class ElectronAppHost implements AppHost {
     };
   }
 
-  traceStart(key: string, address: number, speedMs: number): void {
+  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
     if (this.activeProtocol === "tcp") {
-      void this.bridge.sessionTraceStart(key, address, speedMs);
+      void this.bridge.sessionTraceStart(key, address, speedMs, quantity);
       return;
     }
-    this.inner.traceStart(key, address, speedMs);
+    this.inner.traceStart(key, address, speedMs, quantity);
   }
 
   traceStop(key: string): void {

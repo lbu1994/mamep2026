@@ -161,14 +161,19 @@ export function fromErrorPayload(payload: HostErrorPayload): MamepError {
   });
 }
 
-/** Result<number> 可序列化投影（事件载荷用，如 poll-result）。 */
+/** Result<number | number[]> 可序列化投影（事件载荷用，如 poll-result；多寄存器 ADR-030）。 */
 export const hostResultPayloadSchema = z.discriminatedUnion("ok", [
-  z.object({ ok: z.literal(true), value: z.number() }),
+  z.object({
+    ok: z.literal(true),
+    value: z.union([z.number(), z.array(z.number())]),
+  }),
   z.object({ ok: z.literal(false), error: hostErrorPayloadSchema }),
 ]);
 export type HostResultPayload = z.infer<typeof hostResultPayloadSchema>;
 
-export function toResultPayload(result: Result<number>): HostResultPayload {
+export function toResultPayload(
+  result: Result<number | number[]>,
+): HostResultPayload {
   return result.ok
     ? { ok: true, value: result.value }
     : { ok: false, error: toErrorPayload(result.error) };
@@ -176,7 +181,7 @@ export function toResultPayload(result: Result<number>): HostResultPayload {
 
 export function fromResultPayload(
   payload: HostResultPayload,
-): Result<number> {
+): Result<number | number[]> {
   return payload.ok ? ok(payload.value) : fail(fromErrorPayload(payload.error));
 }
 
@@ -319,7 +324,12 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
     kind: z.literal("session-update-polling-targets"),
     payload: z.object({
       rows: z.array(
-        z.object({ key: z.string(), address: z.number() }),
+        z.object({
+          key: z.string(),
+          address: z.number(),
+          /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
+          quantity: z.number().int().min(1).optional(),
+        }),
       ),
     }),
   }),
@@ -340,6 +350,8 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
       key: z.string(),
       address: z.number(),
       speedMs: z.number(),
+      /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
+      quantity: z.number().int().min(1).optional(),
     }),
   }),
   z.object({
@@ -524,8 +536,8 @@ export interface MamepHostApi {
   sessionGetState(): Promise<Result<SessionStateResponse>>;
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）：对后续请求生效。 */
   sessionSetUnitId(unitId: number): Promise<Result<null>>;
-  /** 单行读（session-read-row）：经主进程统一调度器 FC03。 */
-  sessionReadRow(row: RegisterRowPayload): Promise<Result<number>>;
+  /** 单行读（session-read-row）：经主进程统一调度器 FC03（多寄存器行返回 values[]，ADR-030）。 */
+  sessionReadRow(row: RegisterRowPayload): Promise<Result<number | number[]>>;
   /** 单行写（session-write-row）：经主进程统一调度器 FC0x10；writeVerify 为每表写后回读配置（2026-08-26）。 */
   sessionWriteRow(
     row: RegisterRowPayload,
@@ -539,7 +551,7 @@ export interface MamepHostApi {
   /** 取消远程批任务（session-batch-cancel，ADR-025）：未知 batchId 为安全 no-op。 */
   sessionBatchCancel(batchId: string): Promise<Result<null>>;
   sessionUpdatePollingTargets(
-    rows: Array<{ key: string; address: number }>,
+    rows: Array<{ key: string; address: number; quantity?: number }>,
   ): Promise<Result<null>>;
   sessionPollingStart(): Promise<Result<null>>;
   sessionPollingStop(): Promise<Result<null>>;
@@ -547,6 +559,7 @@ export interface MamepHostApi {
     key: string,
     address: number,
     speedMs: number,
+    quantity?: number,
   ): Promise<Result<null>>;
   sessionTraceStop(key: string): Promise<Result<null>>;
 }
@@ -590,8 +603,8 @@ export interface VscodeHostApi
   sessionSetSlaveAddress(slave: number): Promise<Result<null>>;
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）：对后续请求生效。 */
   sessionSetUnitId(unitId: number): Promise<Result<null>>;
-  /** 单行读（session-read-row）：经 Extension Host 统一调度器 FC03。 */
-  sessionReadRow(row: RegisterRowPayload): Promise<Result<number>>;
+  /** 单行读（session-read-row）：经 Extension Host 统一调度器 FC03（多寄存器行返回 values[]，ADR-030）。 */
+  sessionReadRow(row: RegisterRowPayload): Promise<Result<number | number[]>>;
   /** 单行写（session-write-row）：经 Extension Host 统一调度器 FC0x10；writeVerify 为每表写后回读配置（2026-08-26）。 */
   sessionWriteRow(
     row: RegisterRowPayload,
@@ -605,7 +618,7 @@ export interface VscodeHostApi
   /** 取消远程批任务（session-batch-cancel，ADR-025）：未知 batchId 为安全 no-op。 */
   sessionBatchCancel(batchId: string): Promise<Result<null>>;
   sessionUpdatePollingTargets(
-    rows: Array<{ key: string; address: number }>,
+    rows: Array<{ key: string; address: number; quantity?: number }>,
   ): Promise<Result<null>>;
   sessionPollingStart(): Promise<Result<null>>;
   sessionPollingStop(): Promise<Result<null>>;
@@ -613,6 +626,7 @@ export interface VscodeHostApi
     key: string,
     address: number,
     speedMs: number,
+    quantity?: number,
   ): Promise<Result<null>>;
   sessionTraceStop(key: string): Promise<Result<null>>;
   /** 打开并连接远程 TCP 会话（session-tcp-connect；profile 即连接参数，无串口句柄）。 */

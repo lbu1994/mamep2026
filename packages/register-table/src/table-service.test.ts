@@ -79,7 +79,7 @@ describe("RegisterTableService", () => {
     expect(applied.ok).toBe(true);
     if (applied.ok) {
       expect(applied.value.cellText).toBe("0000");
-      expect(applied.value.lastKnownRawValue?.value).toBe(0);
+      expect(applied.value.registerValues?.[0]?.value).toBe(0);
     }
   });
 
@@ -162,7 +162,7 @@ describe("RegisterTableService 写后回读（2026-08-26）", () => {
     if (result.ok) {
       expect(result.value).toEqual({
         kind: "write-succeeded-verify-matched",
-        readValue: 0x1234,
+        readValues: [0x1234],
       });
     }
     void clock;
@@ -202,7 +202,7 @@ describe("RegisterTableService 写后回读（2026-08-26）", () => {
     if (result.ok) {
       expect(result.value).toEqual({
         kind: "write-succeeded-verify-matched",
-        readValue: 0x1234,
+        readValues: [0x1234],
       });
     }
   });
@@ -255,8 +255,8 @@ describe("RegisterTableService 写后回读（2026-08-26）", () => {
     if (result.ok) {
       expect(result.value).toEqual({
         kind: "write-succeeded-verify-mismatched",
-        expectedValue: 0x1234,
-        readValue: 0x5678,
+        expectedValues: [0x1234],
+        readValues: [0x5678],
       });
     }
   });

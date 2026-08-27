@@ -37,6 +37,35 @@ function writeResponse(slave: number, address: number): Uint8Array {
   );
 }
 
+function readResponseMulti(slave: number, values: number[]): Uint8Array {
+  const payload = new Uint8Array(3 + values.length * 2);
+  payload[0] = slave;
+  payload[1] = 0x03;
+  payload[2] = values.length * 2;
+  values.forEach((value, index) => {
+    payload[3 + index * 2] = (value >> 8) & 0xff;
+    payload[4 + index * 2] = value & 0xff;
+  });
+  return appendCrc(payload);
+}
+
+function writeResponseMulti(
+  slave: number,
+  address: number,
+  quantity: number,
+): Uint8Array {
+  return appendCrc(
+    Uint8Array.from([
+      slave,
+      0x10,
+      (address >> 8) & 0xff,
+      address & 0xff,
+      (quantity >> 8) & 0xff,
+      quantity & 0xff,
+    ]),
+  );
+}
+
 function exceptionResponse(
   slave: number,
   functionCode: number,
@@ -94,7 +123,7 @@ describe("WriteVerifyCoordinator 写后回读（§15.3 / §18.2）", () => {
     if (result.ok) {
       expect(result.value).toEqual({
         kind: "write-succeeded-verify-matched",
-        readValue: 0x1234,
+        readValues: [0x1234],
       });
     }
   });
@@ -117,8 +146,8 @@ describe("WriteVerifyCoordinator 写后回读（§15.3 / §18.2）", () => {
     if (result.ok) {
       expect(result.value).toEqual({
         kind: "write-succeeded-verify-mismatched",
-        expectedValue: 0x1234,
-        readValue: 0x5678,
+        expectedValues: [0x1234],
+        readValues: [0x5678],
       });
     }
   });
@@ -146,7 +175,7 @@ describe("WriteVerifyCoordinator 写后回读（§15.3 / §18.2）", () => {
     if (result.ok) {
       expect(result.value).toEqual({
         kind: "write-succeeded-verify-matched",
-        readValue: 0x1234,
+        readValues: [0x1234],
       });
     }
   });
@@ -234,5 +263,58 @@ describe("WriteVerifyCoordinator 写后回读（§15.3 / §18.2）", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("MODBUS_EXCEPTION_02");
     expect(transport.sentFrames).toHaveLength(1);
+  });
+});
+
+describe("WriteVerifyCoordinator 多寄存器写后回读（ADR-030）", () => {
+  it("多值写后回读一致 → verify-matched（readValues 数组）", async () => {
+    const { clock, transport, session } = makeSession();
+    await session.connect();
+    const coordinator = new WriteVerifyCoordinator(session, clock);
+    const promise = coordinator.writeWithVerifyMany(
+      0x0001,
+      [0x1234, 0xabcd],
+      { mode: "immediate", delayMs: null },
+      { userAddress: 0x0001 },
+    );
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(writeResponseMulti(1, 0x0001, 2));
+    await Promise.resolve();
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    transport.simulateData(readResponseMulti(1, [0x1234, 0xabcd]));
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        kind: "write-succeeded-verify-matched",
+        readValues: [0x1234, 0xabcd],
+      });
+    }
+  });
+
+  it("多值写后回读不一致 → verify-mismatched（逐项比较）", async () => {
+    const { clock, transport, session } = makeSession();
+    await session.connect();
+    const coordinator = new WriteVerifyCoordinator(session, clock);
+    const promise = coordinator.writeWithVerifyMany(
+      0x0001,
+      [0x1234, 0xabcd],
+      { mode: "immediate", delayMs: null },
+      { userAddress: 0x0001 },
+    );
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(writeResponseMulti(1, 0x0001, 2));
+    await Promise.resolve();
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    transport.simulateData(readResponseMulti(1, [0x1234, 0x5678]));
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        kind: "write-succeeded-verify-mismatched",
+        expectedValues: [0x1234, 0xabcd],
+        readValues: [0x1234, 0x5678],
+      });
+    }
   });
 });

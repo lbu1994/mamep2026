@@ -99,6 +99,8 @@ export function createLogger(level = "info", logFrames = true) {
  * - 0x0400–0x040f 非法数据值：读成功；写值须 ≤ 0x7FFF，超出回异常 0x03
  * - 0x0500–0x050f 不支持功能：读/写均回异常 0x01
  * - 0x0600–0x060f 设备无响应：读/写均不回任何帧
+ * - 0x0800–0x080f 多寄存器区（must-multi）：单读/单写回异常 0x02，多读/多写正常
+ *   （模拟真实设备「某些寄存器必须连续读写」，ADR-030）
  * - 0x0900–0x090f 写忽略区：读/写均成功回执，但写入不实际落盘（读回仍为旧值）
  */
 export const DEFAULT_RULES = [
@@ -143,6 +145,14 @@ export const DEFAULT_RULES = [
     end: 0x060f,
     read: { kind: "no-response" },
     write: { kind: "no-response" },
+  },
+  {
+    // ADR-030：单读/单写回异常 0x02；多读/多写正常（必须连续读写）。
+    start: 0x0800,
+    end: 0x080f,
+    read: { kind: "normal" },
+    write: { kind: "normal" },
+    mustMulti: true,
   },
   {
     start: 0x0900,
@@ -225,6 +235,8 @@ export function normalizeRules(rules) {
         rule.write ?? "normal",
         `rules[${index}].write`,
       ),
+      // ADR-030：must-multi 区（单读/单写异常，多读/多写正常）。
+      ...(rule.mustMulti === true ? { mustMulti: true } : {}),
     };
   });
 }

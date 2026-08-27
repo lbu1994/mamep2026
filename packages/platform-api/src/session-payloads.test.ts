@@ -83,7 +83,7 @@ describe("TcpConnectionProfile payload 往返（2026-08-23 TCP 接线）", () =>
 });
 
 describe("RegisterRow payload 往返", () => {
-  it("toPayload → fromPayload 保留 rowId/addressValue/lastKnownRawValue", () => {
+  it("toPayload → fromPayload 保留 rowId/addressValue/registerValues", () => {
     const row = makeRow(0x1000, "04D2");
     const payload = toRegisterRowPayload(row);
     expect(payload.addressValue).toEqual({ value: 0x1000 });
@@ -91,7 +91,7 @@ describe("RegisterRow payload 往返", () => {
     expect(restored.rowId).toBe(row.rowId);
     expect(restored.addressValue?.value).toBe(0x1000);
     expect(restored.cellText).toBe("04D2");
-    expect(restored.lastKnownRawValue).toBeNull();
+    expect(restored.registerValues).toBeNull();
   });
 
   it("空地址行往返保持 addressValue null", () => {
@@ -99,6 +99,28 @@ describe("RegisterRow payload 往返", () => {
     row.addressValue = null;
     const restored = registerRowFromPayload(toRegisterRowPayload(row));
     expect(restored.addressValue).toBeNull();
+  });
+
+  it("范围行子行元数据 registers 往返不丢失（2026-08-27）", () => {
+    const row = makeRow(0x1000, "12 34");
+    row.registerCount = 2;
+    row.registers = [
+      { name: "Hi", comment: "high", dataType: "hex" },
+      { name: "Lo", comment: "low", dataType: "unsigned-0.1" },
+    ];
+    const restored = registerRowFromPayload(toRegisterRowPayload(row));
+    expect(restored.registers).toEqual(row.registers);
+    expect(restored.registerCount).toBe(2);
+  });
+
+  it("无 registers 的 payload 往返后回退为 null", () => {
+    const row = makeRow(0x1000);
+    row.registerCount = 2;
+    row.registers = null;
+    const payload = toRegisterRowPayload(row);
+    // 老数据/旧协议载荷缺省 registers：schema 默认 null，往返不崩。
+    const restored = registerRowFromPayload(payload);
+    expect(restored.registers).toBeNull();
   });
 });
 
@@ -134,11 +156,11 @@ describe("WriteOutcome payload（写后回读，2026-08-26）", () => {
   it("5 种 kind 往返：no-verify / matched / mismatched / failed / cancelled", () => {
     const outcomes: WriteOutcome[] = [
       { kind: "write-succeeded-no-verify" },
-      { kind: "write-succeeded-verify-matched", readValue: 0x1234 },
+      { kind: "write-succeeded-verify-matched", readValues: [0x1234] },
       {
         kind: "write-succeeded-verify-mismatched",
-        expectedValue: 0x1234,
-        readValue: 0x5678,
+        expectedValues: [0x1234],
+        readValues: [0x5678],
       },
       {
         kind: "write-succeeded-verify-failed",

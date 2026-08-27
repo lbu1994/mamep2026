@@ -121,7 +121,8 @@ export interface AppHost {
     listener: (state: ConnectionState) => void,
   ): () => void;
 
-  readRow(row: RegisterRow): Promise<Result<number>>;
+  /** 单行读取（多寄存器行返回 values[]，ADR-030）。 */
+  readRow(row: RegisterRow): Promise<Result<number | number[]>>;
   /**
    * 单行写（FC0x10）。options.writeVerify（2026-08-26）：每表写后回读配置，
    * 非 off 时写入后按配置（立即/延迟）FC03 回读，返回扩展的 WriteOutcome（§18.2）。
@@ -132,15 +133,26 @@ export interface AppHost {
   ): Promise<Result<WriteOutcome>>;
   readAllRows(rows: BatchReadRow[]): BatchReadHandle;
 
-  /** WP 轮询：传入当前启用轮询的有效行；连接状态变化时由 UI 调用 start/stop。 */
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void;
+  /** WP 轮询：传入当前启用轮询的有效行（多寄存器行携带 quantity，ADR-030）。 */
+  updatePollingTargets(
+    rows: Array<{ key: string; address: number; quantity?: number }>,
+  ): void;
   startPolling(): void;
   stopPolling(): void;
   subscribePollResult(
-    listener: (key: string, address: number, result: Result<number>) => void,
+    listener: (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void,
   ): () => void;
 
-  traceStart(key: string, address: number, speedMs: number): void;
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity?: number,
+  ): void;
   traceStop(key: string): void;
   subscribeTraceSample(
     listener: (sample: TraceSampleEvent) => void,
