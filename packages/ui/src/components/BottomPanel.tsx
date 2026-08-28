@@ -29,12 +29,17 @@ import {
   CloseCircleOutlined,
   CopyOutlined,
   DownOutlined,
+  DownloadOutlined,
   InfoCircleOutlined,
   UpOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
 import type { FlowControl } from "@mamep2026/domain";
 import type { CommunicationLogEntry } from "@mamep2026/logging";
+import {
+  communicationLogExportFileName,
+  serializeCommunicationLogToCsv,
+} from "@mamep2026/logging";
 import { useAppStore } from "../app-store";
 import { STATE_DOT_COLOR } from "../connection-state";
 import { isNearBottom } from "../log-scroll";
@@ -78,7 +83,7 @@ CommLogRow.displayName = "CommLogRow";
 
 export function BottomPanel(): React.ReactNode {
   const { t, i18n } = useTranslation();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { token } = theme.useToken();
   // 与 antd Listy 内部 itemHeight 同公式（listy 源码：fontHeight + itemPaddingBlock*2，
   // fontHeight = round(lineHeight * fontSizeMD)，默认 fontSizeMD === fontSize），
@@ -199,6 +204,38 @@ export function BottomPanel(): React.ReactNode {
     }
   };
 
+  // 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：仅导出当前缓冲区，不提供搜索/过滤。
+  // 导出前按 PRD §15.3.6 / TECH_DESIGN §20.6 提示可能包含设备地址与通信数据。
+  // 序列化在 packages/logging（纯函数）；平台落盘/下载经 AppHost.saveTextFile 端口。
+  const handleExport = async (): Promise<void> => {
+    if (host === null || commLog.length === 0) return;
+    await modal.confirm({
+      title: t("panel.exportConfirmTitle"),
+      content: t("panel.exportConfirmContent"),
+      okText: t("panel.export"),
+      cancelText: t("connection.cancel"),
+      onOk: async () => {
+        const csv = serializeCommunicationLogToCsv(commLog);
+        const suggestedName = communicationLogExportFileName(commLog);
+        const result = await host.saveTextFile({
+          suggestedName,
+          content: csv,
+          mimeType: "text/csv",
+        });
+        if (!result.ok) {
+          message.error(t("panel.exportFailed"));
+          return;
+        }
+        if (result.value.saved) {
+          message.success(t("panel.exportSuccess"));
+        } else {
+          // 用户在保存对话框中取消：非错误，静默提示已取消。
+          message.info(t("panel.exportCancelled"));
+        }
+      },
+    });
+  };
+
   const messagesTab = (
     <div className="log-list">
       {messages.length === 0 ? (
@@ -280,6 +317,15 @@ export function BottomPanel(): React.ReactNode {
             onClick={() => void handleCopy()}
           >
             {t("panel.copy")}
+          </Button>
+          {/* Export：通信日志 CSV 导出（PRD §8.3 P1，2026-08-28） */}
+          <Button
+            size="small"
+            icon={<DownloadOutlined />}
+            disabled={commLog.length === 0 || host === null}
+            onClick={() => void handleExport()}
+          >
+            {t("panel.export")}
           </Button>
           <Button size="small" icon={<ClearOutlined />} onClick={clearCommLog}>
             {t("panel.clear")}

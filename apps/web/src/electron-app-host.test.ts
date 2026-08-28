@@ -18,6 +18,7 @@ import type {
   HostDebugState,
   MamepHostApi,
   MamepHostEvent,
+  SaveTextFileResponse,
   SessionBatchReadResponse,
   SessionStateResponse,
   WriteOutcomePayload,
@@ -56,6 +57,7 @@ function createFakeBridge(): {
         nodePlugins: false,
         webPlugins: true,
         connectionConfig: "file",
+        logExport: "save-dialog",
       },
     })),
     getAppVersion: vi.fn(async (): Promise<Result<string>> => ({
@@ -165,6 +167,10 @@ function createFakeBridge(): {
     sessionTraceStop: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
+    })),
+    saveTextFile: vi.fn(async (): Promise<Result<SaveTextFileResponse>> => ({
+      ok: true,
+      value: { saved: true, filePath: "C:\\logs\\comm-log.csv" },
     })),
   };
   return {
@@ -469,6 +475,30 @@ describe("ElectronAppHost（ADR-017 扩展：enumerated 下拉框选择）", () 
     expect(fake.copyCalls).toEqual(["clip-1"]);
     const read = await host.readTextFromClipboard();
     expect(read).toEqual({ ok: true, value: null });
+  });
+
+  it("saveTextFile（CSV 导出）透传给 preload 桥", async () => {
+    const fake = createFakeBridge();
+    const device = new ScriptedModbusRtuDevice();
+    const { serial } = createFakeWebSerial(device);
+    const host = new ElectronAppHost(fake.bridge, {
+      serial,
+      repository: new InMemoryWorkspaceRepository(),
+    });
+    const result = await host.saveTextFile({
+      suggestedName: "comm-log-rtu-20260828-102030.csv",
+      content: "seq,timestamp\r\n",
+      mimeType: "text/csv",
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: { saved: true, filePath: "C:\\logs\\comm-log.csv" },
+    });
+    expect(fake.bridge.saveTextFile).toHaveBeenCalledWith({
+      suggestedName: "comm-log-rtu-20260828-102030.csv",
+      content: "seq,timestamp\r\n",
+      mimeType: "text/csv",
+    });
   });
 
   it("getCommProperties 反映真实会话状态与已选端口", async () => {

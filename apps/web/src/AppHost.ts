@@ -40,6 +40,7 @@ import {
 } from "@mamep2026/connection-config";
 import type {
   ConnectionConfigLoadResponse,
+  SaveTextFileResponse,
   SerialDeviceHandle,
   SerialPortOption,
   PlatformHost,
@@ -413,6 +414,39 @@ export class BrowserAppHost implements AppHost {
       return ok(text === "" ? null : text);
     } catch {
       return fail(clipboardUnavailableError());
+    }
+  }
+
+  // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：浏览器 Blob 下载 ----
+
+  async saveTextFile(options: {
+    suggestedName: string;
+    content: string;
+    mimeType?: string;
+  }): Promise<Result<SaveTextFileResponse>> {
+    try {
+      const blob = new Blob([options.content], {
+        type: options.mimeType ?? "text/csv;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = options.suggestedName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      return ok({ saved: true, filePath: null });
+    } catch (cause) {
+      return fail(
+        createMamepError({
+          code: "SAVE_TEXT_FILE_FAILED",
+          category: "internal",
+          userMessageKey: "panel.exportFailed",
+          technicalMessage:
+            cause instanceof Error ? cause.message : String(cause),
+        }),
+      );
     }
   }
 

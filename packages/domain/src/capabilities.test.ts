@@ -25,4 +25,8 @@ describe("browserCapabilities", () => {
   it("loads external connection config via import/URL (no filesystem)", () => {
     expect(caps.connectionConfig).toBe("import");
   });
+
+  it("exports communication logs via browser download (no save dialog)", () => {
+    expect(caps.logExport).toBe("download");
+  });
 });

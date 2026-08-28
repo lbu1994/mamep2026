@@ -216,6 +216,14 @@ export const en = {
     autoScroll: "Auto scroll",
     copy: "Copy",
     copySuccess: "Copied",
+    // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）----
+    export: "Export",
+    exportConfirmTitle: "Export communication log?",
+    exportConfirmContent:
+      "The exported file may contain device addresses, register data, and raw communication data. Only the current log buffer is exported.",
+    exportSuccess: "Exported",
+    exportCancelled: "Export cancelled",
+    exportFailed: "Export failed",
     collapse: "Collapse panel",
     expand: "Expand panel",
     time: "Time",
@@ -550,6 +558,14 @@ export const zh: TranslationResources = {
     autoScroll: "自动滚动",
     copy: "复制",
     copySuccess: "已复制",
+    // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）----
+    export: "导出",
+    exportConfirmTitle: "导出通信日志？",
+    exportConfirmContent:
+      "导出的文件可能包含设备地址、寄存器数据与原始通信数据；仅导出当前缓冲区内容。",
+    exportSuccess: "已导出",
+    exportCancelled: "已取消导出",
+    exportFailed: "导出失败",
     collapse: "折叠面板",
     expand: "展开面板",
     time: "时间",

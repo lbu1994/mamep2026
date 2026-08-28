@@ -88,6 +88,9 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     loadConnectionConfig: vi.fn(async () =>
       ok({ config: null, sourcePath: null }),
     ),
+    saveTextFile: vi.fn(async () =>
+      ok({ saved: true, filePath: "C:\\logs\\comm-log.csv" }),
+    ),
     ...overrides,
   };
 }
@@ -490,6 +493,49 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     expect(result.type).toBe("error");
     if (result.type === "error") {
       expect(result.payload.code).toBe("TCP_CONNECTION_FAILED");
+    }
+  });
+
+  it("save-text-file 转发主进程落盘并返回 saved 响应（2026-08-28）", async () => {
+    const saveTextFile = vi.fn(async () =>
+      ok({ saved: true, filePath: "C:\\logs\\comm-log.csv" }),
+    );
+    const result = await handleRequest(
+      request("save-text-file", {
+        suggestedName: "comm-log-rtu-20260828-102030.csv",
+        content: "seq,timestamp\r\n",
+        mimeType: "text/csv",
+      }),
+      makeDeps({ saveTextFile }),
+    );
+    expect(result.type).toBe("response");
+    expect(saveTextFile).toHaveBeenCalledWith({
+      suggestedName: "comm-log-rtu-20260828-102030.csv",
+      content: "seq,timestamp\r\n",
+      mimeType: "text/csv",
+    });
+    if (result.type === "response") {
+      expect(result.payload).toEqual({
+        saved: true,
+        filePath: "C:\\logs\\comm-log.csv",
+      });
+    }
+  });
+
+  it("save-text-file 用户取消时原样返回 saved:false（非错误）", async () => {
+    const saveTextFile = vi.fn(async () =>
+      ok({ saved: false, filePath: null }),
+    );
+    const result = await handleRequest(
+      request("save-text-file", {
+        suggestedName: "comm-log.csv",
+        content: "x",
+      }),
+      makeDeps({ saveTextFile }),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ saved: false, filePath: null });
     }
   });
 });

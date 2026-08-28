@@ -35,6 +35,7 @@ export const nodeTcpHostCapabilities: PlatformCapabilities = Object.freeze({
   nodePlugins: false,
   webPlugins: false,
   connectionConfig: "file",
+  logExport: "unsupported",
 });
 
 export interface NodeTcpPlatformHostOptions {

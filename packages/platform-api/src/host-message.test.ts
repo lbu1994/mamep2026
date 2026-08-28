@@ -10,6 +10,7 @@ import {
   fromErrorPayload,
   fromResultPayload,
   parseHostMessage,
+  saveTextFileResponseSchema,
   toErrorPayload,
   toResultPayload,
 } from "./host-message";
@@ -528,6 +529,64 @@ describe("host-message connection-config-load kind（ADR-023 连接对象配置�
     const parsed = connectionConfigLoadResponseSchema.safeParse({
       config: null,
       sourcePath: null,
+    });
+    expect(parsed.success).toBe(true);
+  });
+});
+
+describe("host-message save-text-file kind（2026-08-28 通信日志 CSV 导出）", () => {
+  it("accepts a valid save-text-file request", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-export",
+      kind: "save-text-file",
+      payload: {
+        suggestedName: "comm-log-rtu-20260828-102030.csv",
+        content: "seq,timestamp\r\n1,2026-08-28T10:20:30.123+08:00\r\n",
+        mimeType: "text/csv",
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.type === "request") {
+      expect(result.value.kind).toBe("save-text-file");
+    }
+  });
+
+  it("accepts a save-text-file request without mimeType", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-export-2",
+      kind: "save-text-file",
+      payload: { suggestedName: "a.csv", content: "x" },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a save-text-file request with an empty suggestedName", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-export-bad",
+      kind: "save-text-file",
+      payload: { suggestedName: "", content: "x" },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("validates a saved response via saveTextFileResponseSchema", () => {
+    const parsed = saveTextFileResponseSchema.safeParse({
+      saved: true,
+      filePath: "C:\\logs\\comm-log.csv",
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("validates a cancelled (not saved) response", () => {
+    const parsed = saveTextFileResponseSchema.safeParse({
+      saved: false,
+      filePath: null,
     });
     expect(parsed.success).toBe(true);
   });

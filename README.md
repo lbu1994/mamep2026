@@ -114,7 +114,7 @@ Electron 免安装版无需安装包、无需任何环境（Node/pnpm），当�
 - [x] 写后回读及延迟回读（每表独立配置，默认 ON 立即回读；工具栏 Select；WriteOutcome 扩展 5 种 verify 结果 + WriteVerifyCoordinator；写入期间暂缓同表行轮询；首个工作区迁移 v1→v2 把全局 readVerifySettings 迁移到各表）— PRD §8.3（ADR-029）
 - [x] 多寄存器连续读写（范围行：Register 列范围输入 + Type 拆「进制 + scale」两列 + 范围行树形展开子行（每寄存器一子行，只读），支持 32/64 位整数与 ASCII 字符串，三端落地）— PRD §8.3（ADR-030：实施完成）
 - [x] 批量任务结果统计（Read All 完成结果的全局提示：antd message 富内容展示成功/失败/跳过/取消 + 耗时，与底部面板消息并存；范围仅此，统计面板/历史记录等无对应需求，不实现）— PRD §8.3（2026-08-28）
-- [ ] 日志搜索、过滤和导出 — PRD §8.3
+- [x] 日志导出（仅导出功能，CSV 格式；搜索/过滤本软件不提供，由用户对导出数据使用第三方软件如 Excel 自行处理）— PRD §8.3（2026-08-28：通信日志面板新增 Export 按钮，antd Modal.confirm 隐私提示（可能含设备地址/寄存器数据/原始报文，§15.3.6/§20.6）→ 仅导出当前缓冲区；CSV 序列化在 packages/logging（`csv-export.ts`：16 列固定英文列名 + RFC 4180 转义 + RFC3339 本地时间 + 大写十六进制报文）；平台落盘经 HostMessage v1 新 request kind `save-text-file`（能力矩阵新增 `logExport`：浏览器 `download` Blob 下载 / Electron `save-dialog` 主进程 dialog+fs / VSCode `save-dialog` Extension Host showSaveDialog+workspace.fs，用户取消返回 saved:false 非错误）；文件名 `comm-log-<rtu|tcp|mixed>-<YYYYMMDD-HHmmss>.csv`）
 - [ ] 撤销和重做（行编辑基础已在 MVP，ADR-015；撤销/重做未实现）— PRD §8.3（部分完成）
 - [ ] 工作区导入和导出 — PRD §8.3
 - [ ] 自动重连（TCP profile 字段已就绪、UI 灰显占位）— PRD §8.3 / ADR-022（部分完成）

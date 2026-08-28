@@ -69,6 +69,8 @@ export const HOST_REQUEST_KINDS = [
   "session-tcp-connect",
   // 连接对象配置文件（ADR-023）：桌面端从文件系统加载 config/connections.json（payload 空）。
   "connection-config-load",
+  // 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：把序列化好的 CSV 文本落盘/触发下载。
+  "save-text-file",
 ] as const;
 export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
 
@@ -220,6 +222,17 @@ export type ConnectionConfigLoadResponse = z.infer<
   typeof connectionConfigLoadResponseSchema
 >;
 
+/**
+ * save-text-file 响应载荷（2026-08-28，PRD §8.3 P1 日志导出）。
+ * saved=false 表示用户取消保存对话框（非错误，UI 提示「已取消」）；filePath 为实际落盘路径（诊断用，
+ * 浏览器下载无路径返回 null）。
+ */
+export const saveTextFileResponseSchema = z.object({
+  saved: z.boolean(),
+  filePath: z.string().nullable(),
+});
+export type SaveTextFileResponse = z.infer<typeof saveTextFileResponseSchema>;
+
 const requestBase = {
   protocolVersion: protocolVersionSchema,
   type: z.literal("request"),
@@ -370,6 +383,16 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
     kind: z.literal("connection-config-load"),
     // 连接对象配置文件加载（ADR-023）：无参数，平台侧按默认路径策略查找。
     payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("save-text-file"),
+    // 通信日志 CSV 导出（2026-08-28）：渲染端序列化好的 CSV 文本 + 建议文件名；落盘由平台侧完成。
+    payload: z.object({
+      suggestedName: z.string().min(1),
+      content: z.string(),
+      mimeType: z.string().optional(),
+    }),
   }),
 ]);
 export type HostRequestMessage = z.infer<typeof hostRequestSchema>;
@@ -528,6 +551,15 @@ export interface MamepHostApi {
    * 未找到配置文件返回 ok({ config: null, sourcePath: null })；解析/读取失败返回 fail。
    */
   loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
+  /**
+   * 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：
+   * 浏览器触发 Blob 下载；桌面端弹保存对话框落盘（用户取消返回 ok({ saved: false })）。
+   */
+  saveTextFile(options: {
+    suggestedName: string;
+    content: string;
+    mimeType?: string;
+  }): Promise<Result<SaveTextFileResponse>>;
 
   // ---- 远程会话 RPC（2026-08-23 两端 TCP 接线：Electron TCP 会话在主进程，Renderer 远程代理）----
 
@@ -647,6 +679,7 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   nodePlugins: false,
   webPlugins: true,
   connectionConfig: "file",
+  logExport: "save-dialog",
 });
 
 /**
@@ -662,4 +695,5 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   nodePlugins: false,
   webPlugins: true,
   connectionConfig: "file",
+  logExport: "save-dialog",
 });

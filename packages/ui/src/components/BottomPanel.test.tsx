@@ -258,6 +258,109 @@ describe("BottomPanel comm log", () => {
     fireEvent.click(screen.getByRole("button", { name: /Clear/i }));
     expect(useAppStore.getState().commLog).toHaveLength(0);
   });
+
+  it("export button is disabled when the comm log is empty", () => {
+    renderPanel();
+    const exportButton = screen.getByRole("button", { name: /Export/i });
+    expect((exportButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("export asks for privacy confirmation and saves CSV through the host port", async () => {
+    const saveTextFile = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { saved: true, filePath: null },
+    });
+    useAppStore.setState({
+      host: {
+        saveTextFile,
+        getCommProperties: () => null,
+      } as unknown as AppHost,
+      commLog: [commEntry({ bytesHex: "01 03 00 64 00 01 85 F2" })],
+    });
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: /Export/i }));
+    // 隐私确认对话框出现（PRD §15.3.6）。antd v6 确认框标题同时渲染
+    // .ant-modal-title 与 .ant-modal-confirm-title 两个节点，用 getAllByText 断言。
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("Export communication log?").length,
+      ).toBeGreaterThan(0);
+    });
+    // 确认导出（antd Modal OK 按钮）。
+    fireEvent.click(
+      document.querySelector(".ant-modal .ant-btn-primary") as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(saveTextFile).toHaveBeenCalledTimes(1);
+    });
+    const call = saveTextFile.mock.calls[0]?.[0] as {
+      suggestedName: string;
+      content: string;
+      mimeType: string;
+    };
+    expect(call.mimeType).toBe("text/csv");
+    expect(call.suggestedName).toMatch(/^comm-log-rtu-\d{8}-\d{6}\.csv$/);
+    expect(call.content).toContain("seq,timestamp,direction,protocol");
+    expect(call.content).toContain("01 03 00 64 00 01 85 F2");
+    // 导出成功反馈。
+    await waitFor(() => {
+      expect(screen.getByText("Exported")).toBeTruthy();
+    });
+  });
+
+  it("export reports a failure when the host port fails", async () => {
+    const saveTextFile = vi.fn().mockResolvedValue({
+      ok: false,
+      error: { code: "SAVE_TEXT_FILE_FAILED", technicalMessage: "denied" },
+    });
+    useAppStore.setState({
+      host: {
+        saveTextFile,
+        getCommProperties: () => null,
+      } as unknown as AppHost,
+      commLog: [commEntry()],
+    });
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: /Export/i }));
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("Export communication log?").length,
+      ).toBeGreaterThan(0);
+    });
+    fireEvent.click(
+      document.querySelector(".ant-modal .ant-btn-primary") as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Export failed")).toBeTruthy();
+    });
+  });
+
+  it("export reports a cancel when the user dismisses the save dialog", async () => {
+    const saveTextFile = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { saved: false, filePath: null },
+    });
+    useAppStore.setState({
+      host: {
+        saveTextFile,
+        getCommProperties: () => null,
+      } as unknown as AppHost,
+      commLog: [commEntry()],
+    });
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: /Export/i }));
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("Export communication log?").length,
+      ).toBeGreaterThan(0);
+    });
+    fireEvent.click(
+      document.querySelector(".ant-modal .ant-btn-primary") as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Export cancelled")).toBeTruthy();
+    });
+  });
 });
 
 describe("BottomPanel properties", () => {

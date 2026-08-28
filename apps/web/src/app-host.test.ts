@@ -5,7 +5,7 @@
  * - dispose 清空本地订阅集合（StrictMode 双挂载回归：旧 host 不再收到事件）。
  */
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDefaultRtuProfile, RegisterAddress } from "@mamep2026/domain";
 import type { CommunicationLogEvent } from "@mamep2026/communication";
 import { RegisterTableService } from "@mamep2026/register-table";
@@ -56,5 +56,56 @@ describe("BrowserAppHost 生命周期（dispose，2026-08-23）", () => {
     const host = makeMockHost();
     await host.dispose();
     await host.dispose();
+  });
+});
+
+describe("BrowserAppHost 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）", () => {
+  it("saveTextFile 经 Blob 触发浏览器下载并返回 saved:true", async () => {
+    const host = makeMockHost();
+    const createObjectURL = vi.fn(() => "blob:mock-url");
+    const revokeObjectURL = vi.fn();
+    const click = vi.fn();
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    const originalClick = HTMLAnchorElement.prototype.click;
+    URL.createObjectURL = createObjectURL as typeof URL.createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL as typeof URL.revokeObjectURL;
+    HTMLAnchorElement.prototype.click = click;
+    try {
+      const result = await host.saveTextFile({
+        suggestedName: "comm-log-rtu-20260828-102030.csv",
+        content: "seq,timestamp\r\n",
+        mimeType: "text/csv",
+      });
+      expect(result).toEqual({
+        ok: true,
+        value: { saved: true, filePath: null },
+      });
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(click).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+    } finally {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+      HTMLAnchorElement.prototype.click = originalClick;
+    }
+  });
+
+  it("saveTextFile 失败时返回结构化错误", async () => {
+    const host = makeMockHost();
+    const originalCreate = URL.createObjectURL;
+    URL.createObjectURL = (() => {
+      throw new Error("createObjectURL denied");
+    }) as typeof URL.createObjectURL;
+    try {
+      const result = await host.saveTextFile({
+        suggestedName: "comm-log.csv",
+        content: "x",
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("SAVE_TEXT_FILE_FAILED");
+    } finally {
+      URL.createObjectURL = originalCreate;
+    }
   });
 });

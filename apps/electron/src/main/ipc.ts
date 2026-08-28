@@ -26,6 +26,7 @@ import {
   type HostErrorMessage,
   type HostRequestMessage,
   type HostResponseMessage,
+  type SaveTextFileResponse,
   type SessionStateResponse,
 } from "@mamep2026/platform-api";
 
@@ -70,6 +71,15 @@ export interface IpcDeps {
   session: ElectronSessionLike;
   /** 连接对象配置文件加载（connection-config-load，ADR-023）。 */
   loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
+  /**
+   * 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：
+   * 主进程弹保存对话框落盘；用户取消返回 ok({ saved: false })。
+   */
+  saveTextFile(options: {
+    suggestedName: string;
+    content: string;
+    mimeType?: string;
+  }): Promise<Result<SaveTextFileResponse>>;
 }
 
 /** 会话 RPC 包装：run 返回 Result 并映射为 response/error Envelope。 */
@@ -283,6 +293,18 @@ export async function handleRequest(
     case "connection-config-load":
       // 连接对象配置文件加载（ADR-023）：未找到返回 ok({config:null})，失败返回 error。
       return sessionResult(message, () => deps.loadConnectionConfig());
+    case "save-text-file":
+      // 通信日志 CSV 导出（2026-08-28）：主进程弹保存对话框落盘（取消=ok({saved:false})）。
+      // 显式构造 payload：exactOptionalPropertyTypes 下 Zod 可选字段是 `?: T | undefined`。
+      return sessionResult(message, () =>
+        deps.saveTextFile({
+          suggestedName: message.payload.suggestedName,
+          content: message.payload.content,
+          ...(message.payload.mimeType !== undefined
+            ? { mimeType: message.payload.mimeType }
+            : {}),
+        }),
+      );
     case "debug:get-state":
       // 开发/测试探针（Playwright Electron E2E 用）：打包构建禁用。
       if (deps.isPackaged()) {

@@ -195,11 +195,11 @@ test("TCP 全表读取取消：Read All → 取消 → 汇总 cancelledCount > 0
     page.getByRole("button", { name: /Cancel/ }),
   ).toHaveCount(0);
 
-  await expect(page.locator(".bottom-panel")).toContainText(/cancelled/, {
+  await expect(page.locator(".bottom-panel")).toContainText(/cancelled/i, {
     timeout: 10000,
   });
   const summaryText = (await page.locator(".bottom-panel").innerText()).match(
-    /Read All:.*?(\d+)\s+cancelled/,
+    /Read All:.*?(\d+)\s+cancelled/i,
   );
   const cancelledCount = Number(summaryText?.[1] ?? 0);
   expect(cancelledCount).toBeGreaterThan(0);

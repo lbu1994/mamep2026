@@ -36,6 +36,7 @@ function makeHost(config: ConnectionConfigFile | null): {
       nodePlugins: false,
       webPlugins: true,
       connectionConfig: "file",
+      logExport: "save-dialog",
     } as PlatformCapabilities,
     isMockMode: false,
     pluginRegistry: {} as never,
@@ -101,6 +102,10 @@ function makeHost(config: ConnectionConfigFile | null): {
     readTextFromClipboard: vi.fn(async () => ({
       ok: true as const,
       value: null,
+    })),
+    saveTextFile: vi.fn(async () => ({
+      ok: true as const,
+      value: { saved: true, filePath: null },
     })),
   };
   return { host, selectSerialPort, setSlaveAddress };

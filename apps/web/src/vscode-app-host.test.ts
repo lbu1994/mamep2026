@@ -14,6 +14,7 @@ import {
 import type { ConnectionState } from "@mamep2026/communication";
 import type {
   MamepHostEvent,
+  SaveTextFileResponse,
   SerialPortOption,
   SessionBatchReadResponse,
   SessionStateResponse,
@@ -168,6 +169,10 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
+    saveTextFile: vi.fn(async (): Promise<Result<SaveTextFileResponse>> => ({
+      ok: true,
+      value: { saved: true, filePath: null },
+    })),
   };
   return {
     bridge,
@@ -292,6 +297,25 @@ describe("VscodeAppHost", () => {
     const result = await host.copyTextToClipboard("hello");
     expect(result.ok).toBe(true);
     expect(copyCalls).toEqual(["hello"]);
+  });
+
+  it("saveTextFile（CSV 导出）透传 VSCode 桥", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const result = await host.saveTextFile({
+      suggestedName: "comm-log-rtu-20260828-102030.csv",
+      content: "seq,timestamp\r\n",
+      mimeType: "text/csv",
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: { saved: true, filePath: null },
+    });
+    expect(bridge.saveTextFile).toHaveBeenCalledWith({
+      suggestedName: "comm-log-rtu-20260828-102030.csv",
+      content: "seq,timestamp\r\n",
+      mimeType: "text/csv",
+    });
   });
 
   it("工作区经注入仓储委托 inner（loadWorkspace 走通）", async () => {

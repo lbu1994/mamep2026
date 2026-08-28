@@ -29,6 +29,7 @@ function makeHost(
       nodePlugins: false,
       webPlugins: true,
       connectionConfig: "import",
+      logExport: "save-dialog",
       ...caps,
     },
     isMockMode: false,
@@ -92,6 +93,10 @@ function makeHost(
     readTextFromClipboard: vi.fn(async () => ({
       ok: true as const,
       value: null,
+    })),
+    saveTextFile: vi.fn(async () => ({
+      ok: true as const,
+      value: { saved: true, filePath: null },
     })),
   };
   return { host, connectTcp };

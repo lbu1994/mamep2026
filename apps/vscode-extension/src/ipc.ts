@@ -34,6 +34,7 @@ import {
   type HostErrorMessage,
   type HostRequestMessage,
   type HostResponseMessage,
+  type SaveTextFileResponse,
   type SerialPortOption,
   type VscodeHostDebugState,
 } from "@mamep2026/platform-api";
@@ -107,6 +108,15 @@ export interface IpcDeps {
   sessionStats(): { requestFrames: number; responseFrames: number };
   /** 连接对象配置文件加载（connection-config-load，ADR-023）。 */
   loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
+  /**
+   * 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：
+   * Extension Host 弹保存对话框 + workspace.fs 落盘；用户取消返回 ok({ saved: false })。
+   */
+  saveTextFile(options: {
+    suggestedName: string;
+    content: string;
+    mimeType?: string;
+  }): Promise<Result<SaveTextFileResponse>>;
 }
 
 /** 尽力从无法解析的原始消息中提取 messageId（诊断用；解析失败时为空串）。 */
@@ -334,6 +344,18 @@ export async function handleVscodeRequest(
     case "connection-config-load":
       // 连接对象配置文件加载（ADR-023）：未找到返回 ok({config:null})，失败返回 error。
       return sessionResult(message, () => deps.loadConnectionConfig());
+    case "save-text-file":
+      // 通信日志 CSV 导出（2026-08-28）：Extension Host 弹保存对话框 + workspace.fs 落盘。
+      // 显式构造 payload：exactOptionalPropertyTypes 下 Zod 可选字段是 `?: T | undefined`。
+      return sessionResult(message, () =>
+        deps.saveTextFile({
+          suggestedName: message.payload.suggestedName,
+          content: message.payload.content,
+          ...(message.payload.mimeType !== undefined
+            ? { mimeType: message.payload.mimeType }
+            : {}),
+        }),
+      );
     case "debug:get-state":
       // 开发/测试探针（e2e 用）：生产构建禁用。
       if (!deps.isDev()) {

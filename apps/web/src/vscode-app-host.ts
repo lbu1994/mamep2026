@@ -41,6 +41,7 @@ import {
   type ConnectionConfigLoadResponse,
   type HostResultPayload,
   type MamepHostEvent,
+  type SaveTextFileResponse,
   type SerialDeviceHandle,
   type SerialPortOption,
   type TraceSamplePayload,
@@ -565,5 +566,15 @@ export class VscodeAppHost implements AppHost {
 
   readTextFromClipboard(): Promise<Result<string | null>> {
     return this.bridge.readTextFromClipboard();
+  }
+
+  // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：Extension Host 保存对话框 + workspace.fs 落盘 ----
+
+  saveTextFile(options: {
+    suggestedName: string;
+    content: string;
+    mimeType?: string;
+  }): Promise<Result<SaveTextFileResponse>> {
+    return this.bridge.saveTextFile(options);
   }
 }

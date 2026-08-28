@@ -11,10 +11,12 @@
  * MVP 串口（ADR-017）：与浏览器一致经 Web Serial API，主进程仅配合 select-serial-port 权限处理；
  * 后续 Node Serial/TCP Adapter 落地后由本进程接管。
  */
-import { app, BrowserWindow, clipboard, ipcMain, session } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 import path from "node:path";
+import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
 import { NodeTcpPlatformHost } from "@mamep2026/platform-node/tcp";
 import {
@@ -154,6 +156,35 @@ const ipcDeps: IpcDeps = {
         userDataDir: app.getPath("userData"),
       }),
     ),
+  // 通信日志 CSV 导出（save-text-file，2026-08-28）：主进程弹保存对话框落盘。
+  saveTextFile: async (options) => {
+    try {
+      const result = await dialog.showSaveDialog({
+        title: "Export communication log",
+        defaultPath: options.suggestedName,
+        filters: [
+          { name: "CSV", extensions: ["csv"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      if (result.canceled || result.filePath === undefined) {
+        // 用户取消保存对话框：非错误。
+        return ok({ saved: false, filePath: null });
+      }
+      await writeFile(result.filePath, options.content, "utf8");
+      return ok({ saved: true, filePath: result.filePath });
+    } catch (cause) {
+      return fail(
+        createMamepError({
+          code: "SAVE_TEXT_FILE_FAILED",
+          category: "persistence",
+          userMessageKey: "panel.exportFailed",
+          technicalMessage:
+            cause instanceof Error ? cause.message : String(cause),
+        }),
+      );
+    }
+  },
 };
 
 async function handleInvokeEvent(

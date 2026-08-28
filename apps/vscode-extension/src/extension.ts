@@ -13,6 +13,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as vscode from "vscode";
+import { createMamepError, fail, ok } from "@mamep2026/domain";
 import { NodePlatformHost } from "@mamep2026/platform-node";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
@@ -151,6 +152,34 @@ function createDeps(
           homeDir: os.homedir(),
         }),
       ),
+    // 通信日志 CSV 导出（save-text-file，2026-08-28）：保存对话框 + workspace.fs 落盘。
+    saveTextFile: async (options) => {
+      try {
+        const uri = await vscode.window.showSaveDialog({
+          defaultUri: vscode.Uri.file(options.suggestedName),
+          filters: { CSV: ["csv"], "All Files": ["*"] },
+        });
+        if (uri === undefined) {
+          // 用户取消保存对话框：非错误。
+          return ok({ saved: false, filePath: null });
+        }
+        await vscode.workspace.fs.writeFile(
+          uri,
+          Buffer.from(options.content, "utf8"),
+        );
+        return ok({ saved: true, filePath: uri.fsPath });
+      } catch (cause) {
+        return fail(
+          createMamepError({
+            code: "SAVE_TEXT_FILE_FAILED",
+            category: "persistence",
+            userMessageKey: "panel.exportFailed",
+            technicalMessage:
+              cause instanceof Error ? cause.message : String(cause),
+          }),
+        );
+      }
+    },
   };
 }
 

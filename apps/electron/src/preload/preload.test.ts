@@ -56,6 +56,7 @@ describe("preload 白名单桥", () => {
       "onEvent",
       "platform",
       "readTextFromClipboard",
+      "saveTextFile",
       "selectSerialPort",
       "sessionBatchCancel",
       "sessionBatchRead",
@@ -142,6 +143,37 @@ describe("preload 白名单桥", () => {
       }),
     );
     expect(result).toEqual({ ok: true, value: undefined });
+  });
+
+  it("saveTextFile 透传 CSV 内容并映射 saved 响应（2026-08-28）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "save-text-file",
+      ok: true,
+      payload: { saved: true, filePath: "C:\\logs\\comm-log.csv" },
+    });
+    const result = await bridge.saveTextFile({
+      suggestedName: "comm-log-rtu-20260828-102030.csv",
+      content: "seq,timestamp\r\n",
+      mimeType: "text/csv",
+    });
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "save-text-file",
+        payload: {
+          suggestedName: "comm-log-rtu-20260828-102030.csv",
+          content: "seq,timestamp\r\n",
+          mimeType: "text/csv",
+        },
+      }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      value: { saved: true, filePath: "C:\\logs\\comm-log.csv" },
+    });
   });
 
   it("selectSerialPort 透传 portId 并映射 ok(null)", async () => {

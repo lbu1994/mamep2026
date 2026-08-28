@@ -25,6 +25,7 @@ import type {
   SerialDeviceHandle,
   SerialPortOption,
   ConnectionConfigLoadResponse,
+  SaveTextFileResponse,
 } from "@mamep2026/platform-api";
 import type { ConnectionConfigFile } from "@mamep2026/connection-config";
 import type { ApplicationMessage } from "@mamep2026/logging";
@@ -172,4 +173,14 @@ export interface AppHost {
   copyTextToClipboard(text: string): Promise<Result<void>>;
   /** 读取系统剪贴板文本；无内容返回 ok(null)。 */
   readTextFromClipboard(): Promise<Result<string | null>>;
+  /**
+   * 保存文本文件（2026-08-28 通信日志 CSV 导出）：
+   * 浏览器触发 Blob 下载；桌面端弹保存对话框落盘（用户取消返回 ok({ saved: false })）。
+   * CSV 序列化由 packages/logging 完成，本端口只负责平台侧落盘/下载。
+   */
+  saveTextFile(options: {
+    suggestedName: string;
+    content: string;
+    mimeType?: string;
+  }): Promise<Result<SaveTextFileResponse>>;
 }

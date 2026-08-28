@@ -16,6 +16,7 @@ import type {
   MamepHostApi,
   MamepHostEvent,
   RegisterRowPayload,
+  SaveTextFileResponse,
   SessionBatchReadResponse,
   SessionStateResponse,
   SessionTcpConnectPayload,
@@ -92,6 +93,20 @@ const api: MamepHostApi = {
   /** 加载连接对象配置文件（connection-config-load，ADR-023）：主进程读文件系统。 */
   loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>> {
     return invoke<ConnectionConfigLoadResponse>("connection-config-load", {});
+  },
+  /** 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：主进程弹保存对话框落盘。 */
+  saveTextFile(options: {
+    suggestedName: string;
+    content: string;
+    mimeType?: string;
+  }): Promise<Result<SaveTextFileResponse>> {
+    return invoke<SaveTextFileResponse>("save-text-file", {
+      suggestedName: options.suggestedName,
+      content: options.content,
+      ...(options.mimeType !== undefined
+        ? { mimeType: options.mimeType }
+        : {}),
+    });
   },
   // ---- 远程会话 RPC（Electron TCP 会话在主进程，Renderer 远程代理）----
   sessionDisconnect(): Promise<Result<null>> {

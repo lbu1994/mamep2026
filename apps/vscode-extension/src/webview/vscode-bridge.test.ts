@@ -94,6 +94,38 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
     });
   });
 
+  it("saveTextFile 携带 suggestedName/content/mimeType payload（2026-08-28）", async () => {
+    const { posted, bridge, dispatch } = createHarness();
+    const promise = bridge.saveTextFile({
+      suggestedName: "comm-log-rtu-20260828-102030.csv",
+      content: "seq,timestamp\r\n",
+      mimeType: "text/csv",
+    });
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({
+      kind: "save-text-file",
+      payload: {
+        suggestedName: "comm-log-rtu-20260828-102030.csv",
+        content: "seq,timestamp\r\n",
+        mimeType: "text/csv",
+      },
+    });
+    const envelope = posted[0] as { messageId: string };
+    dispatch({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: envelope.messageId,
+      kind: "save-text-file",
+      ok: true,
+      payload: { saved: true, filePath: null },
+    });
+    const result = await promise;
+    expect(result).toEqual({
+      ok: true,
+      value: { saved: true, filePath: null },
+    });
+  });
+
   it("onEvent 剥壳投递宿主事件，退订函数生效", async () => {
     const { bridge, dispatch } = createHarness();
     const received: Array<{ kind: string; payload: unknown }> = [];
@@ -169,6 +201,7 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
         "onEvent",
         "platform",
         "readTextFromClipboard",
+        "saveTextFile",
         "selectSerialPort",
         "sessionBatchCancel",
         "sessionBatchRead",

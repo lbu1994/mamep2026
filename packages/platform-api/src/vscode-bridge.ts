@@ -22,6 +22,7 @@ import type {
   ConnectionConfigLoadResponse,
   HostRequestKind,
   MamepHostEvent,
+  SaveTextFileResponse,
   SerialPortOption,
   SessionBatchReadResponse,
   SessionConnectPayload,
@@ -190,6 +191,18 @@ export function createVscodeBridge(
       postRequest<null>("session-tcp-connect", payload),
     loadConnectionConfig: () =>
       postRequest<ConnectionConfigLoadResponse>("connection-config-load", {}),
+    saveTextFile: (options: {
+      suggestedName: string;
+      content: string;
+      mimeType?: string;
+    }) =>
+      postRequest<SaveTextFileResponse>("save-text-file", {
+        suggestedName: options.suggestedName,
+        content: options.content,
+        ...(options.mimeType !== undefined
+          ? { mimeType: options.mimeType }
+          : {}),
+      }),
     onEvent: (listener: (event: MamepHostEvent) => void) => {
       listeners.add(listener);
       return () => {

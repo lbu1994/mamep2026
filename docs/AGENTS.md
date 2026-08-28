@@ -298,7 +298,7 @@ Address Adjust 已于 2026-08 确认为核心功能（Connection Settings 配置
 - communication：连接会话、调度、轮询、批量读取、超时、重试和取消
 - register-table：寄存器表用例、单元格编辑、读写状态和撤销重做
 - workspace：Schema、持久化、迁移、自动保存和损坏恢复
-- logging：消息日志、通信日志、过滤、保留和导出模型
+- logging：消息日志、通信日志、保留和导出模型（仅导出，CSV 格式）
 - plugin-api：插件清单、权限、生命周期和贡献点
 - platform-api：平台统一接口和能力矩阵
 - platform-*：具体平台适配器
