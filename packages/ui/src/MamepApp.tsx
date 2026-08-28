@@ -47,6 +47,8 @@ import { RegisterTable } from "./components/RegisterTable";
 import { SheetNameEditor } from "./components/SheetNameEditor";
 import { buildSheetMenuItems } from "./components/SheetMenu";
 import { TraceWindow } from "./components/TraceWindow";
+import { WorkspaceFileActions } from "./components/WorkspaceFileActions";
+import { WorkspaceImportModal } from "./components/WorkspaceImportModal";
 
 /** 折叠时底部面板仅保留标签栏的高度（px）。 */
 const COLLAPSED_BOTTOM_PANEL_HEIGHT = 40;
@@ -712,6 +714,7 @@ export function MamepApp(): React.ReactNode {
 
         <ConnectionSettingsModal />
         <PluginManagerModal />
+        <WorkspaceImportModal />
         {traceWindowKeys.map((rowId) => (
           <TraceWindow key={rowId} rowId={rowId as RowId} />
         ))}
@@ -768,6 +771,9 @@ export function MamepApp(): React.ReactNode {
                   {t("settings.resetWorkspace")}
                 </Button>
               </Popconfirm>
+            </div>
+            <div>
+              <WorkspaceFileActions />
             </div>
             <Typography.Paragraph type="secondary">
               {t("settings.aboutText")}

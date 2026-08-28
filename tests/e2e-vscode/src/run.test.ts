@@ -9,6 +9,7 @@
  */
 import * as assert from "assert";
 import * as vscode from "vscode";
+import * as fs from "node:fs/promises";
 
 const VIEW_TYPE = "mamep2026.mainPanel";
 // HostMessage v1 协议版本字面量（本测试包为 CJS/node10 解析，无法 import 共享包 TS 源码）。
@@ -391,6 +392,88 @@ async function runBatchCancelLoop(): Promise<void> {
 }
 
 /**
+ * 工作区导入导出闭环（2026-08-29，PRD §8.3 P1，ADR-033 方案 A）：经真实 HostMessage RPC
+ * 路径验证 save-text-file / open-text-file 全链路（白名单 + Zod 校验 + ipc 分发 →
+ * Extension Host 假对话框 → workspace.fs 真实读写）。@vscode/test-electron 测试宿主与扩展
+ * 宿主为不同进程、无法桩替换 vscode.window 对话框，故由 run-e2e.mjs 注入 MAMEP_FAKE_DIALOG=1
+ * 门控扩展宿主走固定路径假对话框（与 MAMEP_FAKE_SERIAL/TCP 同模式），路径经环境变量暴露。
+ */
+async function runWorkspaceFileLoop(): Promise<void> {
+  const openPath = process.env.MAMEP_FAKE_DIALOG_OPEN_PATH ?? "";
+  const savePath = process.env.MAMEP_FAKE_DIALOG_SAVE_PATH ?? "";
+  assert.ok(
+    openPath.length > 0 && savePath.length > 0,
+    "fake dialog env paths should be set by run-e2e.mjs (MAMEP_FAKE_DIALOG=1)",
+  );
+
+  try {
+    // 1. open-text-file：先写假对话框读取文件，再经 RPC 读回 → content 一致。
+    const openContent = JSON.stringify({
+      schemaVersion: 4,
+      name: "VSCodeFakeOpen",
+      sheets: [],
+      connectionProfiles: [],
+    });
+    await fs.writeFile(openPath, openContent, "utf8");
+    const read = await rpcEnvelope("open-text-file", {
+      suggestedName: "mamep-workspace.json",
+    });
+    assert.strictEqual(read.type, "response", "open-text-file should succeed");
+    assert.strictEqual(
+      (read.payload as { content: string | null }).content,
+      openContent,
+      "open-text-file should return the fake dialog file content",
+    );
+
+    // 2. save-text-file：经 RPC 写假对话框路径 → 返回路径 + 读回文件内容一致。
+    const saveContent = JSON.stringify({
+      schemaVersion: 4,
+      name: "VSCodeFakeSave",
+      sheets: [],
+      connectionProfiles: [],
+    });
+    const saved = await rpcEnvelope("save-text-file", {
+      suggestedName: "mamep-workspace.json",
+      content: saveContent,
+      mimeType: "application/json",
+    });
+    assert.strictEqual(saved.type, "response", "save-text-file should succeed");
+    assert.strictEqual(
+      (saved.payload as { saved: boolean }).saved,
+      true,
+      "save-text-file should report saved",
+    );
+    assert.strictEqual(
+      (saved.payload as { filePath: string | null }).filePath,
+      savePath,
+      "save-text-file should report the fake dialog save path",
+    );
+    assert.strictEqual(
+      await fs.readFile(savePath, "utf8"),
+      saveContent,
+      "extension host should write the exported content to disk",
+    );
+
+    // 3. 取消语义：删除假对话框读取文件（= 用户取消）→ content:null（非错误）。
+    await fs.rm(openPath, { force: true });
+    const cancelled = await rpcEnvelope("open-text-file");
+    assert.strictEqual(
+      cancelled.type,
+      "response",
+      "cancelled open should be a non-error response",
+    );
+    assert.strictEqual(
+      (cancelled.payload as { content: string | null }).content,
+      null,
+      "missing fake dialog file should map to content:null (cancel)",
+    );
+  } finally {
+    await fs.rm(openPath, { force: true }).catch(() => undefined);
+    await fs.rm(savePath, { force: true }).catch(() => undefined);
+  }
+}
+
+/**
  * 面板关闭释放（Webview 关闭即断开，用户决策）：连接 → 关闭面板 → 会话释放
  * （串口不残留占用）→ 重新连接成功。
  */
@@ -550,6 +633,9 @@ export async function run(): Promise<void> {
 
   // 6.5 远程批任务取消（ADR-025）：session-batch-read → 中途 cancel → cancelledCount > 0。
   await runBatchCancelLoop();
+
+  // 6.75 工作区导入导出闭环（2026-08-29，PRD §8.3 P1）：save-text-file / open-text-file。
+  await runWorkspaceFileLoop();
 
   // 7. 面板关闭释放：连接 → 关闭面板 → 会话释放 → 可重连。
   await runPanelCloseRelease();

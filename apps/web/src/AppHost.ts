@@ -34,12 +34,8 @@ import {
   ApplicationMessageStore,
   CommunicationLogStore,
 } from "@mamep2026/logging";
-import {
-  parseConnectionConfig,
-  type ConnectionConfigFile,
-} from "@mamep2026/connection-config";
 import type {
-  ConnectionConfigLoadResponse,
+  OpenTextFileResponse,
   SaveTextFileResponse,
   SerialDeviceHandle,
   SerialPortOption,
@@ -54,7 +50,6 @@ import {
   installMockHooks,
   MockTransport,
 } from "@mamep2026/platform-web";
-import { parseConnectionConfigFromUrl } from "./connection-config-url";
 
 export interface AppHostOptions {
   capabilities?: PlatformCapabilities;
@@ -81,9 +76,6 @@ export class BrowserAppHost implements AppHost {
   private currentSlaveAddress = 1;
   /** 当前选中端口显示标签（connect 时传给 rtu 供通信属性展示）。 */
   private portLabel: string | null = null;
-  /** 外部连接对象配置文件（ADR-023，浏览器 connectionConfig === "import"）：URL 参数或 UI 导入。 */
-  private connectionConfig: ConnectionConfigFile | null = null;
-  private connectionConfigSource: string | null = null;
 
   private readonly connectionListeners = new Set<
     (state: ConnectionState) => void
@@ -125,16 +117,6 @@ export class BrowserAppHost implements AppHost {
         return { cancel: () => clearTimeout(id) };
       },
     };
-    // 浏览器端从 ?connectionConfig=<base64> URL 参数载入连接对象配置（可选便捷入口）。
-    // node 测试环境无 window，跳过（生产渲染进程始终有 window）。
-    if (typeof window !== "undefined") {
-      const urlConfig = parseConnectionConfigFromUrl(window.location.search);
-      if (urlConfig !== null && urlConfig.ok) {
-        this.connectionConfig = urlConfig.value.config;
-        this.connectionConfigSource = urlConfig.value.sourcePath;
-      }
-      // 解析失败静默忽略（URL 参数仅供便捷载入，不阻塞正常启动）。
-    }
     this.autoSave = new AutoSaveCoordinator(options.repository, {
       debounceMs: 500,
       now: this.clock.now,
@@ -244,24 +226,6 @@ export class BrowserAppHost implements AppHost {
     if (this.isMockMode) return true;
     const serial = navigator.serial;
     return serial !== undefined;
-  }
-
-  async loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>> {
-    // 浏览器无文件系统：返回 URL 参数 / UI 导入的配置（未提供则为空）。
-    return ok({
-      config: this.connectionConfig,
-      sourcePath: this.connectionConfigSource,
-    });
-  }
-
-  async importConnectionConfigText(
-    text: string,
-  ): Promise<Result<ConnectionConfigFile>> {
-    const parsed = parseConnectionConfig(text);
-    if (!parsed.ok) return parsed;
-    this.connectionConfig = parsed.value;
-    this.connectionConfigSource = "import";
-    return ok(parsed.value);
   }
 
   async enumerateSerialPorts(): Promise<Result<SerialPortOption[]>> {
@@ -448,6 +412,25 @@ export class BrowserAppHost implements AppHost {
         }),
       );
     }
+  }
+
+  // ---- 工作区导入（2026-08-29，PRD §8.3 P1）：浏览器走客户端文件选择（Upload），
+  // 不走本端口；本方法按能力矩阵如实返回能力错误（UI 依 workspaceImport === "upload" 分支）。----
+
+  openTextFile(_options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>> {
+    return Promise.resolve(
+      fail(
+        createMamepError({
+          code: "OPEN_TEXT_FILE_UNSUPPORTED",
+          category: "capability",
+          userMessageKey: "errors.workspaceImportUnsupported",
+          technicalMessage:
+            "browser reads workspace files via client-side file picker",
+        }),
+      ),
+    );
   }
 
   getConnectionState(): ConnectionState {

@@ -158,8 +158,7 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     await modal.waitFor({ timeout: 30_000 });
 
     // 打开串口下拉（serial-enumerate RPC 枚举真实端口）→ 选择配置指定串口。
-    // 弹窗首个 .ant-select 是「Load from Config File」连接对象下拉（ADR-023），
-    // 须按 Port Form.Item 定位串口下拉，避免误点连接对象（2026-08-25 修复）。
+    // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除，ADR-034）。
     const rtu = rtuConfig();
     await modal
       .locator(".ant-form-item")
@@ -387,8 +386,7 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     const modal = frame.locator(".ant-modal-container:visible");
     await modal.waitFor({ timeout: 10_000 });
     const rtu = rtuConfig();
-    // 弹窗首个 .ant-select 是「Load from Config File」连接对象下拉（ADR-023），
-    // 须按 Port Form.Item 定位串口下拉，避免误点连接对象（2026-08-25 修复）。
+    // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除，ADR-034）。
     await modal
       .locator(".ant-form-item")
       .filter({ hasText: "Port" })

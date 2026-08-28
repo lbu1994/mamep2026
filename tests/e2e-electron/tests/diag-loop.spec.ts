@@ -172,7 +172,7 @@ test.afterAll(async () => {
 
 test("取消/无可用端口：下拉框空态、无端口标签、无错误", async () => {
   const modal = page.locator(".ant-modal-container:visible");
-  // ADR-023 配置组新增 .ant-select（Load from Config File）：端口下拉须限定在 Port 表单项内。
+  // 端口下拉须限定在 Port 表单项内（连接对象配置分组已移除，ADR-034）。
   const portSelect = modal
     .locator(".ant-form-item")
     .filter({ hasText: "Port" })
@@ -212,7 +212,7 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   });
 
   const modal = page.locator(".ant-modal-container:visible");
-  // ADR-023 配置组新增 Refresh（title=Refresh）：端口刷新须限定在 Port 表单项内。
+  // 端口刷新须限定在 Port 表单项内（连接对象配置分组已移除，ADR-034）。
   const portField = modal
     .locator(".ant-form-item")
     .filter({ hasText: "Port" });

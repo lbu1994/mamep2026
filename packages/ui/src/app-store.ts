@@ -96,6 +96,21 @@ export interface TraceWindowModel {
   average: string | null;
 }
 
+/** 工作区导入预览摘要（2026-08-29，PRD §8.3 P1）：确认导入前展示给用户。 */
+export interface WorkspaceImportPreview {
+  name: string;
+  sheets: number;
+  rows: number;
+  connections: number;
+  schemaVersion: number;
+}
+
+/** 工作区导入草稿：解析通过待确认的完整工作区 + 预览摘要。 */
+export interface WorkspaceImportDraft {
+  workspace: Workspace;
+  preview: WorkspaceImportPreview;
+}
+
 export interface AppStoreState {
   host: AppHost | null;
   workspace: Workspace;
@@ -128,9 +143,15 @@ export interface AppStoreState {
   rowSuccess: Record<RowId, RowSuccess | undefined>;
   /** Data/地址列编辑校验错误（纯 UI 会话状态，不持久化；键=`${rowId}:data|address`）。 */
   cellValidationErrors: Record<string, RowFailure | undefined>;
+  /** 工作区导入草稿（解析通过待确认；null=无待确认导入）。纯 UI 会话状态，不持久化。 */
+  workspaceImportDraft: WorkspaceImportDraft | null;
 
   setHost: (host: AppHost) => void;
   setWorkspace: (workspace: Workspace) => void;
+  /** 设置工作区导入草稿（解析通过待确认）；null 清除/关闭预览。 */
+  setWorkspaceImportDraft: (draft: WorkspaceImportDraft | null) => void;
+  /** 应用当前导入草稿替换工作区（清空撤销栈、触发自动保存）；无草稿时 no-op。 */
+  applyWorkspaceImport: () => void;
   setLoaded: () => void;
   setConnectionState: (state: ConnectionState) => void;
   setConnectionModalOpen: (open: boolean) => void;
@@ -409,9 +430,20 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   pollingKeys: {},
   selectedRowIds: [],
   clipboardPayload: null,
+  workspaceImportDraft: null,
   ...createEmptyRowStatusState(),
 
   setHost: (host) => set({ host }),
+  setWorkspaceImportDraft: (workspaceImportDraft) =>
+    set({ workspaceImportDraft }),
+  applyWorkspaceImport: () => {
+    const draft = get().workspaceImportDraft;
+    if (draft === null) return;
+    // 导入语义对齐 setWorkspace：恢复语言/主题偏好 + 清空撤销栈（ADR-032）。
+    // 持久化由 App 层 workspace 变更订阅（scheduleSave）自动触发，无需手动保存。
+    get().setWorkspace(draft.workspace);
+    set({ workspaceImportDraft: null });
+  },
   setWorkspace: (workspace) => {
     // 加载/重置工作区时恢复持久化的语言偏好（刷新后保持上次选择）。
     applyLanguage(workspace.preferences.language);

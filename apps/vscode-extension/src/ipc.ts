@@ -30,10 +30,10 @@ import {
   toErrorPayload,
   toWriteOutcomePayload,
   type ColorThemeKind,
-  type ConnectionConfigLoadResponse,
   type HostErrorMessage,
   type HostRequestMessage,
   type HostResponseMessage,
+  type OpenTextFileResponse,
   type SaveTextFileResponse,
   type SerialPortOption,
   type VscodeHostDebugState,
@@ -106,8 +106,6 @@ export interface IpcDeps {
    * 用于 e2e 断言一次读取恰好一次收发；生产构建不进入 UI 状态源。
    */
   sessionStats(): { requestFrames: number; responseFrames: number };
-  /** 连接对象配置文件加载（connection-config-load，ADR-023）。 */
-  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
   /**
    * 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：
    * Extension Host 弹保存对话框 + workspace.fs 落盘；用户取消返回 ok({ saved: false })。
@@ -117,6 +115,13 @@ export interface IpcDeps {
     content: string;
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>>;
+  /**
+   * 打开文件对话框并读取 UTF-8 文本（open-text-file，2026-08-29 工作区导入）：
+   * Extension Host 弹系统打开对话框 + workspace.fs 读取；用户取消返回 ok({ content: null })。
+   */
+  openTextFile(options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>>;
 }
 
 /** 尽力从无法解析的原始消息中提取 messageId（诊断用；解析失败时为空串）。 */
@@ -341,9 +346,6 @@ export async function handleVscodeRequest(
         deps.session.connectTcp(tcpConnectionProfileFromPayload(profile)),
       );
     }
-    case "connection-config-load":
-      // 连接对象配置文件加载（ADR-023）：未找到返回 ok({config:null})，失败返回 error。
-      return sessionResult(message, () => deps.loadConnectionConfig());
     case "save-text-file":
       // 通信日志 CSV 导出（2026-08-28）：Extension Host 弹保存对话框 + workspace.fs 落盘。
       // 显式构造 payload：exactOptionalPropertyTypes 下 Zod 可选字段是 `?: T | undefined`。
@@ -355,6 +357,15 @@ export async function handleVscodeRequest(
             ? { mimeType: message.payload.mimeType }
             : {}),
         }),
+      );
+    case "open-text-file":
+      // 工作区导入（2026-08-29）：Extension Host 弹打开对话框读 UTF-8 文本（取消=ok({content:null})）。
+      return sessionResult(message, () =>
+        deps.openTextFile(
+          message.payload.suggestedName !== undefined
+            ? { suggestedName: message.payload.suggestedName }
+            : undefined,
+        ),
       );
     case "debug:get-state":
       // 开发/测试探针（e2e 用）：生产构建禁用。

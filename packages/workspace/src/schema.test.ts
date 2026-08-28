@@ -506,3 +506,129 @@ describe("tcp connection profile persistence", () => {
     });
   });
 });
+
+describe("public exchange format（工作区导入导出，2026-08-29）", () => {
+  it("exports a versioned JSON that round-trips all workspace fields", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      w.name = "My Exchange Workspace";
+      w.notes = "shared with a colleague";
+      const sheet = w.sheets[0];
+      if (sheet === undefined) return;
+      sheet.name = "Pumps";
+      sheet.registerRadix = "hex";
+      sheet.slaveAddress = 7;
+      sheet.writeVerify = { mode: "delayed", delayMs: 200 };
+      sheet.columnWidths = { name: 160 };
+      sheet.columnOrder = ["no", "name"];
+      sheet.open = false;
+      sheet.rows = [
+        {
+          rowId: "row-1" as never,
+          order: 0,
+          name: "Speed",
+          comment: "RPM",
+          addressDraft: "100",
+          addressValue: { value: 100 } as never,
+          registerCount: 1,
+          dataType: "unsigned-0.1",
+          pollingEnabled: true,
+          traceEnabled: false,
+          cellText: "123",
+          registerValues: [{ value: 1230 }] as never,
+          registers: null,
+          createdAt: 1,
+          updatedAt: 2,
+        },
+        {
+          rowId: "row-2" as never,
+          order: 1,
+          name: "Range",
+          comment: "",
+          addressDraft: "1000-1001",
+          addressValue: { value: 1000 } as never,
+          registerCount: 2,
+          dataType: "hex",
+          pollingEnabled: false,
+          traceEnabled: true,
+          cellText: "12 34",
+          registerValues: [{ value: 0x12 }, { value: 0x34 }] as never,
+          registers: [
+            { name: "Hi", comment: "high", dataType: "unsigned" },
+            { name: "Lo", comment: "low", dataType: "hex" },
+          ],
+          createdAt: 3,
+          updatedAt: 4,
+        },
+      ];
+      w.connectionProfiles = [
+        {
+          id: "conn-tcp" as never,
+          name: "PLC",
+          protocol: "tcp",
+          host: "192.168.1.10",
+          port: 502,
+          unitId: 1,
+          connectTimeoutMs: 3000,
+          requestTimeoutMs: 2000,
+          retryCount: 3,
+          autoReconnect: false,
+          interRequestDelayMs: 80,
+        },
+      ];
+    });
+
+    const serialized = serializeWorkspace(workspace);
+    // 导出文件为版本化 JSON（含 schemaVersion；TECH_DESIGN §6「版本化 JSON 更适合跨端导入导出」）。
+    const raw = JSON.parse(serialized);
+    expect(raw.schemaVersion).toBe(4);
+
+    // 导入路径：parseWorkspace（含迁移与断链检测）后字段完整。
+    const parsed = parseWorkspace(raw);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const value = parsed.value;
+    expect(value.name).toBe("My Exchange Workspace");
+    expect(value.notes).toBe("shared with a colleague");
+    const sheet = value.sheets[0];
+    expect(sheet?.name).toBe("Pumps");
+    expect(sheet?.registerRadix).toBe("hex");
+    expect(sheet?.slaveAddress).toBe(7);
+    expect(sheet?.writeVerify).toEqual({ mode: "delayed", delayMs: 200 });
+    expect(sheet?.columnWidths).toEqual({ name: 160 });
+    expect(sheet?.columnOrder).toEqual(["no", "name"]);
+    expect(sheet?.open).toBe(false);
+    const [single, range] = sheet?.rows ?? [];
+    expect(single).toMatchObject({
+      name: "Speed",
+      addressDraft: "100",
+      dataType: "unsigned-0.1",
+      pollingEnabled: true,
+      cellText: "123",
+    });
+    expect(single?.registerValues).toEqual([{ value: 1230 }]);
+    expect(range).toMatchObject({
+      registerCount: 2,
+      dataType: "hex",
+      traceEnabled: true,
+      cellText: "12 34",
+    });
+    expect(range?.registers).toEqual([
+      { name: "Hi", comment: "high", dataType: "unsigned" },
+      { name: "Lo", comment: "low", dataType: "hex" },
+    ]);
+    expect(value.connectionProfiles[0]).toMatchObject({
+      protocol: "tcp",
+      host: "192.168.1.10",
+      unitId: 1,
+    });
+  });
+
+  it("rejects a corrupted exchange file with structured error and no partial state", () => {
+    const parsed = parseWorkspace(
+      JSON.parse('{"schemaVersion":4,"name":42,"sheets":[]}'),
+    );
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error.code).toBe("WORKSPACE_SCHEMA_INVALID");
+  });
+});

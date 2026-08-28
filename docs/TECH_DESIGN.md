@@ -814,10 +814,10 @@ Host 负责装配具体适配器，不实现领域规则。
 | Web 插件     |                 支持受限插件 |   可支持 |         可支持 |
 | VSCode 命令  |                       不支持 |   不支持 |           支持 |
 | 系统通知     |                   浏览器能力 |     支持 |    VSCode 通知 |
-| 连接对象配置文件（ADR-023） |   导入/URL（import） |     文件（file） |     文件（file） |
+| 连接对象配置文件（ADR-023） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） |
 | 自动更新     |                       不适用 | 后续支持 | 由 VSCode 管理 |
 
-> 实现状态（2026-08-21；2026-08-23 更新）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**VSCode 列 RTU 已接线（2026-08-23，ADR-021）**（Extension Host `NodePlatformHost` + 共享 `RtuSessionHost`，Renderer 远程代理，能力翻转）。**两端 Modbus TCP 已接线（2026-08-23，ADR-022）**：会话层 `CommunicationSession` 支持 `protocol:"tcp"`（`TcpFrameParser` MBAP 分帧 + Transaction ID 管理）；Electron TCP 会话承载主进程（`ElectronSessionHost`，Renderer `ElectronAppHost` 混合远程代理）、VSCode TCP 会话承载 Extension Host（`VscodeSessionHost.connectTcp`），能力矩阵 `electronCapabilities`/`vscodeCapabilities` → `modbusTcp:true`；UI Connection Settings 增加 TCP 分组（协议 Segmented 能力门控，浏览器不显示 TCP 入口）；`tests/e2e-vscode` 走通 TCP 闭环、`tests/e2e-electron` 走通 TCP 配置连接 → FC03 读 → FC10 写闭环。**连接对象配置文件已落地（2026-08-24，ADR-023）**：`config/connections.json`（JSON + Zod 校验，`packages/connection-config`）定义真实设备连接对象（RTU 含串口名/从站地址，TCP 含 host/port/unitId 等），供 UI「从配置载入」预填 + 脚本消费（消除 COM4/COM5/127.0.0.1:1502 硬编码）；三端加载——Electron/VSCode 读文件（`connection-config-load` kind，`connectionConfig:"file"`），浏览器导入 JSON/`?connectionConfig=` URL（`connectionConfig:"import"`）；生效时机为重连/重启重读；MOCK/FAKE 保持显式 dev-only 可选，默认路径即真实设备。VSCode 文件持久化仍为规划目标。
+> 实现状态（2026-08-21；2026-08-23 更新）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**VSCode 列 RTU 已接线（2026-08-23，ADR-021）**（Extension Host `NodePlatformHost` + 共享 `RtuSessionHost`，Renderer 远程代理，能力翻转）。**两端 Modbus TCP 已接线（2026-08-23，ADR-022）**：会话层 `CommunicationSession` 支持 `protocol:"tcp"`（`TcpFrameParser` MBAP 分帧 + Transaction ID 管理）；Electron TCP 会话承载主进程（`ElectronSessionHost`，Renderer `ElectronAppHost` 混合远程代理）、VSCode TCP 会话承载 Extension Host（`VscodeSessionHost.connectTcp`），能力矩阵 `electronCapabilities`/`vscodeCapabilities` → `modbusTcp:true`；UI Connection Settings 增加 TCP 分组（协议 Segmented 能力门控，浏览器不显示 TCP 入口）；`tests/e2e-vscode` 走通 TCP 闭环、`tests/e2e-electron` 走通 TCP 配置连接 → FC03 读 → FC10 写闭环。**连接对象配置文件（2026-08-24，ADR-023；应用侧功能 2026-08-29 由 ADR-034 移除）**：`config/connections.json`（JSON，schemaVersion 1）定义真实设备连接对象（RTU 含串口名/从站地址，TCP 含 host/port/unitId 等），**保留供测试/验证脚本消费**（消除 COM4/COM5/127.0.0.1:1502 硬编码）；应用侧「Load from Config File」UI、`packages/connection-config` 包、`connection-config-load` kind、能力矩阵 `connectionConfig` 字段、浏览器 `?connectionConfig=` URL 已删除，连接对象导入由 Settings → 工作区导入（ADR-033）承担。VSCode 文件持久化仍为规划目标。
 
 > 多寄存器连续读写（ADR-030，2026-08-27 设计确认）：属协议层共享能力（三端共用同一共享会话层），
 > 不新增能力矩阵字段；三端一致支持，实施未开始。
@@ -1858,28 +1858,30 @@ TCP 配置：
 
 recentPortHint 只能用于显示最近使用信息，不得触发自动连接。
 
-## 18.4.1 连接对象配置文件（ADR-023）
+## 18.4.1 连接对象配置文件（ADR-023；应用侧功能已由 ADR-034 移除）
 
-外部连接对象（真实设备连接参数）以 `config/connections.json` 集中管理，供 UI「从配置载入」与
-测试/验证脚本消费。与 `connectionProfiles`（工作区持久化）的关系：**默认值来源 + 导入预填**——
-UI 载入后预填连接表单，关闭时照常合并进 `connectionProfiles[0]` 持久化，不改变持久化格式与边界。
+外部连接对象（真实设备连接参数）以 `config/connections.json` 集中管理，**仅供测试/验证脚本消费**
+（real e2e 参数、探针，消除 COM4/COM5/127.0.0.1:1502 硬编码）。应用侧「Load from Config File」
+用户功能（UI 分组、`connection-config-load` kind、三端 `config-loader.ts`、`packages/connection-config`
+包、能力矩阵 `connectionConfig` 字段、浏览器 `?connectionConfig=<base64>` URL）已于 2026-08-29
+**整体移除（ADR-034）**，连接对象导入改由 **Settings → 工作区导入**（ADR-033）承担：工作区 JSON
+已含 `connectionProfiles`，导入后 Connection Settings 以 `connectionProfiles[0]` 预填连接表单。
 
-配置文件格式（由 `packages/connection-config` 的 Zod schema 校验，判别联合 `protocol`）：
+配置文件格式（JSON，schemaVersion 1）：
 
     ConnectionConfigFile
       schemaVersion           // 1
-      activeConnectionId      // 默认选中连接对象 id（可 null）
+      activeConnectionId      // 默认连接对象 id（测试脚本可忽略，可 null）
       connections[]           // RTU 连接对象（port/baudRate/dataBits/stopBits/parity/flowControl/
                               //   slaveAddress/requestTimeoutMs/retryCount/interRequestDelayMs/addressAdjust）
                               // TCP 连接对象（host/port/unitId/connectTimeoutMs/requestTimeoutMs/
                               //   retryCount/autoReconnect/interRequestDelayMs）
 
-- 省略字段按 `defaultConfig` 回填；`port`（串口名）为配置文件特有字段，**不进入 connectionProfiles
-  持久化**（ADR-017 边界不变）；RTU `slaveAddress` 为该连接对象的默认从站地址，UI 载入时同步到
-  当前表从站地址（不改变「从站地址按表独立」模型）。
-- 三端加载：Electron/VSCode 读文件（`connection-config-load` HostMessage kind，`connectionConfig:"file"`），
-  浏览器导入 JSON / `?connectionConfig=<base64>` URL（`connectionConfig:"import"`）。生效时机：重连/重启
-  重读（打开连接设置时加载），无热更新。字段说明与消费方式详见 `config/README.md`。
+- 省略字段按 `defaultConfig` 回填；`port`（串口名）为配置文件特有字段，不进入 `connectionProfiles`
+  持久化（ADR-017 边界不变）；RTU `slaveAddress` 为该连接对象的默认从站地址。
+- 消费方：`scripts/e2e-real.mjs`（`scripts/lib/connection-config.mjs` `findConnection`）、
+  `scripts/prototype/electron-serial-probe.mjs`、各端 real e2e spec（readFileSync 直读）。
+  字段说明与消费方式详见 `config/README.md`。
 
 ## 18.5 ReadVerifySettings
 
@@ -2924,7 +2926,7 @@ TCP: 127.0.0.1:1502，均来自 `config/connections.json` / 从站自身配置�
   → 写值门控 0x0400（0x8000 拒/0x1234 成）→ 异常区 0x0100/0x0200/0x0300→0x02、0x0500→0x01
   → no-response 0x0600 超时且后续正常 → 边界 0x0000/0xFFFF → 扩展 0x0800 分片 / 0x0700 延迟
   → 通信日志帧字节 → 断开/重连（浏览器仅断开一次，重连稳定性由桌面端覆盖）→ 无 console 错误。
-- 能力矩阵不变（modbusRtu/serialPorts/modbusTcp/connectionConfig 已如实）；无新增 HostMessage
+- 能力矩阵如实声明（modbusRtu/serialPorts/modbusTcp；`connectionConfig` 能力位已于 2026-08-29 移除，ADR-034）；无新增 HostMessage
   kind；浏览器不追加 TCP；测试参数不硬编码（读 `config/connections.json`）。
 - **2026-08-25 修正（ADR-028）**：ADR-024 落地后真实端口 e2e 实际从未真正跑通（「已落地」≠
   「已跑通」），首次全量回归暴露并修复多层问题（从站 LOG_LEVELS 未导入、real 套件 setRadixHex

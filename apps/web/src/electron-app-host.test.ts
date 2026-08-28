@@ -18,11 +18,11 @@ import type {
   HostDebugState,
   MamepHostApi,
   MamepHostEvent,
+  OpenTextFileResponse,
   SaveTextFileResponse,
   SessionBatchReadResponse,
   SessionStateResponse,
   WriteOutcomePayload,
-  ConnectionConfigLoadResponse,
 } from "@mamep2026/platform-api";
 import {
   createDefaultTcpProfile,
@@ -56,8 +56,9 @@ function createFakeBridge(): {
         filesystem: "limited",
         nodePlugins: false,
         webPlugins: true,
-        connectionConfig: "file",
         logExport: "save-dialog",
+        workspaceImport: "file",
+        workspaceExport: "save-dialog",
       },
     })),
     getAppVersion: vi.fn(async (): Promise<Result<string>> => ({
@@ -84,12 +85,6 @@ function createFakeBridge(): {
         listeners.delete(listener);
       };
     }),
-    loadConnectionConfig: vi.fn(
-      async (): Promise<Result<ConnectionConfigLoadResponse>> => ({
-        ok: true,
-        value: { config: null, sourcePath: null },
-      }),
-    ),
     getDebugState: vi.fn(
       async (): Promise<Result<HostDebugState | null>> => ({
         ok: true,
@@ -171,6 +166,10 @@ function createFakeBridge(): {
     saveTextFile: vi.fn(async (): Promise<Result<SaveTextFileResponse>> => ({
       ok: true,
       value: { saved: true, filePath: "C:\\logs\\comm-log.csv" },
+    })),
+    openTextFile: vi.fn(async (): Promise<Result<OpenTextFileResponse>> => ({
+      ok: true,
+      value: { content: '{"schemaVersion":4}' },
     })),
   };
   return {
@@ -498,6 +497,26 @@ describe("ElectronAppHost（ADR-017 扩展：enumerated 下拉框选择）", () 
       suggestedName: "comm-log-rtu-20260828-102030.csv",
       content: "seq,timestamp\r\n",
       mimeType: "text/csv",
+    });
+  });
+
+  it("openTextFile（工作区导入）透传给 preload 桥", async () => {
+    const fake = createFakeBridge();
+    const device = new ScriptedModbusRtuDevice();
+    const { serial } = createFakeWebSerial(device);
+    const host = new ElectronAppHost(fake.bridge, {
+      serial,
+      repository: new InMemoryWorkspaceRepository(),
+    });
+    const result = await host.openTextFile({
+      suggestedName: "mamep-workspace.json",
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: { content: '{"schemaVersion":4}' },
+    });
+    expect(fake.bridge.openTextFile).toHaveBeenCalledWith({
+      suggestedName: "mamep-workspace.json",
     });
   });
 

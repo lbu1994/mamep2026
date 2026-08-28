@@ -13,9 +13,6 @@ import type {
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
 import {
-  connectionConfigFileSchema,
-} from "@mamep2026/connection-config";
-import {
   appMessagePayloadSchema,
   batchReadSummaryPayloadSchema,
   commLogEventPayloadSchema,
@@ -67,10 +64,10 @@ export const HOST_REQUEST_KINDS = [
   "session-trace-stop",
   // 两端 TCP 接线（2026-08-23）：TCP 会话连接（无串口句柄，profile 即参数）。
   "session-tcp-connect",
-  // 连接对象配置文件（ADR-023）：桌面端从文件系统加载 config/connections.json（payload 空）。
-  "connection-config-load",
   // 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：把序列化好的 CSV 文本落盘/触发下载。
   "save-text-file",
+  // 工作区导入（2026-08-29，PRD §8.3 P1）：桌面端打开文件对话框并读取 UTF-8 文本返回。
+  "open-text-file",
 ] as const;
 export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
 
@@ -210,19 +207,6 @@ export type SessionBatchReadResponse = z.infer<
 >;
 
 /**
- * connection-config-load 响应载荷（ADR-023）：桌面端从文件系统读取外部连接对象配置。
- * config 为 null 表示未找到配置文件（可选能力，非错误）；sourcePath 为实际读取路径（诊断用）。
- * 校验失败 / 读取失败经 HostMessage error 通道返回 MamepError。
- */
-export const connectionConfigLoadResponseSchema = z.object({
-  config: connectionConfigFileSchema.nullable(),
-  sourcePath: z.string().nullable(),
-});
-export type ConnectionConfigLoadResponse = z.infer<
-  typeof connectionConfigLoadResponseSchema
->;
-
-/**
  * save-text-file 响应载荷（2026-08-28，PRD §8.3 P1 日志导出）。
  * saved=false 表示用户取消保存对话框（非错误，UI 提示「已取消」）；filePath 为实际落盘路径（诊断用，
  * 浏览器下载无路径返回 null）。
@@ -232,6 +216,15 @@ export const saveTextFileResponseSchema = z.object({
   filePath: z.string().nullable(),
 });
 export type SaveTextFileResponse = z.infer<typeof saveTextFileResponseSchema>;
+
+/**
+ * open-text-file 响应载荷（2026-08-29，PRD §8.3 P1 工作区导入）。
+ * content 为 null 表示用户取消打开对话框（非错误，UI 提示「已取消」）。
+ */
+export const openTextFileResponseSchema = z.object({
+  content: z.string().nullable(),
+});
+export type OpenTextFileResponse = z.infer<typeof openTextFileResponseSchema>;
 
 const requestBase = {
   protocolVersion: protocolVersionSchema,
@@ -380,18 +373,21 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     ...requestBase,
-    kind: z.literal("connection-config-load"),
-    // 连接对象配置文件加载（ADR-023）：无参数，平台侧按默认路径策略查找。
-    payload: z.object({}),
-  }),
-  z.object({
-    ...requestBase,
     kind: z.literal("save-text-file"),
     // 通信日志 CSV 导出（2026-08-28）：渲染端序列化好的 CSV 文本 + 建议文件名；落盘由平台侧完成。
     payload: z.object({
       suggestedName: z.string().min(1),
       content: z.string(),
       mimeType: z.string().optional(),
+    }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("open-text-file"),
+    // 工作区导入（2026-08-29）：桌面端打开文件对话框并读取 UTF-8 文本；suggestedName 为可选的
+    // 默认文件名/目录提示，平台侧可不采用。用户取消返回 content:null（非错误）。
+    payload: z.object({
+      suggestedName: z.string().optional(),
     }),
   }),
 ]);
@@ -546,12 +542,6 @@ export interface MamepHostApi {
   sessionTcpConnect(payload: SessionTcpConnectPayload): Promise<Result<null>>;
 
   /**
-   * 加载外部连接对象配置文件（connection-config-load，ADR-023）：
-   * 桌面端从文件系统读取 config/connections.json（默认路径策略见平台侧实现）。
-   * 未找到配置文件返回 ok({ config: null, sourcePath: null })；解析/读取失败返回 fail。
-   */
-  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
-  /**
    * 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：
    * 浏览器触发 Blob 下载；桌面端弹保存对话框落盘（用户取消返回 ok({ saved: false })）。
    */
@@ -560,6 +550,13 @@ export interface MamepHostApi {
     content: string;
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>>;
+  /**
+   * 打开文件对话框并读取 UTF-8 文本（open-text-file，2026-08-29 工作区导入）：
+   * 桌面端弹系统打开对话框；用户取消返回 ok({ content: null })（非错误）。
+   */
+  openTextFile(options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>>;
 
   // ---- 远程会话 RPC（2026-08-23 两端 TCP 接线：Electron TCP 会话在主进程，Renderer 远程代理）----
 
@@ -678,8 +675,9 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   filesystem: "limited",
   nodePlugins: false,
   webPlugins: true,
-  connectionConfig: "file",
   logExport: "save-dialog",
+  workspaceImport: "file",
+  workspaceExport: "save-dialog",
 });
 
 /**
@@ -694,6 +692,7 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   filesystem: "unsupported",
   nodePlugins: false,
   webPlugins: true,
-  connectionConfig: "file",
   logExport: "save-dialog",
+  workspaceImport: "file",
+  workspaceExport: "save-dialog",
 });

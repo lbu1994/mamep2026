@@ -85,12 +85,10 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     clipboardReadText: () => "from-clip",
     resolveSerialPortSelection: vi.fn(() => false),
     session: makeSession(),
-    loadConnectionConfig: vi.fn(async () =>
-      ok({ config: null, sourcePath: null }),
-    ),
     saveTextFile: vi.fn(async () =>
       ok({ saved: true, filePath: "C:\\logs\\comm-log.csv" }),
     ),
+    openTextFile: vi.fn(async () => ok({ content: null })),
     ...overrides,
   };
 }
@@ -536,6 +534,48 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     expect(result.type).toBe("response");
     if (result.type === "response") {
       expect(result.payload).toEqual({ saved: false, filePath: null });
+    }
+  });
+
+  it("open-text-file 转发主进程读取并返回 content 响应（2026-08-29）", async () => {
+    const openTextFile = vi.fn(async () =>
+      ok({ content: '{"schemaVersion":4}' }),
+    );
+    const result = await handleRequest(
+      request("open-text-file", { suggestedName: "mamep-workspace.json" }),
+      makeDeps({ openTextFile }),
+    );
+    expect(result.type).toBe("response");
+    expect(openTextFile).toHaveBeenCalledWith({
+      suggestedName: "mamep-workspace.json",
+    });
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ content: '{"schemaVersion":4}' });
+    }
+  });
+
+  it("open-text-file 无 suggestedName 时不传 options（2026-08-29）", async () => {
+    const openTextFile = vi.fn(async () => ok({ content: null }));
+    const result = await handleRequest(
+      request("open-text-file", {}),
+      makeDeps({ openTextFile }),
+    );
+    expect(result.type).toBe("response");
+    expect(openTextFile).toHaveBeenCalledWith(undefined);
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ content: null });
+    }
+  });
+
+  it("open-text-file 用户取消时原样返回 content:null（非错误，2026-08-29）", async () => {
+    const openTextFile = vi.fn(async () => ok({ content: null }));
+    const result = await handleRequest(
+      request("open-text-file", {}),
+      makeDeps({ openTextFile }),
+    );
+    expect(result.type).toBe("response");
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ content: null });
     }
   });
 });

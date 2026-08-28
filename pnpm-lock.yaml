@@ -213,9 +213,6 @@ importers:
       '@mamep2026/communication':
         specifier: workspace:*
         version: link:../../packages/communication
-      '@mamep2026/connection-config':
-        specifier: workspace:*
-        version: link:../../packages/connection-config
       '@mamep2026/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -247,9 +244,6 @@ importers:
       '@mamep2026/communication':
         specifier: workspace:*
         version: link:../../packages/communication
-      '@mamep2026/connection-config':
-        specifier: workspace:*
-        version: link:../../packages/connection-config
       '@mamep2026/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -299,9 +293,6 @@ importers:
       '@mamep2026/communication':
         specifier: workspace:*
         version: link:../../packages/communication
-      '@mamep2026/connection-config':
-        specifier: workspace:*
-        version: link:../../packages/connection-config
       '@mamep2026/data-conversion':
         specifier: workspace:*
         version: link:../../packages/data-conversion
@@ -411,25 +402,6 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))
 
-  packages/connection-config:
-    dependencies:
-      '@mamep2026/domain':
-        specifier: workspace:*
-        version: link:../domain
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
-    devDependencies:
-      '@mamep2026/typescript-config':
-        specifier: workspace:*
-        version: link:../../tooling/typescript-config
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))
-
   packages/data-conversion:
     dependencies:
       '@mamep2026/domain':
@@ -482,9 +454,6 @@ importers:
       '@mamep2026/communication':
         specifier: workspace:*
         version: link:../communication
-      '@mamep2026/connection-config':
-        specifier: workspace:*
-        version: link:../connection-config
       '@mamep2026/domain':
         specifier: workspace:*
         version: link:../domain
@@ -678,9 +647,6 @@ importers:
       '@mamep2026/communication':
         specifier: workspace:*
         version: link:../communication
-      '@mamep2026/connection-config':
-        specifier: workspace:*
-        version: link:../connection-config
       '@mamep2026/data-conversion':
         specifier: workspace:*
         version: link:../data-conversion

@@ -19,7 +19,6 @@
     "react-dom": "catalog:",
     "@mamep2026/application": "workspace:*",
     "@mamep2026/communication": "workspace:*",
-    "@mamep2026/connection-config": "workspace:*",
     "@mamep2026/data-conversion": "workspace:*",
     "@mamep2026/domain": "workspace:*",
     "@mamep2026/logging": "workspace:*",

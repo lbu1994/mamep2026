@@ -109,3 +109,17 @@ describe("BrowserAppHost 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）"
     }
   });
 });
+
+describe("BrowserAppHost 工作区导入端口（2026-08-29，PRD §8.3 P1）", () => {
+  it("openTextFile 按能力矩阵返回能力错误（浏览器走客户端文件选择）", async () => {
+    const host = makeMockHost();
+    expect(host.capabilities.workspaceImport).toBe("upload");
+    expect(host.capabilities.workspaceExport).toBe("download");
+    const result = await host.openTextFile({ suggestedName: "x.json" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("OPEN_TEXT_FILE_UNSUPPORTED");
+      expect(result.error.category).toBe("capability");
+    }
+  });
+});

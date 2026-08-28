@@ -24,10 +24,9 @@ import type { PluginRegistry } from "@mamep2026/plugin-api";
 import type {
   SerialDeviceHandle,
   SerialPortOption,
-  ConnectionConfigLoadResponse,
+  OpenTextFileResponse,
   SaveTextFileResponse,
 } from "@mamep2026/platform-api";
-import type { ConnectionConfigFile } from "@mamep2026/connection-config";
 import type { ApplicationMessage } from "@mamep2026/logging";
 
 export interface TraceSampleEvent {
@@ -88,20 +87,6 @@ export interface AppHost {
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
   ): Promise<Result<void>>;
-  /**
-   * 加载外部连接对象配置文件（connection-config-load，ADR-023）：
-   * - 桌面端（capabilities.connectionConfig === "file"）：读 config/connections.json（经宿主 RPC）；
-   * - 浏览器（connectionConfig === "import"）：返回 URL 参数 / 已导入的配置。
-   * 未找到/未导入返回 ok({ config: null, sourcePath: null })；解析/读取失败返回 fail。
-   */
-  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
-  /**
-   * 导入配置文件 JSON 文本（浏览器 connectionConfig === "import" 时 UI 读取文件后调用；
-   * 桌面端由宿主文件读取，本方法返回 fail）。
-   */
-  importConnectionConfigText(
-    text: string,
-  ): Promise<Result<ConnectionConfigFile>>;
   /**
    * TCP 连接（2026-08-23 两端 TCP 接线）：profile 即连接参数（host/port/unitId/超时/重试），
    * 无串口句柄。仅 Electron/VSCode 支持；浏览器返回能力错误（UI 依能力矩阵不调用）。
@@ -183,4 +168,12 @@ export interface AppHost {
     content: string;
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>>;
+  /**
+   * 打开文件对话框并读取 UTF-8 文本（2026-08-29 工作区导入）：
+   * 桌面端（workspaceImport === "file"）弹系统打开对话框读取；用户取消返回 ok({ content: null })。
+   * 浏览器（workspaceImport === "upload"）UI 走客户端文件选择（antd Upload），不调用本端口。
+   */
+  openTextFile(options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>>;
 }

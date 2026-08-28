@@ -126,6 +126,51 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
     });
   });
 
+  it("openTextFile 携带 suggestedName payload 并透传 content 响应（2026-08-29）", async () => {
+    const { posted, bridge, dispatch } = createHarness();
+    const promise = bridge.openTextFile({ suggestedName: "mamep-workspace.json" });
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({
+      kind: "open-text-file",
+      payload: { suggestedName: "mamep-workspace.json" },
+    });
+    const envelope = posted[0] as { messageId: string };
+    dispatch({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: envelope.messageId,
+      kind: "open-text-file",
+      ok: true,
+      payload: { content: '{"schemaVersion":4}' },
+    });
+    const result = await promise;
+    expect(result).toEqual({
+      ok: true,
+      value: { content: '{"schemaVersion":4}' },
+    });
+  });
+
+  it("openTextFile 无参数时 payload 为空对象（2026-08-29）", async () => {
+    const { posted, bridge, dispatch } = createHarness();
+    const promise = bridge.openTextFile();
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({
+      kind: "open-text-file",
+      payload: {},
+    });
+    const envelope = posted[0] as { messageId: string };
+    dispatch({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: envelope.messageId,
+      kind: "open-text-file",
+      ok: true,
+      payload: { content: null },
+    });
+    const result = await promise;
+    expect(result).toEqual({ ok: true, value: { content: null } });
+  });
+
   it("onEvent 剥壳投递宿主事件，退订函数生效", async () => {
     const { bridge, dispatch } = createHarness();
     const received: Array<{ kind: string; payload: unknown }> = [];
@@ -197,8 +242,8 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
         "getCapabilities",
         "getColorTheme",
         "getDebugState",
-        "loadConnectionConfig",
         "onEvent",
+        "openTextFile",
         "platform",
         "readTextFromClipboard",
         "saveTextFile",

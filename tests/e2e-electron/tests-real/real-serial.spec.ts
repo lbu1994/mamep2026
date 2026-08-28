@@ -148,8 +148,7 @@ test("RTU 自动选择 COM4（来自 config/connections.json）+ 连接 Online",
   const modal = page.locator(".ant-modal-container:visible");
 
   // 打开端口下拉框（用户手势触发枚举 → 主进程转发端口列表 → 选项出现）。
-  // 弹窗首个 .ant-select 是「Load from Config File」连接对象下拉（ADR-023），
-  // 须按 Port Form.Item 定位串口下拉，避免误点连接对象（2026-08-25 修复）。
+  // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除，ADR-034）。
   await modal
     .locator(".ant-form-item")
     .filter({ hasText: "Port" })
@@ -383,8 +382,7 @@ test("断开连接 → Offline，可重连 → Online（稳定性）", async () 
   const modal = page.locator(".ant-modal-container:visible");
   const rtu = rtuConfig();
   // 打开下拉触发枚举（用户手势），等待 COM4 选项后选择。
-  // 弹窗首个 .ant-select 是「Load from Config File」连接对象下拉（ADR-023），
-  // 须按 Port Form.Item 定位串口下拉，避免误点连接对象（2026-08-25 修复）。
+  // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除，ADR-034）。
   await modal
     .locator(".ant-form-item")
     .filter({ hasText: "Port" })

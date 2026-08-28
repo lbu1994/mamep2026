@@ -139,10 +139,10 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       "selectSerialPort",
       "onEvent",
       "getDebugState",
-      // 连接对象配置文件（ADR-023）：Electron 从文件系统加载 config/connections.json。
-      "loadConnectionConfig",
       // 通信日志 CSV 导出（save-text-file，2026-08-28）：主进程保存对话框落盘。
       "saveTextFile",
+      // 工作区导入（open-text-file，2026-08-29）：主进程打开对话框读取。
+      "openTextFile",
       // 会话 RPC 桥（2026-08-23 两端 TCP 接线，ADR-022）：Electron TCP 会话承载主进程，
       // preload 暴露完整会话 RPC 方法。
       "sessionTcpConnect",

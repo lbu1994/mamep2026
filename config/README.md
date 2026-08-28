@@ -1,6 +1,8 @@
-# 连接对象配置文件（ADR-023）
+# 连接对象配置文件（测试/验证基建，ADR-023 / ADR-034）
 
-`config/connections.json` 定义 **Mamep2026 应用连接真实设备**（真实 COM 口 / 真实 Modbus TCP 端口）所需的连接对象，供应用 UI「从配置载入」与测试/验证脚本消费，消除代码中散落的硬编码（COM4/COM5/127.0.0.1:1502 等）。
+`config/connections.json` 定义 **Mamep2026 测试/验证脚本连接真实设备**（真实 COM 口 / 真实 Modbus TCP 端口）所需的连接对象，供真实端口 e2e（ADR-024）与探针脚本消费，消除代码中散落的硬编码（COM4/COM5/127.0.0.1:1502 等）。
+
+> **应用侧说明（2026-08-29，ADR-034）**：应用 UI 的「Load from Config File」已整体移除，本文件**仅供测试/验证脚本消费**；应用内连接对象的导入由 **Settings → 工作区导入**（ADR-033）承担（工作区 JSON 含 `connectionProfiles`，导入后 Connection Settings 以 `connectionProfiles[0]` 预填表单）。
 
 ## 格式
 
@@ -8,7 +10,7 @@
 {
   // 格式版本（当前 1）。
   "schemaVersion": 1,
-  // 默认选中连接对象 id（「从配置载入」下拉的默认选中项；可为 null）。
+  // 默认连接对象 id（测试脚本可忽略；可为 null）。
   "activeConnectionId": "rtu-com4-master",
   "connections": [
     {
@@ -46,28 +48,21 @@
 }
 ```
 
-- 省略的字段按默认值回填（见上表）；校验由 `packages/connection-config` 的 Zod schema 完成（判别联合 `protocol`）。
-- `slaveAddress` 是**该连接对象的默认从站地址**：UI 载入时同步到当前表从站地址（不改变「从站地址按表独立」模型）；`port` 是配置文件特有字段（区别于 `connectionProfiles` 持久化——持久化不含串口名，ADR-017 边界不变）。
+- 省略的字段按默认值回填（见上表）；字段语义与 `packages/domain` 的 `RtuConnectionProfile`/`TcpConnectionProfile` 对齐（脚本侧 raw JSON 解析，不引入 Zod）。
+- `slaveAddress` 是该连接对象的默认从站地址；`port` 是配置文件特有字段（区别于 `connectionProfiles` 持久化——持久化不含串口名，ADR-017 边界不变）。
 
-## 存放位置与加载方式（三端）
+## 消费方（仅测试/验证脚本）
 
-| 端 | 能力矩阵 | 加载方式 |
-| --- | --- | --- |
-| Electron | `connectionConfig: "file"` | 主进程读文件：环境变量 `MAMEP_CONNECTION_CONFIG` 指定路径 > exe 目录（打包）/ 仓库根（dev）`config/connections.json` > 用户数据目录 `config/connections.json` |
-| VSCode | `connectionConfig: "file"` | Extension Host 读文件：设置项 `mamep2026.connectionConfigPath` > 工作区根 `config/connections.json` > 用户主目录 `config/connections.json` |
-| 浏览器 | `connectionConfig: "import"` | 无文件系统：UI「导入 JSON…」或 URL 参数 `?connectionConfig=<base64>`（base64 编码的完整配置文件 JSON） |
+1. **`scripts/e2e-real.mjs`**：经 `scripts/lib/connection-config.mjs` 的 `findConnection()` 读取
+   `rtu-com4-master` / `tcp-local-slave` 主站连接参数与 TCP 端口（预检与门控）。
+2. **`scripts/prototype/electron-serial-probe.mjs`**：主站连接参数（COM4/9600/8N1），不再硬编码。
+3. **三端真实端口 e2e（ADR-024）**：各端 `tests/e2e-*/tests-real|real` spec 直接 `readFileSync`
+   读取本文件（`rtu-com4-master` / `tcp-local-slave`，测试参数不硬编码）；`modbus-tcp-slave.mjs`
+   默认 host/port/unitId 也取自本文件的 `tcp-local-slave`（从站端口 COM5 属从站自身配置，ADR-023 决策 7）。
 
-加载结果经 HostMessage v1 `connection-config-load` kind（Zod 校验 + 白名单）从桌面端宿主传给 Renderer。
-
-## 生效时机
-
-**重连 / 重启时重新读取**（打开连接设置弹窗时加载），无热更新：修改 `config/connections.json` 后，重新打开 Connection Settings 或重启应用即生效。
-
-## 消费方
-
-1. **应用 UI**：Connection Settings 弹窗「Load from Config File」——选择连接对象 → 预填表单（RTU 自动匹配串口名、同步从站地址；TCP 直接预填 host/port/unitId）→ 关闭时照常合并进 `connectionProfiles[0]` 持久化。
-2. **测试 / 验证脚本**：`scripts/` 下真实设备路径（如 `electron-serial-probe`）从本文件读取主站连接参数，不再硬编码。
-3. **三端真实端口 e2e（ADR-024）**：`scripts/e2e-real.mjs` 与各端 `tests/e2e-*/tests-real|real` spec 从本文件读取主站连接参数（`rtu-com4-master` / `tcp-local-slave`）与门控端口；`modbus-tcp-slave.mjs` 默认 host/port/unitId 也取自本文件的 `tcp-local-slave`（从站端口 COM5 属从站自身配置，ADR-023 决策 7）。
+> 应用侧（2026-08-29，ADR-034）：Connection Settings 的「Load from Config File」及 `connection-config-load`
+> kind / 三端 `config-loader.ts` / 浏览器 `?connectionConfig=` URL 已整体移除；应用内连接对象的导入由
+> Settings → 工作区导入（ADR-033）承担。
 
 ## MOCK/FAKE 边界（明确）
 
@@ -81,6 +76,5 @@
 
 1. com0com 配置 COM4↔COM5 虚拟串口对（只读写、禁止配置/提权）。
 2. 启动从站：`node scripts/modbus-slave/modbus-rtu-slave.mjs`（默认挂 COM5，9600/8N1/从站地址 1，行为与 MockTransport 一致）。
-3. 应用连接 `rtu-com4-master`（COM4）即完成真实串口协议栈的 FC03 读 / FC10 写闭环。
-4. TCP：`node scripts/modbus-slave/modbus-tcp-slave.mjs`（默认 127.0.0.1:1502，host/port/unitId 取自本文件 `tcp-local-slave`），应用连接 `tcp-local-slave`。
-5. 自动化：`pnpm test:e2e:real`（及三端 `test:e2e:*:real`）经 `scripts/e2e-real.mjs` 预检并自动拉起上述从站后跑三端真实端口 e2e（ADR-024）。
+3. TCP：`node scripts/modbus-slave/modbus-tcp-slave.mjs`（默认 127.0.0.1:1502，host/port/unitId 取自本文件 `tcp-local-slave`）。
+4. 自动化：`pnpm test:e2e:real`（及三端 `test:e2e:*:real`）经 `scripts/e2e-real.mjs` 预检并自动拉起上述从站后跑三端真实端口 e2e（ADR-024）。

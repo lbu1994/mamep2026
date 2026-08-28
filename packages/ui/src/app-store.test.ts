@@ -18,6 +18,7 @@ beforeEach(() => {
     connectionState: "disconnected",
     activeSheetId: null,
     pendingDeleteSheetId: null,
+    workspaceImportDraft: null,
   });
 });
 
@@ -1386,8 +1387,75 @@ describe("撤销/重做", () => {
   });
 });
 
-describe("traceWindows（TM 追踪窗口）", () => {
-  function addFirstRowForTrace() {
+describe("workspaceImportDraft（工作区导入，2026-08-29）", () => {
+  function firstRowId(): RowId {
+    const sheet = useAppStore.getState().workspace.sheets[0];
+    const row = sheet?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    return row.rowId;
+  }
+
+  function canUndo(): boolean {
+    return useAppStore.getState().undoStack.length > 0;
+  }
+
+  function canRedo(): boolean {
+    return useAppStore.getState().redoStack.length > 0;
+  }
+
+  it("初始为 null；setWorkspaceImportDraft 写入草稿", () => {
+    const store = useAppStore.getState();
+    expect(store.workspaceImportDraft).toBeNull();
+    const workspace = createEmptyWorkspace();
+    useAppStore.getState().setWorkspaceImportDraft({
+      workspace,
+      preview: {
+        name: "Imported",
+        sheets: 1,
+        rows: 0,
+        connections: 1,
+        schemaVersion: 4,
+      },
+    });
+    expect(useAppStore.getState().workspaceImportDraft?.preview.name).toBe(
+      "Imported",
+    );
+  });
+
+  it("applyWorkspaceImport 替换工作区、清空撤销栈并清除草稿", () => {
+    // setWorkspace 内部调用 applyLanguage：需先初始化 i18n。
+    initI18n();
+    const store = useAppStore.getState();
+    store.setRowName(firstRowId(), "Draft Edit");
+    expect(canUndo()).toBe(true);
+    const imported = createEmptyWorkspace();
+    imported.name = "Imported Workspace";
+    useAppStore.getState().setWorkspaceImportDraft({
+      workspace: imported,
+      preview: {
+        name: imported.name,
+        sheets: 1,
+        rows: 0,
+        connections: 1,
+        schemaVersion: 4,
+      },
+    });
+    useAppStore.getState().applyWorkspaceImport();
+    const state = useAppStore.getState();
+    expect(state.workspace.name).toBe("Imported Workspace");
+    expect(state.workspaceImportDraft).toBeNull();
+    expect(canUndo()).toBe(false);
+    expect(canRedo()).toBe(false);
+  });
+
+  it("无草稿时 applyWorkspaceImport 为 no-op", () => {
+    const before = useAppStore.getState().workspace;
+    useAppStore.getState().applyWorkspaceImport();
+    expect(useAppStore.getState().workspace).toBe(before);
+  });
+});
+
+describe("traceWindows（TM 追踪窗口）", () => {  function addFirstRowForTrace() {
     clearAllSheetRows();
     const id = firstSheetId();
     useAppStore.getState().addRow(id);

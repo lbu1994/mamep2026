@@ -7,7 +7,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   BatchReadRowPayload,
-  ConnectionConfigLoadResponse,
   HostDebugState,
   HostErrorMessage,
   HostEventMessage,
@@ -15,6 +14,7 @@ import type {
   HostResponseMessage,
   MamepHostApi,
   MamepHostEvent,
+  OpenTextFileResponse,
   RegisterRowPayload,
   SaveTextFileResponse,
   SessionBatchReadResponse,
@@ -90,10 +90,6 @@ const api: MamepHostApi = {
     });
     return result;
   },
-  /** 加载连接对象配置文件（connection-config-load，ADR-023）：主进程读文件系统。 */
-  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>> {
-    return invoke<ConnectionConfigLoadResponse>("connection-config-load", {});
-  },
   /** 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：主进程弹保存对话框落盘。 */
   saveTextFile(options: {
     suggestedName: string;
@@ -105,6 +101,16 @@ const api: MamepHostApi = {
       content: options.content,
       ...(options.mimeType !== undefined
         ? { mimeType: options.mimeType }
+        : {}),
+    });
+  },
+  /** 打开文件对话框并读取 UTF-8 文本（open-text-file，2026-08-29 工作区导入）。 */
+  openTextFile(options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>> {
+    return invoke<OpenTextFileResponse>("open-text-file", {
+      ...(options?.suggestedName !== undefined
+        ? { suggestedName: options.suggestedName }
         : {}),
     });
   },

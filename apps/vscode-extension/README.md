@@ -12,7 +12,7 @@ Mamep2026 是一款跨平台 Modbus 调试工具，本扩展将共享 UI 以 Web
 - **单行/全表读取**、**WP 轮询**（间隔 = Rx Delay）、**TM 追踪窗**（时序采样）
 - **通信日志**：字节级日志，支持自动滚动/暂停/复制
 - **工作区持久化**：自动保存与恢复（IndexedDB）
-- **连接对象配置文件**：`config/connections.json` 集中管理真实设备连接参数
+- **工作区导入/导出**：Settings 弹窗导入/导出工作区（含连接对象 `connectionProfiles`）
 - 浅/深主题、中英双语（en-US / zh-CN）
 
 ## 安装
@@ -37,7 +37,7 @@ pnpm dist:vscode    # 打包 VSIX
 1. 打开主面板后，点击 **Connection Settings** 配置连接：
    - **RTU**：选择串口、设置从站地址（每张表独立）、波特率与 Rx Delay
    - **TCP**：填写 host / port / Unit ID / 超时 / 重试
-   - 也可通过 **Load from Config File** 从 `config/connections.json` 加载已定义连接对象（设置项 `mamep2026.connectionConfigPath` 可指定路径，留空时依次查找工作区根与用户主目录）
+   - 连接对象可通过 **Settings → 工作区导入** 导入（工作区 JSON 含连接对象 `connectionProfiles`，导入后此处预填）
 2. 点击 **Connect** 建立连接，状态胶囊会显示 连接中/已连接/告警/失败
 3. 在寄存器表中编辑地址/数据类型/值，执行**单行读取**、**全表读取**或**写入**；开启 WP 轮询按间隔自动刷新
 4. 底部 **Communication Log** 查看字节级收发记录；**Trace** 追踪窗查看指定行的时间序列采样
@@ -46,7 +46,7 @@ pnpm dist:vscode    # 打包 VSIX
 
 - 架构：共享 UI 在 `apps/web`（Vite + React + antd v6），Extension Host 在 `apps/vscode-extension/src`，跨边界走版本化安全 IPC（HostMessage v1）
 - 测试：`pnpm test:e2e:vscode`（真实 VS Code 集成测试）、`pnpm test:e2e:vscode:real`（真实串口/TCP 从站，需 com0com 环境）
-- 扩展宿主调试探针：`MAMEP_FAKE_SERIAL=1` / `MAMEP_FAKE_TCP=1`（仅非生产模式生效，供 e2e 使用）
+- 扩展宿主调试探针：`MAMEP_FAKE_SERIAL=1` / `MAMEP_FAKE_TCP=1` / `MAMEP_FAKE_DIALOG=1`（仅非生产模式生效，供 e2e 使用）
 
 ## 已知限制
 

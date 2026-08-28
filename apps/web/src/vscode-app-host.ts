@@ -25,7 +25,6 @@ import type {
 } from "@mamep2026/domain";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
-import type { ConnectionConfigFile } from "@mamep2026/connection-config";
 import {
   commLogEventFromPayload,
   createBatchId,
@@ -38,9 +37,9 @@ import {
   type AppMessagePayload,
   type ColorThemeKind,
   type CommLogEventPayload,
-  type ConnectionConfigLoadResponse,
   type HostResultPayload,
   type MamepHostEvent,
+  type OpenTextFileResponse,
   type SaveTextFileResponse,
   type SerialDeviceHandle,
   type SerialPortOption,
@@ -279,26 +278,6 @@ export class VscodeAppHost implements AppHost {
   supportsWebSerial(): boolean {
     // VSCode Webview 无 navigator.serial；串口选择走 enumerated 下拉路径。
     return false;
-  }
-
-  /** 加载连接对象配置文件（ADR-023）：Extension Host 读文件系统（经 bridge RPC）。 */
-  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>> {
-    return this.bridge.loadConnectionConfig();
-  }
-
-  /** 桌面端由宿主文件读取配置，不经 UI 导入：返回能力错误。 */
-  importConnectionConfigText(): Promise<Result<ConnectionConfigFile>> {
-    return Promise.resolve(
-      fail(
-        createMamepError({
-          code: "CONNECTION_CONFIG_IMPORT_UNSUPPORTED",
-          category: "capability",
-          userMessageKey: "errors.connectionConfigImportUnsupported",
-          technicalMessage:
-            "connection config import is not supported on the VSCode host (load from config file)",
-        }),
-      ),
-    );
   }
 
   async enumerateSerialPorts(): Promise<Result<SerialPortOption[]>> {
@@ -576,5 +555,13 @@ export class VscodeAppHost implements AppHost {
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>> {
     return this.bridge.saveTextFile(options);
+  }
+
+  // ---- 工作区导入（2026-08-29，PRD §8.3 P1）：Extension Host 打开对话框 + workspace.fs 读取 ----
+
+  openTextFile(options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>> {
+    return this.bridge.openTextFile(options);
   }
 }

@@ -21,11 +21,11 @@ import {
   toBatchReadSummaryPayload,
   toErrorPayload,
   toWriteOutcomePayload,
-  type ConnectionConfigLoadResponse,
   type HostDebugState,
   type HostErrorMessage,
   type HostRequestMessage,
   type HostResponseMessage,
+  type OpenTextFileResponse,
   type SaveTextFileResponse,
   type SessionStateResponse,
 } from "@mamep2026/platform-api";
@@ -69,8 +69,6 @@ export interface IpcDeps {
   resolveSerialPortSelection(portId: string, sender: unknown): boolean;
   /** TCP 会话（Electron 主进程承载，2026-08-23 两端 TCP 接线）。 */
   session: ElectronSessionLike;
-  /** 连接对象配置文件加载（connection-config-load，ADR-023）。 */
-  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>>;
   /**
    * 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：
    * 主进程弹保存对话框落盘；用户取消返回 ok({ saved: false })。
@@ -80,6 +78,13 @@ export interface IpcDeps {
     content: string;
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>>;
+  /**
+   * 打开文件对话框并读取 UTF-8 文本（open-text-file，2026-08-29 工作区导入）：
+   * 主进程弹系统打开对话框；用户取消返回 ok({ content: null })（非错误）。
+   */
+  openTextFile(options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>>;
 }
 
 /** 会话 RPC 包装：run 返回 Result 并映射为 response/error Envelope。 */
@@ -290,9 +295,6 @@ export async function handleRequest(
       return sessionVoid(message, () =>
         deps.session.traceStop(message.payload.key),
       );
-    case "connection-config-load":
-      // 连接对象配置文件加载（ADR-023）：未找到返回 ok({config:null})，失败返回 error。
-      return sessionResult(message, () => deps.loadConnectionConfig());
     case "save-text-file":
       // 通信日志 CSV 导出（2026-08-28）：主进程弹保存对话框落盘（取消=ok({saved:false})）。
       // 显式构造 payload：exactOptionalPropertyTypes 下 Zod 可选字段是 `?: T | undefined`。
@@ -304,6 +306,15 @@ export async function handleRequest(
             ? { mimeType: message.payload.mimeType }
             : {}),
         }),
+      );
+    case "open-text-file":
+      // 工作区导入（2026-08-29）：主进程弹打开对话框读 UTF-8 文本（取消=ok({content:null})）。
+      return sessionResult(message, () =>
+        deps.openTextFile(
+          message.payload.suggestedName !== undefined
+            ? { suggestedName: message.payload.suggestedName }
+            : undefined,
+        ),
       );
     case "debug:get-state":
       // 开发/测试探针（Playwright Electron E2E 用）：打包构建禁用。

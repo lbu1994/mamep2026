@@ -2,7 +2,7 @@
 
 三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具。单表管理不连续保持寄存器，仅功能码 03 读 / 0x10 写，插件隔离厂商私有功能，不以复刻原 M@MEp2006 界面为目标。
 
-当前状态（2026-08-27）：**三端 RTU + TCP 已接线**——浏览器 Web Serial RTU、Electron 主进程承载 TCP（RTU 复用浏览器路径）、VSCode Extension Host 承载 serialport/net；连接对象配置文件化（`config/connections.json`，ADR-023）；具备三端「真实端口」e2e（com0com + 真实 RTU/TCP 从站，ADR-024）；远程批任务取消与 UI 取消入口（`session-batch-cancel`，ADR-025）；TCP Unit ID 会话内动态修改（每表独立 + 工具栏按协议切换，`session-set-unit-id`，ADR-026）；**VSCode 主题完整适配**（`packages/ui-theme` 完整主题令牌映射：中性色跟随 VSCode + 品牌/状态保留，生产 CSS 变量取色 + dev iframe 中继，协议零改动，ADR-027）；**真实端口 e2e 首次全绿与 HostMessage 错误投影 bug 修复**（2026-08-25，ADR-028：ADR-024 落地后实际未跑通，全量回归修复多层问题含两端 ipc `errorEnvelope` 硬编码错误 key，web 12 / electron 24 / vscode 3 全绿）；**写后回读及延迟回读**（2026-08-26，ADR-029：每表独立配置 + 工具栏 Select + 默认 ON 立即回读，`WriteOutcome` 扩展 5 种 verify 结果，`WriteVerifyCoordinator`，写入期间暂缓同表行轮询，首个工作区迁移 v1→v2 把全局 `readVerifySettings` 迁移到各表）。**多寄存器连续读写（范围行）已实施完成**（2026-08-27，ADR-030：Register 范围输入 + Type 拆「进制 + scale」两列 + 范围行树形展开子行，支持 32/64 位整数与 ASCII 字符串，三端落地，见 README 分阶段 ToDoList 已勾选）。**撤销和重做已实施完成**（2026-08-28，ADR-032：工作区编辑命令栈——行级编辑 + 每表配置 + 表结构性操作，工具栏按钮 + Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 快捷键，Data 编辑/设备读值/连接等不入栈，与 ADR-015 删除不弹窗决策兼容）。浏览器端不直接支持 Modbus TCP（产品红线，PRD §8.6）。
+当前状态（2026-08-27）：**三端 RTU + TCP 已接线**——浏览器 Web Serial RTU、Electron 主进程承载 TCP（RTU 复用浏览器路径）、VSCode Extension Host 承载 serialport/net；连接对象配置文件 `config/connections.json` 保留供测试/探针（ADR-023/034）；具备三端「真实端口」e2e（com0com + 真实 RTU/TCP 从站，ADR-024）；远程批任务取消与 UI 取消入口（`session-batch-cancel`，ADR-025）；TCP Unit ID 会话内动态修改（每表独立 + 工具栏按协议切换，`session-set-unit-id`，ADR-026）；**VSCode 主题完整适配**（`packages/ui-theme` 完整主题令牌映射：中性色跟随 VSCode + 品牌/状态保留，生产 CSS 变量取色 + dev iframe 中继，协议零改动，ADR-027）；**真实端口 e2e 首次全绿与 HostMessage 错误投影 bug 修复**（2026-08-25，ADR-028：ADR-024 落地后实际未跑通，全量回归修复多层问题含两端 ipc `errorEnvelope` 硬编码错误 key，web 12 / electron 24 / vscode 3 全绿）；**写后回读及延迟回读**（2026-08-26，ADR-029：每表独立配置 + 工具栏 Select + 默认 ON 立即回读，`WriteOutcome` 扩展 5 种 verify 结果，`WriteVerifyCoordinator`，写入期间暂缓同表行轮询，首个工作区迁移 v1→v2 把全局 `readVerifySettings` 迁移到各表）。**多寄存器连续读写（范围行）已实施完成**（2026-08-27，ADR-030：Register 范围输入 + Type 拆「进制 + scale」两列 + 范围行树形展开子行，支持 32/64 位整数与 ASCII 字符串，三端落地，见 README 分阶段 ToDoList 已勾选）。**撤销和重做已实施完成**（2026-08-28，ADR-032：工作区编辑命令栈——行级编辑 + 每表配置 + 表结构性操作，工具栏按钮 + Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 快捷键，Data 编辑/设备读值/连接等不入栈，与 ADR-015 删除不弹窗决策兼容）。**工作区导入和导出已实施完成**（2026-08-29，ADR-033：版本化 JSON 公开交换格式复用 serializeWorkspace/parseWorkspace（含 v1→v4 迁移），Settings 弹窗入口 + 导入预览 Modal；导出复用 save-text-file（浏览器 Blob / 桌面端保存对话框），桌面端导入新增 HostMessage v1 `open-text-file` kind（打开对话框读 UTF-8，取消返回 content:null 非错误），浏览器走客户端文件选择；能力矩阵新增 workspaceImport/workspaceExport）。浏览器端不直接支持 Modbus TCP（产品红线，PRD §8.6）。
 
 > **面向 AI 编码代理**：工作入口与速览见 [AGENTS.md](AGENTS.md)；完整 43 节开发手册见 [docs/AGENTS.md](docs/AGENTS.md)。
 
@@ -21,8 +21,8 @@
 - `apps/web/` — 浏览器端（Vite + React），装配平台能力与共享 UI（兼作 Electron Renderer）
 - `apps/electron/` — Electron 主进程与 preload（Main/Preload/Renderer 三层 + 版本化安全 IPC，ADR-016）；RTU 复用浏览器 Web Serial、TCP 会话承载主进程（ADR-022）
 - `apps/vscode-extension/` — VSCode 扩展：Extension Host（`extension.ts` + `ipc.ts` + `session-host.ts`）经 Webview 加载共享 UI，HostMessage v1 类型化 RPC（ADR-019/021/022）
-- `packages/` — 分层共享包：`domain`、`protocol-modbus`、`data-conversion`、`communication`、`workspace`、`logging`、`plugin-api`、`register-table`、`platform-api`（HostMessage v1 契约）、`platform-web`、`platform-node`（Node Serial/TCP Adapter）、`application`（三端共享会话编排 RtuSessionHost/TcpSessionHost）、`connection-config`（连接对象配置文件 Zod schema）、`ui`、`ui-theme`（平台主题适配层：base 主题 + VSCode 完整令牌映射，ADR-027）、`test-kit`
-- `config/` — 连接对象配置文件 `connections.json`（真实设备连接参数集中管理，ADR-023）
+- `packages/` — 分层共享包：`domain`、`protocol-modbus`、`data-conversion`、`communication`、`workspace`、`logging`、`plugin-api`、`register-table`、`platform-api`（HostMessage v1 契约）、`platform-web`、`platform-node`（Node Serial/TCP Adapter）、`application`（三端共享会话编排 RtuSessionHost/TcpSessionHost）、`ui`、`ui-theme`（平台主题适配层：base 主题 + VSCode 完整令牌映射，ADR-027）、`test-kit`
+- `config/` — 连接对象配置文件 `connections.json`（测试/验证基建：real e2e 参数与探针，ADR-023/034）
 - `scripts/` — 构建/打包/开发辅助（`build-vscode.mjs`、`package-electron.mjs`、`package-vscode.mjs`、`e2e-real.mjs`、`dev-vscode.mjs`、`dev-with-slave.mjs`、`generate-icons.mjs` 等）与 Modbus 从站（`modbus-slave/`：RTU/TCP 共享核心 `lib/modbus-core.mjs`）
 - `tests/` — `acceptance`（ATDD 核心闭环）、`e2e-web` / `e2e-electron` / `e2e-vscode`（Playwright，各自含 `tests-real|real` 真实端口套件，ADR-024）
 - `docs/` — PRD、TECH_DESIGN、RESEARCH、ADR（013~030）、界面特征整理、测试指南、验证记录
@@ -61,7 +61,7 @@ pnpm test              # 全包单测
 pnpm test:e2e:web      # 浏览器 E2E（Playwright 使用系统 Edge）
 ```
 
-> `?mockTransport=1` 启用 dev 内置模拟 Modbus RTU 传输（生产构建不启用），无需真实串口即可调试完整读写/轮询/Trace 闭环。VSCode 端对应 `MAMEP_FAKE_SERIAL=1` / `MAMEP_FAKE_TCP=1`（dev 门控）。MOCK/FAKE 均为显式可选手段，不带任何开关即走真实设备（连接参数见 `config/connections.json`）。
+> `?mockTransport=1` 启用 dev 内置模拟 Modbus RTU 传输（生产构建不启用），无需真实串口即可调试完整读写/轮询/Trace 闭环。VSCode 端对应 `MAMEP_FAKE_SERIAL=1` / `MAMEP_FAKE_TCP=1`（dev 门控），工作区导入导出闭环对应 `MAMEP_FAKE_DIALOG=1`（假文件对话框，ADR-033）。MOCK/FAKE 均为显式可选手段，不带任何开关即走真实设备（连接参数见 `config/connections.json`）。
 
 ### 启动三端
 
@@ -88,10 +88,10 @@ Electron 免安装版无需安装包、无需任何环境（Node/pnpm），当�
 - [docs/TECH_DESIGN.md](docs/TECH_DESIGN.md) — 技术设计、三端能力矩阵、测试策略
 - [docs/RESEARCH.md](docs/RESEARCH.md) — 调研结论
 - [docs/AGENTS.md](docs/AGENTS.md) — 43 节完整开发手册（架构强制规则、Modbus 协议、调度、持久化、错误模型、TDD、禁止行为、完成自检等）
-- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~032）：monorepo 迁移 / 地址进制 / 行编辑交互 / Electron 骨架与安全 IPC / Web Serial 复用 / 免安装打包 / VSCode 骨架与安全 RPC / 串口库选型 / VSCode RTU 接线 / 两端 TCP 接线 / 连接对象配置文件化 / 三端真实端口 e2e / 远程批任务取消与 UI 取消入口 / TCP Unit ID 会话内动态修改 / VSCode 主题完整适配 / 真实端口 e2e 首次全量回归与 HostMessage 错误投影修复 / 写后回读及延迟回读（每表独立 + 首个迁移 v1→v2） / 多寄存器连续读写与范围行（Register 范围 + Type 双列 + 展开子行，实施完成，ADR-030） / 撤销和重做（工作区编辑命令栈，实施完成，ADR-032）
+- [docs/adr/](docs/adr/) — 已确认产品决策（ADR-013~034）：monorepo 迁移 / 地址进制 / 行编辑交互 / Electron 骨架与安全 IPC / Web Serial 复用 / 免安装打包 / VSCode 骨架与安全 RPC / 串口库选型 / VSCode RTU 接线 / 两端 TCP 接线 / 连接对象配置文件化（应用侧已移除，ADR-034） / 三端真实端口 e2e / 远程批任务取消与 UI 取消入口 / TCP Unit ID 会话内动态修改 / VSCode 主题完整适配 / 真实端口 e2e 首次全量回归与 HostMessage 错误投影修复 / 写后回读及延迟回读（每表独立 + 首个迁移 v1→v2） / 多寄存器连续读写与范围行（Register 范围 + Type 双列 + 展开子行，实施完成，ADR-030） / 撤销和重做（工作区编辑命令栈，实施完成，ADR-032） / 工作区导入和导出（版本化 JSON 交换格式 + open-text-file kind，实施完成，ADR-033） / 移除 Load from Config File 以工作区导入替代（实施完成，ADR-034）
 - [docs/浏览器端自动化测试方法指南.md](docs/浏览器端自动化测试方法指南.md) — 浏览器 E2E 工作流与踩坑
 - [docs/node-serial-prototype-验证记录.md](docs/node-serial-prototype-验证记录.md) / [docs/node-tcp-adapter-验证记录.md](docs/node-tcp-adapter-验证记录.md) — Node 串口 / TCP Adapter 原型验证记录
-- [config/README.md](config/README.md) — 连接对象配置文件（`config/connections.json`）格式与三端加载方式
+- [config/README.md](config/README.md) — 连接对象配置文件（`config/connections.json`）格式（测试/验证基建，应用侧导入由工作区导入承担，ADR-034）
 - [scripts/modbus-slave/README.md](scripts/modbus-slave/README.md) — RTU/TCP 从站与共享规则、扩展行为
 
 ---
@@ -116,7 +116,7 @@ Electron 免安装版无需安装包、无需任何环境（Node/pnpm），当�
 - [x] 批量任务结果统计（Read All 完成结果的全局提示：antd message 富内容展示成功/失败/跳过/取消 + 耗时，与底部面板消息并存；范围仅此，统计面板/历史记录等无对应需求，不实现）— PRD §8.3（2026-08-28）
 - [x] 日志导出（仅导出功能，CSV 格式；搜索/过滤本软件不提供，由用户对导出数据使用第三方软件如 Excel 自行处理）— PRD §8.3（2026-08-28：通信日志面板新增 Export 按钮，antd Modal.confirm 隐私提示（可能含设备地址/寄存器数据/原始报文，§15.3.6/§20.6）→ 仅导出当前缓冲区；CSV 序列化在 packages/logging（`csv-export.ts`：16 列固定英文列名 + RFC 4180 转义 + RFC3339 本地时间 + 大写十六进制报文）；平台落盘经 HostMessage v1 新 request kind `save-text-file`（能力矩阵新增 `logExport`：浏览器 `download` Blob 下载 / Electron `save-dialog` 主进程 dialog+fs / VSCode `save-dialog` Extension Host showSaveDialog+workspace.fs，用户取消返回 saved:false 非错误）；文件名 `comm-log-<rtu|tcp|mixed>-<YYYYMMDD-HHmmss>.csv`）
 - [x] 撤销和重做（工作区编辑命令栈：行级编辑 + 每表配置 + 表结构性操作，工具栏按钮 + Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y；Data 编辑/设备读值/连接等不入栈，与 ADR-015 删除不弹窗决策兼容）— PRD §8.3（2026-08-28，ADR-032）
-- [ ] 工作区导入和导出 — PRD §8.3
+- [x] 工作区导入和导出（版本化 JSON 公开交换格式，复用 serializeWorkspace/parseWorkspace；Settings 弹窗入口 + 导入预览 Modal；导出复用 save-text-file，桌面端导入新增 open-text-file kind；能力矩阵 workspaceImport/workspaceExport；三端 e2e）— PRD §8.3（2026-08-29，ADR-033）
 - [ ] 自动重连（TCP profile 字段已就绪、UI 灰显占位）— PRD §8.3 / ADR-022（部分完成）
 - [ ] Electron 文件持久化（应用数据目录 JSON 存储，`filesystem` 能力翻转）— PRD §8.3 / ADR-019 复审条件
 - [ ] 更完整的键盘操作 — PRD §8.3

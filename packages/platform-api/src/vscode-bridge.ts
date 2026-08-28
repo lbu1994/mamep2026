@@ -19,9 +19,9 @@ import { fail } from "@mamep2026/domain";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
 import type {
   ColorThemeKind,
-  ConnectionConfigLoadResponse,
   HostRequestKind,
   MamepHostEvent,
+  OpenTextFileResponse,
   SaveTextFileResponse,
   SerialPortOption,
   SessionBatchReadResponse,
@@ -189,8 +189,6 @@ export function createVscodeBridge(
       postRequest<null>("session-trace-stop", { key }),
     sessionTcpConnect: (payload: SessionTcpConnectPayload) =>
       postRequest<null>("session-tcp-connect", payload),
-    loadConnectionConfig: () =>
-      postRequest<ConnectionConfigLoadResponse>("connection-config-load", {}),
     saveTextFile: (options: {
       suggestedName: string;
       content: string;
@@ -201,6 +199,12 @@ export function createVscodeBridge(
         content: options.content,
         ...(options.mimeType !== undefined
           ? { mimeType: options.mimeType }
+          : {}),
+      }),
+    openTextFile: (options?: { suggestedName?: string }) =>
+      postRequest<OpenTextFileResponse>("open-text-file", {
+        ...(options?.suggestedName !== undefined
+          ? { suggestedName: options.suggestedName }
           : {}),
       }),
     onEvent: (listener: (event: MamepHostEvent) => void) => {

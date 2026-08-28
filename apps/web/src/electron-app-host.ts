@@ -26,7 +26,6 @@ import type {
   Workspace,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
-import type { ConnectionConfigFile } from "@mamep2026/connection-config";
 import {
   commLogEventFromPayload,
   createBatchId,
@@ -37,10 +36,10 @@ import {
   toTcpConnectionProfilePayload,
   type AppMessagePayload,
   type CommLogEventPayload,
-  type ConnectionConfigLoadResponse,
   type HostResultPayload,
   type MamepHostApi,
   type MamepHostEvent,
+  type OpenTextFileResponse,
   type SaveTextFileResponse,
   type SerialDeviceHandle,
   type SerialPortOption,
@@ -356,26 +355,6 @@ export class ElectronAppHost implements AppHost {
     return this.platform.supportsWebSerial;
   }
 
-  /** 加载连接对象配置文件（ADR-023）：主进程读文件系统（经 preload 白名单桥）。 */
-  loadConnectionConfig(): Promise<Result<ConnectionConfigLoadResponse>> {
-    return this.bridge.loadConnectionConfig();
-  }
-
-  /** 桌面端由宿主文件读取配置，不经 UI 导入：返回能力错误。 */
-  importConnectionConfigText(): Promise<Result<ConnectionConfigFile>> {
-    return Promise.resolve(
-      fail(
-        createMamepError({
-          code: "CONNECTION_CONFIG_IMPORT_UNSUPPORTED",
-          category: "capability",
-          userMessageKey: "errors.connectionConfigImportUnsupported",
-          technicalMessage:
-            "connection config import is not supported on the Electron host (load from config file)",
-        }),
-      ),
-    );
-  }
-
   async connect(
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
@@ -649,6 +628,14 @@ export class ElectronAppHost implements AppHost {
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>> {
     return this.bridge.saveTextFile(options);
+  }
+
+  // ---- 工作区导入（2026-08-29，PRD §8.3 P1）：主进程打开对话框 + fs 读取 ----
+
+  openTextFile(options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>> {
+    return this.bridge.openTextFile(options);
   }
 }
 

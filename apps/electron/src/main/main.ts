@@ -14,7 +14,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 import path from "node:path";
-import { writeFile } from "node:fs/promises";
+import { writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
@@ -32,10 +32,6 @@ import {
 } from "@mamep2026/platform-api";
 import { handleInvoke, type IpcDeps } from "./ipc";
 import { ElectronSessionHost } from "./session-host";
-import {
-  loadConnectionConfig,
-  resolveCandidatePaths,
-} from "./config-loader";
 import {
   deriveAllowedOrigins,
   installSerialPermissionHandlers,
@@ -145,17 +141,6 @@ const ipcDeps: IpcDeps = {
     serialPermissionHandlers?.resolvePendingSelection(portId, sender) ?? false,
   // TCP 会话：主进程承载（Electron TCP，2026-08-23 两端 TCP 接线）。
   session: ensureSessionHost(),
-  // 连接对象配置文件（ADR-023）：env > 仓库根/exe 目录 config/ > 用户数据目录。
-  loadConnectionConfig: () =>
-    loadConnectionConfig(
-      resolveCandidatePaths({
-        envPath: process.env.MAMEP_CONNECTION_CONFIG,
-        appRootDir: app.isPackaged
-          ? path.dirname(app.getPath("exe"))
-          : process.cwd(),
-        userDataDir: app.getPath("userData"),
-      }),
-    ),
   // 通信日志 CSV 导出（save-text-file，2026-08-28）：主进程弹保存对话框落盘。
   saveTextFile: async (options) => {
     try {
@@ -179,6 +164,38 @@ const ipcDeps: IpcDeps = {
           code: "SAVE_TEXT_FILE_FAILED",
           category: "persistence",
           userMessageKey: "panel.exportFailed",
+          technicalMessage:
+            cause instanceof Error ? cause.message : String(cause),
+        }),
+      );
+    }
+  },
+  // 工作区导入（open-text-file，2026-08-29）：主进程弹打开对话框读 UTF-8 文本。
+  openTextFile: async (options) => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: "Import workspace",
+        ...(options?.suggestedName !== undefined
+          ? { defaultPath: options.suggestedName }
+          : {}),
+        properties: ["openFile"],
+        filters: [
+          { name: "JSON", extensions: ["json"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      if (result.canceled || result.filePaths.length === 0) {
+        // 用户取消打开对话框：非错误。
+        return ok({ content: null });
+      }
+      const content = await readFile(result.filePaths[0]!, "utf8");
+      return ok({ content });
+    } catch (cause) {
+      return fail(
+        createMamepError({
+          code: "OPEN_TEXT_FILE_FAILED",
+          category: "persistence",
+          userMessageKey: "workspace.importFailed",
           technicalMessage:
             cause instanceof Error ? cause.message : String(cause),
         }),

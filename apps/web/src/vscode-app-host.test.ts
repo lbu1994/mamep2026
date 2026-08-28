@@ -15,13 +15,13 @@ import type { ConnectionState } from "@mamep2026/communication";
 import type {
   MamepHostEvent,
   SaveTextFileResponse,
+  OpenTextFileResponse,
   SerialPortOption,
   SessionBatchReadResponse,
   SessionStateResponse,
   VscodeHostApi,
   VscodeHostDebugState,
   WriteOutcomePayload,
-  ConnectionConfigLoadResponse,
 } from "@mamep2026/platform-api";
 import { vscodeCapabilities } from "@mamep2026/platform-api";
 import { buildTheme, type CssVarSource } from "@mamep2026/ui-theme";
@@ -71,12 +71,6 @@ function createFakeBridge(): {
         listeners.delete(listener);
       };
     }),
-    loadConnectionConfig: vi.fn(
-      async (): Promise<Result<ConnectionConfigLoadResponse>> => ({
-        ok: true,
-        value: { config: null, sourcePath: null },
-      }),
-    ),
     getDebugState: vi.fn(
       async (): Promise<Result<VscodeHostDebugState | null>> => ({
         ok: true,
@@ -172,6 +166,10 @@ function createFakeBridge(): {
     saveTextFile: vi.fn(async (): Promise<Result<SaveTextFileResponse>> => ({
       ok: true,
       value: { saved: true, filePath: null },
+    })),
+    openTextFile: vi.fn(async (): Promise<Result<OpenTextFileResponse>> => ({
+      ok: true,
+      value: { content: '{"schemaVersion":4}' },
     })),
   };
   return {
@@ -315,6 +313,21 @@ describe("VscodeAppHost", () => {
       suggestedName: "comm-log-rtu-20260828-102030.csv",
       content: "seq,timestamp\r\n",
       mimeType: "text/csv",
+    });
+  });
+
+  it("openTextFile（工作区导入）透传 VSCode 桥", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const result = await host.openTextFile({
+      suggestedName: "mamep-workspace.json",
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: { content: '{"schemaVersion":4}' },
+    });
+    expect(bridge.openTextFile).toHaveBeenCalledWith({
+      suggestedName: "mamep-workspace.json",
     });
   });
 

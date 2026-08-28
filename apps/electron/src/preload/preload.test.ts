@@ -52,8 +52,8 @@ describe("preload 白名单桥", () => {
       "getAppVersion",
       "getCapabilities",
       "getDebugState",
-      "loadConnectionConfig",
       "onEvent",
+      "openTextFile",
       "platform",
       "readTextFromClipboard",
       "saveTextFile",
@@ -174,6 +174,51 @@ describe("preload 白名单桥", () => {
       ok: true,
       value: { saved: true, filePath: "C:\\logs\\comm-log.csv" },
     });
+  });
+
+  it("openTextFile 透传 suggestedName 并映射 content 响应（2026-08-29）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "open-text-file",
+      ok: true,
+      payload: { content: '{"schemaVersion":4}' },
+    });
+    const result = await bridge.openTextFile({
+      suggestedName: "mamep-workspace.json",
+    });
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "open-text-file",
+        payload: { suggestedName: "mamep-workspace.json" },
+      }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      value: { content: '{"schemaVersion":4}' },
+    });
+  });
+
+  it("openTextFile 无参数时 payload 为空对象（2026-08-29）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "open-text-file",
+      ok: true,
+      payload: { content: null },
+    });
+    const result = await bridge.openTextFile();
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "open-text-file",
+        payload: {},
+      }),
+    );
+    expect(result).toEqual({ ok: true, value: { content: null } });
   });
 
   it("selectSerialPort 透传 portId 并映射 ok(null)", async () => {

@@ -11,7 +11,6 @@
  * - 资源释放：onDidReceiveMessage / 主题订阅 / panel dispose 全部随 context.subscriptions 管理。
  */
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as vscode from "vscode";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import { NodePlatformHost } from "@mamep2026/platform-node";
@@ -28,6 +27,7 @@ import {
 } from "@mamep2026/platform-api";
 import { DevFakeSerialFactory } from "./dev-fake-serial";
 import { createDevFakeTcpServer, type DevFakeTcpServer } from "./dev-fake-tcp";
+import { fakeDialogPaths, fakeOpenTextFile, fakeSaveTextFile } from "./dev-fake-dialog";
 import {
   errorEnvelope,
   extractMessageId,
@@ -36,10 +36,6 @@ import {
 } from "./ipc";
 import { VscodeSessionHost } from "./session-host";
 import { getDevHtml } from "./webview/html";
-import {
-  loadConnectionConfig,
-  resolveVscodeCandidatePaths,
-} from "./config-loader";
 
 /** 当前主面板（单实例：重复命令 reveal）。 */
 let panel: vscode.WebviewPanel | undefined;
@@ -139,21 +135,13 @@ function createDeps(
     clipboardReadText: async () => vscode.env.clipboard.readText(),
     session: createSessionHost(isDev, postEvent),
     sessionStats: () => ({ ...sessionStats }),
-    // 连接对象配置文件（ADR-023）：配置项 > workspace 根 config/ > 用户主目录。
-    loadConnectionConfig: () =>
-      loadConnectionConfig(
-        resolveVscodeCandidatePaths({
-          settingPath:
-            vscode.workspace
-              .getConfiguration("mamep2026")
-              .get<string>("connectionConfigPath") ?? undefined,
-          workspaceRoot:
-            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null,
-          homeDir: os.homedir(),
-        }),
-      ),
     // 通信日志 CSV 导出（save-text-file，2026-08-28）：保存对话框 + workspace.fs 落盘。
     saveTextFile: async (options) => {
+      // dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1 && isDev，ADR-033 方案 A）：
+      // 写入固定路径，使工作区导入导出闭环可确定性自动化（测试宿主无法桩替换真实对话框）。
+      if (isDev && process.env.MAMEP_FAKE_DIALOG === "1") {
+        return fakeSaveTextFile(fakeDialogPaths().savePath, options.content);
+      }
       try {
         const uri = await vscode.window.showSaveDialog({
           defaultUri: vscode.Uri.file(options.suggestedName),
@@ -174,6 +162,40 @@ function createDeps(
             code: "SAVE_TEXT_FILE_FAILED",
             category: "persistence",
             userMessageKey: "panel.exportFailed",
+            technicalMessage:
+              cause instanceof Error ? cause.message : String(cause),
+          }),
+        );
+      }
+    },
+    // 工作区导入（open-text-file，2026-08-29）：打开对话框 + workspace.fs 读 UTF-8 文本。
+    openTextFile: async (options) => {
+      // dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1 && isDev，ADR-033 方案 A）：
+      // 读固定路径；文件不存在 = 用户取消（content:null 非错误）。
+      if (isDev && process.env.MAMEP_FAKE_DIALOG === "1") {
+        return fakeOpenTextFile(fakeDialogPaths().openPath);
+      }
+      try {
+        const uri = await vscode.window.showOpenDialog({
+          defaultUri: vscode.Uri.file(options?.suggestedName ?? ""),
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          openLabel: "Import workspace",
+          filters: { JSON: ["json"], "All Files": ["*"] },
+        });
+        if (uri === undefined || uri.length === 0) {
+          // 用户取消打开对话框：非错误。
+          return ok({ content: null });
+        }
+        const bytes = await vscode.workspace.fs.readFile(uri[0]!);
+        return ok({ content: Buffer.from(bytes).toString("utf8") });
+      } catch (cause) {
+        return fail(
+          createMamepError({
+            code: "OPEN_TEXT_FILE_FAILED",
+            category: "persistence",
+            userMessageKey: "workspace.importFailed",
             technicalMessage:
               cause instanceof Error ? cause.message : String(cause),
           }),

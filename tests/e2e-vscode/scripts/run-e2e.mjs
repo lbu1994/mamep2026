@@ -6,6 +6,7 @@
  * 下载 VSCode，网络受阻时降级为 .vscode/launch.json F5 手动验证）。
  */
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { runTests } from "@vscode/test-electron";
 
@@ -25,6 +26,18 @@ const extensionTestsPath = path.resolve(
 // responder）：确定性、无真实设备依赖；runTests 子进程继承本环境变量。
 process.env.MAMEP_FAKE_SERIAL = "1";
 process.env.MAMEP_FAKE_TCP = "1";
+// dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1，ADR-033 方案 A）：测试宿主与扩展宿主跨进程、
+// 无法桩替换 vscode.window 对话框，扩展宿主在 isDev 门控下把 save/open 对话框替换为对
+// 固定路径的读写（工作区导入导出闭环确定性自动化）。路径经环境变量暴露给测试用例。
+process.env.MAMEP_FAKE_DIALOG = "1";
+process.env.MAMEP_FAKE_DIALOG_OPEN_PATH = path.join(
+  os.tmpdir(),
+  "mamep-e2e-dialog-open.json",
+);
+process.env.MAMEP_FAKE_DIALOG_SAVE_PATH = path.join(
+  os.tmpdir(),
+  "mamep-e2e-dialog-save.json",
+);
 
 try {
   const code = await runTests({

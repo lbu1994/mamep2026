@@ -22,11 +22,12 @@ describe("browserCapabilities", () => {
     expect(caps.webPlugins).toBe(true);
   });
 
-  it("loads external connection config via import/URL (no filesystem)", () => {
-    expect(caps.connectionConfig).toBe("import");
-  });
-
   it("exports communication logs via browser download (no save dialog)", () => {
     expect(caps.logExport).toBe("download");
+  });
+
+  it("imports workspaces via client-side file pick and exports via browser download", () => {
+    expect(caps.workspaceImport).toBe("upload");
+    expect(caps.workspaceExport).toBe("download");
   });
 });

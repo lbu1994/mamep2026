@@ -6,9 +6,9 @@ import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   MAMEP_IPC_EVENT_CHANNEL,
   MAMEP_IPC_INVOKE_CHANNEL,
-  connectionConfigLoadResponseSchema,
   fromErrorPayload,
   fromResultPayload,
+  openTextFileResponseSchema,
   parseHostMessage,
   saveTextFileResponseSchema,
   toErrorPayload,
@@ -479,61 +479,6 @@ describe("host-message TCP session kinds（2026-08-23 两端 TCP 接线）", () 
   });
 });
 
-describe("host-message connection-config-load kind（ADR-023 连接对象配置文件）", () => {
-  it("accepts a valid connection-config-load request with empty payload", () => {
-    const result = parseHostMessage({
-      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
-      type: "request",
-      messageId: "req-cfg",
-      kind: "connection-config-load",
-      payload: {},
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok && result.value.type === "request") {
-      expect(result.value.kind).toBe("connection-config-load");
-    }
-  });
-
-  it("rejects a connection-config-load request with a non-object payload", () => {
-    const result = parseHostMessage({
-      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
-      type: "request",
-      messageId: "req-cfg-bad",
-      kind: "connection-config-load",
-      payload: "not-an-object",
-    });
-    expect(result.ok).toBe(false);
-  });
-
-  it("validates a response with a full config via connectionConfigLoadResponseSchema", () => {
-    const parsed = connectionConfigLoadResponseSchema.safeParse({
-      config: {
-        schemaVersion: 1,
-        activeConnectionId: null,
-        connections: [
-          {
-            id: "rtu-com4",
-            name: "COM4",
-            protocol: "rtu",
-            port: "COM4",
-            baudRate: 9600,
-          },
-        ],
-      },
-      sourcePath: "config/connections.json",
-    });
-    expect(parsed.success).toBe(true);
-  });
-
-  it("validates a response with null config (file not found)", () => {
-    const parsed = connectionConfigLoadResponseSchema.safeParse({
-      config: null,
-      sourcePath: null,
-    });
-    expect(parsed.success).toBe(true);
-  });
-});
-
 describe("host-message save-text-file kind（2026-08-28 通信日志 CSV 导出）", () => {
   it("accepts a valid save-text-file request", () => {
     const result = parseHostMessage({
@@ -588,6 +533,59 @@ describe("host-message save-text-file kind（2026-08-28 通信日志 CSV 导出�
       saved: false,
       filePath: null,
     });
+    expect(parsed.success).toBe(true);
+  });
+});
+
+describe("host-message open-text-file kind（2026-08-29 工作区导入）", () => {
+  it("accepts an open-text-file request without payload options", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-open-1",
+      kind: "open-text-file",
+      payload: {},
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.type === "request") {
+      expect(result.value.kind).toBe("open-text-file");
+    }
+  });
+
+  it("accepts an open-text-file request with suggestedName", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-open-2",
+      kind: "open-text-file",
+      payload: { suggestedName: "mamep-workspace.json" },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("strips unknown payload keys (non-strict Zod, consistent with other kinds)", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-open-3",
+      kind: "open-text-file",
+      payload: { path: "C:\\secret\\workspace.json" },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.type === "request") {
+      expect(result.value.payload).toEqual({});
+    }
+  });
+
+  it("validates a content response via openTextFileResponseSchema", () => {
+    const parsed = openTextFileResponseSchema.safeParse({
+      content: '{"schemaVersion":4}',
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("validates a cancelled (content null) response as non-error", () => {
+    const parsed = openTextFileResponseSchema.safeParse({ content: null });
     expect(parsed.success).toBe(true);
   });
 });
