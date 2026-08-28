@@ -179,7 +179,14 @@ export const en = {
     noOpenSheets: "No tables are open",
     noOpenSheetsHint: "Select a table from the sidebar to open it.",
     batchSummary:
-      "Read All: {{success}} succeeded, {{failure}} failed, {{skipped}} skipped, {{cancelled}} cancelled",
+      "Read All: {{success}} Succeeded, {{failure}} Failed, {{skipped}} Skipped, {{cancelled}} Cancelled",
+    // Read All 完成结果的全局提示（antd message，2026-08-28）。
+    readAllComplete: "Read All Complete",
+    readAllSucceeded: "{{count}} Succeeded",
+    readAllFailed: "{{count}} Failed",
+    readAllSkipped: "{{count}} Skipped",
+    readAllCancelled: "{{count}} Cancelled",
+    readAllDuration: "{{ms}} ms",
     cancelReadAll: "Cancel",
   },
   trace: {
@@ -507,6 +514,13 @@ export const zh: TranslationResources = {
     noOpenSheetsHint: "从侧边栏选择一张表以打开。",
     batchSummary:
       "全表读取：成功 {{success}}，失败 {{failure}}，跳过 {{skipped}}，取消 {{cancelled}}",
+    // Read All 完成结果的全局提示（antd message，2026-08-28）。
+    readAllComplete: "全表读取完成",
+    readAllSucceeded: "成功 {{count}}",
+    readAllFailed: "失败 {{count}}",
+    readAllSkipped: "跳过 {{count}}",
+    readAllCancelled: "取消 {{count}}",
+    readAllDuration: "{{ms}} 毫秒",
     cancelReadAll: "取消",
   },
   trace: {

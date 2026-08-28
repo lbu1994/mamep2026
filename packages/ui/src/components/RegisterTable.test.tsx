@@ -8,6 +8,11 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// AntApp：RegisterTable 使用 App.useApp()（antd message，2026-08-28）。antd 的 useApp
+// 无 <App> context 时返回空对象、不抛错（useContext 默认值），因此不调用 message 的既有
+// 测试无需包裹；仅 Read All 成功路径会调用 message.open，此类测试须包 <AntApp>
+// （同 BottomPanel.test.tsx 约定）。
+import { App as AntApp } from "antd";
 import type { BatchReadHandle, BatchReadSummary } from "@mamep2026/communication";
 import {
   createEmptyWorkspace,
@@ -351,7 +356,12 @@ describe("RegisterTable 全表读取取消（ADR-025）", () => {
     if (sheet !== undefined) sheet.rows = sheet.rows.slice(0, 3);
     useAppStore.setState({ host: fakeHost, workspace });
 
-    render(<RegisterTable sheetId={sheetId()} />);
+    // promise 落定走成功路径会调用 message.open：须包 <AntApp>。
+    render(
+      <AntApp>
+        <RegisterTable sheetId={sheetId()} />
+      </AntApp>,
+    );
     // antd 图标计入可访问名（如 "reload Read All"），用正则匹配。
     fireEvent.click(screen.getByRole("button", { name: /Read All/ }));
 
@@ -719,5 +729,110 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
       useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[1]
         ?.comment,
     ).toBe("L2");
+  });
+});
+
+describe("RegisterTable Read All 全局 message（2026-08-28）", () => {
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({
+      host: null,
+      workspace: createEmptyWorkspace(),
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  function fakeHostWithSummary(summary: BatchReadSummary): AppHost {
+    return {
+      readAllRows: vi.fn(
+        (): BatchReadHandle =>
+          ({
+            promise: Promise.resolve(ok(summary)),
+            cancel: vi.fn(),
+          }) as BatchReadHandle,
+      ),
+      // 工具栏「从站地址 / Unit ID」label 需读活动协议（2026-08-25）。
+      getCommProperties: vi.fn(() => ({
+        protocol: "rtu" as const,
+        portLabel: null,
+        unitId: null,
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: 1000,
+        retryCount: 1,
+        rxDelayMs: 50,
+        addressAdjust: "off",
+        connectionState: "connected",
+      })),
+    } as unknown as AppHost;
+  }
+
+  function baseSummary(): BatchReadSummary {
+    return {
+      batchId: "b-1",
+      totalRows: 8,
+      eligibleRows: 8,
+      successCount: 8,
+      failureCount: 0,
+      skippedCount: 0,
+      cancelledCount: 0,
+      startedAt: 0,
+      completedAt: 152,
+      durationMs: 152,
+    };
+  }
+
+  it("Read All 成功后弹出富内容全局 message（统计 + 耗时），底部消息照常追加", async () => {
+    useAppStore.setState({ host: fakeHostWithSummary(baseSummary()) });
+    render(
+      <AntApp>
+        <RegisterTable sheetId={sheetId()} />
+      </AntApp>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Read All/ }));
+    // 全局 message 渲染到 body（AntApp holder），内容为富内容组件。
+    await waitFor(() => {
+      expect(document.querySelector(".read-all-result")).toBeTruthy();
+    });
+    const root = document.querySelector(".read-all-result");
+    expect(root?.textContent).toContain("Read All Complete");
+    expect(root?.textContent).toContain("8 Succeeded");
+    expect(root?.textContent).toContain("152 ms");
+    // 底部面板消息照常追加（既有行为不回归）。
+    await waitFor(() => {
+      const messages = useAppStore.getState().messages;
+      expect(messages.at(-1)?.messageKey).toBe("table.batchSummary");
+    });
+  });
+
+  it("有失败时全局 message 标题为警示图标，失败 Tag 带 error 语义色", async () => {
+    useAppStore.setState({
+      host: fakeHostWithSummary({
+        ...baseSummary(),
+        successCount: 6,
+        failureCount: 2,
+      }),
+    });
+    render(
+      <AntApp>
+        <RegisterTable sheetId={sheetId()} />
+      </AntApp>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Read All/ }));
+    await waitFor(() => {
+      expect(document.querySelector(".read-all-result")).toBeTruthy();
+    });
+    // （antd 图标 class 用 icon.name：ExclamationCircleFilled → anticon-exclamation-circle）
+    expect(
+      document.querySelector(".anticon-exclamation-circle"),
+    ).toBeTruthy();
+    expect(document.querySelector(".read-all-result .ant-tag-error")).toBeTruthy();
   });
 });

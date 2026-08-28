@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  App,
   Button,
   Checkbox,
   Dropdown,
@@ -87,6 +88,7 @@ import type { RowFailure } from "../row-result";
 import { computeNoColumnWidth } from "../no-column-width";
 import { clampColumnWidth } from "./column-resize";
 import { buildRowMenuItems, type RowMenuActions } from "./RegisterRowMenu";
+import { ReadAllResultMessage } from "./ReadAllResultMessage";
 
 /** 写后回读配置选项（PRD §6.5.12，2026-08-26）：Select value ↔ ReadVerifySettings。 */
 type WriteVerifyOptionValue = "off" | "immediate" | "100" | "200" | "500";
@@ -1168,6 +1170,9 @@ export const RegisterTable = memo(function RegisterTable({
   sheetId,
 }: RegisterTableProps): React.ReactNode {
   const { t } = useTranslation();
+  // antd 全局 message（App.useApp，2026-08-28）：Read All 完成结果富内容提示；
+  // 应用已在 MamepApp 用 <AntApp> 包裹（测试须包 <AntApp>，见 BottomPanel.test.tsx）。
+  const { message } = App.useApp();
   const host = useAppStore((s) => s.host);
   // 连接状态订阅：连接/断开时刷新（工具栏「从站地址 / Unit ID」label 按活动协议切换，
   // 2026-08-25 TCP Unit ID 会话内动态修改；协议只在连接时变化）。
@@ -1327,6 +1332,12 @@ export const RegisterTable = memo(function RegisterTable({
           cancelled: result.value.cancelledCount,
         },
         detail: null,
+      });
+      // 全局提示（2026-08-28）：富内容展示批次统计（成功/失败/跳过/取消 + 耗时），
+      // 与底部面板消息并存；content 为 ReactNode，AntApp 上下文内渲染（i18n 可用）。
+      message.open({
+        content: <ReadAllResultMessage summary={result.value} />,
+        duration: 5,
       });
     } else {
       // 批次整体失败（如未连接）：给出明确提示；逐行失败经轮询结果通道标记状态点。
