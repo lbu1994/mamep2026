@@ -188,6 +188,11 @@ export const en = {
     readAllCancelled: "{{count}} Cancelled",
     readAllDuration: "{{ms}} ms",
     cancelReadAll: "Cancel",
+    // 撤销/重做（TECH_DESIGN §24.4，PRD §8.3 P1）。
+    undo: "Undo",
+    redo: "Redo",
+    undoHint: "Undo the last workspace edit (Ctrl+Z)",
+    redoHint: "Redo the undone edit (Ctrl+Shift+Z / Ctrl+Y)",
   },
   trace: {
     title: "M@MEp2006 Advance [Memory Trace]",
@@ -530,6 +535,11 @@ export const zh: TranslationResources = {
     readAllCancelled: "取消 {{count}}",
     readAllDuration: "{{ms}} 毫秒",
     cancelReadAll: "取消",
+    // 撤销/重做（TECH_DESIGN §24.4，PRD §8.3 P1）。
+    undo: "撤销",
+    redo: "重做",
+    undoHint: "撤销上一步工作区编辑（Ctrl+Z）",
+    redoHint: "重做被撤销的编辑（Ctrl+Shift+Z / Ctrl+Y）",
   },
   trace: {
     title: "M@MEp2006 Advance [Memory Trace]",

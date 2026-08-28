@@ -30,8 +30,10 @@ import {
   ColumnWidthOutlined,
   HolderOutlined,
   PlusOutlined,
+  RedoOutlined,
   ReloadOutlined,
   StopOutlined,
+  UndoOutlined,
 } from "@ant-design/icons";
 import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/core";
 import {
@@ -314,18 +316,13 @@ const NameCell = memo(function NameCell({
   rowId: RowId;
   name: string;
 }) {
-  const updateRow = useAppStore((s) => s.updateRow);
+  // 可撤销（TECH_DESIGN §24.4）：改名经 store.setRowName 入撤销栈。
+  const setRowName = useAppStore((s) => s.setRowName);
   return (
     <EditableCellValue
       value={name}
       ariaLabel="Name"
-      onCommit={(value) =>
-        updateRow(rowId, (r) => ({
-          ...r,
-          name: value,
-          updatedAt: Date.now(),
-        }))
-      }
+      onCommit={(value) => setRowName(rowId, value)}
     />
   );
 });
@@ -372,7 +369,8 @@ const WpCell = memo(function WpCell({
   hasAddress: boolean;
 }) {
   const { t } = useTranslation();
-  const updateRow = useAppStore((s) => s.updateRow);
+  // 可撤销（§24.4「修改轮询设置」）：经 store.setPollingEnabled 入撤销栈。
+  const setPollingEnabled = useAppStore((s) => s.setPollingEnabled);
   const connected = useAppStore((s) => s.connectionState) === "connected";
   // 无合法地址时禁用并说明原因（任务要求）；离线不禁用（可预配置，连接后即生效）。
   const disabled = !hasAddress;
@@ -388,13 +386,7 @@ const WpCell = memo(function WpCell({
           aria-label="WP"
           checked={pollingEnabled}
           disabled={disabled}
-          onChange={(checked) =>
-            updateRow(rowId, (r) => ({
-              ...r,
-              pollingEnabled: checked,
-              updatedAt: Date.now(),
-            }))
-          }
+          onChange={(checked) => setPollingEnabled(rowId, checked)}
         />
         {polling ? (
           <Tooltip title={t("table.pollingActive")}>
@@ -771,18 +763,13 @@ const CommentCell = memo(function CommentCell({
   rowId: RowId;
   comment: string;
 }) {
-  const updateRow = useAppStore((s) => s.updateRow);
+  // 可撤销（TECH_DESIGN §24.4）：改备注经 store.setRowComment 入撤销栈。
+  const setRowComment = useAppStore((s) => s.setRowComment);
   return (
     <EditableCellValue
       value={comment}
       ariaLabel="Comment"
-      onCommit={(value) =>
-        updateRow(rowId, (r) => ({
-          ...r,
-          comment: value,
-          updatedAt: Date.now(),
-        }))
-      }
+      onCommit={(value) => setRowComment(rowId, value)}
     />
   );
 });
@@ -1274,6 +1261,11 @@ export const RegisterTable = memo(function RegisterTable({
   const copySelectedRows = useAppStore((s) => s.copySelectedRows);
   const cutSelectedRows = useAppStore((s) => s.cutSelectedRows);
   const pasteRows = useAppStore((s) => s.pasteRows);
+  // 撤销/重做（TECH_DESIGN §24.4）：canUndo/canRedo 由历史栈长度派生（按钮禁用态）。
+  const undo = useAppStore((s) => s.undo);
+  const redo = useAppStore((s) => s.redo);
+  const canUndo = useAppStore((s) => s.undoStack.length > 0);
+  const canRedo = useAppStore((s) => s.redoStack.length > 0);
 
   // 只订阅本表的 Register 地址进制（ADR-014）：行数据变化不触发本选择器，
   // 配合 updateRow 外科手术式更新，非活动表在单行更新时完全不重渲染（性能优化）。
@@ -1527,6 +1519,22 @@ export const RegisterTable = memo(function RegisterTable({
     }
     if (mod) {
       const key = event.key.toLowerCase();
+      // 撤销/重做（TECH_DESIGN §24.4）：Ctrl+Z 撤销、Ctrl+Shift+Z / Ctrl+Y 重做。
+      // 与浏览器原生文本撤销区分：仅当焦点不在文本输入控件时触发（上方已守卫）。
+      if (key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          store.redo();
+        } else {
+          store.undo();
+        }
+        return;
+      }
+      if (key === "y") {
+        event.preventDefault();
+        store.redo();
+        return;
+      }
       if (key === "c") {
         event.preventDefault();
         copySelectedRows(sheetId);
@@ -2080,6 +2088,31 @@ export const RegisterTable = memo(function RegisterTable({
   return (
     <Flex vertical style={{ height: "100%" }} ref={flexRef}>
       <div className="table-toolbar">
+        <div className="table-toolbar__group">
+          <Tooltip title={t("table.undoHint")}>
+            <Button
+              size="small"
+              icon={<UndoOutlined />}
+              disabled={!canUndo}
+              onClick={undo}
+              aria-label={t("table.undo")}
+            >
+              {t("table.undo")}
+            </Button>
+          </Tooltip>
+          <Tooltip title={t("table.redoHint")}>
+            <Button
+              size="small"
+              icon={<RedoOutlined />}
+              disabled={!canRedo}
+              onClick={redo}
+              aria-label={t("table.redo")}
+            >
+              {t("table.redo")}
+            </Button>
+          </Tooltip>
+        </div>
+        <span className="table-toolbar__sep" aria-hidden="true" />
         <div className="table-toolbar__group">
           {rows.length > 0 ? (
             <Button

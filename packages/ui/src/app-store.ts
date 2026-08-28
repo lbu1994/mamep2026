@@ -8,6 +8,7 @@ import type {
   ReadVerifySettings,
   RegisterRadix,
   RegisterRow,
+  RegisterSheet,
   RowId,
   SheetId,
   Workspace,
@@ -49,6 +50,16 @@ import {
   type ChildMetaPatch,
   type ClipboardIssue,
   type RowClipboardData,
+} from "@mamep2026/register-table";
+import {
+  applySheetSnapshot,
+  popRedo,
+  popUndo,
+  pushEntry,
+  sheetFromSnapshot,
+  snapshotSheet,
+  type SheetEditSnapshot,
+  type UndoEntry,
 } from "@mamep2026/register-table";
 import type { ThemeConfig } from "antd";
 import { create } from "zustand";
@@ -104,6 +115,9 @@ export interface AppStoreState {
    */
   themeConfig: ThemeConfig | null;
   saveStatus: SaveStatus;
+  /** 撤销/重做历史栈（TECH_DESIGN §24.4；纯内存会话状态，不随工作区持久化）。 */
+  undoStack: UndoEntry[];
+  redoStack: UndoEntry[];
   messages: ApplicationMessage[];
   commLog: CommunicationLogEntry[];
   traceWindows: Record<string, TraceWindowModel>;
@@ -127,6 +141,10 @@ export interface AppStoreState {
     pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null,
   ) => void;
   setTheme: (theme: "light" | "dark") => void;
+  /** 撤销上一步工作区编辑（TECH_DESIGN §24.4）；无可撤销项时 no-op。 */
+  undo: () => void;
+  /** 重做被撤销的编辑；无重做项时 no-op。 */
+  redo: () => void;
   /** 设置宿主完整主题（VSCode ui-theme；null=回退 buildTheme 两态）。运行时派生，不持久化。 */
   setThemeConfig: (themeConfig: ThemeConfig | null) => void;
   /** 记录界面语言选择到工作区偏好（随自动保存持久化；i18n 引擎切换由组件层调用）。 */
@@ -139,6 +157,12 @@ export interface AppStoreState {
   setPanelLayout: (partial: Partial<PanelLayout>) => void;
 
   updateRow: (rowId: RowId, updater: (row: RegisterRow) => RegisterRow) => void;
+  /** 修改行 Name（可撤销，§24.4）；Data 等运行时字段不走此路径。 */
+  setRowName: (rowId: RowId, name: string) => void;
+  /** 修改行 Comment（可撤销，§24.4）。 */
+  setRowComment: (rowId: RowId, comment: string) => void;
+  /** 修改行 WP 轮询开关（可撤销，§24.4「修改轮询设置」）。 */
+  setPollingEnabled: (rowId: RowId, enabled: boolean) => void;
   commitRowAddress: (rowId: RowId, draft: string) => Result<RegisterRow>;
   /** 提交 Data 单元格文本：按 Type 校验；失败保留输入并记录校验错误（§17/§23）。 */
   commitCellText: (rowId: RowId, text: string) => Result<RegisterRow>;
@@ -233,6 +257,136 @@ export interface AppStoreState {
   recordRowEdit: (rowId: RowId, before: string, after: string) => void;
 }
 
+// ---- 撤销/重做辅助（工作区级应用逻辑，TECH_DESIGN §24.4）----
+
+/** 取指定表；不存在返回 undefined。 */
+function findSheetById(
+  workspace: Workspace,
+  sheetId: SheetId,
+): RegisterSheet | undefined {
+  return workspace.sheets.find((s) => s.sheetId === sheetId);
+}
+
+/** 入栈一个「表内容」撤销条目（新编辑自动清空重做栈，见 pushEntry）。 */
+function pushSheetEntry(
+  get: () => AppStoreState,
+  set: (partial: Partial<AppStoreState>) => void,
+  sheetId: SheetId,
+  before: SheetEditSnapshot | null,
+  after: SheetEditSnapshot | null,
+): void {
+  const state = get();
+  const next = pushEntry(
+    { undoStack: state.undoStack, redoStack: state.redoStack },
+    { kind: "sheet", sheetId, before, after },
+  );
+  set({ undoStack: next.undoStack, redoStack: next.redoStack });
+}
+
+/** 入栈一个「表顺序重排」撤销条目。 */
+function pushReorderEntry(
+  get: () => AppStoreState,
+  set: (partial: Partial<AppStoreState>) => void,
+  before: SheetId[],
+  after: SheetId[],
+): void {
+  const state = get();
+  const next = pushEntry(
+    { undoStack: state.undoStack, redoStack: state.redoStack },
+    { kind: "sheets-reorder", before, after },
+  );
+  set({ undoStack: next.undoStack, redoStack: next.redoStack });
+}
+
+/**
+ * 行字段编辑事务（可撤销）：捕获编辑前表快照 → 应用 updater → 捕获编辑后快照 → 入栈。
+ * 仅用于结构化编辑字段（Name/Comment/WP 等）；读值/Data 文本等运行时更新不走此路径。
+ */
+function commitRowEdit(
+  get: () => AppStoreState,
+  set: (partial: Partial<AppStoreState>) => void,
+  rowId: RowId,
+  updater: (row: RegisterRow) => RegisterRow,
+): void {
+  const state = get();
+  const sheet = state.workspace.sheets.find((s) =>
+    s.rows.some((r) => r.rowId === rowId),
+  );
+  const row = sheet?.rows.find((r) => r.rowId === rowId);
+  if (row === undefined || sheet === undefined) return;
+  const before = snapshotSheet(sheet);
+  get().updateRow(rowId, updater);
+  const afterSheet = findSheetById(get().workspace, sheet.sheetId);
+  if (afterSheet !== undefined) {
+    pushSheetEntry(get, set, sheet.sheetId, before, snapshotSheet(afterSheet));
+  }
+}
+
+/** 活动表修复：activeSheetId 指向不存在的表时回退到首个打开的表。 */
+function fixActiveSheetId(
+  sheets: RegisterSheet[],
+  activeSheetId: SheetId | null,
+): SheetId | null {
+  if (
+    activeSheetId !== null &&
+    sheets.some((s) => s.sheetId === activeSheetId)
+  ) {
+    return activeSheetId;
+  }
+  return sheets.find((s) => s.open)?.sheetId ?? sheets[0]?.sheetId ?? null;
+}
+
+/** 把表编辑快照应用到工作区：表存在→恢复结构；不存在→重建并放回原 order 位置。 */
+function applySheetSnapshotToWorkspace(
+  workspace: Workspace,
+  sheetId: SheetId,
+  snapshot: SheetEditSnapshot,
+): { workspace: Workspace; activeSheetId: SheetId | null } {
+  const existing = workspace.sheets.some((s) => s.sheetId === sheetId);
+  const sheets = existing
+    ? workspace.sheets.map((s) =>
+        s.sheetId === sheetId ? applySheetSnapshot(s, snapshot) : s,
+      )
+    : [...workspace.sheets, sheetFromSnapshot(snapshot)].sort(
+        (a, b) => a.order - b.order,
+      );
+  return {
+    workspace: { ...workspace, sheets, updatedAt: Date.now() },
+    activeSheetId: fixActiveSheetId(sheets, workspace.activeSheetId),
+  };
+}
+
+/** 从工作区移除一张表并修复活动表；移除后无表时重建默认空表（与 deleteSheet 行为一致）。 */
+function removeSheetFromWorkspace(
+  workspace: Workspace,
+  sheetId: SheetId,
+): { workspace: Workspace; activeSheetId: SheetId | null } {
+  const without = workspace.sheets.filter((s) => s.sheetId !== sheetId);
+  const sheets =
+    without.length === 0 ? [createRegisterSheet("Sheet 1", 0)] : without;
+  return {
+    workspace: { ...workspace, sheets, updatedAt: Date.now() },
+    activeSheetId: fixActiveSheetId(sheets, workspace.activeSheetId),
+  };
+}
+
+/** 按 sheetId 顺序重排表（撤销/重做表顺序移动）；不在顺序里的表追加末尾。 */
+function reorderSheetsInWorkspace(
+  workspace: Workspace,
+  order: readonly SheetId[],
+): Workspace {
+  const byId = new Map(workspace.sheets.map((s) => [s.sheetId, s]));
+  const ordered = order
+    .map((id) => byId.get(id))
+    .filter((s): s is RegisterSheet => s !== undefined);
+  const remaining = workspace.sheets.filter((s) => !order.includes(s.sheetId));
+  const sheets = [
+    ...ordered.map((s, index) => ({ ...s, order: index })),
+    ...remaining.map((s, index) => ({ ...s, order: ordered.length + index })),
+  ];
+  return { ...workspace, sheets, updatedAt: Date.now() };
+}
+
 export const useAppStore = create<AppStoreState>()((set, get) => ({
   host: null,
   workspace: createEmptyWorkspace(),
@@ -247,6 +401,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   theme: "light",
   themeConfig: null,
   saveStatus: "idle",
+  undoStack: [],
+  redoStack: [],
   messages: [],
   commLog: [],
   traceWindows: {},
@@ -263,6 +419,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       workspace,
       // 加载工作区时回填持久化的主题，避免刷新后恒为浅色。
       theme: workspace.preferences.theme ?? state.theme,
+      // 加载/重置工作区后撤销历史无意义（新上下文），清空（会话状态不持久化，§24.4）。
+      undoStack: [],
+      redoStack: [],
     }));
   },
   setLoaded: () => set({ loaded: true }),
@@ -281,6 +440,89 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         preferences: { ...state.workspace.preferences, theme },
       },
     })),
+  undo: () => {
+    const state = get();
+    const popped = popUndo({
+      undoStack: state.undoStack,
+      redoStack: state.redoStack,
+    });
+    if (popped.entry === null) return;
+    const entry = popped.entry;
+    let workspace = state.workspace;
+    let activeSheetId = state.activeSheetId;
+    if (entry.kind === "sheet") {
+      const { sheetId, before } = entry;
+      if (before === null) {
+        // 编辑前表不存在（新增/复制表）：撤销 = 删除该表。
+        const removed = removeSheetFromWorkspace(workspace, sheetId);
+        workspace = removed.workspace;
+        activeSheetId = removed.activeSheetId;
+      } else {
+        const applied = applySheetSnapshotToWorkspace(
+          workspace,
+          sheetId,
+          before,
+        );
+        workspace = applied.workspace;
+        activeSheetId = applied.activeSheetId;
+        // 删除唯一表时 UI 重建的默认空表：撤销删除后应移除（只保留被恢复的表）。
+        if (entry.removeFallback === true) {
+          const sheets = workspace.sheets.filter(
+            (s) => s.sheetId === sheetId,
+          );
+          workspace = {
+            ...workspace,
+            sheets,
+            updatedAt: Date.now(),
+          };
+          activeSheetId = fixActiveSheetId(sheets, workspace.activeSheetId);
+        }
+      }
+    } else {
+      // 表顺序重排：恢复到编辑前顺序（activeSheetId 不变，表均存在）。
+      workspace = reorderSheetsInWorkspace(workspace, entry.before);
+    }
+    set({
+      workspace,
+      activeSheetId,
+      undoStack: popped.state.undoStack,
+      // 撤销后该条目可重做（进入重做栈）。
+      redoStack: [...popped.state.redoStack, entry],
+    });
+  },
+  redo: () => {
+    const state = get();
+    const popped = popRedo({
+      undoStack: state.undoStack,
+      redoStack: state.redoStack,
+    });
+    if (popped.entry === null) return;
+    const entry = popped.entry;
+    let workspace = state.workspace;
+    let activeSheetId = state.activeSheetId;
+    if (entry.kind === "sheet") {
+      const { sheetId, after } = entry;
+      if (after === null) {
+        // 编辑后表不存在（删除表）：重做 = 再次删除。
+        const removed = removeSheetFromWorkspace(workspace, sheetId);
+        workspace = removed.workspace;
+        activeSheetId = removed.activeSheetId;
+      } else {
+        const applied = applySheetSnapshotToWorkspace(workspace, sheetId, after);
+        workspace = applied.workspace;
+        activeSheetId = applied.activeSheetId;
+      }
+    } else {
+      workspace = reorderSheetsInWorkspace(workspace, entry.after);
+    }
+    set({
+      workspace,
+      activeSheetId,
+      // 重做后该条目回到撤销栈。
+      undoStack: [...popped.state.undoStack, entry],
+      redoStack: popped.state.redoStack,
+    });
+  },
   setThemeConfig: (themeConfig) => set({ themeConfig }),
   setLanguage: (language) =>
     set((state) => ({
@@ -360,6 +602,25 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     }),
 
+  setRowName: (rowId, name) =>
+    commitRowEdit(get, set, rowId, (row) => ({
+      ...row,
+      name,
+      updatedAt: Date.now(),
+    })),
+  setRowComment: (rowId, comment) =>
+    commitRowEdit(get, set, rowId, (row) => ({
+      ...row,
+      comment,
+      updatedAt: Date.now(),
+    })),
+  setPollingEnabled: (rowId, enabled) =>
+    commitRowEdit(get, set, rowId, (row) => ({
+      ...row,
+      pollingEnabled: enabled,
+      updatedAt: Date.now(),
+    })),
+
   commitRowAddress: (rowId, draft) => {
     // 按 rowId 在全部表中定位所属表，取该表的地址进制（每表独立，ADR-014）。
     const sheets = get().workspace.sheets;
@@ -380,11 +641,25 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }
     const result = commitAddress(row, draft, sheet.registerRadix);
     // §23 校验失败保留用户输入：draft 回写；成功时由 result.value 更新（归一化后的 draft）。
+    const beforeSnapshot = result.ok ? snapshotSheet(sheet) : null;
     get().updateRow(rowId, (r) =>
       result.ok
         ? result.value
         : { ...r, addressDraft: draft, updatedAt: Date.now() },
     );
+    // 撤销入栈：地址提交成功才记录（校验失败不改编辑字段，不入栈）。
+    if (result.ok && beforeSnapshot !== null) {
+      const afterSheet = findSheetById(get().workspace, sheet.sheetId);
+      if (afterSheet !== undefined) {
+        pushSheetEntry(
+          get,
+          set,
+          sheet.sheetId,
+          beforeSnapshot,
+          snapshotSheet(afterSheet),
+        );
+      }
+    }
     // 地址校验错误状态：失败记录（红框+Tooltip）、成功清除；不触碰三态状态点。
     set((state) => {
       const next = applyCellValidation(
@@ -499,12 +774,27 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     if (row === undefined || sheet === undefined) return;
     const result = setChildMetaUseCase(row, index, patch);
     if (!result.ok) return;
+    // 范围行子行元数据修改（可撤销，§24.4；Data/读值路径不经过此）。
+    const before = snapshotSheet(sheet);
     get().updateRow(parentRowId, (r) =>
       r.rowId === result.value.rowId ? result.value : r,
     );
+    const afterSheet = findSheetById(get().workspace, sheet.sheetId);
+    if (afterSheet !== undefined) {
+      pushSheetEntry(
+        get,
+        set,
+        sheet.sheetId,
+        before,
+        snapshotSheet(afterSheet),
+      );
+    }
   },
 
-  addRow: (sheetId) =>
+  addRow: (sheetId) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => {
       const sheets = state.workspace.sheets.map((sheet) => {
         if (sheet.sheetId !== sheetId) return sheet;
@@ -521,9 +811,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       return {
         workspace: { ...state.workspace, sheets, updatedAt: Date.now() },
       };
-    }),
+    });
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  deleteRow: (sheetId, rowId) =>
+  deleteRow: (sheetId, rowId) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -538,9 +836,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  moveRow: (sheetId, rowId, direction) =>
+  moveRow: (sheetId, rowId, direction) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -549,9 +855,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  moveRowToIndex: (sheetId, rowId, targetIndex) =>
+  moveRowToIndex: (sheetId, rowId, targetIndex) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -562,9 +876,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  duplicateRowInSheet: (sheetId, rowId) =>
+  duplicateRowInSheet: (sheetId, rowId) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -573,11 +895,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
   setSelectedRowIds: (rowIds) => set({ selectedRowIds: rowIds }),
 
-  insertRowAfter: (sheetId, rowId) =>
+  insertRowAfter: (sheetId, rowId) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -586,9 +916,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  insertRowBefore: (sheetId, rowId) =>
+  insertRowBefore: (sheetId, rowId) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -597,9 +935,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  moveSelectedRows: (sheetId, direction) =>
+  moveSelectedRows: (sheetId, direction) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined || get().selectedRowIds.length === 0) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => {
       const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
       if (sheet === undefined || state.selectedRowIds.length === 0) {
@@ -615,9 +961,18 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           updatedAt: Date.now(),
         },
       };
-    }),
+    });
+    const after = findSheetById(get().workspace, sheetId);
+    // 批量移动到边界为 no-op（原引用不变），不产生撤销步骤。
+    if (after !== undefined && after !== before) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  deleteSelectedRows: (sheetId) =>
+  deleteSelectedRows: (sheetId) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined || get().selectedRowIds.length === 0) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => {
       const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
       if (sheet === undefined || state.selectedRowIds.length === 0) {
@@ -634,7 +989,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
         selectedRowIds: [],
       };
-    }),
+    });
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined && after !== before) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
   copySelectedRows: (sheetId) => {
     const state = get();
@@ -664,6 +1024,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const state = get();
     const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
     if (sheet === undefined || state.selectedRowIds.length === 0) return;
+    const beforeSnapshot = snapshotSheet(sheet);
     const { sheet: updated, payload } = cutRowsFromSheet(
       sheet,
       state.selectedRowIds,
@@ -679,6 +1040,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       clipboardPayload: payload,
       selectedRowIds: [],
     });
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined && after !== sheet) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
     const host = state.host;
     if (host !== null) {
       void host
@@ -701,6 +1066,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const state = get();
     const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
     if (sheet === undefined) return;
+    const beforeSnapshot = snapshotSheet(sheet);
     let payload: RowClipboardData[] | null = null;
     let issues: ClipboardIssue[] = [];
     const host = state.host;
@@ -735,6 +1101,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         updatedAt: Date.now(),
       },
     });
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined && after !== sheet) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
     if (allIssues.length > 0) {
       get().appendMessage({
         timestamp: Date.now(),
@@ -746,7 +1116,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }
   },
 
-  addSheet: () =>
+  addSheet: () => {
+    const beforeSheets = get().workspace.sheets;
     set((state) => {
       const order = state.workspace.sheets.length;
       const sheet = createRegisterSheet(`Sheet ${order + 1}`, order);
@@ -759,9 +1130,20 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
         activeSheetId: sheet.sheetId,
       };
-    }),
+    });
+    // 入栈：before=null（编辑前表不存在），after=新表快照。
+    const newSheet = get().workspace.sheets.find(
+      (s) => !beforeSheets.some((b) => b.sheetId === s.sheetId),
+    );
+    if (newSheet !== undefined) {
+      pushSheetEntry(get, set, newSheet.sheetId, null, snapshotSheet(newSheet));
+    }
+  },
 
-  renameSheet: (sheetId, name) =>
+  renameSheet: (sheetId, name) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -770,7 +1152,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
   closeSheet: (sheetId) =>
     set((state) => {
@@ -833,7 +1220,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     }),
 
-  deleteSheet: (sheetId) =>
+  deleteSheet: (sheetId) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
+    // 删除唯一表时 UI 会重建默认空表：撤销删除时需移除该保底表。
+    const wasOnlySheet = get().workspace.sheets.length === 1;
     set((state) => {
       const remaining = state.workspace.sheets.filter(
         (sheet) => sheet.sheetId !== sheetId,
@@ -856,7 +1248,21 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
         activeSheetId: nextActive,
       };
-    }),
+    });
+    // 入栈：before=被删表快照，after=null（表编辑后不存在）。
+    pushSheetEntry(get, set, sheetId, beforeSnapshot, null);
+    if (wasOnlySheet) {
+      const entry = get().undoStack[get().undoStack.length - 1];
+      if (entry !== undefined && entry.kind === "sheet") {
+        set({
+          undoStack: [
+            ...get().undoStack.slice(0, -1),
+            { ...entry, removeFallback: true },
+          ],
+        });
+      }
+    }
+  },
 
   closeOtherSheets: (sheetId) =>
     set((state) => {
@@ -906,7 +1312,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     }),
 
-  duplicateSheet: (sheetId) =>
+  duplicateSheet: (sheetId) => {
+    const beforeSheets = get().workspace.sheets;
     set((state) => {
       const sourceIndex = state.workspace.sheets.findIndex(
         (sheet) => sheet.sheetId === sheetId,
@@ -940,9 +1347,24 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
         activeSheetId: copy.sheetId,
       };
-    }),
+    });
+    // 入栈：before=null（副本表编辑前不存在），after=副本表快照。
+    const copySheet = get().workspace.sheets.find(
+      (s) => !beforeSheets.some((b) => b.sheetId === s.sheetId),
+    );
+    if (copySheet !== undefined) {
+      pushSheetEntry(
+        get,
+        set,
+        copySheet.sheetId,
+        null,
+        snapshotSheet(copySheet),
+      );
+    }
+  },
 
-  moveSheetTo: (sheetId, toIndex) =>
+  moveSheetTo: (sheetId, toIndex) => {
+    const beforeIds = get().workspace.sheets.map((s) => s.sheetId);
     set((state) => {
       const fromIndex = state.workspace.sheets.findIndex(
         (sheet) => sheet.sheetId === sheetId,
@@ -964,14 +1386,37 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           updatedAt: Date.now(),
         },
       };
-    }),
+    });
+    const afterIds = get().workspace.sheets.map((s) => s.sheetId);
+    if (JSON.stringify(beforeIds) !== JSON.stringify(afterIds)) {
+      pushReorderEntry(get, set, beforeIds, afterIds);
+    }
+  },
 
   setRowDataType: (rowId, dataType) => {
+    const state = get();
+    const sheet = state.workspace.sheets.find((s) =>
+      s.rows.some((r) => r.rowId === rowId),
+    );
+    const currentRow = sheet?.rows.find((r) => r.rowId === rowId);
+    if (currentRow === undefined || sheet === undefined) return;
+    const beforeSnapshot = snapshotSheet(sheet);
     get().updateRow(rowId, (row) => ({
       ...row,
       dataType,
       updatedAt: Date.now(),
     }));
+    // 撤销入栈：Type 修改（可撤销，§24.4）。
+    const afterSheet = findSheetById(get().workspace, sheet.sheetId);
+    if (afterSheet !== undefined) {
+      pushSheetEntry(
+        get,
+        set,
+        sheet.sheetId,
+        beforeSnapshot,
+        snapshotSheet(afterSheet),
+      );
+    }
     // 范围长度 × 类型合法集校验（ADR-030）：类型切换后按当前 registerCount 重算类型列错误。
     const sheets = get().workspace.sheets;
     const row = sheets.flatMap((sh) => sh.rows).find((r) => r.rowId === rowId);
@@ -986,7 +1431,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     });
   },
 
-  setSheetRegisterRadix: (sheetId, radix) =>
+  setSheetRegisterRadix: (sheetId, radix) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -997,9 +1445,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  setSheetSlaveAddress: (sheetId, slave) =>
+  setSheetSlaveAddress: (sheetId, slave) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -1010,9 +1466,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
-  setSheetWriteVerify: (sheetId, settings) =>
+  setSheetWriteVerify: (sheetId, settings) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {
         ...state.workspace,
@@ -1023,7 +1487,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         ),
         updatedAt: Date.now(),
       },
-    })),
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
 
   setSheetColumnWidths: (sheetId, widths) =>
     set((state) => ({
