@@ -11,7 +11,7 @@
  * e2e（tests/e2e-web/tests/sidebar-menu.spec.ts）覆盖。本文件保留页签头（双击）用例。
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createEmptyWorkspace } from "@mamep2026/domain";
 import { buildTheme, mergeThemeConfig } from "@mamep2026/ui-theme";
 import { initI18n } from "./i18n";
@@ -154,5 +154,69 @@ describe("themeConfig（VSCode 完整主题注入 ConfigProvider，ADR-027）", 
     render(<MamepApp />);
     // 暗色 base 的布局色只可能来自 buildTheme(dark) 回退路径（此前用例均为浅色）。
     expect(document.head.innerHTML).toContain("--ant-color-bg-layout:#101014");
+  });
+});
+
+describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
+  beforeEach(() => {
+    useAppStore.setState({
+      connectionModalOpen: false,
+      settingsModalOpen: false,
+      pluginModalOpen: false,
+      helpModalOpen: false,
+      workspaceImportDraft: null,
+      pendingDeleteSheetId: null,
+      pendingBulkClose: null,
+    });
+  });
+
+  function fireAppKey(
+    key: string,
+    mods: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {},
+  ): void {
+    fireEvent.keyDown(window, {
+      key,
+      ctrlKey: mods.ctrl ?? false,
+      metaKey: false,
+      shiftKey: mods.shift ?? false,
+      altKey: mods.alt ?? false,
+    });
+  }
+
+  it("Ctrl+/ 打开帮助弹窗并渲染快捷键总览（app/table 两组）", () => {
+    render(<MamepApp />);
+    fireAppKey("/", { ctrl: true });
+    expect(screen.getByText("Keyboard Shortcuts")).toBeTruthy();
+    expect(
+      document.querySelectorAll(".keyboard-shortcuts__table").length,
+    ).toBe(2);
+  });
+
+  it("? 打开帮助弹窗（别名 = Shift+/）", () => {
+    render(<MamepApp />);
+    fireAppKey("?", { shift: true });
+    expect(screen.getByText("Keyboard Shortcuts")).toBeTruthy();
+  });
+
+  it("Ctrl+, 打开设置弹窗", () => {
+    render(<MamepApp />);
+    fireAppKey(",", { ctrl: true });
+    expect(screen.getByText("Theme")).toBeTruthy();
+    expect(useAppStore.getState().settingsModalOpen).toBe(true);
+  });
+
+  it("Ctrl+Enter 未连接时打开连接设置弹窗", () => {
+    render(<MamepApp />);
+    fireAppKey("Enter", { ctrl: true });
+    expect(screen.getByText("Connection Settings")).toBeTruthy();
+    expect(useAppStore.getState().connectionModalOpen).toBe(true);
+  });
+
+  it("帮助弹窗打开后快捷键被抑制（Ctrl+, 不再触发）", () => {
+    render(<MamepApp />);
+    fireAppKey("/", { ctrl: true });
+    expect(useAppStore.getState().helpModalOpen).toBe(true);
+    fireAppKey(",", { ctrl: true });
+    expect(useAppStore.getState().settingsModalOpen).toBe(false);
   });
 });

@@ -13,7 +13,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 // 测试无需包裹；仅 Read All 成功路径会调用 message.open，此类测试须包 <AntApp>
 // （同 BottomPanel.test.tsx 约定）。
 import { App as AntApp } from "antd";
-import type { BatchReadHandle, BatchReadSummary } from "@mamep2026/communication";
+import type {
+  BatchReadHandle,
+  BatchReadSummary,
+  WriteOutcome,
+} from "@mamep2026/communication";
 import {
   createEmptyWorkspace,
   ok,
@@ -834,5 +838,217 @@ describe("RegisterTable Read All 全局 message（2026-08-28）", () => {
       document.querySelector(".anticon-exclamation-circle"),
     ).toBeTruthy();
     expect(document.querySelector(".read-all-result .ant-tag-error")).toBeTruthy();
+  });
+});
+
+describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
+  beforeEach(() => {
+    initI18n();
+    // 小工作区（jsdom 渲染 50 行过慢易超时）：仅保留首表前 3 行。
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet !== undefined) sheet.rows = sheet.rows.slice(0, 3);
+    useAppStore.setState({
+      host: null,
+      workspace,
+      // 重置活动表：避免本文件其他用例把 activeSheetId 设成非空值后污染活动表守卫
+      // （handleGlobalKeyDown 只响应活动表）。
+      activeSheetId: null,
+      connectionState: "connected",
+      selectedRowIds: [],
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+      connectionModalOpen: false,
+      settingsModalOpen: false,
+      pluginModalOpen: false,
+      helpModalOpen: false,
+      workspaceImportDraft: null,
+      pendingDeleteSheetId: null,
+      pendingBulkClose: null,
+    });
+  });
+
+  function makeHost(overrides: Partial<AppHost> = {}): AppHost {
+    return {
+      readAllRows: vi.fn(
+        (): BatchReadHandle =>
+          ({
+            promise: new Promise<Result<BatchReadSummary>>(() => {}),
+            cancel: vi.fn(),
+          }) as BatchReadHandle,
+      ),
+      readRow: vi.fn(
+        async (): Promise<Result<number | number[]>> => ok(42),
+      ),
+      writeRow: vi.fn(
+        async (): Promise<Result<WriteOutcome>> =>
+          ok({ kind: "write-succeeded-no-verify" } as WriteOutcome),
+      ),
+      getCommProperties: vi.fn(() => ({
+        protocol: "rtu" as const,
+        portLabel: null,
+        unitId: null,
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: 1000,
+        retryCount: 1,
+        rxDelayMs: 50,
+        addressAdjust: "off",
+        connectionState: "connected",
+      })),
+      ...overrides,
+    } as unknown as AppHost;
+  }
+
+  function rowIdAt(index: number): RowId {
+    const row = useAppStore.getState().workspace.sheets[0]?.rows[index];
+    if (row === undefined) throw new Error(`missing row ${index}`);
+    return row.rowId;
+  }
+
+  function fireKeyOn(
+    target: Element | Document | Window,
+    key: string,
+    mods: { ctrl?: boolean; shift?: boolean; alt?: boolean } = {},
+  ): void {
+    fireEvent.keyDown(target, {
+      key,
+      ctrlKey: mods.ctrl ?? false,
+      metaKey: false,
+      shiftKey: mods.shift ?? false,
+      altKey: mods.alt ?? false,
+    });
+  }
+
+  it("F9 触发全表读取（Read All），运行中再按 F9 取消", async () => {
+    const readAllRows = vi.fn(
+      (): BatchReadHandle =>
+        ({
+          promise: new Promise<Result<BatchReadSummary>>(() => {}),
+          cancel: vi.fn(),
+        }) as BatchReadHandle,
+    );
+    useAppStore.setState({ host: makeHost({ readAllRows }) });
+    render(
+      <AntApp>
+        <RegisterTable sheetId={sheetId()} />
+      </AntApp>,
+    );
+
+    fireKeyOn(window, "F9");
+    expect(readAllRows).toHaveBeenCalledTimes(1);
+    // 运行态：取消按钮出现；再按 F9 = 取消（handle.cancel）。
+    const cancel = screen.getByRole("button", { name: /Cancel/ });
+    fireKeyOn(window, "F9");
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Cancel/ })).toBeNull();
+    });
+    expect((cancel as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("F8 读取选中行（readRow 被调用，Data 值更新为回读值）", async () => {
+    const readRow = vi.fn(
+      async (): Promise<Result<number | number[]>> => ok(42),
+    );
+    useAppStore.setState({
+      host: makeHost({ readRow }),
+      selectedRowIds: [rowIdAt(0)],
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+
+    fireKeyOn(window, "F8");
+    await waitFor(() => {
+      expect(readRow).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      const row = useAppStore
+        .getState()
+        .workspace.sheets[0]?.rows.find((r) => r.rowId === rowIdAt(0));
+      // 默认行 dataType 为 HEX：42 → "002A"。
+      expect(row?.cellText).toBe("002A");
+    });
+  });
+
+  it("Ctrl+Shift+Enter 写入选中行（writeRow 被调用）", async () => {
+    const writeRow = vi.fn(
+      async (): Promise<Result<WriteOutcome>> =>
+        ok({ kind: "write-succeeded-no-verify" } as WriteOutcome),
+    );
+    useAppStore.setState({
+      host: makeHost({ writeRow }),
+      selectedRowIds: [rowIdAt(0)],
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+
+    fireKeyOn(window, "Enter", { ctrl: true, shift: true });
+    await waitFor(() => {
+      expect(writeRow).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("Alt+P 切换选中行的轮询（WP）开关", () => {
+    useAppStore.setState({ host: makeHost(), selectedRowIds: [rowIdAt(0)] });
+    render(<RegisterTable sheetId={sheetId()} />);
+    const before = useAppStore
+      .getState()
+      .workspace.sheets[0]?.rows.find((r) => r.rowId === rowIdAt(0))
+      ?.pollingEnabled;
+
+    fireKeyOn(window, "p", { alt: true });
+    const after = useAppStore
+      .getState()
+      .workspace.sheets[0]?.rows.find((r) => r.rowId === rowIdAt(0))
+      ?.pollingEnabled;
+    expect(after).toBe(!before);
+  });
+
+  it("↑/↓ 移动选中行（焦点在表格体内，替换单选）", () => {
+    useAppStore.setState({
+      host: makeHost(),
+      selectedRowIds: [rowIdAt(1)],
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+    const table = document.querySelector(".ant-table");
+    expect(table).toBeTruthy();
+
+    fireKeyOn(table!, "ArrowDown");
+    expect(useAppStore.getState().selectedRowIds).toEqual([rowIdAt(2)]);
+    fireKeyOn(table!, "ArrowUp");
+    expect(useAppStore.getState().selectedRowIds).toEqual([rowIdAt(1)]);
+  });
+
+  it("Ctrl+Alt+R 恢复列布局（清列宽与列序）", () => {
+    const st = useAppStore.getState();
+    st.setSheetColumnWidths(sheetId(), { no: 60 });
+    st.setSheetColumnOrder(sheetId(), ["no", "tm"]);
+    useAppStore.setState({ host: makeHost() });
+    render(<RegisterTable sheetId={sheetId()} />);
+
+    fireKeyOn(window, "r", { ctrl: true, alt: true });
+    const sheet = useAppStore
+      .getState()
+      .workspace.sheets.find((s) => s.sheetId === sheetId());
+    expect(sheet?.columnWidths).toEqual({});
+    expect(sheet?.columnOrder).toBeNull();
+  });
+
+  it("弹窗打开时表格级快捷键被抑制（F8 不读取）", () => {
+    const readRow = vi.fn(
+      async (): Promise<Result<number | number[]>> => ok(42),
+    );
+    useAppStore.setState({
+      host: makeHost({ readRow }),
+      selectedRowIds: [rowIdAt(0)],
+      settingsModalOpen: true,
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+
+    fireKeyOn(window, "F8");
+    expect(readRow).not.toHaveBeenCalled();
   });
 });

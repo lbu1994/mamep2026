@@ -68,7 +68,7 @@ import type {
 } from "@mamep2026/domain";
 import { defaultConfig } from "@mamep2026/domain";
 import { formatRegisterAddress } from "@mamep2026/data-conversion";
-import { applyColumnOrder, applyReadValueToRow, applyReadValuesToRow, isRowTypeCountValid } from "@mamep2026/register-table";
+import { applyColumnOrder, isRowTypeCountValid } from "@mamep2026/register-table";
 import {
   combineRadixScale,
   dataTypeToRadix,
@@ -91,6 +91,16 @@ import { computeNoColumnWidth } from "../no-column-width";
 import { clampColumnWidth } from "./column-resize";
 import { buildRowMenuItems, type RowMenuActions } from "./RegisterRowMenu";
 import { ReadAllResultMessage } from "./ReadAllResultMessage";
+import {
+  isAnyModalOpen,
+  isArrowNavigationBlocked,
+  isTextInputTarget,
+} from "../keyboard/guards";
+import {
+  matchesShortcut,
+  tableShortcut,
+} from "../keyboard/shortcuts";
+import { readRowById, writeRowById } from "../row-io";
 
 /** 写后回读配置选项（PRD §6.5.12，2026-08-26）：Select value ↔ ReadVerifySettings。 */
 type WriteVerifyOptionValue = "off" | "immediate" | "100" | "200" | "500";
@@ -419,34 +429,17 @@ const ReadCell = memo(function ReadCell({
   const connected = useAppStore((s) => s.connectionState) === "connected";
   // 离线、未配置合法地址或范围长度与类型合法集不匹配时禁用；无地址时提供 Tooltip 说明原因。
   const disabled = !connected || !hasAddress || !typeCountValid;
-  const handleRead = async (): Promise<void> => {
+  // 单行读逻辑统一在 row-io.readRowById（与 F8 读选中行快捷键共用，2026-08-30）。
+  const handleRead = (): void => {
     if (host === null || host === undefined) return;
-    const state = useAppStore.getState();
-    const row = state.workspace.sheets
-      .flatMap((sh) => sh.rows)
-      .find((r) => r.rowId === rowId);
-    if (row === undefined) return;
-    const result = await host.readRow(row);
-    // 手动读结果 → 三态状态点（成功清失败态写成功点；失败写失败态并带错误码）。
-    recordManualResult(rowId, result, "read");
-    if (result.ok) {
-      // 多寄存器行（ADR-030）：applyReadValuesToRow 更新 registerValues（子行数据源）
-      // + cellText（组合文本）；单寄存器行走原路径。
-      updateRow(rowId, (r) => {
-        const applied = Array.isArray(result.value)
-          ? applyReadValuesToRow(r, result.value)
-          : applyReadValueToRow(r, result.value);
-        return applied.ok ? applied.value : r;
-      });
-    }
-    // 读取失败不改变 Data 单元格内容（§17/§25），失败原因经状态点 Tooltip 展示。
+    void readRowById(host, rowId, { updateRow, recordManualResult });
   };
   const button = (
     <Button
       size="small"
       type="primary"
       disabled={disabled}
-      onClick={() => void handleRead()}
+      onClick={handleRead}
     >
       {t("table.read")}
     </Button>
@@ -566,102 +559,25 @@ const WriteCell = memo(function WriteCell({
   const recordManualResult = useAppStore((s) => s.recordManualResult);
   const updateRow = useAppStore((s) => s.updateRow);
   const connected = useAppStore((s) => s.connectionState) === "connected";
-  // 本表写后回读配置（每表独立，2026-08-26）。
-  const writeVerify = useAppStore(
-    (s) =>
-      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.writeVerify ?? {
-        mode: "immediate" as const,
-        delayMs: null,
-      },
-  );
   // 离线、未配置合法地址或范围长度与类型合法集不匹配时禁用；无地址时提供 Tooltip 说明原因。
   const disabled = !connected || !hasAddress || !typeCountValid;
 
-  /** 回读成功（一致/不一致）：按读取规则（Type 格式化）强制覆盖单元格（§15.1）。
-   *  多寄存器行（ADR-030）：回读值数组全量应用（逐寄存器原始值）。 */
-  const applyReadBackValue = (raws: readonly number[]): void => {
-    updateRow(rowId, (row) => {
-      const applied =
-        raws.length === 1
-          ? applyReadValueToRow(row, raws[0] ?? 0)
-          : applyReadValuesToRow(row, raws);
-      return applied.ok ? applied.value : row;
-    });
-  };
-
-  const handleWrite = async (): Promise<void> => {
+  // 单行写逻辑（含每表写后回读配置）统一在 row-io.writeRowById
+  // （与 Ctrl+Shift+Enter 写选中行快捷键共用，2026-08-30）。
+  const handleWrite = (): void => {
     if (host === null || host === undefined) return;
-    const state = useAppStore.getState();
-    const row = state.workspace.sheets
-      .flatMap((sh) => sh.rows)
-      .find((r) => r.rowId === rowId);
-    if (row === undefined) return;
-    const result = await host.writeRow(row, { writeVerify });
-    // 手动写结果 → 三态状态点（writeOutcome 支持 §18.2 verify 结果映射）。
-    recordManualResult(
-      rowId,
-      result,
-      "write",
-      result.ok ? { writeOutcome: result.value } : undefined,
-    );
-    if (result.ok) {
-      const outcome = result.value;
-      if (outcome.kind === "write-succeeded-verify-matched") {
-        applyReadBackValue(outcome.readValues);
-        appendMessage({
-          timestamp: Date.now(),
-          level: "info",
-          messageKey: "messages.writeVerifyMatched",
-          params: { address: row.addressDraft },
-          detail: null,
-        });
-      } else if (outcome.kind === "write-succeeded-verify-mismatched") {
-        applyReadBackValue(outcome.readValues);
-        appendMessage({
-          timestamp: Date.now(),
-          level: "warning",
-          messageKey: "messages.writeVerifyMismatch",
-          params: {
-            address: row.addressDraft,
-            expected: outcome.expectedValues.join(", "),
-            read: outcome.readValues.join(", "),
-          },
-          detail: null,
-        });
-      } else if (outcome.kind === "write-succeeded-verify-failed") {
-        // 回读失败：写入成功结论不变（§18.2），提示回读失败原因。
-        appendMessage({
-          timestamp: Date.now(),
-          level: "warning",
-          messageKey: outcome.userMessageKey,
-          params: { detail: outcome.errorCode },
-          detail: outcome.errorCode,
-        });
-      } else {
-        appendMessage({
-          timestamp: Date.now(),
-          level: "info",
-          messageKey: "messages.writeSucceeded",
-          params: { address: row.addressDraft },
-          detail: null,
-        });
-      }
-    } else {
-      appendMessage({
-        timestamp: Date.now(),
-        level: "error",
-        messageKey: "messages.writeFailed",
-        params: { detail: result.error.code },
-        detail: result.error.code,
-      });
-    }
+    void writeRowById(host, sheetId, rowId, {
+      updateRow,
+      recordManualResult,
+      appendMessage,
+    });
   };
   const button = (
     <Button
       size="small"
       type="primary"
       disabled={disabled}
-      onClick={() => void handleWrite()}
+      onClick={handleWrite}
     >
       {t("table.write")}
     </Button>
@@ -1261,6 +1177,10 @@ export const RegisterTable = memo(function RegisterTable({
   const copySelectedRows = useAppStore((s) => s.copySelectedRows);
   const cutSelectedRows = useAppStore((s) => s.cutSelectedRows);
   const pasteRows = useAppStore((s) => s.pasteRows);
+  // 键盘读写选中行/轮询启停（2026-08-30，PRD §8.3 P1）依赖的单行读/写/轮询动作。
+  const updateRow = useAppStore((s) => s.updateRow);
+  const recordManualResult = useAppStore((s) => s.recordManualResult);
+  const setPollingEnabled = useAppStore((s) => s.setPollingEnabled);
   // 撤销/重做（TECH_DESIGN §24.4）：canUndo/canRedo 由历史栈长度派生（按钮禁用态）。
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
@@ -1472,11 +1392,66 @@ export const RegisterTable = memo(function RegisterTable({
       ? (selectedRowIds[selectedRowIds.length - 1] ?? null)
       : null;
 
+  /** 读取选中行（F8）：与 ReadCell 按钮同一路径（row-io.readRowById），逐行执行。 */
+  const handleReadSelectedRows = (): void => {
+    if (host === null || host === undefined) return;
+    for (const rowId of selectedRowIds) {
+      void readRowById(host, rowId, { updateRow, recordManualResult });
+    }
+  };
+
+  /** 写入选中行（Ctrl+Shift+Enter）：与 WriteCell 按钮同一路径（row-io.writeRowById）。 */
+  const handleWriteSelectedRows = (): void => {
+    if (host === null || host === undefined) return;
+    for (const rowId of selectedRowIds) {
+      void writeRowById(host, sheetId, rowId, {
+        updateRow,
+        recordManualResult,
+        appendMessage,
+      });
+    }
+  };
+
+  /** 轮询启停（Alt+P）：切换选中行的 WP（与 WP 开关同一 store 动作 setPollingEnabled）。 */
+  const togglePollingSelected = (): void => {
+    const state = useAppStore.getState();
+    const sheet = state.workspace.sheets.find((sh) => sh.sheetId === sheetId);
+    for (const rowId of selectedRowIds) {
+      const row = sheet?.rows.find((r) => r.rowId === rowId);
+      if (row !== undefined) {
+        setPollingEnabled(rowId, !row.pollingEnabled);
+      }
+    }
+  };
+
+  /** 方向键移动选中行（↑/↓）：沿表格渲染行顺序把选中行替换为相邻行（轻量，替换单选）。 */
+  const handleArrowMoveSelection = (delta: 1 | -1): void => {
+    if (rows.length === 0) return;
+    const current =
+      selectedRowIds.length > 0
+        ? (selectedRowIds[selectedRowIds.length - 1] ?? null)
+        : null;
+    const currentIndex =
+      current !== null ? rows.findIndex((r) => r.rowId === current) : -1;
+    let nextIndex: number;
+    if (currentIndex === -1) {
+      nextIndex = delta === 1 ? 0 : rows.length - 1;
+    } else {
+      nextIndex = Math.min(rows.length - 1, Math.max(0, currentIndex + delta));
+    }
+    const nextRow = rows[nextIndex];
+    if (nextRow !== undefined) {
+      setSelectedRowIds([nextRow.rowId]);
+    }
+  };
+
   /**
    * 行级键盘：窗口级监听，仅在焦点不在单元格输入控件时触发（避免与单元格编辑/addressDraft 冲突），
    * 且仅作用于当前活动表（多标签页只响应一张表）。
    */
   const handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    // 弹窗打开时抑制快捷键（与 app 级 useGlobalShortcuts 同规则）：避免与弹窗内控件冲突。
+    if (isAnyModalOpen()) return;
     // 活动表在事件回调时实时读取（不经响应式订阅）：多标签页下避免全部表因
     // activeSheetId 变化而重渲染（Tab 切换卡顿根因之一）。
     const store = useAppStore.getState();
@@ -1486,18 +1461,61 @@ export const RegisterTable = memo(function RegisterTable({
     const target = event.target;
     // 仅忽略文本类编辑控件（单元格输入/备注/下拉/可编辑单元格非编辑态按钮），避免与编辑冲突；
     // 复选框/开关/按钮等选择控件不拦截快捷键（选中后可直接 Delete/Ctrl+C 等）。
-    if (
-      target instanceof HTMLElement &&
-      (target.isContentEditable ||
-        target.closest(
-          "input[type='text'], input:not([type]), textarea, select, .ant-select, .register-table__editable-cell-value-wrap",
-        ) !== null)
-    ) {
+    if (isTextInputTarget(target)) {
       return;
     }
     if (event.key === "Escape") {
       setMenuRowId(null);
       return;
+    }
+    // ---- 新增快捷键（PRD §8.3 P1，注册表驱动：keyboard/shortcuts.ts TABLE_SHORTCUTS）----
+    if (matchesShortcut(event, tableShortcut("readAll").combo)) {
+      event.preventDefault();
+      if (readAllRunning) {
+        handleCancelReadAll();
+      } else {
+        void handleReadAll();
+      }
+      return;
+    }
+    if (matchesShortcut(event, tableShortcut("readSelected").combo)) {
+      event.preventDefault();
+      handleReadSelectedRows();
+      return;
+    }
+    if (matchesShortcut(event, tableShortcut("writeSelected").combo)) {
+      event.preventDefault();
+      handleWriteSelectedRows();
+      return;
+    }
+    if (matchesShortcut(event, tableShortcut("togglePolling").combo)) {
+      event.preventDefault();
+      togglePollingSelected();
+      return;
+    }
+    if (matchesShortcut(event, tableShortcut("restoreColumnLayout").combo)) {
+      event.preventDefault();
+      // 与 handleRestoreColumnLayout 同逻辑（内联避免 handleGlobalKeyDown 前向引用）。
+      setColWidths({});
+      colWidthsRef.current = {};
+      setSheetColumnWidths(sheetId, {});
+      setSheetColumnOrder(sheetId, null);
+      return;
+    }
+    // 方向键行导航（↑/↓）：仅纯方向键（无修饰键），焦点在表格体内且非编辑态时移动选中行。
+    const plainArrow =
+      !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    if (plainArrow && !isArrowNavigationBlocked(target)) {
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        handleArrowMoveSelection(-1);
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        handleArrowMoveSelection(1);
+        return;
+      }
     }
     const mod = event.ctrlKey || event.metaKey;
     if (event.key === "Delete") {

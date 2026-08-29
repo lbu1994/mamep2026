@@ -41,7 +41,9 @@ import { STATE_DOT_COLOR } from "./connection-state";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
 import { BottomPanel } from "./components/BottomPanel";
+import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
+import { KeyboardShortcutsTable } from "./components/KeyboardShortcutsTable";
 import { PluginManagerModal } from "./components/PluginManagerModal";
 import { RegisterTable } from "./components/RegisterTable";
 import { SheetNameEditor } from "./components/SheetNameEditor";
@@ -135,7 +137,9 @@ export function MamepApp(): React.ReactNode {
   const setPendingBulkClose = useAppStore((s) => s.setPendingBulkClose);
   const closeOtherSheets = useAppStore((s) => s.closeOtherSheets);
   const closeSheetsToRight = useAppStore((s) => s.closeSheetsToRight);
-  const [helpOpen, setHelpOpen] = useState(false);
+  // 帮助/关于弹窗（PRD §8.3 键盘操作，2026-08-30）：入 store 便于快捷键弹窗抑制。
+  const helpOpen = useAppStore((s) => s.helpModalOpen);
+  const setHelpOpen = useAppStore((s) => s.setHelpModalOpen);
   // Sheet 名重命名编辑态（组件/UI 层状态，不入全局 store）：页签头与侧边栏各自独立，
   // 互不驱动对方渲染；任一位置开始编辑时取消另一位置的编辑态，保证同一时刻至多一个。
   const [tabRenamingSheetId, setTabRenamingSheetId] = useState<SheetId | null>(
@@ -826,7 +830,10 @@ export function MamepApp(): React.ReactNode {
           footer={null}
         >
           <Typography.Paragraph>{t("settings.aboutText")}</Typography.Paragraph>
+          <Divider />
+          <KeyboardShortcutsTable />
         </Modal>
+        <AppShortcutLayer onOpenHelp={() => setHelpOpen(true)} />
       </AntApp>
     </ConfigProvider>
   );

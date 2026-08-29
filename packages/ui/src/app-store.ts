@@ -120,6 +120,8 @@ export interface AppStoreState {
   connectionModalOpen: boolean;
   pluginModalOpen: boolean;
   settingsModalOpen: boolean;
+  /** 帮助/关于弹窗（2026-08-30 键盘操作：Ctrl+/ 或 ? 打开，入 store 供快捷键弹窗抑制）。 */
+  helpModalOpen: boolean;
   pendingDeleteSheetId: SheetId | null;
   /** 批量关闭（关闭其他/右侧）确认弹窗状态；null 表示未在确认。 */
   pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null;
@@ -157,6 +159,7 @@ export interface AppStoreState {
   setConnectionModalOpen: (open: boolean) => void;
   setPluginModalOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
+  setHelpModalOpen: (open: boolean) => void;
   setPendingDeleteSheetId: (sheetId: SheetId | null) => void;
   setPendingBulkClose: (
     pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null,
@@ -417,6 +420,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   connectionModalOpen: false,
   pluginModalOpen: false,
   settingsModalOpen: false,
+  helpModalOpen: false,
   pendingDeleteSheetId: null,
   pendingBulkClose: null,
   theme: "light",
@@ -461,6 +465,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setConnectionModalOpen: (connectionModalOpen) => set({ connectionModalOpen }),
   setPluginModalOpen: (pluginModalOpen) => set({ pluginModalOpen }),
   setSettingsModalOpen: (settingsModalOpen) => set({ settingsModalOpen }),
+  setHelpModalOpen: (helpModalOpen) => set({ helpModalOpen }),
   setPendingDeleteSheetId: (pendingDeleteSheetId) =>
     set({ pendingDeleteSheetId }),
   setPendingBulkClose: (pendingBulkClose) => set({ pendingBulkClose }),

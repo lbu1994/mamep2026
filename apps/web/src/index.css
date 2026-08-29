@@ -1623,3 +1623,49 @@ textarea:focus-visible {
     transition: none;
   }
 }
+
+/* ---------------- 6. 键盘快捷键总览（Help 弹窗，2026-08-30，PRD §8.3 P1） ---------------- */
+
+.keyboard-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.keyboard-shortcuts__group {
+  margin-top: 4px;
+}
+
+.keyboard-shortcuts__table .ant-table-cell {
+  padding-block: 4px;
+}
+
+.keyboard-shortcuts__hint {
+  margin-block: 6px 0;
+  font-size: 12px;
+}
+
+/* <kbd> 按键：等宽 + 圆角小盒 + 柔和内阴影（类系统快捷键提示），浅/深主题自动适配。 */
+.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.shortcut-key__plus {
+  color: var(--ant-color-text-tertiary);
+  padding: 0 1px;
+}
+
+.shortcut-key__kbd {
+  font-family: var(--mamep-font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-secondary);
+  border: 1px solid var(--ant-color-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 3px 5px;
+}

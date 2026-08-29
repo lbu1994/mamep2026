@@ -1368,6 +1368,8 @@ UI 必须：
 
 > **已确认行为（2026-08-15，见 [ADR-015](adr/ADR-015-行编辑交互与剪贴板决策.md)）**：行编辑（新增/插入/删除/上移/下移/复制/剪切/粘贴/多行选择/键盘快捷操作/右键上下文菜单）已在浏览器 MVP 完整实现。多选用 Ant Design Table `rowSelection` 原生能力（复选框列、表头全选、Shift 范围选择、Ctrl 多选），领域层只持有 `selectedRowIds: RowId[]`；行级右键菜单用 `Dropdown trigger={['contextMenu']}`；删除（含多选）直接执行不弹确认、不引入撤销；键盘快捷键 Alt+↑/↓、Delete、Ctrl+C/X/V、Ctrl+I 仅在焦点不在文本输入控件时生效；系统剪贴板经 `AppHost` 端口（`navigator.clipboard`）。
 
+> **已确认行为（2026-08-30，见 [ADR-037](adr/ADR-037-更完整键盘操作.md)）**：更完整的键盘操作已落地——快捷键注册表单一事实源（`packages/ui/src/keyboard/shortcuts.ts`）+ 两级分发（app 级 `useGlobalShortcuts`/`AppShortcutLayer`、表格级 `RegisterTable.handleGlobalKeyDown` 扩展）；app 级 `Ctrl+,`/`Ctrl+Enter`/`Ctrl+/`·`?`/`Ctrl+[`·`Ctrl+]`/`Ctrl+Alt+N/W/O/T/L`/`Ctrl+Shift+S`，表格级 `F9`/`F8`/`Ctrl+Shift+Enter`/`Alt+P`/`↑`·`↓`/`Ctrl+Alt+R`，既有行编辑与撤销快捷键零变化；守卫（`keyboard/guards.ts` 两级共用）：焦点在文本输入控件 / 任一弹窗打开时抑制，方向键导航仅 `.ant-table` 体内且非编辑态生效；Help 弹窗扩展为快捷键总览（`?`/`Ctrl+/` 打开，`helpModalOpen` 入 store）；单行读写（`row-io.ts`）与导入导出（`workspace-transfer.ts`）抽取供按钮与快捷键共用。新增快捷键须经注册表（含 i18n 键与帮助弹窗自动联动）、规避浏览器/系统保留键、遵守两级守卫语义。
+
 ### 25.5 可访问性
 
 必须保证：
