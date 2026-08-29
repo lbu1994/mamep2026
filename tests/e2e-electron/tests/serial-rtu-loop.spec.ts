@@ -15,6 +15,7 @@ import {
 } from "@playwright/test";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { clearWorkspaceFile } from "../clear-workspace-file";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests/）。 */
@@ -176,6 +177,9 @@ test.beforeAll(async () => {
       if (db.name !== undefined) indexedDB.deleteDatabase(db.name);
     }
   });
+  // 工作区持久化已改为文件仓储（ADR-036，2026-08-30）：IndexedDB 清理不再清除工作区，
+  // 一并删除 userData 下 workspace.json(.bak)，避免跨测试/跨运行污染。
+  await clearWorkspaceFile(app);
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
   // 非 mock 启动自动弹出 Connection Settings。

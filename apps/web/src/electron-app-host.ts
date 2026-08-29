@@ -5,7 +5,9 @@
  * 第一个端口，而是把端口列表经 serial-ports-available 事件转发给本 Host，UI 以 antd Select
  * 下拉框展示；用户选择后经 preload 桥 selectSerialPort(portId) 回传主进程解析挂起请求，
  * 再 await requestPort() 得到所选端口对象。连接/读写/轮询/Trace/日志/工作区全部委托复用
- * BrowserAppHost（含 IndexedDB 自动保存与会话恢复）；剪贴板走 preload 白名单桥
+ * BrowserAppHost；工作区持久化（2026-08-30，ADR-036）为主进程文件仓储薄桥
+ * FileWorkspaceRepository（应用数据目录版本化 JSON，经 workspace-load/save/clear IPC），
+ * 自动保存（AutoSaveCoordinator debounce）与会话恢复语义不变；剪贴板走 preload 白名单桥
  * （window.mamepHost）主进程真实实现。
  */
 import type {
@@ -48,8 +50,6 @@ import {
 import type { PluginRegistry } from "@mamep2026/plugin-api";
 import {
   BrowserPlatformHost,
-  createIdbKeyValueStore,
-  IndexedDBWorkspaceRepository,
   usbDeviceLabel,
   type Serial,
   type SerialPort,
@@ -58,12 +58,13 @@ import {
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
+import { FileWorkspaceRepository } from "./file-workspace-repository";
 
 /** ElectronAppHost 可注入依赖（测试用；生产走默认装配）。 */
 export interface ElectronAppHostOptions {
   /** Web Serial 对象（默认 navigator.serial；测试注入 fake）。 */
   serial?: Serial | undefined;
-  /** 工作区仓储（默认 IndexedDB；测试注入内存仓储）。 */
+  /** 工作区仓储（默认主进程文件仓储 FileWorkspaceRepository；测试注入内存仓储）。 */
   repository?: WorkspaceRepositoryPort | undefined;
 }
 
@@ -127,9 +128,8 @@ export class ElectronAppHost implements AppHost {
     this.platform = new BrowserPlatformHost({ serial: this.serial });
     this.inner = new BrowserAppHost({
       platform: this.platform,
-      repository:
-        options.repository ??
-        new IndexedDBWorkspaceRepository(createIdbKeyValueStore()),
+      // 工作区持久化（2026-08-30，ADR-036）：主进程文件仓储薄桥（userData 目录版本化 JSON）。
+      repository: options.repository ?? new FileWorkspaceRepository(bridge),
       mockTransport: false,
     });
     this.capabilities = electronCapabilities;

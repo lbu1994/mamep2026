@@ -77,6 +77,41 @@ function createFakeBridge(): {
         value: null,
       }),
     ),
+    // ---- 工作区文件仓储（2026-08-30，ADR-036）：VSCode filesystem unsupported，
+    // fake 返回能力错误（VscodeAppHost 不走这些桥）。----
+    workspaceLoad: vi.fn(async (): Promise<Result<{ content: string }>> => ({
+      ok: false,
+      error: {
+        code: "WORKSPACE_FILESYSTEM_UNSUPPORTED",
+        category: "capability",
+        severity: "error",
+        retryable: false,
+        userMessageKey: "errors.capabilityUnsupported",
+        technicalMessage: "unsupported",
+      },
+    })),
+    workspaceSave: vi.fn(async (): Promise<Result<null>> => ({
+      ok: false,
+      error: {
+        code: "WORKSPACE_FILESYSTEM_UNSUPPORTED",
+        category: "capability",
+        severity: "error",
+        retryable: false,
+        userMessageKey: "errors.capabilityUnsupported",
+        technicalMessage: "unsupported",
+      },
+    })),
+    workspaceClear: vi.fn(async (): Promise<Result<null>> => ({
+      ok: false,
+      error: {
+        code: "WORKSPACE_FILESYSTEM_UNSUPPORTED",
+        category: "capability",
+        severity: "error",
+        retryable: false,
+        userMessageKey: "errors.capabilityUnsupported",
+        technicalMessage: "unsupported",
+      },
+    })),
     // ---- RTU 会话 RPC（VSCode 接线，2026-08-23）----
     enumerateSerialPorts: vi.fn(
       async (): Promise<Result<SerialPortOption[]>> => ({

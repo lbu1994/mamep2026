@@ -22,6 +22,7 @@ import type {
   SaveTextFileResponse,
   SessionBatchReadResponse,
   SessionStateResponse,
+  WorkspaceLoadResponse,
   WriteOutcomePayload,
 } from "@mamep2026/platform-api";
 import {
@@ -171,6 +172,21 @@ function createFakeBridge(): {
       ok: true,
       value: { content: '{"schemaVersion":4}' },
     })),
+    // ---- 工作区文件仓储桥（2026-08-30，ADR-036：主进程文件持久化）----
+    workspaceLoad: vi.fn(
+      async (): Promise<Result<WorkspaceLoadResponse>> => ({
+        ok: true,
+        value: { content: '{"schemaVersion":4}' },
+      }),
+    ),
+    workspaceSave: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    workspaceClear: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
   };
   return {
     bridge,
@@ -303,6 +319,8 @@ describe("ElectronAppHost（ADR-017 扩展：enumerated 下拉框选择）", () 
     expect(host.capabilities.modbusRtu).toBe(true);
     expect(host.capabilities.modbusTcp).toBe(true);
     expect(host.capabilities.serialPorts).toBe("enumerated");
+    // 文件持久化已落地（2026-08-30，ADR-036）：主进程文件仓储。
+    expect(host.capabilities.filesystem).toBe("full");
     expect(host.isMockMode).toBe(false);
     expect(host.supportsWebSerial()).toBe(true);
     expect(host.appVersion).toBe(__APP_VERSION__);

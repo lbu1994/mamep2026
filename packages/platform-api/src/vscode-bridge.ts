@@ -29,6 +29,7 @@ import type {
   SessionStateResponse,
   VscodeHostApi,
   VscodeHostDebugState,
+  WorkspaceLoadResponse,
 } from "./host-message";
 import type {
   BatchReadRowPayload,
@@ -207,6 +208,12 @@ export function createVscodeBridge(
           ? { suggestedName: options.suggestedName }
           : {}),
       }),
+    // ---- 工作区文件仓储（2026-08-30，ADR-036）：VSCode filesystem 维持 unsupported，
+    // 宿主返回能力错误；转发保留契约一致性（VscodeHostApi 继承 MamepHostApi）。----
+    workspaceLoad: () => postRequest<WorkspaceLoadResponse>("workspace-load", {}),
+    workspaceSave: (content: string) =>
+      postRequest<null>("workspace-save", { content }),
+    workspaceClear: () => postRequest<null>("workspace-clear", {}),
     onEvent: (listener: (event: MamepHostEvent) => void) => {
       listeners.add(listener);
       return () => {

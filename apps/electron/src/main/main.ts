@@ -32,6 +32,7 @@ import {
 } from "@mamep2026/platform-api";
 import { handleInvoke, type IpcDeps } from "./ipc";
 import { ElectronSessionHost } from "./session-host";
+import { WorkspaceFileRepository } from "./workspace-file-repository";
 import {
   deriveAllowedOrigins,
   installSerialPermissionHandlers,
@@ -39,6 +40,12 @@ import {
 } from "./serial-permissions";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// e2e 隔离门控（2026-08-30，ADR-036）：MAMEP_USER_DATA_DIR 指定 userData 目录（Playwright
+// 注入临时目录，避免污染真实用户数据）；必须在 app ready 前调用。生产不设置该变量则行为不变。
+if (process.env.MAMEP_USER_DATA_DIR) {
+  app.setPath("userData", process.env.MAMEP_USER_DATA_DIR);
+}
 
 /** 生产模式渲染器加载的共享 UI（apps/web 的 Electron 模式构建产物）。 */
 const RENDERER_INDEX = path.join(
@@ -63,6 +70,18 @@ const currentConnectionState: ConnectionState = "disconnected";
 
 /** 主进程侧 TCP 会话宿主（Electron TCP 走主进程，惰性装配）。 */
 let electronSessionHost: ElectronSessionHost | null = null;
+
+/** 主进程侧工作区文件仓储（ADR-036，2026-08-30，惰性装配；userData 目录版本化 JSON）。 */
+let workspaceRepository: WorkspaceFileRepository | null = null;
+
+function ensureWorkspaceRepository(): WorkspaceFileRepository {
+  if (workspaceRepository === null) {
+    workspaceRepository = new WorkspaceFileRepository(
+      app.getPath("userData"),
+    );
+  }
+  return workspaceRepository;
+}
 
 /** 主进程会话事件 → 推送渲染进程（HostMessage v1 event Envelope；无窗口时静默丢弃）。 */
 function postSessionEvent(event: HostEventMessage): void {
@@ -202,6 +221,8 @@ const ipcDeps: IpcDeps = {
       );
     }
   },
+  // 工作区文件仓储（workspace-load/save/clear，2026-08-30，ADR-036）：主进程 userData 目录版本化 JSON。
+  workspace: ensureWorkspaceRepository(),
 };
 
 async function handleInvokeEvent(

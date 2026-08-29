@@ -222,6 +222,9 @@ importers:
       '@mamep2026/platform-node':
         specifier: workspace:*
         version: link:../../packages/platform-node
+      '@mamep2026/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
     devDependencies:
       '@mamep2026/typescript-config':
         specifier: workspace:*

@@ -320,6 +320,20 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     }
   });
 
+  it("workspace-load/save/clear 返回能力错误（VSCode filesystem unsupported，2026-08-30）", async () => {
+    for (const kind of ["workspace-load", "workspace-save", "workspace-clear"] as const) {
+      const result = await handleVscodeInvoke(
+        request(kind, kind === "workspace-save" ? { content: "{}" } : {}),
+        makeDeps(),
+      );
+      expect(result.type).toBe("error");
+      if (result.type === "error") {
+        expect(result.payload.code).toBe("WORKSPACE_FILESYSTEM_UNSUPPORTED");
+        expect(result.payload.category).toBe("capability");
+      }
+    }
+  });
+
   it("拒绝未知 kind（不允许任意方法名调用）", async () => {
     const result = await handleVscodeInvoke(
       {

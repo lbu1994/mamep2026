@@ -3,7 +3,7 @@
  * 与 electron 运行时解耦：外部能力经 IpcDeps 注入，便于单测校验/分发/拒绝路径
  * （未知 kind、非法 payload、发送者校验、debug 探针打包禁用等）。
  */
-import { createMamepError, ok, type MamepError, type Result } from "@mamep2026/domain";
+import { createMamepError, fail, ok, type MamepError, type Result } from "@mamep2026/domain";
 import type { ReadVerifySettings, RegisterRow, TcpConnectionProfile } from "@mamep2026/domain";
 import type {
   BatchReadHandle,
@@ -28,7 +28,10 @@ import {
   type OpenTextFileResponse,
   type SaveTextFileResponse,
   type SessionStateResponse,
+  type WorkspaceLoadResponse,
 } from "@mamep2026/platform-api";
+import { parseWorkspace, serializeWorkspace } from "@mamep2026/workspace";
+import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
 
 /** 主进程侧 TCP 会话能力（ElectronSessionHost 实现；测试注入 fake）。 */
 export interface ElectronSessionLike {
@@ -85,6 +88,11 @@ export interface IpcDeps {
   openTextFile(options?: {
     suggestedName?: string;
   }): Promise<Result<OpenTextFileResponse>>;
+  /**
+   * 工作区文件仓储（workspace-load / workspace-save / workspace-clear，2026-08-30，ADR-036）：
+   * 主进程应用数据目录版本化 JSON，实现 WorkspaceRepositoryPort（原子保存 + 备份恢复）。
+   */
+  workspace: WorkspaceRepositoryPort;
 }
 
 /** 会话 RPC 包装：run 返回 Result 并映射为 response/error Envelope。 */
@@ -316,6 +324,39 @@ export async function handleRequest(
             : undefined,
         ),
       );
+    case "workspace-load":
+      // Electron 文件持久化（2026-08-30，ADR-036）：主进程文件仓储 load → 序列化 JSON 字符串。
+      return sessionResult(message, async () => {
+        const result = await deps.workspace.load();
+        if (!result.ok) return result;
+        return ok({ content: serializeWorkspace(result.value) } satisfies WorkspaceLoadResponse);
+      });
+    case "workspace-save":
+      // Electron 文件持久化（2026-08-30，ADR-036）：content 为序列化 JSON 字符串，
+      // 先 JSON.parse + parseWorkspace 校验再原子落盘（非法 JSON = 校验错误）。
+      return sessionResult(message, async () => {
+        let data: unknown;
+        try {
+          data = JSON.parse(message.payload.content);
+        } catch {
+          return fail(
+            createMamepError({
+              code: "WORKSPACE_SCHEMA_INVALID",
+              category: "persistence",
+              severity: "error",
+              retryable: false,
+              userMessageKey: "errors.workspaceSchemaInvalid",
+              technicalMessage: "workspace content is not valid JSON",
+            }),
+          );
+        }
+        const parsed = parseWorkspace(data);
+        if (!parsed.ok) return parsed;
+        return deps.workspace.save(parsed.value);
+      });
+    case "workspace-clear":
+      // Electron 文件持久化（2026-08-30，ADR-036）：清除主文件与备份。
+      return sessionResult(message, () => deps.workspace.clear());
     case "debug:get-state":
       // 开发/测试探针（Playwright Electron E2E 用）：打包构建禁用。
       if (deps.isPackaged()) {

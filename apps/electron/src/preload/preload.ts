@@ -22,6 +22,7 @@ import type {
   SessionTcpConnectPayload,
   ReadVerifySettingsPayload,
   WriteOutcomePayload,
+  WorkspaceLoadResponse,
 } from "@mamep2026/platform-api";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
@@ -113,6 +114,18 @@ const api: MamepHostApi = {
         ? { suggestedName: options.suggestedName }
         : {}),
     });
+  },
+  /** 加载主进程文件仓储工作区（workspace-load，2026-08-30，ADR-036）。 */
+  workspaceLoad(): Promise<Result<WorkspaceLoadResponse>> {
+    return invoke<WorkspaceLoadResponse>("workspace-load", {});
+  },
+  /** 保存工作区到主进程文件仓储（workspace-save，2026-08-30，ADR-036）。 */
+  workspaceSave(content: string): Promise<Result<null>> {
+    return invoke<null>("workspace-save", { content });
+  },
+  /** 清除主进程文件仓储（workspace-clear，2026-08-30，ADR-036）。 */
+  workspaceClear(): Promise<Result<null>> {
+    return invoke<null>("workspace-clear", {});
   },
   // ---- 远程会话 RPC（Electron TCP 会话在主进程，Renderer 远程代理）----
   sessionDisconnect(): Promise<Result<null>> {

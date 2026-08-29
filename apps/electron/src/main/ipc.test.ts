@@ -4,8 +4,10 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectionState } from "@mamep2026/communication";
-import { ok } from "@mamep2026/domain";
+import { createEmptyWorkspace, createMamepError, fail, ok } from "@mamep2026/domain";
 import type { TcpConnectionProfile } from "@mamep2026/domain";
+import { serializeWorkspace } from "@mamep2026/workspace";
+import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   electronCapabilities,
@@ -74,6 +76,17 @@ function makeSession(
   };
 }
 
+function makeWorkspaceRepo(
+  overrides: Partial<WorkspaceRepositoryPort> = {},
+): WorkspaceRepositoryPort {
+  return {
+    load: vi.fn(async () => ok(createEmptyWorkspace())),
+    save: vi.fn(async () => ok(undefined)),
+    clear: vi.fn(async () => ok(undefined)),
+    ...overrides,
+  };
+}
+
 function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
   return {
     appVersion: () => "0.0.0-test",
@@ -89,6 +102,7 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
       ok({ saved: true, filePath: "C:\\logs\\comm-log.csv" }),
     ),
     openTextFile: vi.fn(async () => ok({ content: null })),
+    workspace: makeWorkspaceRepo(),
     ...overrides,
   };
 }
@@ -577,6 +591,87 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     if (result.type === "response") {
       expect(result.payload).toEqual({ content: null });
     }
+  });
+
+  it("workspace-load 转发主进程文件仓储并返回序列化 content（2026-08-30）", async () => {
+    // createEmptyWorkspace 含 Date.now()/随机 id（非确定性），用固定实例比对序列化结果。
+    const fixed = { ...createEmptyWorkspace(), name: "LoadFixed" };
+    const workspace = makeWorkspaceRepo({
+      load: vi.fn(async () => ok(fixed)),
+    });
+    const result = await handleRequest(
+      request("workspace-load", {}),
+      makeDeps({ workspace }),
+    );
+    expect(result.type).toBe("response");
+    expect(workspace.load).toHaveBeenCalled();
+    if (result.type === "response") {
+      expect(result.payload).toEqual({
+        content: serializeWorkspace(fixed),
+      });
+    }
+  });
+
+  it("workspace-load 仓储失败时错误投影 category/userMessageKey 原样往返（ADR-028）", async () => {
+    const workspace = makeWorkspaceRepo({
+      load: vi.fn(async () =>
+        fail(
+          createMamepError({
+            code: "PERSISTENCE_LOAD_FAILED",
+            category: "persistence",
+            userMessageKey: "errors.persistenceError",
+            technicalMessage: "boom",
+          }),
+        ),
+      ),
+    });
+    const result = await handleRequest(
+      request("workspace-load", {}),
+      makeDeps({ workspace }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("PERSISTENCE_LOAD_FAILED");
+      expect(result.payload.category).toBe("persistence");
+      expect(result.payload.userMessageKey).toBe("errors.persistenceError");
+    }
+  });
+
+  it("workspace-save 合法 content 经 JSON.parse + parseWorkspace 校验后落盘（2026-08-30）", async () => {
+    const workspace = makeWorkspaceRepo();
+    const source = { ...createEmptyWorkspace(), name: "SaveMe" };
+    const content = serializeWorkspace(source);
+    const result = await handleRequest(
+      request("workspace-save", { content }),
+      makeDeps({ workspace }),
+    );
+    expect(result.type).toBe("response");
+    expect(workspace.save).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "SaveMe", schemaVersion: 4 }),
+    );
+  });
+
+  it("workspace-save 非法 content 返回校验错误且不落盘（2026-08-30）", async () => {
+    const workspace = makeWorkspaceRepo();
+    const result = await handleRequest(
+      request("workspace-save", { content: "{ not-json" }),
+      makeDeps({ workspace }),
+    );
+    expect(result.type).toBe("error");
+    expect(workspace.save).not.toHaveBeenCalled();
+    if (result.type === "error") {
+      expect(result.payload.category).toBe("persistence");
+    }
+  });
+
+  it("workspace-clear 清除主进程文件仓储（2026-08-30）", async () => {
+    const workspace = makeWorkspaceRepo();
+    const result = await handleRequest(
+      request("workspace-clear", {}),
+      makeDeps({ workspace }),
+    );
+    expect(result.type).toBe("response");
+    expect(workspace.clear).toHaveBeenCalled();
   });
 });
 

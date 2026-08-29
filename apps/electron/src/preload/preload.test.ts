@@ -71,6 +71,9 @@ describe("preload 白名单桥", () => {
       "sessionTraceStop",
       "sessionUpdatePollingTargets",
       "sessionWriteRow",
+      "workspaceClear",
+      "workspaceLoad",
+      "workspaceSave",
     ]);
     expect(bridge.platform).toBe("electron");
   });
@@ -219,6 +222,70 @@ describe("preload 白名单桥", () => {
       }),
     );
     expect(result).toEqual({ ok: true, value: { content: null } });
+  });
+
+  it("workspaceLoad 透传空 payload 并映射 content 响应（2026-08-30）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "workspace-load",
+      ok: true,
+      payload: { content: '{"schemaVersion":4}' },
+    });
+    const result = await bridge.workspaceLoad();
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "workspace-load",
+        payload: {},
+      }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      value: { content: '{"schemaVersion":4}' },
+    });
+  });
+
+  it("workspaceSave 透传序列化 JSON 字符串并映射 ok（2026-08-30）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "workspace-save",
+      ok: true,
+      payload: null,
+    });
+    const content = '{"schemaVersion":4}';
+    const result = await bridge.workspaceSave(content);
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "workspace-save",
+        payload: { content },
+      }),
+    );
+    expect(result).toEqual({ ok: true, value: null });
+  });
+
+  it("workspaceClear 透传空 payload 并映射 ok（2026-08-30）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "workspace-clear",
+      ok: true,
+      payload: null,
+    });
+    const result = await bridge.workspaceClear();
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "workspace-clear",
+        payload: {},
+      }),
+    );
+    expect(result).toEqual({ ok: true, value: null });
   });
 
   it("selectSerialPort 透传 portId 并映射 ok(null)", async () => {

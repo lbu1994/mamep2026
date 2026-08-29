@@ -4,6 +4,8 @@
  */
 export type SerialPortCapability =
   "browser-picker" | "enumerated" | "unsupported";
+/** 文件持久化能力（2026-08-30，ADR-036）：limited=受限（浏览器 IndexedDB / 客户端文件选择）、
+ * full=主进程应用数据目录版本化 JSON 文件仓储（Electron）、unsupported=不支持（VSCode 骨架）。 */
 export type FilesystemCapability = "limited" | "full" | "unsupported";
 /** 通信日志 CSV 导出的落盘方式（2026-08-28，PRD §8.3 P1）：download=浏览器 Blob 下载、save-dialog=桌面端保存对话框、unsupported=不支持。 */
 export type LogExportCapability = "download" | "save-dialog" | "unsupported";

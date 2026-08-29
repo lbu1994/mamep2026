@@ -372,6 +372,18 @@ export async function handleVscodeRequest(
             : undefined,
         ),
       );
+    case "workspace-load":
+    case "workspace-save":
+    case "workspace-clear":
+      // Electron 文件持久化（2026-08-30，ADR-036）：VSCode filesystem 维持 unsupported 如实
+      // 声明（工作区持久化走 Webview 内 IndexedDB，VscodeAppHost inner BrowserAppHost），
+      // 本 kind 不适用——返回能力错误并满足穷尽守卫。
+      return errorEnvelope(
+        message.messageId,
+        "WORKSPACE_FILESYSTEM_UNSUPPORTED",
+        "workspace file persistence is only supported on the Electron host",
+        "capability",
+      );
     case "debug:get-state":
       // 开发/测试探针（e2e 用）：生产构建禁用。
       if (!deps.isDev()) {

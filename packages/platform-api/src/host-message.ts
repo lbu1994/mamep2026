@@ -70,6 +70,10 @@ export const HOST_REQUEST_KINDS = [
   "save-text-file",
   // 工作区导入（2026-08-29，PRD §8.3 P1）：桌面端打开文件对话框并读取 UTF-8 文本返回。
   "open-text-file",
+  // Electron 文件持久化（2026-08-30，ADR-036）：工作区文件仓储经主进程 IPC（content 传序列化 JSON 字符串）。
+  "workspace-load",
+  "workspace-save",
+  "workspace-clear",
 ] as const;
 export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
 
@@ -227,6 +231,15 @@ export const openTextFileResponseSchema = z.object({
   content: z.string().nullable(),
 });
 export type OpenTextFileResponse = z.infer<typeof openTextFileResponseSchema>;
+
+/**
+ * workspace-load 响应载荷（2026-08-30，ADR-036 Electron 文件持久化）。
+ * content 恒为 serializeWorkspace 序列化 JSON 字符串（无文件时主进程返回空工作区的序列化结果）。
+ */
+export const workspaceLoadResponseSchema = z.object({
+  content: z.string(),
+});
+export type WorkspaceLoadResponse = z.infer<typeof workspaceLoadResponseSchema>;
 
 const requestBase = {
   protocolVersion: protocolVersionSchema,
@@ -398,6 +411,25 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
       suggestedName: z.string().optional(),
     }),
   }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("workspace-load"),
+    // Electron 文件持久化（2026-08-30，ADR-036）：主进程文件仓储 load，返回序列化 JSON 字符串。
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("workspace-save"),
+    // Electron 文件持久化（2026-08-30，ADR-036）：content 为 serializeWorkspace 序列化 JSON
+    // 字符串；主进程先 parseWorkspace 校验再原子落盘。
+    payload: z.object({ content: z.string() }),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("workspace-clear"),
+    // Electron 文件持久化（2026-08-30，ADR-036）：清除主文件与备份（用户重置损坏工作区用）。
+    payload: z.object({}),
+  }),
 ]);
 export type HostRequestMessage = z.infer<typeof hostRequestSchema>;
 
@@ -566,6 +598,19 @@ export interface MamepHostApi {
     suggestedName?: string;
   }): Promise<Result<OpenTextFileResponse>>;
 
+  /**
+   * 加载主进程文件仓储工作区（workspace-load，2026-08-30，ADR-036）：返回
+   * serializeWorkspace 序列化 JSON 字符串（无文件 = 空工作区序列化结果）。
+   */
+  workspaceLoad(): Promise<Result<WorkspaceLoadResponse>>;
+  /**
+   * 保存工作区到主进程文件仓储（workspace-save，2026-08-30，ADR-036）：
+   * content 为 serializeWorkspace 序列化 JSON 字符串，主进程校验后原子落盘。
+   */
+  workspaceSave(content: string): Promise<Result<null>>;
+  /** 清除主进程文件仓储（workspace-clear，2026-08-30，ADR-036）：删除主文件与备份。 */
+  workspaceClear(): Promise<Result<null>>;
+
   // ---- 远程会话 RPC（2026-08-23 两端 TCP 接线：Electron TCP 会话在主进程，Renderer 远程代理）----
 
   sessionDisconnect(): Promise<Result<null>>;
@@ -671,16 +716,18 @@ export interface VscodeHostApi
 }
 
 /**
- * Electron 能力矩阵（ADR-017 扩展，2026-08-21；2026-08-23 TCP 接线）：MVP 串口仍经
- * Web Serial API（Renderer navigator.serial，serialPorts:"enumerated" 下拉选择）；
+ * Electron 能力矩阵（ADR-017 扩展，2026-08-21；2026-08-23 TCP 接线；2026-08-30 文件持久化）：
+ * MVP 串口仍经 Web Serial API（Renderer navigator.serial，serialPorts:"enumerated" 下拉选择）；
  * Modbus TCP 已接线——会话承载在主进程（Node TCP Adapter + TcpSessionHost），
- * Renderer 经 HostMessage v1 远程代理（modbusTcp:true）。
+ * Renderer 经 HostMessage v1 远程代理（modbusTcp:true）；文件持久化已落地（ADR-036）——
+ * 主进程应用数据目录版本化 JSON，Renderer 经 workspace-load/save/clear 薄桥（filesystem:"full"）。
  */
 export const electronCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: true,
   modbusTcp: true,
   serialPorts: "enumerated",
-  filesystem: "limited",
+  // 文件持久化已落地（2026-08-30，ADR-036）：主进程应用数据目录版本化 JSON（filesystem: "full"）。
+  filesystem: "full",
   nodePlugins: false,
   webPlugins: true,
   logExport: "save-dialog",

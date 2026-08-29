@@ -13,6 +13,7 @@ import {
   saveTextFileResponseSchema,
   toErrorPayload,
   toResultPayload,
+  workspaceLoadResponseSchema,
 } from "./host-message";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 
@@ -587,5 +588,77 @@ describe("host-message open-text-file kind（2026-08-29 工作区导入）", () 
   it("validates a cancelled (content null) response as non-error", () => {
     const parsed = openTextFileResponseSchema.safeParse({ content: null });
     expect(parsed.success).toBe(true);
+  });
+});
+
+describe("host-message workspace kinds（2026-08-30，ADR-036 Electron 文件持久化）", () => {
+  it("accepts a workspace-load request with empty payload", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-ws-load-1",
+      kind: "workspace-load",
+      payload: {},
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.type === "request") {
+      expect(result.value.kind).toBe("workspace-load");
+    }
+  });
+
+  it("accepts a workspace-save request with serialized JSON content", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-ws-save-1",
+      kind: "workspace-save",
+      payload: { content: '{"schemaVersion":4}' },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a workspace-save request without content", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-ws-save-2",
+      kind: "workspace-save",
+      payload: {},
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a workspace-save request with non-string content", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-ws-save-3",
+      kind: "workspace-save",
+      payload: { content: 42 },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a workspace-clear request with empty payload", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-ws-clear-1",
+      kind: "workspace-clear",
+      payload: {},
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("validates a content response via workspaceLoadResponseSchema", () => {
+    const parsed = workspaceLoadResponseSchema.safeParse({
+      content: '{"schemaVersion":4}',
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects a workspaceLoad response without content", () => {
+    const parsed = workspaceLoadResponseSchema.safeParse({});
+    expect(parsed.success).toBe(false);
   });
 });

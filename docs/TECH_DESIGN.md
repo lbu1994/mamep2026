@@ -822,6 +822,13 @@ Host 负责装配具体适配器，不实现领域规则。
 > 多寄存器连续读写（ADR-030，2026-08-27 设计确认）：属协议层共享能力（三端共用同一共享会话层），
 > 不新增能力矩阵字段；三端一致支持，实施未开始。
 
+> **Electron 文件持久化已落地（2026-08-30，ADR-036）**：工作区持久化由 Renderer IndexedDB 替换为
+> 主进程应用数据目录版本化 JSON（`WorkspaceFileRepository`，原子保存 + 单份 .bak + 损坏自愈），
+> HostMessage v1 新增 `workspace-load/workspace-save/workspace-clear` kind，Renderer `FileWorkspaceRepository`
+> 薄桥，`electronCapabilities.filesystem` 翻转为 `"full"`；浏览器维持 `limited`（IndexedDB）、
+> VSCode 维持 `unsupported` 如实声明（工作区持久化仍走 Webview 内 IndexedDB，VSCode 文件持久化属
+> ADR-019 复审条件待办）。
+
 能力矩阵通过 PlatformCapabilities 对象注入 UI。
 
 UI 根据能力执行：
@@ -2008,6 +2015,15 @@ Electron 使用应用数据目录下的版本化 JSON 文件。
 不得由 Renderer 直接写入文件。
 
 文件权限和路径由 Main Process 控制。
+
+> **实现状态（2026-08-30，ADR-036）**：已落地——主进程 `WorkspaceFileRepository`
+> （`apps/electron/src/main/workspace-file-repository.ts`）实现 `WorkspaceRepositoryPort`，
+> 文件布局 `userData/workspace.json` + `workspace.json.bak`（单份备份轮转，与浏览器 IndexedDB
+> 单备份语义一致；「定期清理旧备份」在单份策略下退化为每次轮转覆盖）；原子保存流程 1→5 已实现
+> （临时文件 → 写入 → `fsync` → 主改备份 → 临时文件原子替换，Windows `rename` 目标已存在先 `rm`
+> 兜底）；损坏时从 .bak 恢复并自愈写回主文件；Renderer 经 `workspace-load/save/clear`
+> HostMessage v1 kind 走薄桥 `FileWorkspaceRepository`（`apps/web/src/file-workspace-repository.ts`），
+> 不直接触碰文件系统；能力矩阵 `electronCapabilities.filesystem: "full"`。
 
 ## 19.5 VSCode 持久化
 
