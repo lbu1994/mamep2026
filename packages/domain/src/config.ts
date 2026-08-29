@@ -22,8 +22,14 @@ export const defaultConfig = {
     connectTimeoutMs: 5000,
     requestTimeoutMs: 1000,
     retryCount: 1,
-    /** 自动重连：P1 能力（UI 灰显禁用，2026-08-23 确认） */
+    /** 自动重连：P1 能力（2026-08-30 落地），默认 false */
     autoReconnect: false,
+    /** 自动重连：最大尝试次数（内部默认值，不入 profile/表单/持久化，2026-08-30） */
+    reconnectMaxAttempts: 5,
+    /** 自动重连：退避基值（ms，内部默认值，2026-08-30） */
+    reconnectBaseIntervalMs: 1000,
+    /** 自动重连：退避封顶（ms，内部默认值，2026-08-30） */
+    reconnectMaxIntervalMs: 15000,
     /** 请求间隔，兼作 WP 轮询间隔（内部字段，不入表单） */
     interRequestDelayMs: 50,
   },

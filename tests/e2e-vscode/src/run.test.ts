@@ -558,8 +558,106 @@ async function runRangeMultiLoop(): Promise<void> {
   await rpcEnvelope("session-disconnect");
 }
 
+/**
+ * TCP 自动重连闭环（2026-08-30，PRD §8.3 P1 / ADR-022 已知限制打通）：经真实 HostMessage
+ * RPC 路径验证 autoReconnect=true 连接 → debug:fake-tcp-drop 探针强制断线（MAMEP_FAKE_TCP
+ * 假设备）→ ReconnectCoordinator 自动重连（指数退避首个间隔 1s）→ 状态回 connected →
+ * 新会话读写仍可用。用户断开不重连/失败达上限等由 application 单测与 Electron e2e 覆盖。
+ */
+async function runReconnectLoop(): Promise<void> {
+  // 1. 连接 TCP（autoReconnect=true，假设备 127.0.0.1:1502）。
+  const profile = tcpProfile();
+  profile.autoReconnect = true;
+  const connect = await rpcEnvelope("session-tcp-connect", { profile });
+  assert.strictEqual(
+    connect.type,
+    "response",
+    "session-tcp-connect (auto-reconnect) should succeed",
+  );
+
+  const connected = await rpcEnvelope("session-get-state");
+  assert.strictEqual(
+    (connected.payload as { connectionState: string }).connectionState,
+    "connected",
+  );
+
+  // 2. 强制断线（dev 探针：断开假 TCP 设备当前客户端）。
+  const drop = await rpcEnvelope("debug:fake-tcp-drop");
+  assert.strictEqual(drop.type, "response", "debug:fake-tcp-drop");
+  assert.strictEqual(
+    (drop.payload as { dropped: boolean }).dropped,
+    true,
+    "fake tcp device should have a client to drop",
+  );
+
+  // 3. 离开 connected（interrupted / reconnect-waiting / reconnecting）。
+  let leftConnected = false;
+  for (let i = 0; i < 50; i += 1) {
+    await sleep(100);
+    const state = await rpcEnvelope("session-get-state");
+    const cs = (state.payload as { connectionState: string }).connectionState;
+    if (cs !== "connected") {
+      leftConnected = true;
+      break;
+    }
+  }
+  assert.ok(
+    leftConnected,
+    "TCP should leave connected after the fake device drops the connection",
+  );
+
+  // 4. 自动重连：轮询直到回到 connected（首个退避间隔 1s，兜底 10s）。
+  let backToConnected = false;
+  for (let i = 0; i < 100; i += 1) {
+    await sleep(100);
+    const state = await rpcEnvelope("session-get-state");
+    if (
+      (state.payload as { connectionState: string }).connectionState ===
+      "connected"
+    ) {
+      backToConnected = true;
+      break;
+    }
+  }
+  assert.ok(
+    backToConnected,
+    "TCP should auto-reconnect after the fake device drops the connection",
+  );
+
+  // 5. 重连后的新会话读写仍可用。
+  const write = await rpcEnvelope("session-write-row", {
+    row: registerRow(0x0001, "0A0B"),
+  });
+  assert.strictEqual(
+    write.type,
+    "response",
+    "session-write-row (after reconnect) should succeed",
+  );
+  assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
+  const read = await rpcEnvelope("session-read-row", {
+    row: registerRow(0x0001, ""),
+  });
+  assert.strictEqual(
+    read.type,
+    "response",
+    "session-read-row (after reconnect) should succeed",
+  );
+  assert.strictEqual(
+    read.payload,
+    0x0a0b,
+    "FC03 read should work after reconnect",
+  );
+
+  // 6. 断开。
+  const disconnect = await rpcEnvelope("session-disconnect");
+  assert.strictEqual(
+    disconnect.type,
+    "response",
+    "session-disconnect (after reconnect) should succeed",
+  );
+}
+
 export async function run(): Promise<void> {
-  // 1. 命令打开主面板。
   await vscode.commands.executeCommand("mamep2026.openMainPanel");
   await sleep(500);
 
@@ -633,6 +731,9 @@ export async function run(): Promise<void> {
 
   // 6.5 远程批任务取消（ADR-025）：session-batch-read → 中途 cancel → cancelledCount > 0。
   await runBatchCancelLoop();
+
+  // 6.75 TCP 自动重连（2026-08-30）：断线 → 自动重连成功 → 读写仍可用。
+  await runReconnectLoop();
 
   // 6.75 工作区导入导出闭环（2026-08-29，PRD §8.3 P1）：save-text-file / open-text-file。
   await runWorkspaceFileLoop();

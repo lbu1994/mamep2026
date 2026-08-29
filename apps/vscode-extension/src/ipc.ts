@@ -97,6 +97,11 @@ export interface IpcDeps {
   colorTheme(): ColorThemeKind;
   /** 是否开发/测试运行（extensionMode Development；生产打包禁用探针）。 */
   isDev(): boolean;
+  /**
+   * 断开假 TCP 设备当前客户端（dev/e2e 探针，2026-08-30 自动重连）：
+   * 无运行中的假设备返回 false；仅 MAMEP_FAKE_TCP=1 时装配。
+   */
+  dropFakeTcpClients(): boolean;
   clipboardWriteText(text: string): Promise<void>;
   clipboardReadText(): Promise<string>;
   /** RTU 会话（VSCode 接线，Extension Host 侧，2026-08-23）。 */
@@ -386,6 +391,16 @@ export async function handleVscodeRequest(
           sessionStats: deps.sessionStats(),
         } satisfies VscodeHostDebugState,
       );
+    case "debug:fake-tcp-drop":
+      // 开发/测试探针（e2e 自动重连用）：生产构建禁用。
+      if (!deps.isDev()) {
+        return errorEnvelope(
+          message.messageId,
+          "DEBUG_PROBE_DISABLED",
+          "debug probe is disabled in production",
+        );
+      }
+      return okResponse(message, { dropped: deps.dropFakeTcpClients() });
     default: {
       // 穷尽性守卫：新增 request kind 而未处理时，此处编译报错。
       const _exhaustive: never = message;

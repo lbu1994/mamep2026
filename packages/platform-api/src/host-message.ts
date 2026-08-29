@@ -46,6 +46,8 @@ export const HOST_REQUEST_KINDS = [
   "select-serial-port",
   "get-color-theme",
   "debug:get-state",
+  // 自动重连 e2e（2026-08-30）：dev/e2e 探针，断开假 TCP 设备当前客户端。
+  "debug:fake-tcp-drop",
   // VSCode RTU 接线（2026-08-23）：串口枚举 + 远程会话命令。
   "serial-enumerate",
   "session-connect",
@@ -268,6 +270,12 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   z.object({
     ...requestBase,
     kind: z.literal("debug:get-state"),
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("debug:fake-tcp-drop"),
+    // dev/e2e 探针（2026-08-30）：断开假 TCP 设备当前客户端，返回是否命中设备。
     payload: z.object({}),
   }),
   z.object({

@@ -336,6 +336,10 @@ export async function handleRequest(
           uptimeMs: deps.uptimeMs(),
         } satisfies HostDebugState,
       );
+    case "debug:fake-tcp-drop":
+      // dev/e2e 探针（2026-08-30 自动重连）：Electron 的假 TCP 设备在测试进程内
+      // （Playwright net server），不驻留主进程，故恒返回 dropped:false。
+      return okResponse(message, { dropped: false });
     default: {
       // 穷尽性守卫：新增 request kind 而未处理时，此处编译报错。
       const _exhaustive: never = message;

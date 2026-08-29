@@ -42,6 +42,7 @@ function buildTcpFrame(tid: number, unitId: number, pdu: Uint8Array): Uint8Array
 
 export class DevFakeTcpServer {
   private readonly server: net.Server;
+  private readonly sockets = new Set<net.Socket>();
 
   constructor() {
     this.server = net.createServer((socket) => this.handle(socket));
@@ -58,13 +59,22 @@ export class DevFakeTcpServer {
   }
 
   stop(): Promise<void> {
+    for (const socket of this.sockets) socket.destroy();
+    this.sockets.clear();
     return new Promise((resolve) => {
       this.server.close(() => resolve());
     });
   }
 
+  /** 断开当前客户端连接（模拟设备断线，2026-08-30 自动重连 e2e），服务器继续监听。 */
+  dropClients(): void {
+    for (const socket of this.sockets) socket.destroy();
+    this.sockets.clear();
+  }
+
   /** 单连接 MBAP 分帧处理：半包/粘包缓冲，完整帧后响应。 */
   private handle(socket: net.Socket): void {
+    this.sockets.add(socket);
     const buffer: number[] = [];
     socket.on("data", (chunk: Buffer) => {
       for (const byte of chunk) buffer.push(byte);
@@ -84,6 +94,10 @@ export class DevFakeTcpServer {
     });
     socket.on("error", () => {
       // 客户端断开等错误：忽略（连接级错误由客户端侧会话处理）。
+      this.sockets.delete(socket);
+    });
+    socket.on("close", () => {
+      this.sockets.delete(socket);
     });
   }
 

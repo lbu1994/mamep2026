@@ -24,6 +24,7 @@ export const settingsSchema = z
     host: z.string(),
     port: z.number().int().min(1).max(65535),
     unitId: z.number().int().min(0).max(255),
+    autoReconnect: z.boolean(),
   })
   .superRefine((values, ctx) => {
     if (values.protocol === "tcp" && values.host.length === 0) {
@@ -51,7 +52,7 @@ export const rtuPersistedSettingsSchema = z.object({
   addressAdjust: z.enum(["off", "on"]),
 });
 
-/** TCP 随工作区持久化的连接设置子集（2026-08-23 两端 TCP 接线：host/port/unitId/超时/重试）。 */
+/** TCP 随工作区持久化的连接设置子集（2026-08-23 两端 TCP 接线：host/port/unitId/超时/重试；2026-08-30 增 autoReconnect）。 */
 export const tcpPersistedSettingsSchema = z.object({
   protocol: z.literal("tcp"),
   host: z.string().min(1),
@@ -60,6 +61,7 @@ export const tcpPersistedSettingsSchema = z.object({
   requestTimeoutMs: z.number().int().min(50).max(60000),
   retryCount: z.number().int().min(0).max(10),
   interRequestDelayMs: z.number().int().min(0).max(5000),
+  autoReconnect: z.boolean(),
 });
 
 export const persistedSettingsSchema = z.discriminatedUnion("protocol", [
@@ -85,6 +87,7 @@ export function toProfile(
       requestTimeoutMs: values.timeout,
       retryCount: values.retry,
       interRequestDelayMs: values.rxDelay,
+      autoReconnect: values.autoReconnect,
     };
   }
   return { ...(base as RtuConnectionProfile), ...values, protocol: "rtu" };
@@ -109,6 +112,7 @@ export function profileToValues(
       host: profile.host,
       port: profile.port,
       unitId: profile.unitId,
+      autoReconnect: profile.autoReconnect,
     };
   }
   return {
@@ -126,6 +130,8 @@ export function profileToValues(
     host: "",
     port: 502,
     unitId: 0,
+    // autoReconnect 为 TCP 专属（RTU 无此字段），RTU 表单值恒 false。
+    autoReconnect: false,
   };
 }
 
@@ -142,6 +148,7 @@ export function extractPersistedSettings(
       requestTimeoutMs: values.timeout,
       retryCount: values.retry,
       interRequestDelayMs: values.rxDelay,
+      autoReconnect: values.autoReconnect,
     };
   }
   return {

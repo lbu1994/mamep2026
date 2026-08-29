@@ -11,10 +11,14 @@ import type {
   CommunicationLogEvent,
   ConnectionState,
   TraceSample,
+  TransportPort,
 } from "@mamep2026/communication";
 import {
   createDefaultTcpProfile,
   createEmptyRow,
+  createMamepError,
+  fail,
+  ok,
   RegisterAddress,
   type RegisterRow,
   type Result,
@@ -213,5 +217,169 @@ describe("TcpSessionHost 读/写", () => {
     expect(h.host.getConnectionState()).toBe("disconnected");
     expect(h.host.getProfile()).toBeNull();
     expect(h.host.getPortLabel()).toBeNull();
+  });
+});
+
+describe("TcpSessionHost 自动重连（ReconnectCoordinator 集成）", () => {
+  interface ReconnectHarness {
+    host: TcpSessionHost;
+    clock: VirtualClock;
+    events: Record<keyof SessionHostEvents, MockedEvent>;
+    opened: FakeTransport[];
+    openTransport: ReturnType<typeof vi.fn>;
+    profile: TcpConnectionProfile;
+  }
+
+  function createReconnectHarness(): ReconnectHarness {
+    const clock = new VirtualClock();
+    const events: Record<keyof SessionHostEvents, MockedEvent> = {
+      onLog: vi.fn<(event: CommunicationLogEvent) => void>(),
+      onStateChange: vi.fn<(state: ConnectionState) => void>(),
+      onPollResult: vi.fn<
+        (key: string, address: number, result: Result<number>) => void
+      >(),
+      onTraceSample: vi.fn<(sample: TraceSample) => void>(),
+      onMessage: vi.fn<(message: ApplicationMessage) => void>(),
+    };
+    const profile = createDefaultTcpProfile("PLC-502");
+    profile.autoReconnect = true;
+    const opened: FakeTransport[] = [];
+    const openTransport = vi.fn(
+      async (): Promise<Result<TransportPort>> => {
+        const transport = new FakeTransport();
+        opened.push(transport);
+        return ok(transport);
+      },
+    );
+    const host = new TcpSessionHost({
+      clock,
+      events: events as SessionHostEvents,
+      openTransport,
+    });
+    return { host, clock, events, opened, openTransport, profile };
+  }
+
+  async function connectReconnect(
+    h: ReconnectHarness,
+  ): Promise<FakeTransport> {
+    const first = new FakeTransport();
+    const result = await h.host.connect({
+      profile: h.profile,
+      transport: first,
+      portLabel: "127.0.0.1:502",
+    });
+    expect(result.ok).toBe(true);
+    return first;
+  }
+
+  it("interrupted 后自动重连成功：状态序列 + 轮询恢复 + 无失败消息", async () => {
+    const h = createReconnectHarness();
+    const first = await connectReconnect(h);
+    h.host.updatePollingTargets([{ key: "row-a", address: 0x0001 }]);
+    h.host.startPolling();
+
+    // 对端断开 → interrupted → 自动进入 reconnect-waiting。
+    first.simulateClose();
+    await flushMicrotasks();
+    expect(h.host.getConnectionState()).toBe("reconnect-waiting");
+
+    // 推进退避 1000ms → reconnecting → openTransport 重建传输 → 重连成功。
+    h.clock.advance(1000);
+    await flushMicrotasks();
+    expect(h.openTransport).toHaveBeenCalledTimes(1);
+    expect(h.opened).toHaveLength(1);
+    expect(h.host.getConnectionState()).toBe("connected");
+    expect(
+      h.events.onMessage.mock.calls.some(
+        (call) => call[0]?.messageKey === "messages.reconnectFailed",
+      ),
+    ).toBe(false);
+
+    // 轮询自动恢复：新传输上出现 FC03 请求。
+    h.clock.advance(50);
+    await flushMicrotasks();
+    const frames = h.opened[0]?.sentFrames ?? [];
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames[0]?.[7]).toBe(0x03);
+  });
+
+  it("autoReconnect=false 时不重连：停留在 interrupted", async () => {
+    const h = createReconnectHarness();
+    h.profile.autoReconnect = false;
+    const first = await connectReconnect(h);
+    first.simulateClose();
+    await flushMicrotasks();
+    expect(h.host.getConnectionState()).toBe("interrupted");
+    h.clock.advance(10000);
+    await flushMicrotasks();
+    expect(h.openTransport).not.toHaveBeenCalled();
+    expect(h.host.getConnectionState()).toBe("interrupted");
+  });
+
+  it("用户主动断开取消挂起重连，不再重连", async () => {
+    const h = createReconnectHarness();
+    const first = await connectReconnect(h);
+    first.simulateClose();
+    await flushMicrotasks();
+    expect(h.host.getConnectionState()).toBe("reconnect-waiting");
+
+    await h.host.disconnect();
+    h.clock.advance(10000);
+    await flushMicrotasks();
+    expect(h.openTransport).not.toHaveBeenCalled();
+    expect(h.host.getConnectionState()).toBe("disconnected");
+  });
+
+  it("重连等待期间用户发起新连接取消重连", async () => {
+    const h = createReconnectHarness();
+    const first = await connectReconnect(h);
+    first.simulateClose();
+    await flushMicrotasks();
+    expect(h.host.getConnectionState()).toBe("reconnect-waiting");
+
+    const second = new FakeTransport();
+    const result = await h.host.connect({
+      profile: h.profile,
+      transport: second,
+      portLabel: "127.0.0.1:502",
+    });
+    expect(result.ok).toBe(true);
+    h.clock.advance(10000);
+    await flushMicrotasks();
+    expect(h.openTransport).not.toHaveBeenCalled();
+    expect(h.host.getConnectionState()).toBe("connected");
+  });
+
+  it("重连失败达到上限转 failed 并上报消息", async () => {
+    const h = createReconnectHarness();
+    h.openTransport.mockImplementation(
+      async (): Promise<Result<TransportPort>> =>
+        fail(
+          createMamepError({
+            code: "TCP_CONNECT_FAILED",
+            category: "connection",
+            severity: "error",
+            retryable: true,
+            userMessageKey: "errors.tcpConnectFailed",
+            technicalMessage: "open failed (fake)",
+          }),
+        ),
+    );
+    const first = await connectReconnect(h);
+    first.simulateClose();
+    await flushMicrotasks();
+    expect(h.host.getConnectionState()).toBe("reconnect-waiting");
+
+    // maxAttempts=5：1s/2s/4s/8s/15s(封顶) 五次 open 失败后转 failed。
+    for (const delay of [1000, 2000, 4000, 8000, 15000]) {
+      h.clock.advance(delay);
+      await flushMicrotasks();
+    }
+    expect(h.host.getConnectionState()).toBe("failed");
+    expect(
+      h.events.onMessage.mock.calls.some(
+        (call) => call[0]?.messageKey === "messages.reconnectFailed",
+      ),
+    ).toBe(true);
   });
 });

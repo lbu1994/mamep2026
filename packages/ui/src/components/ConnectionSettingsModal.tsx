@@ -629,13 +629,22 @@ export function ConnectionSettingsModal(): React.ReactNode {
                 />
               </Col>
               <Col span={24}>
-                <Form.Item
-                  label={t("connection.autoReconnect")}
-                  tooltip={t("connection.autoReconnectHint")}
-                >
-                  {/* 自动重连为 P1（PRD §8.3），P0 仅展示/禁用（2026-08-23 确认）。 */}
-                  <Switch disabled checked={false} />
-                </Form.Item>
+                <Controller
+                  name="autoReconnect"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item
+                      label={t("connection.autoReconnect")}
+                      tooltip={t("connection.autoReconnectHint")}
+                    >
+                      {/* 自动重连：PRD §8.3 P1（2026-08-30 落地，有限次数 + 指数退避）。 */}
+                      <Switch
+                        checked={field.value}
+                        onChange={(checked) => field.onChange(checked)}
+                      />
+                    </Form.Item>
+                  )}
+                />
               </Col>
             </Row>
           </>

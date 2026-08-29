@@ -129,6 +129,12 @@ function createDeps(
     capabilities: () => vscodeCapabilities,
     colorTheme: () => toColorThemeKind(vscode.window.activeColorTheme.kind),
     isDev: () => isDev,
+    // 自动重连 e2e（2026-08-30）：dev/e2e 探针，断开假 TCP 设备当前客户端（MAMEP_FAKE_TCP=1 时装配）。
+    dropFakeTcpClients: () => {
+      if (fakeTcpServer === null) return false;
+      fakeTcpServer.dropClients();
+      return true;
+    },
     clipboardWriteText: async (text) => {
       await vscode.env.clipboard.writeText(text);
     },

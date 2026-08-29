@@ -40,6 +40,8 @@ export class ElectronSessionHost {
     this.tcp = new TcpSessionHost({
       clock: options.platform.clock,
       events: options.events,
+      // 自动重连（2026-08-30）：重连时由协调器重新打开 TCP 传输。
+      openTransport: (profile) => this.platform.openTcpTransport(profile),
     });
   }
 

@@ -25,8 +25,10 @@ import type {
   Result,
   TcpConnectionProfile,
 } from "@mamep2026/domain";
+import { createMamepError, fail } from "@mamep2026/domain";
 import type { SessionHostEvents } from "./session-host-core";
 import { SessionHostCore } from "./session-host-core";
+import { ReconnectCoordinator } from "./reconnect-coordinator";
 
 export type { SessionHostEvents as TcpSessionHostEvents } from "./session-host-core";
 
@@ -41,11 +43,20 @@ export interface TcpConnectInput {
 export interface TcpSessionHostOptions {
   clock: Clock;
   events: SessionHostEvents;
+  /**
+   * 自动重连用的传输重开工厂（可选，仅 TCP）：由平台宿主注入（重新 openTcpTransport）。
+   * 缺省时 TcpSessionHost 不启用自动重连（profile.autoReconnect 被忽略）。
+   */
+  openTransport?: (
+    profile: TcpConnectionProfile,
+  ) => Promise<Result<TransportPort>>;
 }
 
 export class TcpSessionHost {
   private readonly core: SessionHostCore;
+  private readonly coordinator: ReconnectCoordinator | null;
   private currentProfile: TcpConnectionProfile | null = null;
+  private currentPortLabel: string | null = null;
 
   constructor(options: TcpSessionHostOptions) {
     this.core = new SessionHostCore({
@@ -55,35 +66,93 @@ export class TcpSessionHost {
       // TCP 无 Address Adjust（发送地址 = 用户地址，恒 off）。
       getAddressAdjustMode: () => "off",
     });
+    // 自动重连仅在注入 openTransport（平台宿主提供重开能力）时启用。
+    this.coordinator =
+      options.openTransport !== undefined
+        ? new ReconnectCoordinator({
+            clock: options.clock,
+            events: options.events,
+            openTransport: options.openTransport,
+            performReconnect: (transport) => this.reconnectWith(transport),
+          })
+        : null;
   }
 
   /** 打开并连接 TCP 会话：替换旧会话，恢复轮询/追踪配置。 */
   async connect(input: TcpConnectInput): Promise<Result<void>> {
+    // 用户主动发起新连接：取消挂起的自动重连。
+    this.coordinator?.disarm();
     this.currentProfile = input.profile;
-    const session = new CommunicationSession({
-      transport: input.transport,
+    this.currentPortLabel = input.portLabel;
+    const result = await this.core.connect(
+      this.buildSession(input.profile, input.transport),
+      input.portLabel,
+    );
+    if (result.ok) {
+      // 连接成功：按 profile.autoReconnect 启用自动重连（armed 保持到下次 interrupted）。
+      this.coordinator?.arm(input.profile);
+    }
+    return result;
+  }
+
+  /** 自动重连专用：用新传输重建会话（不经 disarm，成功后恢复轮询/追踪并保持 armed）。 */
+  private async reconnectWith(transport: TransportPort): Promise<Result<void>> {
+    const profile = this.currentProfile;
+    if (profile === null) {
+      return fail(
+        createMamepError({
+          code: "CONNECTION_NOT_CONNECTED",
+          category: "connection",
+          userMessageKey: "errors.notConnected",
+          technicalMessage: "reconnect without an active profile",
+        }),
+      );
+    }
+    const result = await this.core.connect(
+      this.buildSession(profile, transport),
+      this.currentPortLabel,
+    );
+    if (result.ok) {
+      // 保持 armed：重连成功后仍开启自动重连（下次 interrupted 再触发）。
+      this.coordinator?.arm(profile);
+    }
+    return result;
+  }
+
+  private buildSession(
+    profile: TcpConnectionProfile,
+    transport: TransportPort,
+  ): CommunicationSession {
+    return new CommunicationSession({
+      transport,
       clock: this.core.clock,
-      config: input.profile,
+      config: profile,
       protocol: "tcp",
-      unitId: input.profile.unitId,
+      unitId: profile.unitId,
       onLog: (event: CommunicationLogEvent) => this.core.emitLog(event),
-      onStateChange: (state: ConnectionState) => this.core.emitStateChange(state),
+      onStateChange: (state: ConnectionState) => {
+        this.core.emitStateChange(state);
+        this.coordinator?.onSessionState(state);
+      },
     });
-    return this.core.connect(session, input.portLabel);
   }
 
   async disconnect(): Promise<Result<void>> {
+    // 停止自动重连（docs/AGENTS.md §11.5 第 4 项）。
+    this.coordinator?.disarm();
     return this.core.disconnect();
   }
 
   /** 释放全部资源（Webview 关闭 / 扩展停用 / 卸载）：断开会话并清空状态。 */
   async dispose(): Promise<void> {
+    this.coordinator?.disarm();
     await this.core.dispose();
     this.currentProfile = null;
+    this.currentPortLabel = null;
   }
 
   getConnectionState(): ConnectionState {
-    return this.core.getConnectionState();
+    return this.coordinator?.getState() ?? this.core.getConnectionState();
   }
 
   getProfile(): TcpConnectionProfile | null {

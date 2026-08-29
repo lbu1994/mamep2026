@@ -83,6 +83,7 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     capabilities: () => vscodeCapabilities,
     colorTheme: () => "dark",
     isDev: () => true,
+    dropFakeTcpClients: () => false,
     clipboardWriteText: vi.fn(async () => undefined),
     clipboardReadText: vi.fn(async () => "from-clip"),
     session: makeSession(),
@@ -202,6 +203,30 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
   it("debug:get-state 在非 dev 时禁用", async () => {
     const result = await handleVscodeInvoke(
       request("debug:get-state"),
+      makeDeps({ isDev: () => false }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("DEBUG_PROBE_DISABLED");
+    }
+  });
+
+  it("debug:fake-tcp-drop 在 dev 时返回 dropped 结果（自动重连 e2e 探针，2026-08-30）", async () => {
+    const dropFakeTcpClients = vi.fn(() => true);
+    const result = await handleVscodeInvoke(
+      request("debug:fake-tcp-drop"),
+      makeDeps({ dropFakeTcpClients }),
+    );
+    expect(result.type).toBe("response");
+    expect(dropFakeTcpClients).toHaveBeenCalledOnce();
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ dropped: true });
+    }
+  });
+
+  it("debug:fake-tcp-drop 在非 dev 时禁用", async () => {
+    const result = await handleVscodeInvoke(
+      request("debug:fake-tcp-drop"),
       makeDeps({ isDev: () => false }),
     );
     expect(result.type).toBe("error");

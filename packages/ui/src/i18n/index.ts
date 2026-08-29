@@ -71,7 +71,8 @@ export const en = {
     unitId: "Unit ID",
     unitIdHint: "MBAP Unit Identifier: 0–255. 0 = broadcast (not implemented).",
     autoReconnect: "Auto Reconnect",
-    autoReconnectHint: "Planned for V1.0 (P1); not yet available.",
+    autoReconnectHint:
+      "Automatically reconnect when the TCP link drops (limited attempts with backoff).",
   },
   state: {
     disconnected: "Offline",
@@ -301,6 +302,7 @@ export const en = {
     connectFailed: "Connection failed: {{detail}}",
     disconnected: "Disconnected.",
     deviceDisconnected: "Serial device disconnected.",
+    reconnectFailed: "Auto-reconnect failed after multiple attempts.",
     writeSucceeded: "Write succeeded ({{address}}).",
     writeFailed: "Write failed: {{detail}}",
     writeVerifyMatched: "Write verified: read-back matches ({{address}}).",
@@ -441,7 +443,7 @@ export const zh: TranslationResources = {
     unitId: "Unit ID",
     unitIdHint: "MBAP 单元标识：0~255；0=广播（未实现）。",
     autoReconnect: "自动重连",
-    autoReconnectHint: "规划于 V1.0（P1），暂不可用。",
+    autoReconnectHint: "TCP 断线后自动重连（有限次数 + 指数退避）。",
   },
   state: {
     disconnected: "离线",
@@ -663,6 +665,7 @@ export const zh: TranslationResources = {
     connectFailed: "连接失败：{{detail}}",
     disconnected: "已断开。",
     deviceDisconnected: "串口设备已断开。",
+    reconnectFailed: "自动重连多次尝试后仍失败。",
     writeSucceeded: "写入成功（{{address}}）。",
     writeFailed: "写入失败：{{detail}}",
     writeVerifyMatched: "写入校验通过：回读一致（{{address}}）。",

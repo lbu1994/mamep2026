@@ -52,4 +52,11 @@ describe("defaultConfig (docs/AGENTS.md §42 集中默认值)", () => {
   it("limits polling to one pending task per row", () => {
     expect(defaultConfig.polling.maxPendingPollingTasks).toBe(1);
   });
+
+  it("defines TCP auto-reconnect internal defaults (2026-08-30)", () => {
+    expect(defaultConfig.tcp.autoReconnect).toBe(false);
+    expect(defaultConfig.tcp.reconnectMaxAttempts).toBe(5);
+    expect(defaultConfig.tcp.reconnectBaseIntervalMs).toBe(1000);
+    expect(defaultConfig.tcp.reconnectMaxIntervalMs).toBe(15000);
+  });
 });

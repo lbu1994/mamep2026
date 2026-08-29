@@ -1,8 +1,8 @@
 /**
  * ConnectionSettingsModal TCP 分组测试（2026-08-23 两端 TCP 接线）：
  * - 能力门控：modbusTcp=true 显示 TCP 协议选项；false（浏览器）不显示 TCP 入口；
- * - TCP 表单：切换协议后展示 host/port/unitId/超时/重试 + autoReconnect 灰显；
- * - CONNECT 路由：TCP 走 host.connectTcp（携带 TCP profile），空 host 校验阻止提交。
+ * - TCP 表单：切换协议后展示 host/port/unitId/超时/重试 + autoReconnect 开关（2026-08-30 启用）；
+ * - CONNECT 路由：TCP 走 host.connectTcp（携带 TCP profile，含 autoReconnect），空 host 校验阻止提交。
  */
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -127,8 +127,10 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     });
     // TCP 模式下 InputNumber 控件：port / unitId / timeout / retry。
     expect(screen.getAllByRole("spinbutton")).toHaveLength(4);
-    // autoReconnect 开关灰显（P1）。
-    expect(screen.getByText("Auto Reconnect")).toBeTruthy();
+    // autoReconnect 开关可用（2026-08-30 落地，PRD §8.3 P1）。
+    const switchEl = screen.getByRole("switch");
+    expect(switchEl).toBeTruthy();
+    expect(switchEl.getAttribute("aria-checked")).toBe("false");
   });
 
   it("TCP 能力关闭（浏览器）：不显示 TCP 入口，避免必然失败的入口", () => {
@@ -163,11 +165,40 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
       host: string;
       port: number;
       unitId: number;
+      autoReconnect: boolean;
     };
     expect(profile.protocol).toBe("tcp");
     expect(profile.host).toBe("192.168.1.10");
     expect(profile.port).toBe(502);
     expect(profile.unitId).toBe(1);
+    // autoReconnect 默认 false 并随表单透传。
+    expect(profile.autoReconnect).toBe(false);
+  });
+
+  it("开启 autoReconnect 开关：CONNECT 携带 profile.autoReconnect=true", async () => {
+    const { host, connectTcp } = makeHost({});
+    renderModal(host);
+    fireEvent.click(screen.getByText("Modbus TCP"));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("192.168.1.10")).toBeTruthy(),
+    );
+    fireEvent.change(screen.getByPlaceholderText("192.168.1.10"), {
+      target: { value: "192.168.1.10" },
+    });
+    // 打开 autoReconnect 开关。
+    const switchEl = screen.getByRole("switch");
+    fireEvent.click(switchEl);
+    await waitFor(() =>
+      expect(switchEl.getAttribute("aria-checked")).toBe("true"),
+    );
+    fireEvent.click(screen.getByText("CONNECT"));
+    await waitFor(() => expect(connectTcp).toHaveBeenCalled());
+    const profile = connectTcp.mock.calls[0]?.[0] as {
+      protocol: string;
+      autoReconnect: boolean;
+    };
+    expect(profile.protocol).toBe("tcp");
+    expect(profile.autoReconnect).toBe(true);
   });
 
   it("TCP 空 host：校验阻止提交，connectTcp 不被调用", async () => {

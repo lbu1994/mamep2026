@@ -26,6 +26,7 @@ describe("connection-settings-model persistence mapping", () => {
       timeout: 2000,
       retry: 3,
       addressAdjust: "on",
+      autoReconnect: false,
     };
     expect(extractPersistedSettings(values)).toEqual({
       protocol: "rtu",
@@ -67,6 +68,7 @@ describe("connection-settings-model persistence mapping", () => {
       host: "",
       port: 502,
       unitId: 0,
+      autoReconnect: false,
     });
   });
 
@@ -77,6 +79,7 @@ describe("connection-settings-model persistence mapping", () => {
     profile.unitId = 7;
     profile.requestTimeoutMs = 1500;
     profile.retryCount = 2;
+    profile.autoReconnect = true;
     expect(profileToValues(profile)).toEqual({
       protocol: "tcp",
       baudRate: 9600,
@@ -91,6 +94,7 @@ describe("connection-settings-model persistence mapping", () => {
       host: "192.168.1.10",
       port: 502,
       unitId: 7,
+      autoReconnect: true,
     });
   });
 });
@@ -111,6 +115,7 @@ describe("settingsSchema（表单校验：host 非空仅 TCP 生效，2026-08-23
     timeout: 1000,
     retry: 1,
     addressAdjust: "off",
+    autoReconnect: false,
   };
 
   it("RTU 提交（host 为空）通过校验", () => {
