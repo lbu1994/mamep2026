@@ -15,6 +15,7 @@ import {
   toResultPayload,
   workspaceLoadResponseSchema,
 } from "./host-message";
+import { pluginStoreDataResponseSchema } from "./session-payloads";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 
 describe("host-message protocol v1", () => {
@@ -660,5 +661,82 @@ describe("host-message workspace kinds（2026-08-30，ADR-036 Electron 文件持
   it("rejects a workspaceLoad response without content", () => {
     const parsed = workspaceLoadResponseSchema.safeParse({});
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () => {
+  const manifestPayload = {
+    id: "installed-a",
+    name: "Installed A",
+    version: "1.0.0",
+    description: "A user-installed plugin",
+    platform: { web: true, node: false },
+    permissions: ["ui.panel"],
+    contributions: { panels: [] },
+  };
+
+  it("accepts a plugin-store-load request with empty payload", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-plugin-load-1",
+      kind: "plugin-store-load",
+      payload: {},
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.type === "request") {
+      expect(result.value.kind).toBe("plugin-store-load");
+    }
+  });
+
+  it("accepts a plugin-store-save request with store data payload", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-plugin-save-1",
+      kind: "plugin-store-save",
+      payload: {
+        data: {
+          schemaVersion: 1,
+          plugins: [{ manifest: manifestPayload, enabled: true }],
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a plugin-store-save request without data", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-plugin-save-2",
+      kind: "plugin-store-save",
+      payload: {},
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a plugin-store-save request with invalid manifest", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-plugin-save-3",
+      kind: "plugin-store-save",
+      payload: {
+        data: {
+          schemaVersion: 1,
+          plugins: [{ manifest: { id: "x" }, enabled: true }],
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("validates a plugin store data response via pluginStoreDataResponseSchema", () => {
+    const parsed = pluginStoreDataResponseSchema.safeParse({
+      schemaVersion: 1,
+      plugins: [{ manifest: manifestPayload, enabled: false }],
+    });
+    expect(parsed.success).toBe(true);
   });
 });

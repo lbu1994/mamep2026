@@ -18,6 +18,7 @@ import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
 import { ElectronAppHost } from "./electron-app-host";
 import { VscodeAppHost } from "./vscode-app-host";
+import { IndexedDBPluginStore } from "./indexeddb-plugin-store";
 
 const MOCK_FLAG = "mockTransport";
 
@@ -98,12 +99,14 @@ export default function App(): React.ReactNode {
               serial !== undefined
                 ? new BrowserPlatformHost({ serial })
                 : new BrowserPlatformHost({});
+            // 工作区与插件存储共享同一 IndexedDB KV（不同 key：workspace / plugins）。
+            const kv = createIdbKeyValueStore();
             return new BrowserAppHost({
               platform: platformHost,
-              repository: new IndexedDBWorkspaceRepository(
-                createIdbKeyValueStore(),
-              ),
+              repository: new IndexedDBWorkspaceRepository(kv),
               mockTransport,
+              // 插件持久化（2026-08-30，ADR-038）：IndexedDB 独立 key。
+              pluginStore: new IndexedDBPluginStore(kv),
             });
           })();
     hostRef.current = host;

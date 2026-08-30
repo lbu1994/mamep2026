@@ -72,3 +72,67 @@ describe("PluginRegistry", () => {
     expect(registry.list()).toHaveLength(1);
   });
 });
+
+describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", () => {
+  it("register 默认 source 为 builtin；可指定 installed", () => {
+    const registry = new PluginRegistry();
+    registry.register(manifest());
+    registry.register(manifest({ id: "installed-panel" }), {
+      source: "installed",
+    });
+    expect(registry.getSource("example-panel")).toBe("builtin");
+    expect(registry.getSource("installed-panel")).toBe("installed");
+    expect(registry.getSource("unknown")).toBeNull();
+  });
+
+  it("snapshot 只包含 installed 来源插件与启用状态", () => {
+    const registry = new PluginRegistry();
+    registry.register(manifest());
+    registry.register(manifest({ id: "installed-a" }), { source: "installed" });
+    registry.register(manifest({ id: "installed-b" }), { source: "installed" });
+    registry.setEnabled("installed-b", false);
+
+    const data = registry.snapshot();
+    expect(data.schemaVersion).toBe(1);
+    expect(data.plugins.map((p) => p.manifest.id)).toEqual([
+      "installed-a",
+      "installed-b",
+    ]);
+    expect(data.plugins.find((p) => p.manifest.id === "installed-a")?.enabled).toBe(
+      true,
+    );
+    expect(data.plugins.find((p) => p.manifest.id === "installed-b")?.enabled).toBe(
+      false,
+    );
+  });
+
+  it("hydrate 恢复 installed 插件与启用状态；内置同 id 跳过不报错", () => {
+    const registry = new PluginRegistry();
+    registry.register(manifest());
+
+    registry.hydrate({
+      schemaVersion: 1,
+      plugins: [
+        // 与内置同 id：跳过（内置优先），不产生加载错误。
+        { manifest: manifest({ name: "Duplicate" }), enabled: false },
+        { manifest: manifest({ id: "stored-a" }), enabled: false },
+        { manifest: manifest({ id: "stored-b" }), enabled: true },
+      ],
+    });
+
+    expect(registry.getSource("stored-a")).toBe("installed");
+    expect(registry.isEnabled("stored-a")).toBe(false);
+    expect(registry.isEnabled("stored-b")).toBe(true);
+    expect(registry.getLoadErrors()).toHaveLength(0);
+    expect(registry.list()).toHaveLength(3);
+  });
+
+  it("snapshot 后再 hydrate 保持幂等（不重复注册）", () => {
+    const registry = new PluginRegistry();
+    registry.register(manifest({ id: "installed-a" }), { source: "installed" });
+    const data = registry.snapshot();
+    registry.hydrate(data);
+    expect(registry.list()).toHaveLength(1);
+    expect(registry.getLoadErrors()).toHaveLength(0);
+  });
+});

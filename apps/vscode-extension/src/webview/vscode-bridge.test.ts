@@ -238,6 +238,52 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
     expect(result).toEqual({ ok: true, value: null });
   });
 
+  it("pluginStoreLoad 携带空 payload 并透传插件存储响应（2026-08-30）", async () => {
+    const { posted, bridge, dispatch } = createHarness();
+    const promise = bridge.pluginStoreLoad();
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({
+      kind: "plugin-store-load",
+      payload: {},
+    });
+    const envelope = posted[0] as { messageId: string };
+    dispatch({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: envelope.messageId,
+      kind: "plugin-store-load",
+      ok: true,
+      payload: { schemaVersion: 1, plugins: [] },
+    });
+    const result = await promise;
+    expect(result).toEqual({
+      ok: true,
+      value: { schemaVersion: 1, plugins: [] },
+    });
+  });
+
+  it("pluginStoreSave 携带 data payload 并映射 ok（2026-08-30）", async () => {
+    const { posted, bridge, dispatch } = createHarness();
+    const data = { schemaVersion: 1 as const, plugins: [] };
+    const promise = bridge.pluginStoreSave(data);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({
+      kind: "plugin-store-save",
+      payload: { data },
+    });
+    const envelope = posted[0] as { messageId: string };
+    dispatch({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: envelope.messageId,
+      kind: "plugin-store-save",
+      ok: true,
+      payload: null,
+    });
+    const result = await promise;
+    expect(result).toEqual({ ok: true, value: null });
+  });
+
   it("onEvent 剥壳投递宿主事件，退订函数生效", async () => {
     const { bridge, dispatch } = createHarness();
     const received: Array<{ kind: string; payload: unknown }> = [];
@@ -312,6 +358,8 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
         "onEvent",
         "openTextFile",
         "platform",
+        "pluginStoreLoad",
+        "pluginStoreSave",
         "readTextFromClipboard",
         "saveTextFile",
         "selectSerialPort",

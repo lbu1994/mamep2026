@@ -10,6 +10,7 @@ import {
 } from "@mamep2026/platform-api";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
+import { createEmptyPluginStoreData } from "@mamep2026/plugin-api";
 import {
   extractMessageId,
   handleVscodeInvoke,
@@ -92,6 +93,10 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
       ok({ saved: true, filePath: "C:\\logs\\comm-log.csv" }),
     ),
     openTextFile: vi.fn(async () => ok({ content: null })),
+    pluginStore: {
+      load: vi.fn(async () => ok(createEmptyPluginStoreData())),
+      save: vi.fn(async () => ok(undefined)),
+    },
     ...overrides,
   };
 }
@@ -332,6 +337,78 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
         expect(result.payload.category).toBe("capability");
       }
     }
+  });
+
+  it("plugin-store-load 转发扩展宿主持久化并返回数据（2026-08-30，ADR-038）", async () => {
+    const pluginStore = {
+      load: vi.fn(async () => ok(createEmptyPluginStoreData())),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const result = await handleVscodeInvoke(
+      request("plugin-store-load", {}),
+      makeDeps({ pluginStore }),
+    );
+    expect(result.type).toBe("response");
+    expect(pluginStore.load).toHaveBeenCalled();
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ schemaVersion: 1, plugins: [] });
+    }
+  });
+
+  it("plugin-store-load 失败时错误投影 category/userMessageKey 原样往返", async () => {
+    const pluginStore = {
+      load: vi.fn(async () =>
+        fail(
+          createMamepError({
+            code: "PLUGIN_STORE_LOAD_FAILED",
+            category: "plugin",
+            userMessageKey: "errors.pluginStoreError",
+            technicalMessage: "boom",
+          }),
+        ),
+      ),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const result = await handleVscodeInvoke(
+      request("plugin-store-load", {}),
+      makeDeps({ pluginStore }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("PLUGIN_STORE_LOAD_FAILED");
+      expect(result.payload.category).toBe("plugin");
+      expect(result.payload.userMessageKey).toBe("errors.pluginStoreError");
+    }
+  });
+
+  it("plugin-store-save 转发载荷给扩展宿主持久化", async () => {
+    const pluginStore = {
+      load: vi.fn(async () => ok(createEmptyPluginStoreData())),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const data = {
+      schemaVersion: 1,
+      plugins: [
+        {
+          manifest: {
+            id: "installed-a",
+            name: "Installed A",
+            version: "1.0.0",
+            description: "A user-installed plugin",
+            platform: { web: true, node: false },
+            permissions: [],
+            contributions: { panels: [] },
+          },
+          enabled: true,
+        },
+      ],
+    };
+    const result = await handleVscodeInvoke(
+      request("plugin-store-save", { data }),
+      makeDeps({ pluginStore }),
+    );
+    expect(result.type).toBe("response");
+    expect(pluginStore.save).toHaveBeenCalledWith(data);
   });
 
   it("拒绝未知 kind（不允许任意方法名调用）", async () => {

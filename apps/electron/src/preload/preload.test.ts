@@ -55,6 +55,8 @@ describe("preload 白名单桥", () => {
       "onEvent",
       "openTextFile",
       "platform",
+      "pluginStoreLoad",
+      "pluginStoreSave",
       "readTextFromClipboard",
       "saveTextFile",
       "selectSerialPort",
@@ -283,6 +285,50 @@ describe("preload 白名单桥", () => {
       expect.objectContaining({
         kind: "workspace-clear",
         payload: {},
+      }),
+    );
+    expect(result).toEqual({ ok: true, value: null });
+  });
+
+  it("pluginStoreLoad 透传空 payload 并映射插件存储响应（2026-08-30）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "plugin-store-load",
+      ok: true,
+      payload: { schemaVersion: 1, plugins: [] },
+    });
+    const result = await bridge.pluginStoreLoad();
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "plugin-store-load",
+        payload: {},
+      }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      value: { schemaVersion: 1, plugins: [] },
+    });
+  });
+
+  it("pluginStoreSave 透传插件存储数据并映射 ok（2026-08-30）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "plugin-store-save",
+      ok: true,
+      payload: null,
+    });
+    const data = { schemaVersion: 1 as const, plugins: [] };
+    const result = await bridge.pluginStoreSave(data);
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "plugin-store-save",
+        payload: { data },
       }),
     );
     expect(result).toEqual({ ok: true, value: null });

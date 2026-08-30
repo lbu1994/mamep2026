@@ -143,6 +143,9 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       "saveTextFile",
       // 工作区导入（open-text-file，2026-08-29）：主进程打开对话框读取。
       "openTextFile",
+      // 插件存储桥（2026-08-30，ADR-038）：主进程 userData plugins.json 持久化。
+      "pluginStoreLoad",
+      "pluginStoreSave",
       // 会话 RPC 桥（2026-08-23 两端 TCP 接线，ADR-022）：Electron TCP 会话承载主进程，
       // preload 暴露完整会话 RPC 方法。
       "sessionTcpConnect",

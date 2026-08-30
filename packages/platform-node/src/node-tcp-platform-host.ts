@@ -37,6 +37,7 @@ export const nodeTcpHostCapabilities: PlatformCapabilities = Object.freeze({
   logExport: "unsupported",
   workspaceImport: "unsupported",
   workspaceExport: "unsupported",
+  pluginInstall: "unsupported",
 });
 
 export interface NodeTcpPlatformHostOptions {

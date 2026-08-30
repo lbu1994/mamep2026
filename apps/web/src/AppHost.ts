@@ -41,7 +41,11 @@ import type {
   SerialPortOption,
   PlatformHost,
 } from "@mamep2026/platform-api";
-import { PluginRegistry } from "@mamep2026/plugin-api";
+import {
+  PluginPersistenceCoordinator,
+  PluginRegistry,
+} from "@mamep2026/plugin-api";
+import type { PluginStorePort } from "@mamep2026/plugin-api";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { AutoSaveCoordinator } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
@@ -56,6 +60,12 @@ export interface AppHostOptions {
   platform: PlatformHost | null;
   repository: WorkspaceRepositoryPort;
   mockTransport: boolean;
+  /**
+   * 插件存储端口（2026-08-30，ADR-038）：提供时装配 PluginPersistenceCoordinator，
+   * 启动 hydrate 已安装插件并在注册/启用变化时持久化。浏览器=IndexedDB、
+   * Electron/VSCode=主进程/扩展宿主持久化经桥。缺省不装配（无持久化，纯内存）。
+   */
+  pluginStore?: PluginStorePort | undefined;
 }
 
 export class BrowserAppHost implements AppHost {
@@ -70,6 +80,8 @@ export class BrowserAppHost implements AppHost {
   private readonly messageStore = new ApplicationMessageStore(2000);
   private readonly commLogStore = new CommunicationLogStore(10000);
   private readonly autoSave: AutoSaveCoordinator;
+  /** 插件持久化协调器（2026-08-30，ADR-038）：null = 未注入插件存储端口（纯内存）。 */
+  private readonly pluginPersistence: PluginPersistenceCoordinator | null;
   /** RTU 会话宿主（Application 层）：会话/轮询/追踪/读写的单一编排，浏览器与 VSCode 共用。 */
   private readonly rtu: RtuSessionHost;
   /** 当前会话从站地址（每表独立，2026-08-19）：UI 切换表/修改值时同步，连接时作为初始值。 */
@@ -125,6 +137,14 @@ export class BrowserAppHost implements AppHost {
     this.autoSave.onStatusChange((status) => {
       for (const listener of this.saveListeners) listener(status);
     });
+    // 插件持久化（2026-08-30，ADR-038）：注入存储端口时装配协调器并启动 hydrate。
+    this.pluginPersistence =
+      options.pluginStore !== undefined
+        ? new PluginPersistenceCoordinator(this.pluginRegistry, options.pluginStore)
+        : null;
+    if (this.pluginPersistence !== null) {
+      void this.pluginPersistence.init();
+    }
     this.messageStore.subscribe((message) => {
       for (const listener of this.messageListeners) listener(message);
     });

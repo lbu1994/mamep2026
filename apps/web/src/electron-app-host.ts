@@ -47,7 +47,10 @@ import {
   type SerialPortOption,
   type TraceSamplePayload,
 } from "@mamep2026/platform-api";
-import type { PluginRegistry } from "@mamep2026/plugin-api";
+import type {
+  PluginRegistry,
+  PluginStorePort,
+} from "@mamep2026/plugin-api";
 import {
   BrowserPlatformHost,
   usbDeviceLabel,
@@ -58,6 +61,7 @@ import {
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
+import { BridgePluginStore } from "./bridge-plugin-store";
 import { FileWorkspaceRepository } from "./file-workspace-repository";
 
 /** ElectronAppHost 可注入依赖（测试用；生产走默认装配）。 */
@@ -66,6 +70,8 @@ export interface ElectronAppHostOptions {
   serial?: Serial | undefined;
   /** 工作区仓储（默认主进程文件仓储 FileWorkspaceRepository；测试注入内存仓储）。 */
   repository?: WorkspaceRepositoryPort | undefined;
+  /** 插件存储（默认 BridgePluginStore 经 preload 桥；测试注入内存仓储）。 */
+  pluginStore?: PluginStorePort | undefined;
 }
 
 export class ElectronAppHost implements AppHost {
@@ -131,6 +137,8 @@ export class ElectronAppHost implements AppHost {
       // 工作区持久化（2026-08-30，ADR-036）：主进程文件仓储薄桥（userData 目录版本化 JSON）。
       repository: options.repository ?? new FileWorkspaceRepository(bridge),
       mockTransport: false,
+      // 插件持久化（2026-08-30，ADR-038）：主进程插件存储薄桥（userData 目录 plugins.json）。
+      pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
     });
     this.capabilities = electronCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;

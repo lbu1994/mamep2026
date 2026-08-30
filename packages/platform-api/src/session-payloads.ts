@@ -424,3 +424,49 @@ export function toAppMessagePayload(
 ): AppMessagePayload {
   return { ...message };
 }
+
+// ---- 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038）----
+// 已安装插件（manifest + 启用状态）为应用级资产，三端经 HostMessage v1 往返：
+// 浏览器直连 IndexedDB（不跨边界）；Electron 主进程 userData plugins.json；
+// VSCode Extension Host globalState。manifest 投影与 @mamep2026/plugin-api 的
+// PluginManifest 结构一致（结构收窄，非蒙混），由消费层做 FromPayload 重建。
+
+export const pluginManifestPayloadSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  version: z.string().min(1),
+  description: z.string(),
+  author: z.string().optional(),
+  platform: z.object({
+    web: z.boolean(),
+    node: z.boolean(),
+  }),
+  permissions: z.array(z.string()),
+  contributions: z.object({
+    panels: z
+      .array(
+        z.object({
+          id: z.string().min(1),
+          titleKey: z.string().min(1),
+        }),
+      )
+      .default([]),
+  }),
+});
+export type PluginManifestPayload = z.infer<typeof pluginManifestPayloadSchema>;
+
+export const storedPluginPayloadSchema = z.object({
+  manifest: pluginManifestPayloadSchema,
+  enabled: z.boolean(),
+});
+export type StoredPluginPayload = z.infer<typeof storedPluginPayloadSchema>;
+
+export const pluginStoreDataPayloadSchema = z.object({
+  schemaVersion: z.literal(1),
+  plugins: z.array(storedPluginPayloadSchema),
+});
+export type PluginStoreDataPayload = z.infer<typeof pluginStoreDataPayloadSchema>;
+
+/** plugin-store-load 响应载荷（结构同 PluginStoreData，空 store 返回 { schemaVersion:1, plugins:[] }）。 */
+export const pluginStoreDataResponseSchema = pluginStoreDataPayloadSchema;
+export type PluginStoreDataResponse = z.infer<typeof pluginStoreDataResponseSchema>;

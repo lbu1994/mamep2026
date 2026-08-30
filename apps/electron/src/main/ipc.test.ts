@@ -8,6 +8,7 @@ import { createEmptyWorkspace, createMamepError, fail, ok } from "@mamep2026/dom
 import type { TcpConnectionProfile } from "@mamep2026/domain";
 import { serializeWorkspace } from "@mamep2026/workspace";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
+import { createEmptyPluginStoreData } from "@mamep2026/plugin-api";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   electronCapabilities,
@@ -103,6 +104,10 @@ function makeDeps(overrides: Partial<IpcDeps> = {}): IpcDeps {
     ),
     openTextFile: vi.fn(async () => ok({ content: null })),
     workspace: makeWorkspaceRepo(),
+    pluginStore: {
+      load: vi.fn(async () => ok(createEmptyPluginStoreData())),
+      save: vi.fn(async () => ok(undefined)),
+    },
     ...overrides,
   };
 }
@@ -672,6 +677,105 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     );
     expect(result.type).toBe("response");
     expect(workspace.clear).toHaveBeenCalled();
+  });
+});
+
+describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () => {
+  const manifestPayload = {
+    id: "installed-a",
+    name: "Installed A",
+    version: "1.0.0",
+    description: "A user-installed plugin",
+    platform: { web: true, node: false },
+    permissions: ["ui.panel"],
+    contributions: { panels: [] },
+  };
+
+  function makePluginStore() {
+    return {
+      load: vi.fn(async () => ok(createEmptyPluginStoreData())),
+      save: vi.fn(async () => ok(undefined)),
+    };
+  }
+
+  it("plugin-store-load 转发主进程插件存储并返回数据", async () => {
+    const pluginStore = makePluginStore();
+    const result = await handleRequest(
+      request("plugin-store-load", {}),
+      makeDeps({ pluginStore }),
+    );
+    expect(result.type).toBe("response");
+    expect(pluginStore.load).toHaveBeenCalled();
+    if (result.type === "response") {
+      expect(result.payload).toEqual({ schemaVersion: 1, plugins: [] });
+    }
+  });
+
+  it("plugin-store-load 失败时错误投影 category/userMessageKey 原样往返（ADR-028）", async () => {
+    const pluginStore = {
+      ...makePluginStore(),
+      load: vi.fn(async () =>
+        fail(
+          createMamepError({
+            code: "PLUGIN_STORE_LOAD_FAILED",
+            category: "plugin",
+            userMessageKey: "errors.pluginStoreError",
+            technicalMessage: "boom",
+          }),
+        ),
+      ),
+    };
+    const result = await handleRequest(
+      request("plugin-store-load", {}),
+      makeDeps({ pluginStore }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("PLUGIN_STORE_LOAD_FAILED");
+      expect(result.payload.category).toBe("plugin");
+      expect(result.payload.userMessageKey).toBe("errors.pluginStoreError");
+    }
+  });
+
+  it("plugin-store-save 转发载荷给主进程插件存储", async () => {
+    const pluginStore = makePluginStore();
+    const data = {
+      schemaVersion: 1,
+      plugins: [{ manifest: manifestPayload, enabled: true }],
+    };
+    const result = await handleRequest(
+      request("plugin-store-save", { data }),
+      makeDeps({ pluginStore }),
+    );
+    expect(result.type).toBe("response");
+    expect(pluginStore.save).toHaveBeenCalledWith(data);
+  });
+
+  it("plugin-store-save 失败时错误投影 category/userMessageKey 原样往返", async () => {
+    const pluginStore = {
+      ...makePluginStore(),
+      save: vi.fn(async () =>
+        fail(
+          createMamepError({
+            code: "PLUGIN_STORE_WRITE_FAILED",
+            category: "plugin",
+            userMessageKey: "errors.pluginStoreError",
+            technicalMessage: "boom",
+          }),
+        ),
+      ),
+    };
+    const result = await handleRequest(
+      request("plugin-store-save", {
+        data: { schemaVersion: 1, plugins: [] },
+      }),
+      makeDeps({ pluginStore }),
+    );
+    expect(result.type).toBe("error");
+    if (result.type === "error") {
+      expect(result.payload.code).toBe("PLUGIN_STORE_WRITE_FAILED");
+      expect(result.payload.category).toBe("plugin");
+    }
   });
 });
 

@@ -33,6 +33,8 @@ import type {
 } from "./host-message";
 import type {
   BatchReadRowPayload,
+  PluginStoreDataPayload,
+  PluginStoreDataResponse,
   ReadVerifySettingsPayload,
   RegisterRowPayload,
   SessionTcpConnectPayload,
@@ -214,6 +216,12 @@ export function createVscodeBridge(
     workspaceSave: (content: string) =>
       postRequest<null>("workspace-save", { content }),
     workspaceClear: () => postRequest<null>("workspace-clear", {}),
+    // ---- 插件存储（2026-08-30，ADR-038）：VSCode 由 Extension Host globalState 承载，
+    // 经 plugin-store-load/save 转发。----
+    pluginStoreLoad: () =>
+      postRequest<PluginStoreDataResponse>("plugin-store-load", {}),
+    pluginStoreSave: (data: PluginStoreDataPayload) =>
+      postRequest<null>("plugin-store-save", { data }),
     onEvent: (listener: (event: MamepHostEvent) => void) => {
       listeners.add(listener);
       return () => {

@@ -15,6 +15,8 @@ import type {
   MamepHostApi,
   MamepHostEvent,
   OpenTextFileResponse,
+  PluginStoreDataPayload,
+  PluginStoreDataResponse,
   RegisterRowPayload,
   SaveTextFileResponse,
   SessionBatchReadResponse,
@@ -126,6 +128,14 @@ const api: MamepHostApi = {
   /** 清除主进程文件仓储（workspace-clear，2026-08-30，ADR-036）。 */
   workspaceClear(): Promise<Result<null>> {
     return invoke<null>("workspace-clear", {});
+  },
+  /** 加载插件存储（plugin-store-load，2026-08-30，ADR-038）。 */
+  pluginStoreLoad(): Promise<Result<PluginStoreDataResponse>> {
+    return invoke<PluginStoreDataResponse>("plugin-store-load", {});
+  },
+  /** 保存插件存储（plugin-store-save，2026-08-30，ADR-038）。 */
+  pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>> {
+    return invoke<null>("plugin-store-save", { data });
   },
   // ---- 远程会话 RPC（Electron TCP 会话在主进程，Renderer 远程代理）----
   sessionDisconnect(): Promise<Result<null>> {

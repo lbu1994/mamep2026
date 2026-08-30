@@ -28,6 +28,7 @@ import {
 import { DevFakeSerialFactory } from "./dev-fake-serial";
 import { createDevFakeTcpServer, type DevFakeTcpServer } from "./dev-fake-tcp";
 import { fakeDialogPaths, fakeOpenTextFile, fakeSaveTextFile } from "./dev-fake-dialog";
+import { GlobalStatePluginStore } from "./plugin-store";
 import {
   errorEnvelope,
   extractMessageId,
@@ -208,6 +209,8 @@ function createDeps(
         );
       }
     },
+    // 插件存储（plugin-store-load/save，2026-08-30，ADR-038）：Extension Host globalState 承载。
+    pluginStore: new GlobalStatePluginStore(context.globalState),
   };
 }
 

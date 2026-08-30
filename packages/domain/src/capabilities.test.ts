@@ -30,4 +30,8 @@ describe("browserCapabilities", () => {
     expect(caps.workspaceImport).toBe("upload");
     expect(caps.workspaceExport).toBe("download");
   });
+
+  it("installs plugins via client-side file pick", () => {
+    expect(caps.pluginInstall).toBe("upload");
+  });
 });

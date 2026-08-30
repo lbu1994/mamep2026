@@ -33,6 +33,7 @@ import {
 import { handleInvoke, type IpcDeps } from "./ipc";
 import { ElectronSessionHost } from "./session-host";
 import { WorkspaceFileRepository } from "./workspace-file-repository";
+import { PluginFileStore } from "./plugin-file-store";
 import {
   deriveAllowedOrigins,
   installSerialPermissionHandlers,
@@ -81,6 +82,16 @@ function ensureWorkspaceRepository(): WorkspaceFileRepository {
     );
   }
   return workspaceRepository;
+}
+
+/** 主进程侧插件文件仓储（ADR-038，2026-08-30，惰性装配；userData 目录 plugins.json）。 */
+let pluginStore: PluginFileStore | null = null;
+
+function ensurePluginStore(): PluginFileStore {
+  if (pluginStore === null) {
+    pluginStore = new PluginFileStore(app.getPath("userData"));
+  }
+  return pluginStore;
 }
 
 /** 主进程会话事件 → 推送渲染进程（HostMessage v1 event Envelope；无窗口时静默丢弃）。 */
@@ -223,6 +234,8 @@ const ipcDeps: IpcDeps = {
   },
   // 工作区文件仓储（workspace-load/save/clear，2026-08-30，ADR-036）：主进程 userData 目录版本化 JSON。
   workspace: ensureWorkspaceRepository(),
+  // 插件存储（plugin-store-load/save，2026-08-30，ADR-038）：主进程 userData 目录 plugins.json。
+  pluginStore: ensurePluginStore(),
 };
 
 async function handleInvokeEvent(

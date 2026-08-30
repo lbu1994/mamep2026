@@ -222,6 +222,9 @@ importers:
       '@mamep2026/platform-node':
         specifier: workspace:*
         version: link:../../packages/platform-node
+      '@mamep2026/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
       '@mamep2026/workspace':
         specifier: workspace:*
         version: link:../../packages/workspace
@@ -259,6 +262,9 @@ importers:
       '@mamep2026/platform-node':
         specifier: workspace:*
         version: link:../../packages/platform-node
+      '@mamep2026/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
       '@mamep2026/ui-theme':
         specifier: workspace:*
         version: link:../../packages/ui-theme

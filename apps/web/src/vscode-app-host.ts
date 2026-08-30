@@ -46,7 +46,10 @@ import {
   type TraceSamplePayload,
   type VscodeHostApi,
 } from "@mamep2026/platform-api";
-import type { PluginRegistry } from "@mamep2026/plugin-api";
+import type {
+  PluginRegistry,
+  PluginStorePort,
+} from "@mamep2026/plugin-api";
 import {
   buildVscodeTheme,
   readVscodeCssVars,
@@ -61,11 +64,14 @@ import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { useAppStore } from "@mamep2026/ui";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
+import { BridgePluginStore } from "./bridge-plugin-store";
 
 /** VscodeAppHost 可注入依赖（测试用；生产走默认装配）。 */
 export interface VscodeAppHostOptions {
   /** 工作区仓储（默认 IndexedDB；测试注入内存仓储）。 */
   repository?: WorkspaceRepositoryPort | undefined;
+  /** 插件存储（默认 BridgePluginStore 经 vscode-bridge；测试注入内存仓储）。 */
+  pluginStore?: PluginStorePort | undefined;
   /**
    * 主题 CSS 变量读取源（默认 getComputedStyle(document.documentElement) 惰性委托；
    * 测试注入 fake，避免 node 环境触碰 DOM）。
@@ -146,6 +152,8 @@ export class VscodeAppHost implements AppHost {
         options.repository ??
         new IndexedDBWorkspaceRepository(createIdbKeyValueStore()),
       mockTransport: false,
+      // 插件持久化（2026-08-30，ADR-038）：Extension Host globalState 经 vscode-bridge 薄桥。
+      pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
     });
     this.capabilities = vscodeCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;

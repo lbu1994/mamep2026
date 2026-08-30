@@ -49,6 +49,7 @@ export const nodeHostCapabilities: PlatformCapabilities = Object.freeze({
   logExport: "unsupported",
   workspaceImport: "unsupported",
   workspaceExport: "unsupported",
+  pluginInstall: "unsupported",
 });
 
 export interface NodePlatformHostOptions {

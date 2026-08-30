@@ -31,6 +31,7 @@ function makeHost(
       logExport: "save-dialog",
       workspaceImport: "upload",
       workspaceExport: "download",
+      pluginInstall: "upload",
       ...caps,
     },
     isMockMode: false,

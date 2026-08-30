@@ -14,8 +14,9 @@ import {
 import type { ConnectionState } from "@mamep2026/communication";
 import type {
   MamepHostEvent,
-  SaveTextFileResponse,
   OpenTextFileResponse,
+  PluginStoreDataResponse,
+  SaveTextFileResponse,
   SerialPortOption,
   SessionBatchReadResponse,
   SessionStateResponse,
@@ -111,6 +112,17 @@ function createFakeBridge(): {
         userMessageKey: "errors.capabilityUnsupported",
         technicalMessage: "unsupported",
       },
+    })),
+    // ---- 插件存储桥（2026-08-30，ADR-038：Extension Host globalState 持久化）----
+    pluginStoreLoad: vi.fn(
+      async (): Promise<Result<PluginStoreDataResponse>> => ({
+        ok: true,
+        value: { schemaVersion: 1, plugins: [] },
+      }),
+    ),
+    pluginStoreSave: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
     })),
     // ---- RTU 会话 RPC（VSCode 接线，2026-08-23）----
     enumerateSerialPorts: vi.fn(

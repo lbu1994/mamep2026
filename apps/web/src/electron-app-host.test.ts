@@ -19,6 +19,7 @@ import type {
   MamepHostApi,
   MamepHostEvent,
   OpenTextFileResponse,
+  PluginStoreDataResponse,
   SaveTextFileResponse,
   SessionBatchReadResponse,
   SessionStateResponse,
@@ -60,6 +61,7 @@ function createFakeBridge(): {
         logExport: "save-dialog",
         workspaceImport: "file",
         workspaceExport: "save-dialog",
+        pluginInstall: "file",
       },
     })),
     getAppVersion: vi.fn(async (): Promise<Result<string>> => ({
@@ -184,6 +186,17 @@ function createFakeBridge(): {
       value: null,
     })),
     workspaceClear: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    // ---- 插件存储桥（2026-08-30，ADR-038：主进程 plugins.json 持久化）----
+    pluginStoreLoad: vi.fn(
+      async (): Promise<Result<PluginStoreDataResponse>> => ({
+        ok: true,
+        value: { schemaVersion: 1, plugins: [] },
+      }),
+    ),
+    pluginStoreSave: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
     })),

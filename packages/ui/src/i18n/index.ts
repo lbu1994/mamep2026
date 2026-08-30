@@ -251,6 +251,16 @@ export const en = {
     permission: {
       uiPanel: "UI Panel",
     },
+    // 插件安装入口（2026-08-30，PRD §8.3 P1，ADR-038）。
+    install: "Install Plugin",
+    installUnsupported:
+      "Plugin installation is not supported in this environment.",
+    installConfirmTitle: "Install this plugin?",
+    installConfirmWarning:
+      "You are about to install an untrusted third-party plugin. It may access the device or file capabilities declared in its manifest. Only continue if you trust its source.",
+    installConfirmOk: "Install",
+    installSuccess: "Plugin installed.",
+    installedTag: "Installed",
   },
   help: {
     title: "Help / About",
@@ -396,6 +406,13 @@ export const en = {
       "The workspace file is invalid or corrupted.",
     workspaceImportUnsupported:
       "Importing a workspace file is not supported in this environment.",
+    pluginManifestInvalid: "The plugin manifest is invalid.",
+    pluginPlatformUnsupported:
+      "This plugin requires a platform not supported in this environment.",
+    pluginAlreadyRegistered: "This plugin is already registered.",
+    pluginStoreError: "Failed to persist the installed plugin.",
+    pluginStoreSchemaInvalid:
+      "The stored plugin data is invalid or corrupted.",
     clipboardUnavailable: "System clipboard is not available.",
     internal: "Internal error.",
     unexpectedResponse: "Unexpected response from the device.",
@@ -644,6 +661,15 @@ export const zh: TranslationResources = {
     permission: {
       uiPanel: "界面面板",
     },
+    // 插件安装入口（2026-08-30，PRD §8.3 P1，ADR-038）。
+    install: "安装插件",
+    installUnsupported: "当前环境不支持安装插件。",
+    installConfirmTitle: "安装此插件？",
+    installConfirmWarning:
+      "你将安装一个未受信任的第三方插件。它可能访问清单中声明的设备或文件能力。请仅在信任其来源时继续。",
+    installConfirmOk: "安装",
+    installSuccess: "插件安装成功。",
+    installedTag: "已安装",
   },
   help: {
     title: "帮助 / 关于",
@@ -780,7 +806,13 @@ export const zh: TranslationResources = {
     tcpPortOutOfRange: "TCP 端口超出范围（1..65535）。",
     tcpUnitIdOutOfRange: "TCP 单元标识超出范围（0..255）。",
     workspaceSchemaInvalid: "工作区文件无效或已损坏。",
-    workspaceImportUnsupported: "当前环境不支持导入工作区文件。",    clipboardUnavailable: "系统剪贴板不可用。",
+    workspaceImportUnsupported: "当前环境不支持导入工作区文件。",
+    pluginManifestInvalid: "插件清单无效。",
+    pluginPlatformUnsupported: "该插件要求的平台能力当前环境不支持。",
+    pluginAlreadyRegistered: "该插件已注册。",
+    pluginStoreError: "已安装插件持久化失败。",
+    pluginStoreSchemaInvalid: "已存储的插件数据无效或已损坏。",
+    clipboardUnavailable: "系统剪贴板不可用。",
     internal: "内部错误。",
     unexpectedResponse: "设备响应异常。",
     illegalStateTransition: "连接状态转换非法。",

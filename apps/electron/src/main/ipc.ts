@@ -32,6 +32,7 @@ import {
 } from "@mamep2026/platform-api";
 import { parseWorkspace, serializeWorkspace } from "@mamep2026/workspace";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
+import type { PluginStorePort } from "@mamep2026/plugin-api";
 
 /** 主进程侧 TCP 会话能力（ElectronSessionHost 实现；测试注入 fake）。 */
 export interface ElectronSessionLike {
@@ -93,6 +94,11 @@ export interface IpcDeps {
    * 主进程应用数据目录版本化 JSON，实现 WorkspaceRepositoryPort（原子保存 + 备份恢复）。
    */
   workspace: WorkspaceRepositoryPort;
+  /**
+   * 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038）：
+   * 主进程 userData plugins.json，实现 PluginStorePort（原子保存 + 备份恢复）。
+   */
+  pluginStore: PluginStorePort;
 }
 
 /** 会话 RPC 包装：run 返回 Result 并映射为 response/error Envelope。 */
@@ -357,6 +363,12 @@ export async function handleRequest(
     case "workspace-clear":
       // Electron 文件持久化（2026-08-30，ADR-036）：清除主文件与备份。
       return sessionResult(message, () => deps.workspace.clear());
+    case "plugin-store-load":
+      // 插件存储（2026-08-30，ADR-038）：返回已安装插件清单 + 启用状态（无文件 = 空数组）。
+      return sessionResult(message, () => deps.pluginStore.load());
+    case "plugin-store-save":
+      // 插件存储（2026-08-30，ADR-038）：载荷为结构化插件存储数据，主进程校验后原子落盘。
+      return sessionResult(message, () => deps.pluginStore.save(message.payload.data));
     case "debug:get-state":
       // 开发/测试探针（Playwright Electron E2E 用）：打包构建禁用。
       if (deps.isPackaged()) {

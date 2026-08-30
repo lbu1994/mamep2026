@@ -16,6 +16,7 @@ import {
   appMessagePayloadSchema,
   batchReadSummaryPayloadSchema,
   commLogEventPayloadSchema,
+  pluginStoreDataPayloadSchema,
   registerRowPayloadSchema,
   rtuConnectionProfilePayloadSchema,
   sessionBatchCancelPayloadSchema,
@@ -24,6 +25,8 @@ import {
   sessionWriteRowPayloadSchema,
   traceSamplePayloadSchema,
   type BatchReadRowPayload,
+  type PluginStoreDataPayload,
+  type PluginStoreDataResponse,
   type ReadVerifySettingsPayload,
   type RegisterRowPayload,
   type SessionTcpConnectPayload,
@@ -74,6 +77,9 @@ export const HOST_REQUEST_KINDS = [
   "workspace-load",
   "workspace-save",
   "workspace-clear",
+  // 插件存储（2026-08-30，ADR-038）：已安装插件清单 + 启用状态经主进程/扩展宿主持久化。
+  "plugin-store-load",
+  "plugin-store-save",
 ] as const;
 export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
 
@@ -430,6 +436,18 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
     // Electron 文件持久化（2026-08-30，ADR-036）：清除主文件与备份（用户重置损坏工作区用）。
     payload: z.object({}),
   }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("plugin-store-load"),
+    // 插件存储（2026-08-30，ADR-038）：返回已安装插件清单 + 启用状态（空 store 返回空数组）。
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("plugin-store-save"),
+    // 插件存储（2026-08-30，ADR-038）：data 为插件存储载荷（manifest + enabled）。
+    payload: z.object({ data: pluginStoreDataPayloadSchema }),
+  }),
 ]);
 export type HostRequestMessage = z.infer<typeof hostRequestSchema>;
 
@@ -611,6 +629,17 @@ export interface MamepHostApi {
   /** 清除主进程文件仓储（workspace-clear，2026-08-30，ADR-036）：删除主文件与备份。 */
   workspaceClear(): Promise<Result<null>>;
 
+  /**
+   * 加载插件存储（plugin-store-load，2026-08-30，ADR-038）：返回已安装插件清单 + 启用状态。
+   * 无数据时返回空数组（非错误）。
+   */
+  pluginStoreLoad(): Promise<Result<PluginStoreDataResponse>>;
+  /**
+   * 保存插件存储（plugin-store-save，2026-08-30，ADR-038）：data 为插件存储载荷。
+   * 主进程/扩展宿主持久化后返回。
+   */
+  pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>>;
+
   // ---- 远程会话 RPC（2026-08-23 两端 TCP 接线：Electron TCP 会话在主进程，Renderer 远程代理）----
 
   sessionDisconnect(): Promise<Result<null>>;
@@ -685,6 +714,10 @@ export interface VscodeHostApi
   sessionSetSlaveAddress(slave: number): Promise<Result<null>>;
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）：对后续请求生效。 */
   sessionSetUnitId(unitId: number): Promise<Result<null>>;
+  /** 加载插件存储（plugin-store-load，2026-08-30，ADR-038）：返回已安装插件 + 启用状态。 */
+  pluginStoreLoad(): Promise<Result<PluginStoreDataResponse>>;
+  /** 保存插件存储（plugin-store-save，2026-08-30，ADR-038）：持久化已安装插件清单。 */
+  pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>>;
   /** 单行读（session-read-row）：经 Extension Host 统一调度器 FC03（多寄存器行返回 values[]，ADR-030）。 */
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number | number[]>>;
   /** 单行写（session-write-row）：经 Extension Host 统一调度器 FC0x10；writeVerify 为每表写后回读配置（2026-08-26）。 */
@@ -733,6 +766,8 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   logExport: "save-dialog",
   workspaceImport: "file",
   workspaceExport: "save-dialog",
+  // 插件安装入口（2026-08-30，ADR-038）：主进程 userData plugins.json 持久化，manifest 经 open-text-file 对话框读取。
+  pluginInstall: "file",
 });
 
 /**
@@ -750,4 +785,6 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   logExport: "save-dialog",
   workspaceImport: "file",
   workspaceExport: "save-dialog",
+  // 插件安装入口（2026-08-30，ADR-038）：Extension Host globalState 持久化，manifest 经 open-text-file 对话框读取。
+  pluginInstall: "file",
 });
