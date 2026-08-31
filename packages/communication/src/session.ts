@@ -71,12 +71,18 @@ export interface ReadRegistersMeta {
   priority?: RequestPriority;
   group?: string;
   cancelToken?: CancellationToken;
+  /** 发起插件 id（source="plugin" 时必填，流入通信日志；ADR-039）。 */
+  pluginId?: string | null;
 }
 
 /** 写请求元数据（多寄存器 values 由 writeRegisters 传入，ADR-030）。 */
 export interface WriteRegistersMeta {
   source: RequestSource;
   userAddress?: number;
+  /** 插件写请求可指定 plugin-background（ADR-039）；缺省保持 manual-write。 */
+  priority?: RequestPriority;
+  /** 发起插件 id（source="plugin" 时必填，流入通信日志；ADR-039）。 */
+  pluginId?: string | null;
 }
 
 interface ExchangeMeta {
@@ -85,6 +91,7 @@ interface ExchangeMeta {
   sentAddress: number | null;
   functionCode: number;
   quantity: number;
+  pluginId: string | null;
 }
 
 /** 会话协议：rtu（默认）/ tcp（2026-08-23 TCP 接线）。 */
@@ -287,6 +294,7 @@ export class CommunicationSession {
           errorCode: "LATE_RESPONSE_DISCARDED",
           exceptionCode: null,
           source: "connection-control",
+          pluginId: null,
           durationMs: null,
         });
       }
@@ -332,6 +340,7 @@ export class CommunicationSession {
       errorCode: error.code,
       exceptionCode: null,
       source: "connection-control",
+      pluginId: null,
       durationMs: null,
     });
   }
@@ -469,7 +478,7 @@ export class CommunicationSession {
     }
     return this.scheduler.enqueue(
       () => this.executeWrite(sentAddress, values, meta),
-      { priority: "manual-write" },
+      { priority: meta.priority ?? "manual-write" },
     );
   }
 
@@ -486,6 +495,7 @@ export class CommunicationSession {
         sentAddress,
         functionCode: FUNCTION_READ_HOLDING,
         quantity,
+        pluginId: meta.pluginId ?? null,
       },
     );
     if (!decoded.ok) return decoded;
@@ -520,6 +530,7 @@ export class CommunicationSession {
         sentAddress,
         functionCode: FUNCTION_WRITE_MULTIPLE,
         quantity: values.length,
+        pluginId: meta.pluginId ?? null,
       },
     );
     if (!decoded.ok) return decoded;
@@ -577,6 +588,7 @@ export class CommunicationSession {
         errorCode: null,
         exceptionCode: null,
         source: meta.source,
+        pluginId: meta.pluginId,
         durationMs: null,
       });
 
@@ -828,6 +840,7 @@ export class CommunicationSession {
       errorCode,
       exceptionCode,
       source: meta.source,
+      pluginId: meta.pluginId,
       durationMs: this.options.clock.now() - startedAt,
     });
   }

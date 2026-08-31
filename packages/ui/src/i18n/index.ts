@@ -209,6 +209,7 @@ export const en = {
     commLog: "Comm Log",
     properties: "Comm Properties",
     notes: "Notes",
+    plugins: "Plugins",
     clear: "Clear",
     autoScroll: "Auto scroll",
     copy: "Copy",
@@ -248,8 +249,31 @@ export const en = {
     platformNode: "Node",
     platformWebTooltip: "Runs in the browser (Web platform).",
     platformNodeTooltip: "Requires the Node.js platform.",
+    // 可执行化（2026-08-31，ADR-039）：apiVersion / 能力要求 / entry 展示。
+    apiVersion: "API Version",
+    requiredCapabilities: "Required capabilities",
+    entry: "Entry",
+    entryWeb: "Web",
+    entryNode: "Node",
+    entryNotExecuted: "Declared only (not executed)",
+    // 贡献点占位（2026-08-31，ADR-039）：交互内容随 Phase F 插件 runtime 提供。
+    panelPlaceholder:
+      "Plugin panel content will be provided by the plugin runtime.",
+    settingsPlaceholder:
+      "Plugin settings will be provided by the plugin runtime.",
+    toolbarActionPlaceholder:
+      "This plugin action is not available yet (plugin runtime is Phase A).",
     permission: {
       uiPanel: "UI Panel",
+      communication: "Communication",
+      deviceWrite: "Device Write",
+      workspaceRead: "Workspace Read",
+      workspaceWrite: "Workspace Write",
+      fileRead: "File Read",
+      fileWrite: "File Write",
+      network: "Network",
+      uiContribution: "UI Contribution",
+      theme: "Theme",
     },
     // 插件安装入口（2026-08-30，PRD §8.3 P1，ADR-038）。
     install: "Install Plugin",
@@ -619,6 +643,7 @@ export const zh: TranslationResources = {
     commLog: "通信日志",
     properties: "通信属性",
     notes: "备注",
+    plugins: "插件",
     clear: "清空",
     autoScroll: "自动滚动",
     copy: "复制",
@@ -658,8 +683,29 @@ export const zh: TranslationResources = {
     platformNode: "Node",
     platformWebTooltip: "可在浏览器（Web 平台）运行。",
     platformNodeTooltip: "需要 Node.js 平台。",
+    // 可执行化（2026-08-31，ADR-039）：apiVersion / 能力要求 / entry 展示。
+    apiVersion: "API 版本",
+    requiredCapabilities: "能力要求",
+    entry: "入口",
+    entryWeb: "Web",
+    entryNode: "Node",
+    entryNotExecuted: "仅声明（不执行）",
+    // 贡献点占位（2026-08-31，ADR-039）：交互内容随 Phase F 插件 runtime 提供。
+    panelPlaceholder: "插件面板内容将由插件运行时提供。",
+    settingsPlaceholder: "插件设置内容将由插件运行时提供。",
+    toolbarActionPlaceholder:
+      "此插件动作暂不可用（插件运行时为 Phase A）。",
     permission: {
       uiPanel: "界面面板",
+      communication: "通信",
+      deviceWrite: "设备写入",
+      workspaceRead: "工作区读取",
+      workspaceWrite: "工作区写入",
+      fileRead: "文件读取",
+      fileWrite: "文件写入",
+      network: "网络",
+      uiContribution: "界面贡献",
+      theme: "主题",
     },
     // 插件安装入口（2026-08-30，PRD §8.3 P1，ADR-038）。
     install: "安装插件",

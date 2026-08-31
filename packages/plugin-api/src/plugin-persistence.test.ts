@@ -11,10 +11,12 @@ function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
     id: "installed-a",
     name: "Installed A",
     version: "1.0.0",
+    apiVersion: "1.0",
     description: "A user-installed plugin",
+    requiredCapabilities: [],
     platform: { web: true, node: false },
     permissions: [],
-    contributions: { panels: [] },
+    contributes: {},
     ...overrides,
   };
 }
@@ -38,7 +40,7 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
   it("init 时从 store 加载并 hydrate 已安装插件", async () => {
     const registry = new PluginRegistry();
     const { store } = makeStore({
-      schemaVersion: 1,
+      schemaVersion: 2,
       plugins: [{ manifest: manifest(), enabled: false }],
     });
     const coordinator = new PluginPersistenceCoordinator(registry, store);

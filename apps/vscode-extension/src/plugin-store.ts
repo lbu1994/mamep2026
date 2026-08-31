@@ -11,6 +11,7 @@ import { fail, ok } from "@mamep2026/domain";
 import type { PluginStoreData, PluginStorePort } from "@mamep2026/plugin-api";
 import {
   createEmptyPluginStoreData,
+  migratePluginStoreData,
   pluginStoreDataSchema,
 } from "@mamep2026/plugin-api";
 
@@ -43,15 +44,8 @@ export class GlobalStatePluginStore implements PluginStorePort {
   async load(): Promise<Result<PluginStoreData>> {
     const raw = this.memento.get<unknown>(STORE_KEY);
     if (raw === undefined) return ok(createEmptyPluginStoreData());
-    const parsed = pluginStoreDataSchema.safeParse(raw);
-    if (!parsed.success) {
-      return fail(
-        schemaInvalidError(
-          `stored plugin store is invalid: ${parsed.error.message}`,
-        ),
-      );
-    }
-    return ok(parsed.data);
+    // v1 → v2 迁移（ADR-039）：老版本已装插件平滑升级；损坏数据返回结构化错误。
+    return migratePluginStoreData(raw);
   }
 
   async save(data: PluginStoreData): Promise<Result<void>> {

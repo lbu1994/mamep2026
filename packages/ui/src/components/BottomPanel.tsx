@@ -43,6 +43,11 @@ import {
 import { useAppStore } from "../app-store";
 import { STATE_DOT_COLOR } from "../connection-state";
 import { isNearBottom } from "../log-scroll";
+import { usePluginContributions } from "../plugin/use-contributions";
+import {
+  PluginPanels,
+  type PanelContribution,
+} from "./plugin-contributions";
 
 /**
  * 通信日志单行（性能优化）：memo 后追加新日志时，旧行 entry 引用不变即跳过整棵子树重渲染，
@@ -101,6 +106,11 @@ export function BottomPanel(): React.ReactNode {
   const panelLayout = useAppStore((s) => s.workspace.panelLayout);
   const properties = host?.getCommProperties() ?? null;
   const connectionState = useAppStore((s) => s.connectionState);
+  // 插件面板贡献（2026-08-31，ADR-039）：有贡献时显示「插件」页签。
+  const pluginPanels = usePluginContributions<PanelContribution[]>(
+    host,
+    "panels",
+  );
 
   const collapsed = panelLayout.bottomPanelCollapsed;
   const activeTab = panelLayout.activeBottomTab;
@@ -492,6 +502,15 @@ export function BottomPanel(): React.ReactNode {
             children: propertiesTab,
           },
           { key: "notes", label: t("panel.notes"), children: notesTab },
+          ...(pluginPanels.length > 0
+            ? [
+                {
+                  key: "plugins",
+                  label: t("panel.plugins"),
+                  children: <PluginPanels host={host} />,
+                },
+              ]
+            : []),
         ]}
       />
     </div>

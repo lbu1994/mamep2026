@@ -28,12 +28,21 @@ export interface PlatformCapabilities {
   readonly workspaceExport: WorkspaceExportCapability;
   /** 插件安装入口的文件来源（2026-08-30，PRD §8.3 P1，ADR-038）。 */
   readonly pluginInstall: PluginInstallCapability;
+  /** 可执行插件（web 插件代码执行，ADR-039）：Phase A 为 false，Phase F 隔离机制落地后翻转。 */
+  readonly executablePlugins: boolean;
+  /** Host 插件（Node 主进程 / Extension Host 执行，ADR-039）：Phase A 为 false，Phase F 翻转。 */
+  readonly hostPlugins: boolean;
+  /** 已注册协议扩展 ID（如 ["yaskawa-memobus"]；Phase B 扩展）。 */
+  readonly protocolExtensions: readonly string[];
+  /** 已注册表类型 ID（含核心 "holding-register"；Phase C 扩展）。 */
+  readonly tableTypes: readonly string[];
 }
 
 /** 浏览器端能力：RTU 支持、TCP 不支持、串口走浏览器授权、无 Node.js 插件；
  * 日志导出走浏览器 Blob 下载（logExport: "download"）；
  * 工作区导入走客户端文件选择（workspaceImport: "upload"）、导出走 Blob 下载（workspaceExport: "download"）；
- * 插件安装走客户端文件选择（pluginInstall: "upload"，2026-08-30，ADR-038）。 */
+ * 插件安装走客户端文件选择（pluginInstall: "upload"，2026-08-30，ADR-038）；
+ * 可执行插件/表类型如实声明（Phase A：executablePlugins/hostPlugins=false、tableTypes 仅核心，ADR-039）。 */
 export const browserCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: true,
   modbusTcp: false,
@@ -45,4 +54,8 @@ export const browserCapabilities: PlatformCapabilities = Object.freeze({
   workspaceImport: "upload",
   workspaceExport: "download",
   pluginInstall: "upload",
+  executablePlugins: false,
+  hostPlugins: false,
+  protocolExtensions: [],
+  tableTypes: ["holding-register"],
 });

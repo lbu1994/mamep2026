@@ -15,6 +15,10 @@ import type {
   MamepHostApi,
   MamepHostEvent,
   OpenTextFileResponse,
+  PluginContributionQueryResponse,
+  PluginRpcPayload,
+  PluginRuntimeLoadPayload,
+  PluginRuntimeUnloadPayload,
   PluginStoreDataPayload,
   PluginStoreDataResponse,
   RegisterRowPayload,
@@ -136,6 +140,25 @@ const api: MamepHostApi = {
   /** 保存插件存储（plugin-store-save，2026-08-30，ADR-038）。 */
   pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>> {
     return invoke<null>("plugin-store-save", { data });
+  },
+  // ---- 插件运行时桥（2026-08-31，ADR-039）：Phase A 主进程返回能力错误，契约就位。----
+  pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>> {
+    return invoke<null>("plugin-runtime-load", payload);
+  },
+  pluginRuntimeUnload(
+    payload: PluginRuntimeUnloadPayload,
+  ): Promise<Result<null>> {
+    return invoke<null>("plugin-runtime-unload", payload);
+  },
+  pluginRpc(payload: PluginRpcPayload): Promise<Result<unknown>> {
+    return invoke<unknown>("plugin-rpc", payload);
+  },
+  pluginContributionQuery(payload?: {
+    pointId?: string;
+  }): Promise<Result<PluginContributionQueryResponse>> {
+    return invoke<PluginContributionQueryResponse>("plugin-contribution-query", {
+      ...(payload?.pointId !== undefined ? { pointId: payload.pointId } : {}),
+    });
   },
   // ---- 远程会话 RPC（Electron TCP 会话在主进程，Renderer 远程代理）----
   sessionDisconnect(): Promise<Result<null>> {

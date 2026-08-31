@@ -40,8 +40,15 @@ import type {
   SerialDeviceHandle,
   SerialPortOption,
   PlatformHost,
+  PluginContributionQueryResponse,
+  PluginRpcPayload,
+  PluginRuntimeLoadPayload,
+  PluginRuntimeUnloadPayload,
 } from "@mamep2026/platform-api";
 import {
+  BUILTIN_CONTRIBUTION_POINTS,
+  ContributionPointRegistry,
+  PLUGIN_RUNTIME_NOT_AVAILABLE,
   PluginPersistenceCoordinator,
   PluginRegistry,
 } from "@mamep2026/plugin-api";
@@ -71,7 +78,9 @@ export interface AppHostOptions {
 export class BrowserAppHost implements AppHost {
   readonly capabilities: PlatformCapabilities;
   readonly appVersion = __APP_VERSION__;
-  readonly pluginRegistry = new PluginRegistry();
+  readonly pluginRegistry: PluginRegistry;
+  /** 贡献点注册表（ADR-039）：注册内置贡献点并注入 PluginRegistry 校验插件 contributes。 */
+  private readonly contributionRegistry: ContributionPointRegistry;
   readonly isMockMode: boolean;
   private readonly platform: PlatformHost | null;
   private readonly repository: WorkspaceRepositoryPort;
@@ -115,6 +124,15 @@ export class BrowserAppHost implements AppHost {
     this.platform = options.platform;
     this.repository = options.repository;
     this.isMockMode = options.mockTransport;
+    // 贡献点注册表（2026-08-31，ADR-039）：注册 10 个内置贡献点，插件 contributes 按点校验；
+    // 消费方由 UI 层经 host.pluginRegistry.getContributions(id) 读取（启用/失败过滤）。
+    this.contributionRegistry = new ContributionPointRegistry();
+    for (const point of BUILTIN_CONTRIBUTION_POINTS) {
+      this.contributionRegistry.registerPoint(point);
+    }
+    this.pluginRegistry = new PluginRegistry({
+      contributionRegistry: this.contributionRegistry,
+    });
     this.mockTransportInstance = options.mockTransport
       ? new MockTransport()
       : null;
@@ -453,6 +471,31 @@ export class BrowserAppHost implements AppHost {
     );
   }
 
+  // ---- 插件运行时桥（2026-08-31，ADR-039）：浏览器无宿主桥，如实返回能力错误；
+  // 契约与穷尽守卫先行，运行时语义 Phase F 补齐。----
+
+  pluginRuntimeLoad(
+    _payload: PluginRuntimeLoadPayload,
+  ): Promise<Result<null>> {
+    return Promise.resolve(fail(pluginRuntimeUnavailableError()));
+  }
+
+  pluginRuntimeUnload(
+    _payload: PluginRuntimeUnloadPayload,
+  ): Promise<Result<null>> {
+    return Promise.resolve(fail(pluginRuntimeUnavailableError()));
+  }
+
+  pluginRpc(_payload: PluginRpcPayload): Promise<Result<unknown>> {
+    return Promise.resolve(fail(pluginRuntimeUnavailableError()));
+  }
+
+  pluginContributionQuery(_payload?: {
+    pointId?: string;
+  }): Promise<Result<PluginContributionQueryResponse>> {
+    return Promise.resolve(fail(pluginRuntimeUnavailableError()));
+  }
+
   getConnectionState(): ConnectionState {
     return this.rtu.getConnectionState();
   }
@@ -580,5 +623,16 @@ function clipboardUnavailableError() {
     severity: "warning",
     userMessageKey: "errors.clipboardUnavailable",
     technicalMessage: "system clipboard is not available in this context",
+  });
+}
+
+/** 插件运行时不可用（Phase A 无执行/无宿主桥）时返回的结构化能力错误（ADR-039）。 */
+function pluginRuntimeUnavailableError() {
+  return createMamepError({
+    code: PLUGIN_RUNTIME_NOT_AVAILABLE,
+    category: "plugin",
+    userMessageKey: "errors.pluginRuntimeNotAvailable",
+    technicalMessage:
+      "plugin runtime is not available in this platform (Phase A)",
   });
 }

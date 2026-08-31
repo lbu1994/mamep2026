@@ -39,6 +39,7 @@ import {
   type VscodeHostDebugState,
 } from "@mamep2026/platform-api";
 import type { PluginStorePort } from "@mamep2026/plugin-api";
+import { PLUGIN_RUNTIME_NOT_AVAILABLE } from "@mamep2026/plugin-api";
 
 /** 错误响应 category（与 host-message.ts 的 errorCategorySchema 对齐）。 */
 export type HostErrorCategory =
@@ -396,6 +397,19 @@ export async function handleVscodeRequest(
     case "plugin-store-save":
       // 插件存储（2026-08-30，ADR-038）：载荷为结构化插件存储数据，宿主校验后写入 globalState。
       return sessionResult(message, () => deps.pluginStore.save(message.payload.data));
+    case "plugin-runtime-load":
+    case "plugin-runtime-unload":
+    case "plugin-rpc":
+    case "plugin-contribution-query":
+      // 插件运行时桥（2026-08-31，ADR-039）：Phase A 不执行第三方代码（隔离机制 Phase F，
+      // 另立 ADR），宿主侧如实返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误；契约与穷尽守卫先行。
+      return errorEnvelope(
+        message.messageId,
+        PLUGIN_RUNTIME_NOT_AVAILABLE,
+        `plugin runtime is not available in this build (kind=${message.kind})`,
+        "plugin",
+        "errors.pluginRuntimeNotAvailable",
+      );
     case "debug:get-state":
       // 开发/测试探针（e2e 用）：生产构建禁用。
       if (!deps.isDev()) {

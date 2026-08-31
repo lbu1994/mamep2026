@@ -88,6 +88,8 @@ import {
 import { useAppStore } from "../app-store";
 import type { RowFailure } from "../row-result";
 import { computeNoColumnWidth } from "../no-column-width";
+import { usePluginContributions } from "../plugin/use-contributions";
+import type { ToolbarActionContribution } from "../plugin/plugin-registries";
 import { clampColumnWidth } from "./column-resize";
 import { buildRowMenuItems, type RowMenuActions } from "./RegisterRowMenu";
 import { ReadAllResultMessage } from "./ReadAllResultMessage";
@@ -1077,6 +1079,16 @@ export const RegisterTable = memo(function RegisterTable({
   // 应用已在 MamepApp 用 <AntApp> 包裹（测试须包 <AntApp>，见 BottomPanel.test.tsx）。
   const { message } = App.useApp();
   const host = useAppStore((s) => s.host);
+  // 插件工具栏动作贡献（2026-08-31，ADR-039）：按目标表类型过滤（Phase A 仅核心表），
+  // 无 handler → 禁用按钮 + tooltip 占位（handler 随 Phase F 插件 runtime 提供）。
+  const toolbarActions = usePluginContributions<ToolbarActionContribution>(
+    host,
+    "toolbarAction",
+  ).filter(
+    (action) =>
+      action.payload.targetTableType === undefined ||
+      action.payload.targetTableType === "holding-register",
+  );
   // 连接状态订阅：连接/断开时刷新（工具栏「从站地址 / Unit ID」label 按活动协议切换，
   // 2026-08-25 TCP Unit ID 会话内动态修改；协议只在连接时变化）。
   const connectionState = useAppStore((s) => s.connectionState);
@@ -2264,6 +2276,28 @@ export const RegisterTable = memo(function RegisterTable({
             {t("table.rowCount", { count: rows.length })}
           </span>
         </div>
+        {toolbarActions.length > 0 ? (
+          <>
+            <span className="table-toolbar__sep" aria-hidden="true" />
+            <div className="table-toolbar__group table-toolbar__plugins">
+              {toolbarActions.map((action) => (
+                <Tooltip
+                  key={action.payload.id}
+                  title={t("plugins.toolbarActionPlaceholder")}
+                >
+                  <Button
+                    size="small"
+                    disabled
+                    aria-label={t(action.payload.titleKey)}
+                    data-testid={`plugin-toolbar-action-${action.payload.id}`}
+                  >
+                    {t(action.payload.titleKey)}
+                  </Button>
+                </Tooltip>
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
       <DndContext
         modifiers={[restrictToVerticalAxis]}

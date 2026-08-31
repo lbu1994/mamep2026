@@ -7,10 +7,12 @@ function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
     id: "example-panel",
     name: "Example Panel",
     version: "1.0.0",
+    apiVersion: "1.0",
     description: "A built-in example plugin",
+    requiredCapabilities: [],
     platform: { web: true, node: false },
-    permissions: ["ui.panel"],
-    contributions: {
+    permissions: ["ui-contribution"],
+    contributes: {
       panels: [{ id: "example-info", titleKey: "plugins.example.title" }],
     },
     ...overrides,
@@ -93,7 +95,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     registry.setEnabled("installed-b", false);
 
     const data = registry.snapshot();
-    expect(data.schemaVersion).toBe(1);
+    expect(data.schemaVersion).toBe(2);
     expect(data.plugins.map((p) => p.manifest.id)).toEqual([
       "installed-a",
       "installed-b",
@@ -111,7 +113,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     registry.register(manifest());
 
     registry.hydrate({
-      schemaVersion: 1,
+      schemaVersion: 2,
       plugins: [
         // 与内置同 id：跳过（内置优先），不产生加载错误。
         { manifest: manifest({ name: "Duplicate" }), enabled: false },

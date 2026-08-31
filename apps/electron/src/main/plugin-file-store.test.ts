@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { createEmptyPluginStoreData } from "@mamep2026/plugin-api";
-import type { PluginStoreData } from "@mamep2026/plugin-api";
+import type { PluginManifest, PluginStoreData } from "@mamep2026/plugin-api";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,19 +14,21 @@ import { PluginFileStore } from "./plugin-file-store";
 const MAIN_FILE = "plugins.json";
 const BACKUP_FILE = "plugins.json.bak";
 
-const manifest = {
+const manifest: PluginManifest = {
   id: "installed-a",
   name: "Installed A",
   version: "1.0.0",
+  apiVersion: "1.0",
   description: "A user-installed plugin",
+  requiredCapabilities: [],
   platform: { web: true, node: false },
-  permissions: ["ui.panel"],
-  contributions: { panels: [] },
+  permissions: ["ui-contribution"],
+  contributes: { panels: [] },
 };
 
 function storeData(name: string): PluginStoreData {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     plugins: [{ manifest: { ...manifest, id: name, name }, enabled: true }],
   };
 }

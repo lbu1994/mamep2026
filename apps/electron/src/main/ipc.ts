@@ -33,6 +33,7 @@ import {
 import { parseWorkspace, serializeWorkspace } from "@mamep2026/workspace";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type { PluginStorePort } from "@mamep2026/plugin-api";
+import { PLUGIN_RUNTIME_NOT_AVAILABLE } from "@mamep2026/plugin-api";
 
 /** 主进程侧 TCP 会话能力（ElectronSessionHost 实现；测试注入 fake）。 */
 export interface ElectronSessionLike {
@@ -369,6 +370,19 @@ export async function handleRequest(
     case "plugin-store-save":
       // 插件存储（2026-08-30，ADR-038）：载荷为结构化插件存储数据，主进程校验后原子落盘。
       return sessionResult(message, () => deps.pluginStore.save(message.payload.data));
+    case "plugin-runtime-load":
+    case "plugin-runtime-unload":
+    case "plugin-rpc":
+    case "plugin-contribution-query":
+      // 插件运行时桥（2026-08-31，ADR-039）：Phase A 不执行第三方代码（隔离机制 Phase F，
+      // 另立 ADR），宿主侧如实返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误；契约与穷尽守卫先行。
+      return errorEnvelope(
+        message.messageId,
+        PLUGIN_RUNTIME_NOT_AVAILABLE,
+        `plugin runtime is not available in this build (kind=${message.kind})`,
+        "plugin",
+        "errors.pluginRuntimeNotAvailable",
+      );
     case "debug:get-state":
       // 开发/测试探针（Playwright Electron E2E 用）：打包构建禁用。
       if (deps.isPackaged()) {

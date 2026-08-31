@@ -356,3 +356,43 @@ describe("CommunicationSession transport close/error", () => {
     expect(session.getState()).toBe("disconnected");
   });
 });
+
+describe("plugin 来源与 pluginId（ADR-039）", () => {
+  it("readRegister 的 pluginId 元数据流入通信日志", async () => {
+    const logs: CommunicationLogEvent[] = [];
+    const { clock, transport, session } = makeSession({
+      onLog: (e) => logs.push(e),
+    });
+    await session.connect();
+
+    const promise = session.readRegister(0x0001, {
+      source: "plugin",
+      pluginId: "demo-plugin",
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(readResponse(1, 0x1234));
+    const result = await promise;
+    expect(result.ok).toBe(true);
+
+    const requestLog = logs.find(
+      (l) => l.direction === "request" && l.source === "plugin",
+    );
+    expect(requestLog?.pluginId).toBe("demo-plugin");
+  });
+
+  it("writeRegister 支持 priority 元数据（plugin-background 传入调度器）", async () => {
+    const { clock, transport, session } = makeSession();
+    await session.connect();
+
+    const promise = session.writeRegister(0x0001, 0x1234, {
+      source: "plugin",
+      pluginId: "demo-plugin",
+      priority: "plugin-background",
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(writeResponse(1, 0x0001));
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.kind).toBe("write-succeeded-no-verify");
+  });
+});

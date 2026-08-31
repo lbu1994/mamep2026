@@ -11,6 +11,7 @@ import { fail, ok } from "@mamep2026/domain";
 import type { PluginStoreData, PluginStorePort } from "@mamep2026/plugin-api";
 import {
   createEmptyPluginStoreData,
+  migratePluginStoreData,
   pluginStoreDataSchema,
 } from "@mamep2026/plugin-api";
 import type { KeyValueStore } from "@mamep2026/platform-web";
@@ -44,20 +45,8 @@ export class IndexedDBPluginStore implements PluginStorePort {
     try {
       const raw = await this.store.get(PLUGINS_KEY);
       if (raw === undefined) return ok(createEmptyPluginStoreData());
-      const parsed = pluginStoreDataSchema.safeParse(raw);
-      if (!parsed.success) {
-        return fail(
-          createMamepError({
-            code: "PLUGIN_STORE_SCHEMA_INVALID",
-            category: "plugin",
-            severity: "error",
-            retryable: false,
-            userMessageKey: "errors.pluginStoreSchemaInvalid",
-            technicalMessage: `stored plugin store is invalid: ${parsed.error.message}`,
-          }),
-        );
-      }
-      return ok(parsed.data);
+      // v1 → v2 迁移（ADR-039）：老版本已装插件平滑升级；损坏数据返回结构化错误。
+      return migratePluginStoreData(raw);
     } catch (cause) {
       return fail(
         pluginStoreError(

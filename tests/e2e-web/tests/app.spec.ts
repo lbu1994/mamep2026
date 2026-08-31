@@ -401,8 +401,8 @@ test("plugin manager lists the built-in plugin with enable toggle", async ({
   // 平台能力：Web/Node 双 Tag（web 支持着色，node 灰）。
   await expect(modal.getByText("Web", { exact: true })).toBeVisible();
   await expect(modal.getByText("Node", { exact: true })).toBeVisible();
-  // 权限：ui.panel 的人类可读标签。
-  await expect(modal).toContainText("UI Panel");
+  // 权限：ui-contribution 的人类可读标签（2026-08-31，ADR-039 Manifest v2 权限枚举）。
+  await expect(modal).toContainText("UI Contribution");
 });
 
 test("no console errors during a full interaction round", async ({ page }) => {

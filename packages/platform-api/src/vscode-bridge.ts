@@ -33,6 +33,10 @@ import type {
 } from "./host-message";
 import type {
   BatchReadRowPayload,
+  PluginContributionQueryResponse,
+  PluginRpcPayload,
+  PluginRuntimeLoadPayload,
+  PluginRuntimeUnloadPayload,
   PluginStoreDataPayload,
   PluginStoreDataResponse,
   ReadVerifySettingsPayload,
@@ -222,6 +226,18 @@ export function createVscodeBridge(
       postRequest<PluginStoreDataResponse>("plugin-store-load", {}),
     pluginStoreSave: (data: PluginStoreDataPayload) =>
       postRequest<null>("plugin-store-save", { data }),
+    // ---- 插件运行时桥（2026-08-31，ADR-039）：Phase A 宿主返回能力错误，契约就位。----
+    pluginRuntimeLoad: (payload: PluginRuntimeLoadPayload) =>
+      postRequest<null>("plugin-runtime-load", payload),
+    pluginRuntimeUnload: (payload: PluginRuntimeUnloadPayload) =>
+      postRequest<null>("plugin-runtime-unload", payload),
+    pluginRpc: (payload: PluginRpcPayload) =>
+      postRequest<unknown>("plugin-rpc", payload),
+    pluginContributionQuery: (payload?: { pointId?: string }) =>
+      postRequest<PluginContributionQueryResponse>(
+        "plugin-contribution-query",
+        payload ?? {},
+      ),
     onEvent: (listener: (event: MamepHostEvent) => void) => {
       listeners.add(listener);
       return () => {

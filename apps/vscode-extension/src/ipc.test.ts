@@ -351,7 +351,7 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     expect(result.type).toBe("response");
     expect(pluginStore.load).toHaveBeenCalled();
     if (result.type === "response") {
-      expect(result.payload).toEqual({ schemaVersion: 1, plugins: [] });
+      expect(result.payload).toEqual({ schemaVersion: 2, plugins: [] });
     }
   });
 
@@ -387,17 +387,19 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
       save: vi.fn(async () => ok(undefined)),
     };
     const data = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       plugins: [
         {
           manifest: {
             id: "installed-a",
             name: "Installed A",
             version: "1.0.0",
+            apiVersion: "1.0",
             description: "A user-installed plugin",
+            requiredCapabilities: [],
             platform: { web: true, node: false },
             permissions: [],
-            contributions: { panels: [] },
+            contributes: { panels: [] },
           },
           enabled: true,
         },
@@ -425,6 +427,29 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     expect(result.type).toBe("error");
     if (result.type === "error") {
       expect(result.payload.code).toBe("HOST_MESSAGE_INVALID");
+    }
+  });
+
+  it("plugin runtime kinds → PLUGIN_RUNTIME_NOT_AVAILABLE（2026-08-31，ADR-039）", async () => {
+    const cases: Array<{
+      kind: HostRequestMessage["kind"];
+      payload: Record<string, unknown>;
+    }> = [
+      { kind: "plugin-runtime-load", payload: { pluginId: "demo" } },
+      { kind: "plugin-runtime-unload", payload: { pluginId: "demo" } },
+      { kind: "plugin-rpc", payload: { pluginId: "demo", method: "ping" } },
+      { kind: "plugin-contribution-query", payload: {} },
+    ];
+    for (const c of cases) {
+      const result = await handleVscodeInvoke(
+        request(c.kind, c.payload),
+        makeDeps(),
+      );
+      expect(result.type).toBe("error");
+      if (result.type === "error") {
+        expect(result.payload.code).toBe("PLUGIN_RUNTIME_NOT_AVAILABLE");
+        expect(result.payload.category).toBe("plugin");
+      }
     }
   });
 

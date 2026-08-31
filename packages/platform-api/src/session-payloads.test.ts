@@ -141,6 +141,7 @@ describe("CommunicationLogEvent payload 往返", () => {
       errorCode: null,
       exceptionCode: null,
       source: "manual-read",
+      pluginId: null,
       durationMs: 12,
     };
     const payload = toCommLogEventPayload(event);

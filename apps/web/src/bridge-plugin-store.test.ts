@@ -14,13 +14,15 @@ const manifest = {
   id: "installed-a",
   name: "Installed A",
   version: "1.0.0",
+  apiVersion: "1.0",
   description: "A user-installed plugin",
+  requiredCapabilities: [],
   platform: { web: true, node: false },
   permissions: [],
-  contributions: { panels: [] },
+  contributes: { panels: [] },
 };
 
-const emptyStore: PluginStoreDataResponse = { schemaVersion: 1, plugins: [] };
+const emptyStore: PluginStoreDataResponse = { schemaVersion: 2, plugins: [] };
 
 function makeBridge(
   load: () => Promise<Result<PluginStoreDataResponse>> = vi.fn(
@@ -55,7 +57,7 @@ describe("BridgePluginStore", () => {
     const bridge = makeBridge();
     const store = new BridgePluginStore(bridge);
     const data = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       plugins: [{ manifest, enabled: true }],
     };
     const result = await store.save(data);

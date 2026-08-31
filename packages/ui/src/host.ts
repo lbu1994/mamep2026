@@ -22,6 +22,10 @@ import type {
 import type { SaveStatus } from "@mamep2026/workspace";
 import type { PluginRegistry } from "@mamep2026/plugin-api";
 import type {
+  PluginContributionQueryResponse,
+  PluginRpcPayload,
+  PluginRuntimeLoadPayload,
+  PluginRuntimeUnloadPayload,
   SerialDeviceHandle,
   SerialPortOption,
   OpenTextFileResponse,
@@ -176,4 +180,21 @@ export interface AppHost {
   openTextFile(options?: {
     suggestedName?: string;
   }): Promise<Result<OpenTextFileResponse>>;
+
+  /**
+   * 插件运行时桥（2026-08-31，ADR-039，Phase A 契约就位）：
+   * - pluginRuntimeLoad / pluginRuntimeUnload：请求宿主加载/卸载 Host 插件实例；
+   * - pluginRpc：渲染 ↔ 宿主通用插件调用桥；
+   * - pluginContributionQuery：查询宿主侧已装配贡献点。
+   * Phase A 宿主侧（Electron/VSCode）返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误；
+   * 浏览器无宿主桥，同样返回能力错误。运行时语义随 Phase F（隔离机制 ADR）补齐。
+   */
+  pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>>;
+  pluginRuntimeUnload(
+    payload: PluginRuntimeUnloadPayload,
+  ): Promise<Result<null>>;
+  pluginRpc(payload: PluginRpcPayload): Promise<Result<unknown>>;
+  pluginContributionQuery(payload?: {
+    pointId?: string;
+  }): Promise<Result<PluginContributionQueryResponse>>;
 }

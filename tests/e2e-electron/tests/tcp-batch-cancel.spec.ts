@@ -150,6 +150,8 @@ test.beforeAll(async () => {
   await page.waitForSelector(".ant-modal-container:visible", {
     timeout: 15000,
   });
+  // 弹窗打开动画完成后再交互（启动竞态 flake 加固，见仓库记忆 electron-modal-launch-race-flake）。
+  await page.waitForTimeout(1000);
 });
 
 test.afterAll(async () => {
@@ -165,6 +167,7 @@ test("TCP 全表读取取消：Read All → 取消 → 汇总 cancelledCount > 0
   // 1. 切换到 Modbus TCP 并连接本地假设备。
   await modal.locator(".ant-segmented-item").filter({ hasText: "Modbus TCP" }).click();
   const hostInput = modal.getByPlaceholder("192.168.1.10");
+  await expect(hostInput).toBeVisible({ timeout: 5000 });
   await hostInput.fill("127.0.0.1");
   const portInput = modal.locator(".ant-input-number-input").first();
   await portInput.click();

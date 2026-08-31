@@ -146,6 +146,11 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       // 插件存储桥（2026-08-30，ADR-038）：主进程 userData plugins.json 持久化。
       "pluginStoreLoad",
       "pluginStoreSave",
+      // 插件运行时桥（2026-08-31，ADR-039）：Phase A 契约，宿主返回能力错误。
+      "pluginContributionQuery",
+      "pluginRpc",
+      "pluginRuntimeLoad",
+      "pluginRuntimeUnload",
       // 会话 RPC 桥（2026-08-23 两端 TCP 接线，ADR-022）：Electron TCP 会话承载主进程，
       // preload 暴露完整会话 RPC 方法。
       "sessionTcpConnect",

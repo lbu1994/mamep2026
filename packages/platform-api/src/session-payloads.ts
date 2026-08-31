@@ -379,6 +379,8 @@ export const commLogEventPayloadSchema = z.object({
     "plugin",
     "connection-control",
   ]),
+  /** 发起插件 id（source="plugin" 时非 null；ADR-039）。 */
+  pluginId: z.string().nullable(),
   durationMs: z.number().nullable(),
 });
 export type CommLogEventPayload = z.infer<typeof commLogEventPayloadSchema>;
@@ -425,33 +427,47 @@ export function toAppMessagePayload(
   return { ...message };
 }
 
-// ---- 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038）----
+// ---- 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038；v2 2026-08-31，ADR-039）----
 // 已安装插件（manifest + 启用状态）为应用级资产，三端经 HostMessage v1 往返：
 // 浏览器直连 IndexedDB（不跨边界）；Electron 主进程 userData plugins.json；
 // VSCode Extension Host globalState。manifest 投影与 @mamep2026/plugin-api 的
-// PluginManifest 结构一致（结构收窄，非蒙混），由消费层做 FromPayload 重建。
+// PluginManifest v2 结构一致（结构收窄，非蒙混），由消费层做 FromPayload 重建。
 
 export const pluginManifestPayloadSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   version: z.string().min(1),
+  apiVersion: z.string().min(1),
   description: z.string(),
   author: z.string().optional(),
+  license: z.string().optional(),
+  entry: z
+    .object({
+      web: z.string().min(1).optional(),
+      node: z.string().min(1).optional(),
+    })
+    .optional(),
+  requiredCapabilities: z.array(z.string()).default([]),
   platform: z.object({
     web: z.boolean(),
     node: z.boolean(),
   }),
-  permissions: z.array(z.string()),
-  contributions: z.object({
-    panels: z
-      .array(
-        z.object({
-          id: z.string().min(1),
-          titleKey: z.string().min(1),
-        }),
-      )
-      .default([]),
-  }),
+  permissions: z
+    .array(
+      z.enum([
+        "communication",
+        "device-write",
+        "workspace-read",
+        "workspace-write",
+        "file-read",
+        "file-write",
+        "network",
+        "ui-contribution",
+        "theme",
+      ]),
+    )
+    .default([]),
+  contributes: z.record(z.string(), z.unknown()).default({}),
 });
 export type PluginManifestPayload = z.infer<typeof pluginManifestPayloadSchema>;
 
@@ -462,11 +478,67 @@ export const storedPluginPayloadSchema = z.object({
 export type StoredPluginPayload = z.infer<typeof storedPluginPayloadSchema>;
 
 export const pluginStoreDataPayloadSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   plugins: z.array(storedPluginPayloadSchema),
 });
 export type PluginStoreDataPayload = z.infer<typeof pluginStoreDataPayloadSchema>;
 
-/** plugin-store-load 响应载荷（结构同 PluginStoreData，空 store 返回 { schemaVersion:1, plugins:[] }）。 */
+/** plugin-store-load 响应载荷（结构同 PluginStoreData，空 store 返回 { schemaVersion:2, plugins:[] }）。 */
 export const pluginStoreDataResponseSchema = pluginStoreDataPayloadSchema;
 export type PluginStoreDataResponse = z.infer<typeof pluginStoreDataResponseSchema>;
+
+// ---- 插件运行时桥（2026-08-31，ADR-039：Phase A 契约一次定型，宿主侧返回能力错误）----
+
+/** plugin-runtime-load 请求载荷：请求宿主加载 Host 插件实例（Phase A 宿主返回能力错误）。 */
+export const pluginRuntimeLoadPayloadSchema = z.object({
+  pluginId: z.string().min(1),
+});
+export type PluginRuntimeLoadPayload = z.infer<
+  typeof pluginRuntimeLoadPayloadSchema
+>;
+
+/** plugin-runtime-unload 请求载荷：卸载 Host 插件实例。 */
+export const pluginRuntimeUnloadPayloadSchema = z.object({
+  pluginId: z.string().min(1),
+});
+export type PluginRuntimeUnloadPayload = z.infer<
+  typeof pluginRuntimeUnloadPayloadSchema
+>;
+
+/** plugin-rpc 请求载荷：渲染 ↔ 宿主通用插件调用桥（method/args 由插件自定）。 */
+export const pluginRpcPayloadSchema = z.object({
+  pluginId: z.string().min(1),
+  method: z.string().min(1),
+  args: z.array(z.unknown()).default([]),
+});
+export type PluginRpcPayload = z.infer<typeof pluginRpcPayloadSchema>;
+
+/** plugin-contribution-query 请求载荷：可选按贡献点 ID 过滤查询已装配贡献点。 */
+export const pluginContributionQueryPayloadSchema = z.object({
+  pointId: z.string().optional(),
+});
+export type PluginContributionQueryPayload = z.infer<
+  typeof pluginContributionQueryPayloadSchema
+>;
+
+/** plugin-contribution-query 响应载荷：已装配贡献点摘要（Phase A 宿主返回能力错误）。 */
+export const pluginContributionQueryResponseSchema = z.object({
+  points: z.array(
+    z.object({
+      pluginId: z.string(),
+      pointId: z.string(),
+      payload: z.unknown(),
+    }),
+  ),
+});
+export type PluginContributionQueryResponse = z.infer<
+  typeof pluginContributionQueryResponseSchema
+>;
+
+/** plugin-event 事件载荷：宿主 → 渲染的插件事件订阅转发。 */
+export const pluginEventPayloadSchema = z.object({
+  pluginId: z.string().min(1),
+  name: z.string().min(1),
+  payload: z.unknown().optional(),
+});
+export type PluginEventPayload = z.infer<typeof pluginEventPayloadSchema>;

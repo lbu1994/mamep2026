@@ -144,6 +144,8 @@ test.beforeAll(async () => {
   await page.waitForSelector(".ant-modal-container:visible", {
     timeout: 15000,
   });
+  // 弹窗打开动画完成后再交互（启动竞态 flake 加固，见仓库记忆 electron-modal-launch-race-flake）。
+  await page.waitForTimeout(1000);
 });
 
 test.afterAll(async () => {
@@ -164,6 +166,7 @@ test("TCP 配置连接 + FC03 读 + FC10 写闭环（主进程会话）", async 
 
   // 2. 填写 host（占位符 192.168.1.10 的 Input）与端口（TCP 模式下第一个 InputNumber）。
   const hostInput = modal.getByPlaceholder("192.168.1.10");
+  await expect(hostInput).toBeVisible({ timeout: 5000 });
   await hostInput.fill("127.0.0.1");
   const portInput = modal.locator(".ant-input-number-input").first();
   await portInput.click();

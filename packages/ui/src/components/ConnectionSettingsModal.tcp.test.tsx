@@ -32,6 +32,10 @@ function makeHost(
       workspaceImport: "upload",
       workspaceExport: "download",
       pluginInstall: "upload",
+      executablePlugins: false,
+      hostPlugins: false,
+      protocolExtensions: [],
+      tableTypes: ["holding-register"],
       ...caps,
     },
     isMockMode: false,
@@ -90,6 +94,15 @@ function makeHost(
       ok: true as const,
       value: { content: null },
     })),
+    // 插件运行时桥（2026-08-31，ADR-039：Phase A 契约，测试不实际调用）。
+    pluginRuntimeLoad: vi.fn(async () => ({ ok: true as const, value: null })),
+    pluginRuntimeUnload: vi.fn(
+      async () => ({ ok: true as const, value: null }),
+    ),
+    pluginRpc: vi.fn(async () => ({ ok: true as const, value: null })),
+    pluginContributionQuery: vi.fn(
+      async () => ({ ok: true as const, value: { points: [] } }),
+    ),
   };
   return { host, connectTcp };
 }

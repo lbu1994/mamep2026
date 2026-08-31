@@ -42,6 +42,10 @@ import {
   type MamepHostApi,
   type MamepHostEvent,
   type OpenTextFileResponse,
+  type PluginContributionQueryResponse,
+  type PluginRpcPayload,
+  type PluginRuntimeLoadPayload,
+  type PluginRuntimeUnloadPayload,
   type SaveTextFileResponse,
   type SerialDeviceHandle,
   type SerialPortOption,
@@ -644,6 +648,28 @@ export class ElectronAppHost implements AppHost {
     suggestedName?: string;
   }): Promise<Result<OpenTextFileResponse>> {
     return this.bridge.openTextFile(options);
+  }
+
+  // ---- 插件运行时桥（2026-08-31，ADR-039）：主进程返回能力错误（Phase A），委托桥契约就位 ----
+
+  pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>> {
+    return this.bridge.pluginRuntimeLoad(payload);
+  }
+
+  pluginRuntimeUnload(
+    payload: PluginRuntimeUnloadPayload,
+  ): Promise<Result<null>> {
+    return this.bridge.pluginRuntimeUnload(payload);
+  }
+
+  pluginRpc(payload: PluginRpcPayload): Promise<Result<unknown>> {
+    return this.bridge.pluginRpc(payload);
+  }
+
+  pluginContributionQuery(payload?: {
+    pointId?: string;
+  }): Promise<Result<PluginContributionQueryResponse>> {
+    return this.bridge.pluginContributionQuery(payload);
   }
 }
 

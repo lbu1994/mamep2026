@@ -53,18 +53,28 @@ function toCommLogEntry(event: CommunicationLogEvent) {
   };
 }
 
+/**
+ * 内置示例插件（ADR-039，2026-08-31）：升级为 Manifest v2，演示两个贡献点——
+ * panels（底部面板「插件」页签）与 theme（主题色贡献，经装配链生效）。
+ * 可于 Plugin Manager 禁用恢复默认主题。仅声明式贡献，无代码执行。
+ */
 function registerExamplePlugin(registry: PluginRegistry): void {
   registry.register({
     id: "example-panel",
     name: "Example Panel",
     version: "1.0.0",
+    apiVersion: "1.0",
     description:
       "A built-in UI-safe example plugin that validates the plugin boundary.",
     author: "Mamep2026 Team",
     platform: { web: true, node: false },
-    permissions: ["ui.panel"],
-    contributions: {
+    permissions: ["ui-contribution", "theme"],
+    contributes: {
       panels: [{ id: "example-info", titleKey: "plugins.exampleTitle" }],
+      theme: {
+        colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
+        colorLink: { light: "#4f46e5", dark: "#818cf8" },
+      },
     },
   });
 }

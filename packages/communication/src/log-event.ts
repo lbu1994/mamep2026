@@ -34,6 +34,8 @@ export interface CommunicationLogEvent {
   errorCode: string | null;
   exceptionCode: number | null;
   source: RequestSource;
+  /** 发起插件 id（source="plugin" 时非 null；TECH_DESIGN §8.3，ADR-039）。 */
+  pluginId: string | null;
   durationMs: number | null;
 }
 

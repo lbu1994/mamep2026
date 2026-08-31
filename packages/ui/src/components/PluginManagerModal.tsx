@@ -15,17 +15,17 @@ import {
   Typography,
 } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
-import { pluginManifestSchema } from "@mamep2026/plugin-api";
+import {
+  PERMISSION_LABEL_KEYS,
+  pluginManifestSchema,
+  type PermissionId,
+} from "@mamep2026/plugin-api";
 import { useAppStore } from "../app-store";
 
-/** 权限 → i18n 标签键映射；未登记的权限回退显示原始字符串。 */
-const PERMISSION_LABEL_KEYS: Readonly<Record<string, string>> = {
-  "ui.panel": "plugins.permission.uiPanel",
-};
-
+/** 权限 → i18n 标签键映射（ADR-039）：共享自 plugin-api，未登记权限回退显示原始字符串。 */
 function permissionLabel(
   t: (key: string) => string,
-  permission: string,
+  permission: PermissionId,
 ): string {
   const labelKey = PERMISSION_LABEL_KEYS[permission];
   return labelKey !== undefined ? t(labelKey) : permission;
@@ -86,6 +86,37 @@ export function PluginManagerModal(): React.ReactNode {
             </Descriptions.Item>
             <Descriptions.Item label={t("plugins.version")}>
               {manifest.version}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("plugins.apiVersion")}>
+              {manifest.apiVersion}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("plugins.requiredCapabilities")}>
+              {manifest.requiredCapabilities.length > 0 ? (
+                <Space size={[4, 4]} wrap>
+                  {manifest.requiredCapabilities.map((capability) => (
+                    <Tag key={capability}>{capability}</Tag>
+                  ))}
+                </Space>
+              ) : (
+                "—"
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("plugins.entry")}>
+              {manifest.entry !== undefined ? (
+                <Space size={4}>
+                  {manifest.entry.web !== undefined ? (
+                    <Tag color="blue">{t("plugins.entryWeb")}</Tag>
+                  ) : null}
+                  {manifest.entry.node !== undefined ? (
+                    <Tag color="green">{t("plugins.entryNode")}</Tag>
+                  ) : null}
+                  <Typography.Text type="secondary">
+                    {t("plugins.entryNotExecuted")}
+                  </Typography.Text>
+                </Space>
+              ) : (
+                "—"
+              )}
             </Descriptions.Item>
             <Descriptions.Item label={t("plugins.permissions")}>
               {manifest.permissions.length > 0 ? (

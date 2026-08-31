@@ -23,6 +23,12 @@ import {
   Typography,
 } from "antd";
 import { AppIcon } from "./assets/AppIcon";
+import { usePluginContributions } from "./plugin/use-contributions";
+import {
+  collectThemeConfig,
+  type ThemeContribution,
+} from "./plugin/theme-contributions";
+import type { SettingsContribution } from "./plugin/plugin-registries";
 import {
   ApiOutlined,
   AppstoreOutlined,
@@ -37,6 +43,7 @@ import {
 import type { RowId, SheetId } from "@mamep2026/domain";
 import { defaultConfig } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
+import { mergeThemeConfig } from "@mamep2026/ui-theme";
 import { STATE_DOT_COLOR } from "./connection-state";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
@@ -107,6 +114,28 @@ export function MamepApp(): React.ReactNode {
   const setTheme = useAppStore((s) => s.setTheme);
   // 宿主完整主题（VSCode ui-theme 装配，ADR-027）；null=回退 buildTheme 两态。
   const themeConfig = useAppStore((s) => s.themeConfig);
+  // 插件主题贡献（2026-08-31，ADR-039）：插件 theme 贡献（纯数据）→ 用户设置（Phase D）→
+  // 默认 buildTheme。经 mergeThemeConfig 并入装配链，theme 贡献 Phase A 即可全功能。
+  const themeContributions = usePluginContributions<ThemeContribution>(
+    host,
+    "theme",
+  );
+  const pluginThemeConfig = collectThemeConfig(
+    themeContributions,
+    theme === "dark",
+  );
+  const effectiveThemeConfig =
+    pluginThemeConfig === null
+      ? (themeConfig ?? buildTheme(theme === "dark"))
+      : mergeThemeConfig(
+          themeConfig ?? buildTheme(theme === "dark"),
+          pluginThemeConfig,
+        );
+  // settings 贡献消费方（ADR-039）：Settings 弹窗分区（Phase A 声明式标题占位）。
+  const settingsContributions = usePluginContributions<SettingsContribution>(
+    host,
+    "settings",
+  );
   const setLanguage = useAppStore((s) => s.setLanguage);
   const addSheet = useAppStore((s) => s.addSheet);
   const renameSheet = useAppStore((s) => s.renameSheet);
@@ -359,7 +388,7 @@ export function MamepApp(): React.ReactNode {
   ];
 
   return (
-    <ConfigProvider theme={themeConfig ?? buildTheme(theme === "dark")}>
+    <ConfigProvider theme={effectiveThemeConfig}>
       <AntApp>
         <Layout style={{ height: "100vh" }}>
           <Layout.Header className="mamep-header">
@@ -779,6 +808,23 @@ export function MamepApp(): React.ReactNode {
             <div>
               <WorkspaceFileActions />
             </div>
+            {settingsContributions.length > 0 && (
+              <div
+                className="plugin-settings"
+                data-testid="plugin-settings"
+              >
+                {settingsContributions.map((contribution) => (
+                  <div key={contribution.payload.id}>
+                    <Divider titlePlacement="left" plain>
+                      {t(contribution.payload.titleKey)}
+                    </Divider>
+                    <Typography.Text type="secondary">
+                      {t("plugins.settingsPlaceholder")}
+                    </Typography.Text>
+                  </div>
+                ))}
+              </div>
+            )}
             <Typography.Paragraph type="secondary">
               {t("settings.aboutText")}
             </Typography.Paragraph>

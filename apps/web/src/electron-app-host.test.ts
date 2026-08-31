@@ -20,6 +20,7 @@ import type {
   MamepHostEvent,
   OpenTextFileResponse,
   PluginStoreDataResponse,
+  PluginContributionQueryResponse,
   SaveTextFileResponse,
   SessionBatchReadResponse,
   SessionStateResponse,
@@ -62,6 +63,10 @@ function createFakeBridge(): {
         workspaceImport: "file",
         workspaceExport: "save-dialog",
         pluginInstall: "file",
+        executablePlugins: false,
+        hostPlugins: false,
+        protocolExtensions: [],
+        tableTypes: ["holding-register"],
       },
     })),
     getAppVersion: vi.fn(async (): Promise<Result<string>> => ({
@@ -193,13 +198,32 @@ function createFakeBridge(): {
     pluginStoreLoad: vi.fn(
       async (): Promise<Result<PluginStoreDataResponse>> => ({
         ok: true,
-        value: { schemaVersion: 1, plugins: [] },
+        value: { schemaVersion: 2, plugins: [] },
       }),
     ),
     pluginStoreSave: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
     })),
+    // ---- 插件运行时桥（2026-08-31，ADR-039：Phase A 契约，测试不实际调用）----
+    pluginRuntimeLoad: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    pluginRuntimeUnload: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    pluginRpc: vi.fn(async (): Promise<Result<unknown>> => ({
+      ok: true,
+      value: null,
+    })),
+    pluginContributionQuery: vi.fn(
+      async (): Promise<Result<PluginContributionQueryResponse>> => ({
+        ok: true,
+        value: { points: [] },
+      }),
+    ),
   };
   return {
     bridge,

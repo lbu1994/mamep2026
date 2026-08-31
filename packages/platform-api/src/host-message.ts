@@ -16,6 +16,11 @@ import {
   appMessagePayloadSchema,
   batchReadSummaryPayloadSchema,
   commLogEventPayloadSchema,
+  pluginContributionQueryPayloadSchema,
+  pluginEventPayloadSchema,
+  pluginRpcPayloadSchema,
+  pluginRuntimeLoadPayloadSchema,
+  pluginRuntimeUnloadPayloadSchema,
   pluginStoreDataPayloadSchema,
   registerRowPayloadSchema,
   rtuConnectionProfilePayloadSchema,
@@ -25,6 +30,10 @@ import {
   sessionWriteRowPayloadSchema,
   traceSamplePayloadSchema,
   type BatchReadRowPayload,
+  type PluginContributionQueryResponse,
+  type PluginRpcPayload,
+  type PluginRuntimeLoadPayload,
+  type PluginRuntimeUnloadPayload,
   type PluginStoreDataPayload,
   type PluginStoreDataResponse,
   type ReadVerifySettingsPayload,
@@ -80,6 +89,12 @@ export const HOST_REQUEST_KINDS = [
   // 插件存储（2026-08-30，ADR-038）：已安装插件清单 + 启用状态经主进程/扩展宿主持久化。
   "plugin-store-load",
   "plugin-store-save",
+  // 插件运行时桥（2026-08-31，ADR-039）：Host 插件加载/卸载/通用 RPC/贡献点查询。
+  // Phase A 宿主侧返回能力错误（PLUGIN_RUNTIME_NOT_AVAILABLE），运行时语义 Phase F 补齐。
+  "plugin-runtime-load",
+  "plugin-runtime-unload",
+  "plugin-rpc",
+  "plugin-contribution-query",
 ] as const;
 export type HostRequestKind = (typeof HOST_REQUEST_KINDS)[number];
 
@@ -93,6 +108,8 @@ export const HOST_EVENT_KINDS = [
   "poll-result",
   "trace-sample",
   "app-message",
+  // 插件事件订阅转发（2026-08-31，ADR-039）：宿主 → 渲染（Phase A 无宿主插件，契约就位）。
+  "plugin-event",
 ] as const;
 export type HostEventKind = (typeof HOST_EVENT_KINDS)[number];
 
@@ -448,6 +465,27 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
     // 插件存储（2026-08-30，ADR-038）：data 为插件存储载荷（manifest + enabled）。
     payload: z.object({ data: pluginStoreDataPayloadSchema }),
   }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("plugin-runtime-load"),
+    // 插件运行时桥（2026-08-31，ADR-039）：Phase A 宿主返回能力错误，运行时语义 Phase F 补齐。
+    payload: pluginRuntimeLoadPayloadSchema,
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("plugin-runtime-unload"),
+    payload: pluginRuntimeUnloadPayloadSchema,
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("plugin-rpc"),
+    payload: pluginRpcPayloadSchema,
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("plugin-contribution-query"),
+    payload: pluginContributionQueryPayloadSchema,
+  }),
 ]);
 export type HostRequestMessage = z.infer<typeof hostRequestSchema>;
 
@@ -528,6 +566,14 @@ export const hostEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("app-message"),
     // 主机侧应用消息（如设备拔出）回灌 Renderer 的 messageStore。
     payload: z.object({ message: appMessagePayloadSchema }),
+  }),
+  z.object({
+    protocolVersion: protocolVersionSchema,
+    type: z.literal("event"),
+    messageId: messageIdSchema,
+    kind: z.literal("plugin-event"),
+    // 插件事件订阅转发（2026-08-31，ADR-039）：宿主 → 渲染（Phase A 无宿主插件，契约就位）。
+    payload: z.object({ event: pluginEventPayloadSchema }),
   }),
 ]);
 export type HostEventMessage = z.infer<typeof hostEventSchema>;
@@ -639,6 +685,23 @@ export interface MamepHostApi {
    * 主进程/扩展宿主持久化后返回。
    */
   pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>>;
+
+  /**
+   * 插件运行时桥（2026-08-31，ADR-039，Phase A 契约就位）：
+   * - plugin-runtime-load / plugin-runtime-unload：请求宿主加载/卸载 Host 插件实例；
+   * - plugin-rpc：渲染 ↔ 宿主通用插件调用桥（method/args 由插件自定）；
+   * - plugin-contribution-query：查询宿主侧已装配贡献点。
+   * Phase A 宿主侧均返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误（不执行第三方代码），
+   * 运行时语义随 Phase F（隔离机制 ADR）补齐。
+   */
+  pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>>;
+  pluginRuntimeUnload(
+    payload: PluginRuntimeUnloadPayload,
+  ): Promise<Result<null>>;
+  pluginRpc(payload: PluginRpcPayload): Promise<Result<unknown>>;
+  pluginContributionQuery(
+    payload?: { pointId?: string },
+  ): Promise<Result<PluginContributionQueryResponse>>;
 
   // ---- 远程会话 RPC（2026-08-23 两端 TCP 接线：Electron TCP 会话在主进程，Renderer 远程代理）----
 
@@ -768,6 +831,11 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   workspaceExport: "save-dialog",
   // 插件安装入口（2026-08-30，ADR-038）：主进程 userData plugins.json 持久化，manifest 经 open-text-file 对话框读取。
   pluginInstall: "file",
+  // 可执行插件（ADR-039）：Phase A 不执行第三方代码，如实声明 false；Phase F 隔离机制落地后翻转。
+  executablePlugins: false,
+  hostPlugins: false,
+  protocolExtensions: [],
+  tableTypes: ["holding-register"],
 });
 
 /**
@@ -787,4 +855,9 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   workspaceExport: "save-dialog",
   // 插件安装入口（2026-08-30，ADR-038）：Extension Host globalState 持久化，manifest 经 open-text-file 对话框读取。
   pluginInstall: "file",
+  // 可执行插件（ADR-039）：Phase A 不执行第三方代码，如实声明 false；Phase F 隔离机制落地后翻转。
+  executablePlugins: false,
+  hostPlugins: false,
+  protocolExtensions: [],
+  tableTypes: ["holding-register"],
 });

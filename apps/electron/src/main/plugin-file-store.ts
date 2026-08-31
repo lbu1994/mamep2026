@@ -10,7 +10,11 @@ import { createMamepError } from "@mamep2026/domain";
 import type { Result } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import type { PluginStoreData, PluginStorePort } from "@mamep2026/plugin-api";
-import { createEmptyPluginStoreData, pluginStoreDataSchema } from "@mamep2026/plugin-api";
+import {
+  createEmptyPluginStoreData,
+  migratePluginStoreData,
+  pluginStoreDataSchema,
+} from "@mamep2026/plugin-api";
 import { access, open, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
@@ -107,20 +111,8 @@ export class PluginFileStore implements PluginStorePort {
         }),
       );
     }
-    const parsed = pluginStoreDataSchema.safeParse(data);
-    if (!parsed.success) {
-      return fail(
-        createMamepError({
-          code: "PLUGIN_STORE_SCHEMA_INVALID",
-          category: "plugin",
-          severity: "error",
-          retryable: false,
-          userMessageKey: "errors.pluginStoreSchemaInvalid",
-          technicalMessage: `stored plugin store is invalid: ${parsed.error.message}`,
-        }),
-      );
-    }
-    return ok(parsed.data);
+    const parsed = migratePluginStoreData(data);
+    return parsed.ok ? parsed : fail(parsed.error);
   }
 
   async save(data: PluginStoreData): Promise<Result<void>> {

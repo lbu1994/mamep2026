@@ -1,5 +1,5 @@
 /**
- * 插件存储 Port 与数据契约（ADR-038，2026-08-30）。
+ * 插件存储 Port 与数据契约（ADR-038，2026-08-30；ADR-039 2026-08-31：schemaVersion 1→2）。
  * 已安装插件（manifest + 启用状态）为应用级资产，非工作区数据；UI 不直接调用
  * IndexedDB/文件系统，只通过该接口访问。三端实现：
  * - 浏览器：IndexedDB KV（apps/web `IndexedDBPluginStore`，复用 createIdbKeyValueStore）；
@@ -8,11 +8,16 @@
  * 存储 schema 版本独立于工作区 schemaVersion / 消息协议版本。
  */
 import { z } from "zod";
-import type { Result } from "@mamep2026/domain";
-import { pluginManifestSchema, type PluginManifest } from "./manifest";
+import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
+import {
+  PLUGIN_API_VERSION,
+  pluginManifestSchema,
+  type PluginManifest,
+} from "./manifest";
+import { normalizePermissions } from "./permissions";
 
-/** 插件存储 schema 版本（当前仅 v1：installed 插件清单 + 启用状态）。 */
-export const PLUGIN_STORE_SCHEMA_VERSION = 1 as const;
+/** 插件存储 schema 版本（v2：Manifest v2 字段，ADR-039）。 */
+export const PLUGIN_STORE_SCHEMA_VERSION = 2 as const;
 
 export interface StoredPlugin {
   manifest: PluginManifest;
@@ -39,6 +44,73 @@ export type PluginStoreDataZod = z.infer<typeof pluginStoreDataSchema>;
 /** 空插件存储（首次启动 / 无已安装插件时 load 的兜底）。 */
 export function createEmptyPluginStoreData(): PluginStoreData {
   return { schemaVersion: PLUGIN_STORE_SCHEMA_VERSION, plugins: [] };
+}
+
+/**
+ * 存储数据迁移（ADR-039）：v1（manifest 无 apiVersion / requiredCapabilities、permissions 为
+ * 自由 string[]）→ v2（Manifest v2 字段）。
+ * - schemaVersion 2：严格校验（损坏/非法 → PLUGIN_STORE_SCHEMA_INVALID）；
+ * - schemaVersion 1 / 缺失：迁移——plugins 必须为数组（否则视为损坏），非法条目跳过
+ *   （不阻断其余条目），permissions 非法项丢弃。
+ */
+export function migratePluginStoreData(input: unknown): Result<PluginStoreData> {
+  if (typeof input !== "object" || input === null) {
+    return fail(schemaInvalidError("plugin store data is not an object"));
+  }
+  const raw = input as { schemaVersion?: unknown; plugins?: unknown };
+  if (raw.schemaVersion === PLUGIN_STORE_SCHEMA_VERSION) {
+    const parsed = pluginStoreDataSchema.safeParse(input);
+    return parsed.success
+      ? ok(parsed.data)
+      : fail(
+          schemaInvalidError(`stored plugin store is invalid: ${parsed.error.message}`),
+        );
+  }
+  if (!Array.isArray(raw.plugins)) {
+    return fail(
+      schemaInvalidError("stored plugin store is invalid: plugins must be an array"),
+    );
+  }
+  const migrated: StoredPlugin[] = [];
+  for (const entry of raw.plugins) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const stored = entry as { manifest?: unknown; enabled?: unknown };
+    if (typeof stored.manifest !== "object" || stored.manifest === null) continue;
+    const m = stored.manifest as Record<string, unknown>;
+    const manifest: Record<string, unknown> = {
+      ...m,
+      apiVersion:
+        typeof m.apiVersion === "string" && m.apiVersion.length > 0
+          ? m.apiVersion
+          : PLUGIN_API_VERSION,
+      requiredCapabilities: Array.isArray(m.requiredCapabilities)
+        ? m.requiredCapabilities
+        : [],
+      permissions: normalizePermissions(m.permissions),
+      // 旧字段名 contributions（v1 固定 panels）与 v2 的 contributes 均兼容。
+      contributes:
+        typeof m.contributes === "object" && m.contributes !== null
+          ? m.contributes
+          : typeof m.contributions === "object" && m.contributions !== null
+            ? m.contributions
+            : {},
+    };
+    const parsed = pluginManifestSchema.safeParse(manifest);
+    if (!parsed.success) continue;
+    migrated.push({ manifest: parsed.data, enabled: stored.enabled === true });
+  }
+  return ok({ schemaVersion: PLUGIN_STORE_SCHEMA_VERSION, plugins: migrated });
+}
+
+function schemaInvalidError(technicalMessage: string) {
+  return createMamepError({
+    code: "PLUGIN_STORE_SCHEMA_INVALID",
+    category: "plugin",
+    severity: "error",
+    retryable: false,
+    userMessageKey: "errors.pluginStoreSchemaInvalid",
+    technicalMessage,
+  });
 }
 
 /** 插件存储 Port：实现由各平台 composition root / 主进程 / 扩展宿主提供。 */

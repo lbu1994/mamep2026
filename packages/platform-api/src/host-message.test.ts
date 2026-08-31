@@ -16,6 +16,7 @@ import {
   workspaceLoadResponseSchema,
 } from "./host-message";
 import { pluginStoreDataResponseSchema } from "./session-payloads";
+import { pluginContributionQueryResponseSchema } from "./session-payloads";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 
 describe("host-message protocol v1", () => {
@@ -305,6 +306,7 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
           errorCode: null,
           exceptionCode: null,
           source: "manual-read",
+          pluginId: null,
           durationMs: null,
         },
       },
@@ -334,6 +336,7 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
           errorCode: null,
           exceptionCode: null,
           source: "manual-read",
+          pluginId: null,
           durationMs: null,
         },
       },
@@ -669,10 +672,11 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
     id: "installed-a",
     name: "Installed A",
     version: "1.0.0",
+    apiVersion: "1.0",
     description: "A user-installed plugin",
     platform: { web: true, node: false },
-    permissions: ["ui.panel"],
-    contributions: { panels: [] },
+    permissions: ["ui-contribution"],
+    contributes: { panels: [] },
   };
 
   it("accepts a plugin-store-load request with empty payload", () => {
@@ -697,7 +701,7 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       kind: "plugin-store-save",
       payload: {
         data: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           plugins: [{ manifest: manifestPayload, enabled: true }],
         },
       },
@@ -724,7 +728,7 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       kind: "plugin-store-save",
       payload: {
         data: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           plugins: [{ manifest: { id: "x" }, enabled: true }],
         },
       },
@@ -734,8 +738,67 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
 
   it("validates a plugin store data response via pluginStoreDataResponseSchema", () => {
     const parsed = pluginStoreDataResponseSchema.safeParse({
-      schemaVersion: 1,
+      schemaVersion: 2,
       plugins: [{ manifest: manifestPayload, enabled: false }],
+    });
+    expect(parsed.success).toBe(true);
+  });
+});
+
+describe("host-message plugin runtime kinds（2026-08-31，ADR-039）", () => {
+  it("accepts plugin-runtime-load / plugin-runtime-unload / plugin-rpc / plugin-contribution-query requests", () => {
+    const cases: Array<{
+      kind: string;
+      payload: Record<string, unknown>;
+    }> = [
+      { kind: "plugin-runtime-load", payload: { pluginId: "demo" } },
+      { kind: "plugin-runtime-unload", payload: { pluginId: "demo" } },
+      {
+        kind: "plugin-rpc",
+        payload: { pluginId: "demo", method: "ping", args: [1, "x"] },
+      },
+      { kind: "plugin-contribution-query", payload: {} },
+      { kind: "plugin-contribution-query", payload: { pointId: "panels" } },
+    ];
+    for (const c of cases) {
+      const result = parseHostMessage({
+        protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+        type: "request",
+        messageId: "req-plugin-runtime",
+        kind: c.kind,
+        payload: c.payload,
+      });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it("rejects plugin-rpc without method", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-plugin-rpc-bad",
+      kind: "plugin-rpc",
+      payload: { pluginId: "demo" },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a plugin-event event payload", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "evt-plugin",
+      kind: "plugin-event",
+      payload: { event: { pluginId: "demo", name: "sample", payload: 42 } },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("validates plugin contribution query response via pluginContributionQueryResponseSchema", () => {
+    const parsed = pluginContributionQueryResponseSchema.safeParse({
+      points: [
+        { pluginId: "demo", pointId: "panels", payload: { id: "p" } },
+      ],
     });
     expect(parsed.success).toBe(true);
   });

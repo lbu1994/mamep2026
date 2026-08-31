@@ -685,10 +685,11 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     id: "installed-a",
     name: "Installed A",
     version: "1.0.0",
+    apiVersion: "1.0",
     description: "A user-installed plugin",
     platform: { web: true, node: false },
-    permissions: ["ui.panel"],
-    contributions: { panels: [] },
+    permissions: ["ui-contribution"],
+    contributes: { panels: [] },
   };
 
   function makePluginStore() {
@@ -707,7 +708,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     expect(result.type).toBe("response");
     expect(pluginStore.load).toHaveBeenCalled();
     if (result.type === "response") {
-      expect(result.payload).toEqual({ schemaVersion: 1, plugins: [] });
+      expect(result.payload).toEqual({ schemaVersion: 2, plugins: [] });
     }
   });
 
@@ -740,7 +741,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
   it("plugin-store-save 转发载荷给主进程插件存储", async () => {
     const pluginStore = makePluginStore();
     const data = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       plugins: [{ manifest: manifestPayload, enabled: true }],
     };
     const result = await handleRequest(
@@ -767,7 +768,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     };
     const result = await handleRequest(
       request("plugin-store-save", {
-        data: { schemaVersion: 1, plugins: [] },
+        data: { schemaVersion: 2, plugins: [] },
       }),
       makeDeps({ pluginStore }),
     );
@@ -775,6 +776,34 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     if (result.type === "error") {
       expect(result.payload.code).toBe("PLUGIN_STORE_WRITE_FAILED");
       expect(result.payload.category).toBe("plugin");
+    }
+  });
+});
+
+describe("plugin runtime kinds（2026-08-31，ADR-039：Phase A 返回能力错误）", () => {
+  it("plugin-runtime-load/unload/rpc/contribution-query → PLUGIN_RUNTIME_NOT_AVAILABLE", async () => {
+    const cases: Array<{
+      kind: HostRequestMessage["kind"];
+      payload: Record<string, unknown>;
+    }> = [
+      { kind: "plugin-runtime-load", payload: { pluginId: "demo" } },
+      { kind: "plugin-runtime-unload", payload: { pluginId: "demo" } },
+      {
+        kind: "plugin-rpc",
+        payload: { pluginId: "demo", method: "ping" },
+      },
+      { kind: "plugin-contribution-query", payload: {} },
+    ];
+    for (const c of cases) {
+      const result = await handleRequest(
+        request(c.kind, c.payload),
+        makeDeps(),
+      );
+      expect(result.type).toBe("error");
+      if (result.type === "error") {
+        expect(result.payload.code).toBe("PLUGIN_RUNTIME_NOT_AVAILABLE");
+        expect(result.payload.category).toBe("plugin");
+      }
     }
   });
 });

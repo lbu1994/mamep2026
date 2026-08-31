@@ -201,6 +201,8 @@ async function connectViaUi(autoReconnect: boolean): Promise<void> {
     await page.getByRole("button", { name: "Connect" }).first().click();
   }
   await expect(modal).toBeVisible({ timeout: 15000 });
+  // 弹窗打开动画完成后再交互（启动竞态 flake 加固，见仓库记忆 electron-modal-launch-race-flake）。
+  await page.waitForTimeout(1000);
   await modal
     .locator(".ant-segmented-item")
     .filter({ hasText: "Modbus TCP" })

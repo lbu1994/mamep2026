@@ -17,11 +17,12 @@ const manifest = {
   id: "e2e-installed",
   name: "E2E Installed",
   version: "1.0.0",
+  apiVersion: "1.0",
   description: "Installed via the plugin install e2e.",
   author: "E2E Team",
   platform: { web: true, node: false },
-  permissions: ["ui.panel"],
-  contributions: { panels: [] },
+  permissions: ["ui-contribution"],
+  contributes: { panels: [] },
 };
 
 async function openApp(page: Page): Promise<void> {
@@ -85,7 +86,7 @@ test("安装成功：文件选择 → 安全确认 → 确认后注册并显示 
   const confirm = await confirmModal(page);
   await expect(confirm).toContainText("E2E Installed");
   await expect(confirm).toContainText("1.0.0");
-  await expect(confirm).toContainText("UI Panel");
+  await expect(confirm).toContainText("UI Contribution");
 
   // 确认安装。
   await confirm.getByRole("button", { name: "Install", exact: true }).click();

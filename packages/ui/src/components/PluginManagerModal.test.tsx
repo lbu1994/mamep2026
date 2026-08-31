@@ -22,11 +22,12 @@ const manifestJson = {
   id: "installed-a",
   name: "Installed A",
   version: "1.0.0",
+  apiVersion: "1.0",
   description: "A user-installed plugin.",
   author: "Someone",
   platform: { web: true, node: false },
-  permissions: ["ui.panel"],
-  contributions: { panels: [] },
+  permissions: ["ui-contribution"],
+  contributes: { panels: [] },
 };
 
 const browserCaps = {
@@ -40,6 +41,10 @@ const browserCaps = {
   workspaceImport: "upload",
   workspaceExport: "download",
   pluginInstall: "upload",
+  executablePlugins: false,
+  hostPlugins: false,
+  protocolExtensions: [],
+  tableTypes: ["holding-register"],
 } as const;
 
 const desktopCaps = {
@@ -53,6 +58,10 @@ const desktopCaps = {
   workspaceImport: "file",
   workspaceExport: "save-dialog",
   pluginInstall: "file",
+  executablePlugins: false,
+  hostPlugins: false,
+  protocolExtensions: [],
+  tableTypes: ["holding-register"],
 } as const;
 
 /** 注入 host 桩：pluginRegistry + 能力矩阵 + 可选 openTextFile。 */
@@ -112,11 +121,12 @@ describe("PluginManagerModal", () => {
       id: "example-panel",
       name: "Example Panel",
       version: "1.0.0",
+      apiVersion: "1.0",
       description: "A built-in UI-safe example plugin.",
       author: "Mamep2026 Team",
       platform: { web: true, node: false },
-      permissions: ["ui.panel"],
-      contributions: { panels: [] },
+      permissions: ["ui-contribution"],
+      contributes: { panels: [] },
     });
     setHostWithPlugin(registry);
     renderModal();
@@ -125,8 +135,8 @@ describe("PluginManagerModal", () => {
     // 平台能力：Web/Node 双 Tag。
     expect(screen.getByText("Web", { exact: true })).toBeTruthy();
     expect(screen.getByText("Node", { exact: true })).toBeTruthy();
-    // 权限：ui.panel → 人类可读标签。
-    expect(screen.getByText("UI Panel")).toBeTruthy();
+    // 权限：ui-contribution → 人类可读标签。
+    expect(screen.getByText("UI Contribution")).toBeTruthy();
   });
 
   it("degrades gracefully when author and permissions are absent", () => {
@@ -135,10 +145,11 @@ describe("PluginManagerModal", () => {
       id: "minimal",
       name: "Minimal",
       version: "0.1.0",
+      apiVersion: "1.0",
       description: "No author, no permissions.",
       platform: { web: true, node: false },
       permissions: [],
-      contributions: { panels: [] },
+      contributes: { panels: [] },
     });
     setHostWithPlugin(registry);
     renderModal();
@@ -157,20 +168,22 @@ describe("PluginManagerModal", () => {
       id: "builtin-x",
       name: "Builtin Plugin",
       version: "1.0.0",
+      apiVersion: "1.0",
       description: "Builtin.",
       platform: { web: true, node: false },
       permissions: [],
-      contributions: { panels: [] },
+      contributes: { panels: [] },
     });
     registry.register(
       {
         id: "installed-x",
         name: "User Plugin",
         version: "1.0.0",
+        apiVersion: "1.0",
         description: "Installed.",
         platform: { web: true, node: false },
         permissions: [],
-        contributions: { panels: [] },
+        contributes: { panels: [] },
       },
       { source: "installed" },
     );
@@ -211,7 +224,7 @@ describe("PluginManagerModal", () => {
       );
       expect(screen.getByText("Installed A")).toBeTruthy();
       expect(screen.getByText("1.0.0")).toBeTruthy();
-      expect(screen.getByText("UI Panel")).toBeTruthy();
+      expect(screen.getByText("UI Contribution")).toBeTruthy();
 
       clickConfirmOk();
 
@@ -390,6 +403,10 @@ describe("PluginManagerModal", () => {
           workspaceImport: "unsupported",
           workspaceExport: "unsupported",
           pluginInstall: "unsupported",
+          executablePlugins: false,
+          hostPlugins: false,
+          protocolExtensions: [],
+          tableTypes: ["holding-register"],
         },
         openTextFile,
       });
