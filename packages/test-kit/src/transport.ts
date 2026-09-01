@@ -8,9 +8,16 @@ import { fail, ok } from "@mamep2026/domain";
 import type { Clock, TransportPort } from "@mamep2026/communication";
 import { appendCrc } from "@mamep2026/protocol-modbus";
 
-/** 可编程 Modbus RTU 模拟设备：寄存器表 + 自动应答 FC03/FC0x10（含多寄存器，ADR-030）。 */
+/** 可编程 Modbus RTU 模拟设备：寄存器表 + 自动应答 FC03/FC0x10（含多寄存器，ADR-030），
+ * 以及基础表 FC01/FC02/FC04/FC0F（线圈/离散输入/输入寄存器，ADR-043 E-1）。 */
 export class ScriptedModbusRtuDevice {
   readonly registers = new Map<number, number>();
+  /** 线圈（FC01 读 / FC0F 写），值为 0/1。 */
+  readonly coils = new Map<number, number>();
+  /** 离散输入（FC02 读），值为 0/1。 */
+  readonly inputs = new Map<number, number>();
+  /** 输入寄存器（FC04 读）。 */
+  readonly inputRegisters = new Map<number, number>();
   /**
    * 「must-multi」区起始地址（null=关闭，ADR-030）：该地址起，
    * 单寄存器读/写（quantity===1）返回异常 0x02，多寄存器读/写（quantity>1）正常——
@@ -26,14 +33,60 @@ export class ScriptedModbusRtuDevice {
     return this.registers.get(address & 0xffff) ?? null;
   }
 
+  setCoil(address: number, value: number): void {
+    this.coils.set(address & 0xffff, value === 0 ? 0 : 1);
+  }
+
+  getCoil(address: number): number | null {
+    return this.coils.get(address & 0xffff) ?? null;
+  }
+
+  setInput(address: number, value: number): void {
+    this.inputs.set(address & 0xffff, value === 0 ? 0 : 1);
+  }
+
+  getInput(address: number): number | null {
+    return this.inputs.get(address & 0xffff) ?? null;
+  }
+
+  setInputRegister(address: number, value: number): void {
+    this.inputRegisters.set(address & 0xffff, value & 0xffff);
+  }
+
+  getInputRegister(address: number): number | null {
+    return this.inputRegisters.get(address & 0xffff) ?? null;
+  }
+
+  /** 位打包读（FC01/FC02）：逐位取 map 值（缺省 0），LSB 在前。 */
+  private readBits(
+    map: Map<number, number>,
+    slave: number,
+    functionCode: number,
+    address: number,
+    quantity: number,
+  ): Uint8Array {
+    const byteCount = Math.ceil(quantity / 8);
+    const data = new Uint8Array(byteCount);
+    for (let i = 0; i < quantity; i += 1) {
+      const value = map.get((address + i) & 0xffff) ?? 0;
+      if (value !== 0) {
+        const index = i >> 3;
+        data[index] = (data[index] ?? 0) | (1 << (i & 7));
+      }
+    }
+    return appendCrc(
+      Uint8Array.from([slave, functionCode, byteCount, ...data]),
+    );
+  }
+
   /** 处理设备收到的帧；返回应回传的字节，null 表示不应答（用于模拟超时）。 */
   handleFrame(frame: Uint8Array): Uint8Array | null {
     if (frame.length < 8) return null;
     const slave = frame[0] ?? 0;
     const functionCode = frame[1] ?? 0;
     const address = ((frame[2] ?? 0) << 8) | (frame[3] ?? 0);
+    const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
     if (functionCode === 0x03) {
-      const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
       // must-multi 区：单读返回非法数据地址异常。
       if (
         this.mustMultiStart !== null &&
@@ -55,8 +108,39 @@ export class ScriptedModbusRtuDevice {
       ]);
       return appendCrc(body);
     }
+    if (functionCode === 0x04) {
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(this.inputRegisters.get((address + i) & 0xffff) ?? 0);
+      }
+      const byteCount = quantity * 2;
+      const body = Uint8Array.from([
+        slave,
+        0x04,
+        byteCount,
+        ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+      ]);
+      return appendCrc(body);
+    }
+    if (functionCode === 0x01) {
+      return this.readBits(
+        this.coils,
+        slave,
+        0x01,
+        address,
+        quantity,
+      );
+    }
+    if (functionCode === 0x02) {
+      return this.readBits(
+        this.inputs,
+        slave,
+        0x02,
+        address,
+        quantity,
+      );
+    }
     if (functionCode === 0x10) {
-      const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
       // must-multi 区：单写返回非法数据地址异常。
       if (
         this.mustMultiStart !== null &&
@@ -74,6 +158,25 @@ export class ScriptedModbusRtuDevice {
         Uint8Array.from([
           slave,
           0x10,
+          (address >> 8) & 0xff,
+          address & 0xff,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
+        ]),
+      );
+    }
+    if (functionCode === 0x0f) {
+      const byteCount = frame[6] ?? 0;
+      for (let i = 0; i < quantity; i += 1) {
+        const byteIndex = i >> 3;
+        const bitIndex = i & 7;
+        const byte = byteIndex < byteCount ? (frame[7 + byteIndex] ?? 0) : 0;
+        this.coils.set((address + i) & 0xffff, (byte >> bitIndex) & 1);
+      }
+      return appendCrc(
+        Uint8Array.from([
+          slave,
+          0x0f,
           (address >> 8) & 0xff,
           address & 0xff,
           (quantity >> 8) & 0xff,

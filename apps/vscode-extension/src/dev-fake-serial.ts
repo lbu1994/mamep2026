@@ -22,12 +22,15 @@ export const FAKE_SERIAL_PORT = "FAKE-1";
 /** e2e 可访问的共享状态（仅测试用）。 */
 export const devFakeSerialState = {
   registers: new Map<number, number>(),
+  /** 线圈状态（ADR-043 E-6 基础表 FC01/FC0F）：位 1=ON。 */
+  coils: new Map<number, boolean>(),
   /** must-multi 区起始地址（ADR-030）：null=关闭；该地址起单读/单写返回异常 0x02。 */
   mustMultiStart: null as number | null,
 };
 
 export function resetDevFakeSerial(): void {
   devFakeSerialState.registers.clear();
+  devFakeSerialState.coils.clear();
   devFakeSerialState.mustMultiStart = null;
 }
 
@@ -133,6 +136,43 @@ class DevFakeSerialPort implements SerialPortLike {
         Uint8Array.from([
           slave,
           0x10,
+          (address >> 8) & 0xff,
+          address & 0xff,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
+        ]),
+      );
+    }
+    if (functionCode === 0x01) {
+      // 读线圈（FC01）：按地址连续位打包（字节内 LSB 在前），byteCount=ceil(qty/8)。
+      const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
+      const byteCount = Math.ceil(quantity / 8);
+      const data = new Uint8Array(byteCount);
+      for (let i = 0; i < quantity; i += 1) {
+        if (devFakeSerialState.coils.get((address + i) & 0xffff)) {
+          const byteIndex = Math.floor(i / 8);
+          const current = data[byteIndex] ?? 0;
+          data[byteIndex] = current | (1 << (i % 8));
+        }
+      }
+      return appendCrc(
+        Uint8Array.from([slave, 0x01, byteCount, ...data]),
+      );
+    }
+    if (functionCode === 0x0f) {
+      // 写多线圈（FC0F）：请求体 字节数 + 位打包数据（字节内 LSB 在前）。
+      const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
+      for (let i = 0; i < quantity; i += 1) {
+        const byte = frame[7 + Math.floor(i / 8)] ?? 0;
+        devFakeSerialState.coils.set(
+          (address + i) & 0xffff,
+          (byte & (1 << (i % 8))) !== 0,
+        );
+      }
+      return appendCrc(
+        Uint8Array.from([
+          slave,
+          0x0f,
           (address >> 8) & 0xff,
           address & 0xff,
           (quantity >> 8) & 0xff,

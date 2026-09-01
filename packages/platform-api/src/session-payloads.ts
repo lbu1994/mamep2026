@@ -58,7 +58,6 @@ export const rtuConnectionProfilePayloadSchema = z.object({
   retryCount: z.number(),
   /** Rx Delay：请求间隔，兼作 WP 轮询间隔。 */
   interRequestDelayMs: z.number(),
-  addressAdjust: z.enum(["off", "on"]),
   recentPortHint: z.string().nullable(),
 });
 export type RtuConnectionProfilePayload = z.infer<
@@ -118,21 +117,8 @@ export type SessionTcpConnectPayload = z.infer<
 
 // ---- RegisterRow ----
 
-const dataTypeEnumSchema = z.enum([
-  "hex",
-  "unsigned",
-  "unsigned-0.1",
-  "unsigned-0.01",
-  "unsigned-0.001",
-  "unsigned-0.0001",
-  "signed",
-  "signed-0.1",
-  "signed-0.01",
-  "signed-0.001",
-  "signed-0.0001",
-  "binary",
-  "string",
-]);
+/** dataType（ADR-043 E-3）：开放字符串，承载内置 + 插件类型。 */
+const dataTypeEnumSchema = z.string().min(1);
 
 export const registerAddressPayloadSchema = z.object({
   value: z.number(),
@@ -352,8 +338,8 @@ export const commLogEventPayloadSchema = z.object({
   timestamp: z.number(),
   direction: z.enum(["request", "response"]),
   bytesHex: z.string(),
-  /** 协议：rtu / tcp（2026-08-23 TCP 接线）。 */
-  protocol: z.enum(["rtu", "tcp"]),
+  /** 协议：rtu / tcp / codecId（2026-08-23 TCP 接线；2026-08-31 ADR-040 开放为 codecId）。 */
+  protocol: z.string(),
   slaveAddress: z.number().nullable(),
   functionCode: z.number().nullable(),
   userAddress: z.number().nullable(),

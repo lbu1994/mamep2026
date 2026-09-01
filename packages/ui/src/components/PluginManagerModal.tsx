@@ -14,13 +14,14 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { UploadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import {
   PERMISSION_LABEL_KEYS,
   pluginManifestSchema,
   type PermissionId,
 } from "@mamep2026/plugin-api";
 import { useAppStore } from "../app-store";
+import type { AppHost } from "../host";
 
 /** 权限 → i18n 标签键映射（ADR-039）：共享自 plugin-api，未登记权限回退显示原始字符串。 */
 function permissionLabel(
@@ -45,7 +46,106 @@ export function PluginManagerModal(): React.ReactNode {
   const loadErrors = registry?.getLoadErrors() ?? [];
 
   /**
-   * 已读取的 manifest 文本：JSON.parse + pluginManifestSchema 校验 → 平台预检 →
+   * 单文件 JS 插件安装（ADR-044 Phase F-2/3）：entrySource 含 manifest + activate，
+   * 在隔离线程（Web Worker）加载提取 manifest → 校验 → §6.10.4 安全确认（含运行位置）→
+   * registry.register({source:"installed", remoteRuntime, entrySource})。
+   */
+  const handlePluginSourceText = async (text: string): Promise<void> => {
+    if (registry === null || host === null) return;
+    if (!host.capabilities.executablePlugins) {
+      message.error(t("plugins.executableUnsupported"));
+      return;
+    }
+    // 创建隔离运行时并加载 entry（Worker 内 import 提取 manifest）。
+    let runtime: ReturnType<AppHost["createPluginRemoteRuntime"]>;
+    let loadResult: Awaited<ReturnType<typeof runtime.load>>;
+    try {
+      runtime = host.createPluginRemoteRuntime(text);
+      loadResult = await runtime.load();
+    } catch {
+      message.error(t("errors.pluginLoadFailed"));
+      return;
+    }
+    if (!loadResult.ok) {
+      message.error(t("errors.pluginLoadFailed"));
+      return;
+    }
+    const manifest = loadResult.value;
+    void modal.confirm({
+      title: t("plugins.installConfirmTitle"),
+      content: (
+        <div>
+          <Typography.Paragraph type="secondary">
+            {t("plugins.installConfirmWarning")}
+          </Typography.Paragraph>
+          <Typography.Paragraph type="warning">
+            {t("plugins.executableEntryNotice")}
+          </Typography.Paragraph>
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label={t("plugins.name")}>
+              <Typography.Text strong>{manifest.name}</Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label={t("plugins.author")}>
+              {manifest.author ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("plugins.version")}>
+              {manifest.version}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("plugins.entry")}>
+              <Space size={4}>
+                <Tag color="orange">{t("plugins.entryIsolated")}</Tag>
+              </Space>
+            </Descriptions.Item>
+            <Descriptions.Item label={t("plugins.permissions")}>
+              {manifest.permissions.length > 0 ? (
+                <Space size={[4, 4]} wrap>
+                  {manifest.permissions.map((permission: PermissionId) => (
+                    <Tag key={permission} color="geekblue">
+                      {permissionLabel(t, permission)}
+                    </Tag>
+                  ))}
+                </Space>
+              ) : (
+                "—"
+              )}
+            </Descriptions.Item>
+          </Descriptions>
+        </div>
+      ),
+      okText: t("plugins.installConfirmOk"),
+      cancelText: t("connection.cancel"),
+      okButtonProps: { danger: true },
+      onOk: () => {
+        const result = registry.register(manifest, {
+          source: "installed",
+          remoteRuntime: runtime,
+          entrySource: text,
+        });
+        if (!result.ok) {
+          message.error(t(result.error.userMessageKey));
+          return;
+        }
+        message.success(t("plugins.installSuccess"));
+        forceRender((v) => v + 1);
+      },
+      onCancel: () => {
+        // 取消安装：关闭隔离线程。
+        void runtime.dispose();
+      },
+    });
+  };
+
+  /** 已读取的插件文件文本：JSON = 清单注册（既有路径）；JS = 单文件可执行插件（隔离加载）。 */
+  const handlePluginFileText = (text: string): void => {
+    const trimmed = text.trimStart();
+    if (trimmed.startsWith("{")) {
+      handleManifestText(text);
+      return;
+    }
+    void handlePluginSourceText(text);
+  };
+
+  /** 已读取的 manifest 文本：JSON.parse + pluginManifestSchema 校验 → 平台预检 →
    * §6.10.4/§15.3-3 安全确认（来源/版本/权限/平台/风险）→ 确认后 registry.register
    * （source: "installed"，持久化由 PluginPersistenceCoordinator 承担）。
    */
@@ -180,7 +280,7 @@ export function PluginManagerModal(): React.ReactNode {
         // 用户取消打开对话框：非错误。
         return;
       }
-      handleManifestText(content);
+      handlePluginFileText(content);
       return;
     }
     // upload：浏览器客户端文件选择（隐藏 input）。
@@ -194,7 +294,35 @@ export function PluginManagerModal(): React.ReactNode {
     // 允许重复选择同一文件。
     event.target.value = "";
     if (file === undefined) return;
-    void file.text().then(handleManifestText);
+    void file.text().then(handlePluginFileText);
+  };
+
+  /**
+   * 卸载插件（ADR-044 Phase F-1）：仅 installed 来源显示按钮；确认 →
+   * registry.unregister（回收贡献点 + 持久化删除，由 PluginPersistenceCoordinator 承担）。
+   */
+  const handleUninstall = (pluginId: string): void => {
+    if (registry === null) return;
+    void modal.confirm({
+      title: t("plugins.uninstallConfirmTitle"),
+      content: (
+        <Typography.Paragraph type="secondary">
+          {t("plugins.uninstallConfirmWarning")}
+        </Typography.Paragraph>
+      ),
+      okText: t("plugins.uninstallConfirmOk"),
+      cancelText: t("connection.cancel"),
+      okButtonProps: { danger: true },
+      onOk: () => {
+        const result = registry.unregister(pluginId);
+        if (!result.ok) {
+          message.error(t(result.error.userMessageKey));
+          return;
+        }
+        message.success(t("plugins.uninstallSuccess"));
+        forceRender((v) => v + 1);
+      },
+    });
   };
 
   return (
@@ -214,7 +342,7 @@ export function PluginManagerModal(): React.ReactNode {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json,application/json"
+          accept=".json,.mjs,application/json,text/javascript"
           style={{ display: "none" }}
           onChange={handleFileInput}
           data-testid="plugin-manifest-file-input"
@@ -274,14 +402,27 @@ export function PluginManagerModal(): React.ReactNode {
                   ) : null}
                 </Space>
               </div>
-              <Switch
-                size="small"
-                checked={registry?.isEnabled(plugin.id) ?? false}
-                onChange={(checked) => {
-                  registry?.setEnabled(plugin.id, checked);
-                  forceRender((v) => v + 1);
-                }}
-              />
+              <Flex align="center" gap={4}>
+                {registry?.getSource(plugin.id) === "installed" ? (
+                  <Tooltip title={t("plugins.uninstall")}>
+                    <Button
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleUninstall(plugin.id)}
+                      aria-label={t("plugins.uninstall")}
+                    />
+                  </Tooltip>
+                ) : null}
+                <Switch
+                  size="small"
+                  checked={registry?.isEnabled(plugin.id) ?? false}
+                  onChange={(checked) => {
+                    registry?.setEnabled(plugin.id, checked);
+                    forceRender((v) => v + 1);
+                  }}
+                />
+              </Flex>
             </Flex>
           )}
         />

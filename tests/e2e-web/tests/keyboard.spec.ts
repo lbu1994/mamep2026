@@ -75,8 +75,10 @@ test("F9 全表读取（Read All 完成全局提示出现）", async ({ page }) 
 
 test("Ctrl+[ / Ctrl+] 在打开的表间循环切换", async ({ page }) => {
   await openApp(page);
-  // 新建第二张表（侧边栏 + 按钮）。
-  await page.locator(".sheet-sidebar__section-action").click();
+  // 新建第二张表（侧边栏核心组 + 按钮）。
+  await page
+    .locator('.sheet-sidebar__group-head[data-sheet-group="holding-register"] .sheet-sidebar__group-action')
+    .click();
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
   ).toContainText("Sheet 2");

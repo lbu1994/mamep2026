@@ -168,6 +168,10 @@ export function createVscodeBridge(
       postRequest<null>("session-set-slave-address", { slave }),
     sessionSetUnitId: (unitId: number) =>
       postRequest<null>("session-set-unit-id", { unitId }),
+    sessionSetAddressTransform: (config: {
+      transformId: string;
+      enabled: boolean;
+    }) => postRequest<null>("session-set-address-transform", config),
     sessionReadRow: (row: RegisterRowPayload) =>
       postRequest<number>("session-read-row", { row }),
     sessionWriteRow: (

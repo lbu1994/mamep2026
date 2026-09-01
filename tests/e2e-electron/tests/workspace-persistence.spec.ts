@@ -151,7 +151,9 @@ test("修改工作区 → 主进程自动保存落盘为 userData/workspace.json
     // 非 mock 启动自动弹出 Connection Settings：先关闭再操作表格。
     await closeConnectionModal(page);
     // 结构性操作：新增表（侧边栏 New Register Table）→ 触发自动保存。
-    await page.getByRole("button", { name: "New Register Table" }).click();
+    await page
+      .getByRole("button", { name: "New Register Table", exact: true })
+      .click();
     await expect(
       page.locator(".register-table-tabs .ant-tabs-tab-active"),
     ).toContainText("Sheet 2", { timeout: 5000 });
@@ -175,7 +177,7 @@ test("关闭后同 userData 重启 → 会话恢复（新表仍在）", async ()
   try {
     await closeConnectionModal(first.page);
     await first.page
-      .getByRole("button", { name: "New Register Table" })
+      .getByRole("button", { name: "New Register Table", exact: true })
       .click();
     await expect(
       first.page.locator(".register-table-tabs .ant-tabs-tab-active"),

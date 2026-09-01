@@ -20,12 +20,19 @@ import {
   DEFAULT_MOCK_RULES,
   matchMockRule,
   type MockRangeRule,
+  type MockTableType,
 } from "./mock-scenarios";
 
 export class MockTransport implements TransportPort {
   readonly kind = "mock" as const;
   private openFlag = false;
   private readonly registers = new Map<number, number>();
+  /** 线圈（FC01 读 / FC0F 写，ADR-043 E-1），值为 0/1。 */
+  private readonly coils = new Map<number, number>();
+  /** 离散输入（FC02 读，ADR-043 E-1），值为 0/1。 */
+  private readonly inputs = new Map<number, number>();
+  /** 输入寄存器（FC04 读，ADR-043 E-1）。 */
+  private readonly inputRegisters = new Map<number, number>();
   private readonly rules: readonly MockRangeRule[];
   private readonly dataListeners = new Set<(chunk: Uint8Array) => void>();
   private readonly errorListeners = new Set<(error: MamepError) => void>();
@@ -89,12 +96,58 @@ export class MockTransport implements TransportPort {
     return this.registers.get(address & 0xffff) ?? null;
   }
 
+  setCoil(address: number, value: number): void {
+    this.coils.set(address & 0xffff, value === 0 ? 0 : 1);
+  }
+
+  getCoil(address: number): number | null {
+    return this.coils.get(address & 0xffff) ?? null;
+  }
+
+  setInput(address: number, value: number): void {
+    this.inputs.set(address & 0xffff, value === 0 ? 0 : 1);
+  }
+
+  getInput(address: number): number | null {
+    return this.inputs.get(address & 0xffff) ?? null;
+  }
+
+  setInputRegister(address: number, value: number): void {
+    this.inputRegisters.set(address & 0xffff, value & 0xffff);
+  }
+
+  getInputRegister(address: number): number | null {
+    return this.inputRegisters.get(address & 0xffff) ?? null;
+  }
+
   dumpRegisters(): Record<string, number> {
     const dump: Record<string, number> = {};
     for (const [address, value] of this.registers) {
       dump[address.toString(16).toUpperCase().padStart(4, "0")] = value;
     }
     return dump;
+  }
+
+  /** 位打包读（FC01/FC02）：逐位取 map 值（缺省 0），LSB 在前。 */
+  private readBitsResponse(
+    map: Map<number, number>,
+    slave: number,
+    functionCode: number,
+    address: number,
+    quantity: number,
+  ): void {
+    const byteCount = Math.ceil(quantity / 8);
+    const data = new Uint8Array(byteCount);
+    for (let i = 0; i < quantity; i += 1) {
+      const value = map.get((address + i) & 0xffff) ?? 0;
+      if (value !== 0) {
+        const index = i >> 3;
+        data[index] = (data[index] ?? 0) | (1 << (i & 7));
+      }
+    }
+    this.respond(
+      Uint8Array.from([slave, functionCode, byteCount, ...data]),
+    );
   }
 
   private handleFrame(bytes: Uint8Array): void {
@@ -195,6 +248,134 @@ export class MockTransport implements TransportPort {
       );
       return;
     }
+    // 自定义功能码示例（ADR-043 E-4）：0x65 读 / 0x66 写，与 FC03/FC10 同构（registers map）。
+    if (functionCode === 0x65 || functionCode === 0x66) {
+      const behavior =
+        functionCode === 0x65
+          ? (rule?.read ?? { kind: "normal" })
+          : (rule?.write ?? { kind: "normal" });
+      if (behavior.kind === "no-response") return;
+      if (behavior.kind === "exception") {
+        this.respond(
+          this.exceptionFrame(slave, functionCode, behavior.exceptionCode),
+        );
+        return;
+      }
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      if (functionCode === 0x65) {
+        const values: number[] = [];
+        for (let i = 0; i < quantity; i += 1) {
+          values.push(this.registers.get((address + i) & 0xffff) ?? 0);
+        }
+        this.respond(
+          Uint8Array.from([
+            slave,
+            0x65,
+            quantity * 2,
+            ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+          ]),
+        );
+      } else {
+        const byteCount = bytes[6] ?? 0;
+        const values: number[] = [];
+        for (let i = 0; i < quantity; i += 1) {
+          values.push(
+            (((bytes[7 + i * 2] ?? 0) << 8) | (bytes[8 + i * 2] ?? 0)) & 0xffff,
+          );
+        }
+        void byteCount;
+        for (let i = 0; i < quantity; i += 1) {
+          this.registers.set((address + i) & 0xffff, values[i] ?? 0);
+        }
+        this.respond(
+          Uint8Array.from([
+            slave,
+            0x66,
+            (address >> 8) & 0xff,
+            address & 0xff,
+            (quantity >> 8) & 0xff,
+            quantity & 0xff,
+          ]),
+        );
+      }
+      return;
+    }
+    // 基础表（ADR-043 E-1）：FC01/FC02 位打包读、FC04 16 位读、FC0F 位打包写。
+    if (functionCode === 0x01 || functionCode === 0x02) {
+      const tableType: MockTableType =
+        functionCode === 0x01 ? "coil" : "discrete-input";
+      const tableRule = matchMockRule(this.rules, address, tableType);
+      const behavior = tableRule?.read ?? { kind: "normal" };
+      if (behavior.kind === "no-response") return;
+      if (behavior.kind === "exception") {
+        this.respond(
+          this.exceptionFrame(slave, functionCode, behavior.exceptionCode),
+        );
+        return;
+      }
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      const map = functionCode === 0x01 ? this.coils : this.inputs;
+      this.readBitsResponse(map, slave, functionCode, address, quantity);
+      return;
+    }
+    if (functionCode === 0x04) {
+      const tableRule = matchMockRule(
+        this.rules,
+        address,
+        "input-register",
+      );
+      const behavior = tableRule?.read ?? { kind: "normal" };
+      if (behavior.kind === "no-response") return;
+      if (behavior.kind === "exception") {
+        this.respond(this.exceptionFrame(slave, 0x04, behavior.exceptionCode));
+        return;
+      }
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      const values: number[] = [];
+      for (let i = 0; i < quantity; i += 1) {
+        values.push(this.inputRegisters.get((address + i) & 0xffff) ?? 0);
+      }
+      this.respond(
+        Uint8Array.from([
+          slave,
+          0x04,
+          quantity * 2,
+          ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+        ]),
+      );
+      return;
+    }
+    if (functionCode === 0x0f) {
+      const tableRule = matchMockRule(this.rules, address, "coil");
+      const behavior = tableRule?.write ?? { kind: "normal" };
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      const byteCount = bytes[6] ?? 0;
+      if (behavior.kind === "no-response") return;
+      if (behavior.kind === "exception") {
+        this.respond(this.exceptionFrame(slave, 0x0f, behavior.exceptionCode));
+        return;
+      }
+      // 逐位写入线圈（LSB 在前）；write-ignore 区回执成功但不写入。
+      for (let i = 0; i < quantity; i += 1) {
+        const byteIndex = i >> 3;
+        const bitIndex = i & 7;
+        const byte = byteIndex < byteCount ? (bytes[7 + byteIndex] ?? 0) : 0;
+        if (behavior.kind !== "write-ignore") {
+          this.coils.set((address + i) & 0xffff, (byte >> bitIndex) & 1);
+        }
+      }
+      this.respond(
+        Uint8Array.from([
+          slave,
+          0x0f,
+          (address >> 8) & 0xff,
+          address & 0xff,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
+        ]),
+      );
+      return;
+    }
     // 不支持的功能码：回异常响应。
     this.respond(Uint8Array.from([slave, functionCode | 0x80, 0x01]));
   }
@@ -214,13 +395,23 @@ export class MockTransport implements TransportPort {
   }
 }
 
-/** E2E 钩子：dev 模式下挂到 window 供 Playwright 预置/断言寄存器值。 */
+/** E2E 钩子：dev 模式下挂到 window 供 Playwright 预置/断言寄存器与基础表值。 */
 export function installMockHooks(transport: MockTransport): void {
   (window as unknown as { __mamepMock?: unknown }).__mamepMock = {
     setRegister: (address: number, value: number) =>
       transport.setRegister(address, value),
     getRegister: (address: number) => transport.getRegister(address),
     dumpRegisters: () => transport.dumpRegisters(),
+    setCoil: (address: number, value: number) =>
+      transport.setCoil(address, value),
+    getCoil: (address: number) => transport.getCoil(address),
+    setInput: (address: number, value: number) =>
+      transport.setInput(address, value),
+    getInput: (address: number) => transport.getInput(address),
+    setInputRegister: (address: number, value: number) =>
+      transport.setInputRegister(address, value),
+    getInputRegister: (address: number) =>
+      transport.getInputRegister(address),
   };
 }
 

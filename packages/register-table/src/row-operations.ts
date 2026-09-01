@@ -11,24 +11,33 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import { ok } from "@mamep2026/domain";
-import { formatRawValue, formatRawValues } from "@mamep2026/data-conversion";
+import {
+  createDataTypeResolver,
+  formatRawValues,
+  type DataTypeResolver,
+} from "@mamep2026/data-conversion";
+
+/** 模块级缺省解析器（仅内置；ADR-043 E-3 插件类型由 UI 注入 resolver）。 */
+const defaultResolver: DataTypeResolver = createDataTypeResolver();
 
 /** 应用读取成功结果（单寄存器）：按 Type 格式化并强制覆盖单元格（单一当前值模型，§15.1）。 */
 export function applyReadValueToRow(
   row: RegisterRow,
   raw: number,
+  resolver?: DataTypeResolver,
 ): Result<RegisterRow> {
   const rawValue = RawRegisterValue.create(raw);
   if (!rawValue.ok) return rawValue;
   return ok({
     ...row,
-    cellText: formatRawValue(raw, row.dataType),
+    cellText: (resolver ?? defaultResolver).format(raw, row.dataType),
     registerValues: [rawValue.value],
     updatedAt: Date.now(),
   });
 }
 
-/** 应用读取成功结果（多寄存器，ADR-030）：按组合类型格式化并覆盖单元格。 */
+/** 应用读取成功结果（多寄存器，ADR-030）：按组合类型格式化并覆盖单元格。
+ *  组合格式化保持内置契约（插件类型仅单寄存器，E-3 范围收敛，无需 resolver）。 */
 export function applyReadValuesToRow(
   row: RegisterRow,
   values: readonly number[],
@@ -41,6 +50,7 @@ export function applyReadValuesToRow(
   }
   return ok({
     ...row,
+    // 多寄存器组合格式化保持内置契约（插件类型仅单寄存器，E-3 范围收敛）。
     cellText: formatRawValues([...values], row.dataType),
     registerValues,
     updatedAt: Date.now(),

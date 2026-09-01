@@ -67,6 +67,8 @@ export const HOST_REQUEST_KINDS = [
   "session-get-state",
   "session-set-slave-address",
   "session-set-unit-id",
+  // 表级 Address Adjust（2026-09-01，ADR-042）：host 端会话的活动表地址变换配置同步。
+  "session-set-address-transform",
   "session-read-row",
   "session-write-row",
   "session-batch-read",
@@ -213,11 +215,13 @@ export function fromResultPayload(
   return payload.ok ? ok(payload.value) : fail(fromErrorPayload(payload.error));
 }
 
-/** session-connect 载荷。 */
+/** session-connect 载荷（ADR-043 E-6：可选 protocol = codecId，缺省 rtu）。 */
 export const sessionConnectPayloadSchema = z.object({
   portId: z.string(),
   profile: rtuConnectionProfilePayloadSchema,
   slaveAddress: z.number(),
+  /** 会话协议（ADR-041/043）：缺省 rtu；基础表/安川表 = codecId。 */
+  protocol: z.string().optional(),
 });
 export type SessionConnectPayload = z.infer<typeof sessionConnectPayloadSchema>;
 
@@ -345,6 +349,15 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
     // TCP Unit ID 会话内动态修改（2026-08-25）：渲染端按活动协议路由，TCP 走本 kind。
     kind: z.literal("session-set-unit-id"),
     payload: z.object({ unitId: z.number() }),
+  }),
+  z.object({
+    ...requestBase,
+    // 表级 Address Adjust（2026-09-01，ADR-042）：host 端会话同步活动表地址变换配置。
+    kind: z.literal("session-set-address-transform"),
+    payload: z.object({
+      transformId: z.string().min(1),
+      enabled: z.boolean(),
+    }),
   }),
   z.object({
     ...requestBase,
@@ -710,6 +723,11 @@ export interface MamepHostApi {
   sessionGetState(): Promise<Result<SessionStateResponse>>;
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）：对后续请求生效。 */
   sessionSetUnitId(unitId: number): Promise<Result<null>>;
+  /** 表级 Address Adjust（session-set-address-transform，2026-09-01 ADR-042）：host 端会话同步活动表地址变换配置。 */
+  sessionSetAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  }): Promise<Result<null>>;
   /** 单行读（session-read-row）：经主进程统一调度器 FC03（多寄存器行返回 values[]，ADR-030）。 */
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number | number[]>>;
   /** 单行写（session-write-row）：经主进程统一调度器 FC0x10；writeVerify 为每表写后回读配置（2026-08-26）。 */
@@ -777,6 +795,11 @@ export interface VscodeHostApi
   sessionSetSlaveAddress(slave: number): Promise<Result<null>>;
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）：对后续请求生效。 */
   sessionSetUnitId(unitId: number): Promise<Result<null>>;
+  /** 表级 Address Adjust（session-set-address-transform，2026-09-01 ADR-042）：host 端会话同步活动表地址变换配置。 */
+  sessionSetAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  }): Promise<Result<null>>;
   /** 加载插件存储（plugin-store-load，2026-08-30，ADR-038）：返回已安装插件 + 启用状态。 */
   pluginStoreLoad(): Promise<Result<PluginStoreDataResponse>>;
   /** 保存插件存储（plugin-store-save，2026-08-30，ADR-038）：持久化已安装插件清单。 */
@@ -831,11 +854,28 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   workspaceExport: "save-dialog",
   // 插件安装入口（2026-08-30，ADR-038）：主进程 userData plugins.json 持久化，manifest 经 open-text-file 对话框读取。
   pluginInstall: "file",
-  // 可执行插件（ADR-039）：Phase A 不执行第三方代码，如实声明 false；Phase F 隔离机制落地后翻转。
-  executablePlugins: false,
+  // 可执行插件（ADR-039）：Phase A 不执行第三方代码，如实声明 false；Phase F（ADR-044）
+  // Web Worker 隔离执行在 Renderer 已落地 → executablePlugins: true；主进程 host 插件
+  // 执行面未装配 → hostPlugins 维持 false（如实声明，ADR-044 已知限制）。
+  executablePlugins: true,
   hostPlugins: false,
-  protocolExtensions: [],
-  tableTypes: ["holding-register"],
+  // 协议扩展/表类型（ADR-041 Phase C）：内置安川插件 + 本地 RTU codec 会话已可用，如实声明。
+  // ADR-043 E-2：基础表 codec（coil/discrete-input/input-register，RTU 承载）追加。
+  protocolExtensions: [
+    "yaskawa-memobus-67h-010dh-010eh",
+    "modbus-basic-tables:coil",
+    "modbus-basic-tables:discrete-input",
+    "modbus-basic-tables:input-register",
+    "custom-function-code",
+  ],
+  tableTypes: [
+    "holding-register",
+    "coil",
+    "discrete-input",
+    "input-register",
+    "yaskawa-memobus-67h-010dh-010eh:holding-register",
+    "custom-function-code:holding-register",
+  ],
 });
 
 /**
@@ -855,9 +895,26 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   workspaceExport: "save-dialog",
   // 插件安装入口（2026-08-30，ADR-038）：Extension Host globalState 持久化，manifest 经 open-text-file 对话框读取。
   pluginInstall: "file",
-  // 可执行插件（ADR-039）：Phase A 不执行第三方代码，如实声明 false；Phase F 隔离机制落地后翻转。
-  executablePlugins: false,
+  // 可执行插件（ADR-039）：Phase A 不执行第三方代码，如实声明 false；Phase F（ADR-044）
+  // Web Worker 隔离执行在 Webview 已落地 → executablePlugins: true；Extension Host host 插件
+  // 执行面未装配 → hostPlugins 维持 false（如实声明，ADR-044 已知限制）。
+  executablePlugins: true,
   hostPlugins: false,
-  protocolExtensions: [],
-  tableTypes: ["holding-register"],
+  // 协议扩展/表类型（ADR-041 Phase C / ADR-043 E-6）：Extension Host 已注入 codecRegistry
+  // （基础表 + 安川 codec），session-connect 经 protocol 字段路由，如实声明。
+  protocolExtensions: [
+    "yaskawa-memobus-67h-010dh-010eh",
+    "modbus-basic-tables:coil",
+    "modbus-basic-tables:discrete-input",
+    "modbus-basic-tables:input-register",
+    "custom-function-code",
+  ],
+  tableTypes: [
+    "holding-register",
+    "coil",
+    "discrete-input",
+    "input-register",
+    "yaskawa-memobus-67h-010dh-010eh:holding-register",
+    "custom-function-code:holding-register",
+  ],
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultConfig, RegisterAddress } from "@mamep2026/domain";
 import {
   createMockScenarioRows,
+  DEFAULT_MOCK_BASIC_TABLE_SCENARIOS,
   DEFAULT_MOCK_RULES,
   DEFAULT_MOCK_SCENARIOS,
   matchMockRule,
@@ -41,14 +42,19 @@ describe("DEFAULT_MOCK_SCENARIOS 默认场景定义", () => {
   });
 
   it("DEFAULT_MOCK_RULES 与场景的地址/行为一一对应", () => {
-    expect(DEFAULT_MOCK_RULES).toHaveLength(DEFAULT_MOCK_SCENARIOS.length);
+    const scenarios = [
+      ...DEFAULT_MOCK_SCENARIOS,
+      ...DEFAULT_MOCK_BASIC_TABLE_SCENARIOS,
+    ];
+    expect(DEFAULT_MOCK_RULES).toHaveLength(scenarios.length);
     DEFAULT_MOCK_RULES.forEach((rule, index) => {
-      const scenario = DEFAULT_MOCK_SCENARIOS[index];
+      const scenario = scenarios[index];
       if (scenario === undefined) return;
       expect(rule.start).toBe(scenario.start);
       expect(rule.end).toBe(scenario.end);
       expect(rule.read).toEqual(scenario.read);
       expect(rule.write).toEqual(scenario.write);
+      expect(rule.tableType).toBe(scenario.tableType);
     });
   });
 });
@@ -103,6 +109,35 @@ describe("matchMockRule", () => {
     expect(matchMockRule(overlapping, 0x0050)?.read).toEqual({
       kind: "exception",
       exceptionCode: 0x01,
+    });
+  });
+
+  it("表类型专用规则优先于通用规则（ADR-043 E-1）", () => {
+    const mixed: readonly MockRangeRule[] = [
+      {
+        start: 0x0000,
+        end: 0x000f,
+        read: { kind: "normal" },
+        write: { kind: "normal" },
+      },
+      {
+        tableType: "coil",
+        start: 0x0000,
+        end: 0x000f,
+        read: { kind: "normal" },
+        write: { kind: "exception", exceptionCode: 0x02 },
+      },
+    ];
+    // 保持寄存器：命中通用规则（normal）。
+    expect(matchMockRule(mixed, 0x0005)?.write).toEqual({ kind: "normal" });
+    // 线圈：命中专用规则（写异常 0x02）。
+    expect(matchMockRule(mixed, 0x0005, "coil")?.write).toEqual({
+      kind: "exception",
+      exceptionCode: 0x02,
+    });
+    // 离散输入：无专用规则，回退通用规则。
+    expect(matchMockRule(mixed, 0x0005, "discrete-input")?.read).toEqual({
+      kind: "normal",
     });
   });
 });

@@ -63,10 +63,13 @@ function createFakeBridge(): {
         workspaceImport: "file",
         workspaceExport: "save-dialog",
         pluginInstall: "file",
-        executablePlugins: false,
-        hostPlugins: false,
-        protocolExtensions: [],
-        tableTypes: ["holding-register"],
+        executablePlugins: true,
+        hostPlugins: true,
+        protocolExtensions: ["yaskawa-memobus-67h-010dh-010eh"],
+        tableTypes: [
+          "holding-register",
+          "yaskawa-memobus-67h-010dh-010eh:holding-register",
+        ],
       },
     })),
     getAppVersion: vi.fn(async (): Promise<Result<string>> => ({
@@ -118,6 +121,9 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
+    sessionSetAddressTransform: vi.fn(
+      async (): Promise<Result<null>> => ({ ok: true, value: null }),
+    ),
     sessionReadRow: vi.fn(async (): Promise<Result<number>> => ({
       ok: true,
       value: 0xabcd,

@@ -11,6 +11,7 @@ import type {
   BatchReadRow,
   BatchReadSummary,
   CommunicationLogEvent,
+  CommunicationSession,
   ConnectionState,
   WriteOutcome,
 } from "@mamep2026/communication";
@@ -54,6 +55,7 @@ import type {
   PluginRegistry,
   PluginStorePort,
 } from "@mamep2026/plugin-api";
+import { createUnavailableCommunicationApi } from "@mamep2026/plugin-api";
 import {
   buildVscodeTheme,
   readVscodeCssVars,
@@ -62,6 +64,7 @@ import {
 import {
   BrowserPlatformHost,
   createIdbKeyValueStore,
+  createWebPluginRemoteRuntime,
   IndexedDBWorkspaceRepository,
 } from "@mamep2026/platform-web";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
@@ -313,6 +316,7 @@ export class VscodeAppHost implements AppHost {
   connect(
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
+    options?: { protocol?: string },
   ): Promise<Result<void>> {
     if (handle === null) {
       return Promise.resolve(
@@ -326,17 +330,23 @@ export class VscodeAppHost implements AppHost {
         ),
       );
     }
-    return this.bridge.sessionConnect({
-      portId: handle.id,
-      profile: toRtuConnectionProfilePayload(profile),
-      slaveAddress: this.currentSlaveAddress,
-    }).then((result) => {
-      if (!result.ok) return result;
-      this.currentProfile = profile;
-      this.portLabel = handle.label;
-      this.connectionState = "connected";
-      return ok(undefined);
-    });
+    return this.bridge
+      .sessionConnect({
+        portId: handle.id,
+        profile: toRtuConnectionProfilePayload(profile),
+        slaveAddress: this.currentSlaveAddress,
+        // ADR-043 E-6：codec 协议（基础表/安川）透传 Extension Host；缺省 rtu。
+        ...(options?.protocol !== undefined && options.protocol !== "rtu"
+          ? { protocol: options.protocol }
+          : {}),
+      })
+      .then((result) => {
+        if (!result.ok) return result;
+        this.currentProfile = profile;
+        this.portLabel = handle.label;
+        this.connectionState = "connected";
+        return ok(undefined);
+      });
   }
 
   /** TCP 连接（session-tcp-connect）：profile 即连接参数，无串口句柄。 */
@@ -381,6 +391,18 @@ export class VscodeAppHost implements AppHost {
     return this.connectionState;
   }
 
+  /** 当前会话（ADR-044 Phase F-2）：VSCode 会话在 Extension Host，无本地会话 → null。 */
+  getSession(): CommunicationSession | null {
+    return null;
+  }
+
+  /** 插件隔离运行时（ADR-044 Phase F-2）：Webview 内 Web Worker 加载 entry。 */
+  createPluginRemoteRuntime(entrySource: string) {
+    return createWebPluginRemoteRuntime(entrySource, () =>
+      createUnavailableCommunicationApi(),
+    );
+  }
+
   getCommProperties(): CommProperties {
     const profile = this.currentProfile;
     if (profile !== null && profile.protocol === "tcp") {
@@ -397,7 +419,6 @@ export class VscodeAppHost implements AppHost {
         timeoutMs: profile.requestTimeoutMs,
         retryCount: profile.retryCount,
         rxDelayMs: profile.interRequestDelayMs,
-        addressAdjust: "off",
         connectionState: this.connectionState,
       };
     }
@@ -414,7 +435,6 @@ export class VscodeAppHost implements AppHost {
       timeoutMs: rtu?.requestTimeoutMs ?? 1000,
       retryCount: rtu?.retryCount ?? 1,
       rxDelayMs: rtu?.interRequestDelayMs ?? 50,
-      addressAdjust: rtu?.addressAdjust ?? "off",
       connectionState: this.connectionState,
     };
   }
@@ -429,6 +449,22 @@ export class VscodeAppHost implements AppHost {
       void this.bridge.sessionSetUnitId(slave);
     } else {
       void this.bridge.sessionSetSlaveAddress(slave);
+    }
+  }
+
+  /** 更新活动表地址变换配置（ADR-042）：VSCode 会话在 Extension Host，经 session-set-address-transform RPC。 */
+  setAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  } | null): void {
+    // TCP 无地址变换（恒不调整）：仍同步 null 使宿主复位。
+    if (config === null) {
+      void this.bridge.sessionSetAddressTransform({
+        transformId: "builtin.address-adjust",
+        enabled: false,
+      });
+    } else {
+      void this.bridge.sessionSetAddressTransform(config);
     }
   }
 

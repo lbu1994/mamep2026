@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   decodeRtuResponse,
+  encodeReadBitsRequest,
   encodeReadHoldingRegistersRequest,
+  encodeReadInputRegistersRequest,
+  encodeWriteMultipleCoilsRequest,
   encodeWriteMultipleRegistersRequest,
   encodeWriteSingleRegisterRequest,
   expectedResponseLength,
+  FUNCTION_READ_COILS,
+  FUNCTION_READ_DISCRETE_INPUTS,
+  MAX_READ_BITS_QUANTITY,
   MAX_READ_QUANTITY,
+  MAX_WRITE_COILS_QUANTITY,
   MAX_WRITE_QUANTITY,
   type ExpectedResponse,
 } from "./rtu-frame";
@@ -298,5 +305,236 @@ describe("quantity limits (ADR-030)", () => {
   it("exposes RTU read/write quantity ceilings", () => {
     expect(MAX_READ_QUANTITY).toBe(125);
     expect(MAX_WRITE_QUANTITY).toBe(123);
+  });
+});
+
+describe("basic table frames (ADR-043 E-1: FC01/FC02/FC04/FC0F)", () => {
+  function withCrc(payload: number[]): Uint8Array {
+    const bytes = Uint8Array.from(payload);
+    const crc = crc16(bytes);
+    const out = new Uint8Array(payload.length + 2);
+    out.set(bytes);
+    out[out.length - 2] = crc & 0xff;
+    out[out.length - 1] = (crc >> 8) & 0xff;
+    return out;
+  }
+
+  function crc16(bytes: Uint8Array): number {
+    let crc = 0xffff;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let i = 0; i < 8; i++) {
+        crc = crc & 1 ? (crc >> 1) ^ 0xa001 : crc >> 1;
+      }
+    }
+    return crc;
+  }
+
+  it("exposes basic table quantity ceilings", () => {
+    expect(MAX_READ_BITS_QUANTITY).toBe(2000);
+    expect(MAX_WRITE_COILS_QUANTITY).toBe(1968);
+  });
+
+  it("encodes FC01 read coils request", () => {
+    const bytes = encodeReadBitsRequest(
+      { slaveAddress: 1, startAddress: 0, quantity: 8 },
+      FUNCTION_READ_COILS,
+    );
+    expect(Array.from(bytes.slice(0, 6))).toEqual([
+      0x01, 0x01, 0x00, 0x00, 0x00, 0x08,
+    ]);
+  });
+
+  it("encodes FC02 read discrete inputs request", () => {
+    const bytes = encodeReadBitsRequest(
+      { slaveAddress: 0x11, startAddress: 0x000a, quantity: 1 },
+      FUNCTION_READ_DISCRETE_INPUTS,
+    );
+    expect(Array.from(bytes.slice(0, 6))).toEqual([
+      0x11, 0x02, 0x00, 0x0a, 0x00, 0x01,
+    ]);
+  });
+
+  it("encodes FC04 read input registers request", () => {
+    const bytes = encodeReadInputRegistersRequest({
+      slaveAddress: 1,
+      startAddress: 0,
+      quantity: 1,
+    });
+    expect(Array.from(bytes.slice(0, 6))).toEqual([
+      0x01, 0x04, 0x00, 0x00, 0x00, 0x01,
+    ]);
+  });
+
+  it("encodes FC0F write multiple coils with LSB-first bit packing", () => {
+    // 值 [1,0,1,1,0,0,0,1] → 字节 0b10001101 = 0x8D
+    const bytes = encodeWriteMultipleCoilsRequest({
+      slaveAddress: 1,
+      startAddress: 0,
+      values: [1, 0, 1, 1, 0, 0, 0, 1],
+    });
+    expect(Array.from(bytes.slice(0, 7))).toEqual([
+      0x01, 0x0f, 0x00, 0x00, 0x00, 0x08, 0x01,
+    ]);
+    expect(bytes[7]).toBe(0x8d);
+  });
+
+  it("encodes FC0F with multiple bytes and zero-padded last byte", () => {
+    // 9 个值 → 2 字节，第 9 位（索引 8）置位 → 第二字节 0x01
+    const values = new Array<number>(9).fill(0);
+    values[8] = 1;
+    const bytes = encodeWriteMultipleCoilsRequest({
+      slaveAddress: 1,
+      startAddress: 0,
+      values,
+    });
+    expect(Array.from(bytes.slice(0, 7))).toEqual([
+      0x01, 0x0f, 0x00, 0x00, 0x00, 0x09, 0x02,
+    ]);
+    expect(bytes[7]).toBe(0x00);
+    expect(bytes[8]).toBe(0x01);
+  });
+
+  it("computes bit-packed read expected lengths", () => {
+    expect(expectedResponseLength("read-coils", 1)).toEqual({
+      normal: 6,
+      exception: 5,
+    });
+    expect(expectedResponseLength("read-coils", 8)).toEqual({
+      normal: 6,
+      exception: 5,
+    });
+    expect(expectedResponseLength("read-coils", 9)).toEqual({
+      normal: 7,
+      exception: 5,
+    });
+    expect(expectedResponseLength("read-discrete-inputs", 2000)).toEqual({
+      normal: 3 + 250 + 2,
+      exception: 5,
+    });
+    expect(expectedResponseLength("read-input-registers", 2)).toEqual({
+      normal: 9,
+      exception: 5,
+    });
+  });
+
+  it("decodes FC01 bit-packed coils response", () => {
+    // 8 位：[1,0,1,1,0,0,0,1] → 0x8D
+    const expectCoils: ExpectedResponse = {
+      kind: "read-coils",
+      slaveAddress: 1,
+      startAddress: 0,
+      quantity: 8,
+    };
+    const frame = withCrc([0x01, 0x01, 0x01, 0x8d]);
+    const result = decodeRtuResponse(frame, expectCoils);
+    expectOk(result);
+    expect(result.value).toEqual({
+      kind: "read-coils",
+      values: [1, 0, 1, 1, 0, 0, 0, 1],
+    });
+  });
+
+  it("decodes FC01 with a 9-bit quantity spanning two bytes", () => {
+    const expectCoils: ExpectedResponse = {
+      kind: "read-coils",
+      slaveAddress: 1,
+      startAddress: 0,
+      quantity: 9,
+    };
+    // 9 位：[0,0,0,0,0,0,0,1,1]
+    const frame = withCrc([0x01, 0x01, 0x02, 0x01, 0x01]);
+    const result = decodeRtuResponse(frame, expectCoils);
+    expectOk(result);
+    expect(result.value).toEqual({
+      kind: "read-coils",
+      values: [1, 0, 0, 0, 0, 0, 0, 0, 1],
+    });
+  });
+
+  it("decodes FC02 discrete inputs bit-packed response", () => {
+    const expectInputs: ExpectedResponse = {
+      kind: "read-discrete-inputs",
+      slaveAddress: 1,
+      startAddress: 0,
+      quantity: 4,
+    };
+    const frame = withCrc([0x01, 0x02, 0x01, 0x0a]);
+    const result = decodeRtuResponse(frame, expectInputs);
+    expectOk(result);
+    expect(result.value).toEqual({
+      kind: "read-discrete-inputs",
+      values: [0, 1, 0, 1],
+    });
+  });
+
+  it("decodes FC04 input registers as 16-bit values", () => {
+    const expectInput: ExpectedResponse = {
+      kind: "read-input-registers",
+      slaveAddress: 1,
+      startAddress: 0,
+      quantity: 2,
+    };
+    const frame = withCrc([0x01, 0x04, 0x04, 0x12, 0x34, 0xab, 0xcd]);
+    const result = decodeRtuResponse(frame, expectInput);
+    expectOk(result);
+    expect(result.value).toEqual({
+      kind: "read-input-registers",
+      values: [0x1234, 0xabcd],
+    });
+  });
+
+  it("decodes FC0F write multiple coils echo", () => {
+    const expectWrite: ExpectedResponse = {
+      kind: "write-multiple-coils",
+      slaveAddress: 1,
+      address: 0x0001,
+      quantity: 8,
+    };
+    const frame = withCrc([0x01, 0x0f, 0x00, 0x01, 0x00, 0x08]);
+    const result = decodeRtuResponse(frame, expectWrite);
+    expectOk(result);
+    expect(result.value).toEqual({ kind: "write-multiple-coils" });
+  });
+
+  it("rejects FC01 byte count mismatch", () => {
+    const expectCoils: ExpectedResponse = {
+      kind: "read-coils",
+      slaveAddress: 1,
+      startAddress: 0,
+      quantity: 8,
+    };
+    // 帧长正确（4 payload 字节），但 byteCount 声明 2（应为 1）
+    const frame = withCrc([0x01, 0x01, 0x02, 0x8d]);
+    const result = decodeRtuResponse(frame, expectCoils);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("RTU_BYTE_COUNT_MISMATCH");
+  });
+
+  it("rejects FC0F echo quantity mismatch", () => {
+    const expectWrite: ExpectedResponse = {
+      kind: "write-multiple-coils",
+      slaveAddress: 1,
+      address: 0x0001,
+      quantity: 8,
+    };
+    const frame = withCrc([0x01, 0x0f, 0x00, 0x01, 0x00, 0x09]);
+    const result = decodeRtuResponse(frame, expectWrite);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("RTU_QUANTITY_MISMATCH");
+  });
+
+  it("rejects FC02 response with wrong function code", () => {
+    const expectInputs: ExpectedResponse = {
+      kind: "read-discrete-inputs",
+      slaveAddress: 1,
+      startAddress: 0,
+      quantity: 4,
+    };
+    // 响应帧用了 FC01（函数不匹配）
+    const frame = withCrc([0x01, 0x01, 0x01, 0x0a]);
+    const result = decodeRtuResponse(frame, expectInputs);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("RTU_FUNCTION_MISMATCH");
   });
 });

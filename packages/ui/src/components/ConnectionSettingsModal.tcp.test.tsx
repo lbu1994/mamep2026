@@ -9,6 +9,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
 import { createEmptyWorkspace } from "@mamep2026/domain";
+import { PluginRegistry } from "@mamep2026/plugin-api";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import type { AppHost } from "../host";
@@ -39,7 +40,9 @@ function makeHost(
       ...caps,
     },
     isMockMode: false,
-    pluginRegistry: {} as never,
+    // 真实注册表（Phase C：ConnectionSettingsModal 经 usePluginContributions 读取 tableType
+    // 贡献，空对象 mock 缺 getVersion 会崩）。
+    pluginRegistry: new PluginRegistry(),
     appVersion: "0.0.0-test",
     loadWorkspace: vi.fn(async () => ({
       ok: true as const,
@@ -62,8 +65,11 @@ function makeHost(
     disconnect: vi.fn(async () => ({ ok: true as const, value: undefined })),
     dispose: vi.fn(async () => undefined),
     getConnectionState: vi.fn(() => "disconnected" as const),
+    getSession: vi.fn(() => null),
+    createPluginRemoteRuntime: vi.fn(),
     getCommProperties: vi.fn(),
     setSlaveAddress: vi.fn(),
+    setAddressTransform: vi.fn(),
     subscribeConnectionState: vi.fn(() => () => undefined),
     readRow: vi.fn(),
     writeRow: vi.fn(),

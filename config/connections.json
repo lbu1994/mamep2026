@@ -15,8 +15,7 @@
       "slaveAddress": 1,
       "requestTimeoutMs": 1000,
       "retryCount": 1,
-      "interRequestDelayMs": 50,
-      "addressAdjust": "off"
+      "interRequestDelayMs": 50
     },
     {
       "id": "tcp-local-slave",

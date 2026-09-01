@@ -50,7 +50,7 @@ describe("FileWorkspaceRepository", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       // createEmptyWorkspace 含 Date.now()/随机 id（非确定性），做结构化断言。
-      expect(result.value.schemaVersion).toBe(4);
+      expect(result.value.schemaVersion).toBe(7);
       expect(result.value.name).toBe("Workspace");
       expect(result.value.sheets).toHaveLength(1);
     }

@@ -1,15 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { defaultConfig } from "./config";
 import {
+  basicTablesProtocolId,
+  coreTableTypeMeta,
   createEmptyRow,
   createEmptyWorkspace,
   createRegisterSheet,
   createRegisterSubRowMeta,
   createRegisterSubRowMetas,
+  isCoreSheetType,
+  sheetTypeWritable,
   type RegisterRow,
 } from "./workspace-model";
 
 describe("createRegisterSheet 默认行（新建表默认填充 defaultRowCount 行）", () => {
+  it("新建表默认 type=holding-register（ADR-041）", () => {
+    const sheet = createRegisterSheet("S", 0);
+    expect(sheet.type).toBe("holding-register");
+  });
+
+  it("createRegisterSheet 支持插件表类型（ADR-041）", () => {
+    const sheet = createRegisterSheet(
+      "Yaskawa",
+      0,
+      "yaskawa-memobus-67h-010dh-010eh:holding-register",
+    );
+    expect(sheet.type).toBe(
+      "yaskawa-memobus-67h-010dh-010eh:holding-register",
+    );
+  });
+
   it("新建表默认生成 defaultRowCount 个空行", () => {
     const sheet = createRegisterSheet("S", 0);
     expect(sheet.rows).toHaveLength(
@@ -113,5 +133,44 @@ describe("范围行子行元数据（2026-08-27）", () => {
     metas[1] = { ...metas[1] ?? { name: "", comment: "", dataType: "hex" }, name: "x" };
     expect(metas[0]?.name).toBe("");
     expect(metas[1]?.name).toBe("x");
+  });
+});
+
+describe("核心表类型元数据（ADR-043 E-2）", () => {
+  it("基础表协议 ID：modbus-basic-tables:<tableType>", () => {
+    expect(basicTablesProtocolId("coil")).toBe("modbus-basic-tables:coil");
+    expect(basicTablesProtocolId("discrete-input")).toBe(
+      "modbus-basic-tables:discrete-input",
+    );
+    expect(basicTablesProtocolId("input-register")).toBe(
+      "modbus-basic-tables:input-register",
+    );
+  });
+
+  it("coil 可读写、默认 bool；discrete-input/input-register 只读", () => {
+    expect(coreTableTypeMeta("coil")).toMatchObject({
+      writable: true,
+      defaultDataType: "bool",
+      bitValue: true,
+    });
+    expect(coreTableTypeMeta("discrete-input")).toMatchObject({
+      writable: false,
+      bitValue: true,
+    });
+    expect(coreTableTypeMeta("input-register")).toMatchObject({
+      writable: false,
+      bitValue: false,
+    });
+    expect(sheetTypeWritable("coil")).toBe(true);
+    expect(sheetTypeWritable("discrete-input")).toBe(false);
+    expect(sheetTypeWritable("input-register")).toBe(false);
+    expect(sheetTypeWritable("holding-register")).toBe(true);
+  });
+
+  it("isCoreSheetType 识别核心类型、排除插件类型", () => {
+    expect(isCoreSheetType("holding-register")).toBe(true);
+    expect(isCoreSheetType("coil")).toBe(true);
+    expect(isCoreSheetType("yaskawa-memobus:holding-register")).toBe(false);
+    expect(coreTableTypeMeta("yaskawa-memobus:holding-register")).toBeNull();
   });
 });

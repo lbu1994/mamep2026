@@ -376,7 +376,6 @@ describe("BottomPanel properties", () => {
     timeoutMs: 500,
     retryCount: 3,
     rxDelayMs: 100,
-    addressAdjust: "on",
     connectionState: "connected",
   };
 
@@ -399,7 +398,7 @@ describe("BottomPanel properties", () => {
     });
   });
 
-  it("renders all 11 communication properties with their values", () => {
+  it("renders all 10 communication properties with their values", () => {
     renderPanel();
     expect(screen.getByText("COM3")).toBeTruthy();
     expect(screen.getByText("19200")).toBeTruthy();
@@ -410,22 +409,21 @@ describe("BottomPanel properties", () => {
     expect(screen.getByText("500")).toBeTruthy();
     expect(screen.getByText("3")).toBeTruthy();
     expect(screen.getByText("100")).toBeTruthy();
-    expect(screen.getByText("ON")).toBeTruthy();
     expect(screen.getByText("Online")).toBeTruthy();
   });
 
-  it("lays properties out in 3 columns (11 items across 4 rows)", () => {
+  it("lays properties out in 3 columns (10 items across 4 rows)", () => {
     const { container } = renderPanel();
     const rows = container.querySelectorAll(".ant-descriptions tbody tr");
     const items = container.querySelectorAll(".ant-descriptions-item");
-    expect(items).toHaveLength(11);
+    expect(items).toHaveLength(10);
     expect(rows).toHaveLength(4);
     rows.forEach((row) => {
       expect(
         row.querySelectorAll(".ant-descriptions-item").length,
       ).toBeLessThanOrEqual(3);
     });
-    // 末行 2 项（11 = 3×3 + 2）。
-    expect(rows[3]?.querySelectorAll(".ant-descriptions-item")).toHaveLength(2);
+    // 末行 1 项（10 = 3×3 + 1）。
+    expect(rows[3]?.querySelectorAll(".ant-descriptions-item")).toHaveLength(1);
   });
 });

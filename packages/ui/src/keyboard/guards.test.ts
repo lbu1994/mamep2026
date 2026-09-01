@@ -110,7 +110,7 @@ describe("isAnyModalOpen", () => {
           sheets: 1,
           rows: 0,
           connections: 0,
-          schemaVersion: 4,
+          schemaVersion: 5,
         },
       },
     });

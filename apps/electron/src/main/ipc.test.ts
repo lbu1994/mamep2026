@@ -652,7 +652,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     );
     expect(result.type).toBe("response");
     expect(workspace.save).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "SaveMe", schemaVersion: 4 }),
+      expect.objectContaining({ name: "SaveMe", schemaVersion: 7 }),
     );
   });
 

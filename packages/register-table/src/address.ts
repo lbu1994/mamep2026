@@ -1,14 +1,19 @@
 /**
- * 地址提交与 Address Adjust（docs/AGENTS.md §17.2、ADR-013、ADR-014、ADR-030）。
+ * 地址提交与 Address Adjust（docs/AGENTS.md §17.2、ADR-013、ADR-014、ADR-030、ADR-042）。
  * - 编辑态 addressDraft 与提交值 addressValue 分离；
  * - 校验失败保留用户输入并返回结构化错误；
  * - 成功提交后按进制归一化：HEX 4 位大写补零；DEC 去首尾空格（不补零）；
  * - 范围行（ADR-030）：draft 支持 `start-end`，提交后更新 registerCount（覆盖寄存器数）；
- * - Address Adjust ON 时发送地址 = 用户地址 − 1，日志记录双地址。
+ * - Address Adjust（ADR-042 插件 Phase D）：表级 addressTransform 配置 → 运行时变换 apply，
+ *   ON 时发送地址 = 用户地址 − 1（0 下溢报错），日志记录双地址。
  */
 import {
+  BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID,
   createMamepError,
   RegisterAddress,
+  type AddressAdjustMode,
+  type AddressTransform,
+  type AddressTransformConfig,
   type RegisterRadix,
   type RegisterRow,
   type Result,
@@ -72,12 +77,13 @@ export function rowTypeCountError(
   };
 }
 
-/** 计算实际发送地址（Address Adjust）。用户地址 0 且 ON 时下溢报错。 */
-export function computeSentAddress(
-  userAddress: number,
-  addressAdjust: "off" | "on",
-): Result<number> {
-  if (addressAdjust === "on") {
+/** 内置 Address Adjust 变换（ADR-042）：ON 时发送 = 用户地址 − 1，0 下溢报错。 */
+export const BUILTIN_ADDRESS_ADJUST_TRANSFORM: AddressTransform = {
+  id: BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID,
+  protocol: "rtu",
+  titleKey: "table.addressAdjust",
+  defaultConfig: { enabled: false },
+  apply(userAddress) {
     if (userAddress === 0) {
       return fail(
         createMamepError({
@@ -89,6 +95,55 @@ export function computeSentAddress(
       );
     }
     return ok(userAddress - 1);
-  }
-  return ok(userAddress);
+  },
+  validate(userAddress) {
+    if (userAddress === 0) {
+      return fail(
+        createMamepError({
+          code: "ADDRESS_ADJUST_UNDERFLOW",
+          category: "validation",
+          userMessageKey: "errors.addressAdjustUnderflow",
+          technicalMessage: "address 0 cannot be adjusted by -1",
+        }),
+      );
+    }
+    return ok(null);
+  },
+};
+
+/** 解析内置地址变换（按 id）；未知 id 返回 null（自定义变换由宿主注入 resolver，ADR-042）。 */
+export function resolveBuiltinAddressTransform(
+  transformId: string,
+): AddressTransform | null {
+  return transformId === BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID
+    ? BUILTIN_ADDRESS_ADJUST_TRANSFORM
+    : null;
+}
+
+/** 由表的 addressTransform 配置解析运行时变换（enabled 时按 transformId 查）；null=不调整。 */
+export function resolveSheetAddressTransform(
+  config: AddressTransformConfig | null,
+  resolve: (transformId: string) => AddressTransform | null = resolveBuiltinAddressTransform,
+): AddressTransform | null {
+  if (config === null || !config.enabled) return null;
+  return resolve(config.transformId);
+}
+
+/** 应用地址变换：null=不调整直接返回；否则变换 apply（0 下溢等失败返回结构化错误）。 */
+export function applyAddressTransform(
+  userAddress: number,
+  transform: AddressTransform | null,
+): Result<number> {
+  return transform === null ? ok(userAddress) : transform.apply(userAddress);
+}
+
+/** 计算实际发送地址（兼容旧签名，语义委托内置变换）。 */
+export function computeSentAddress(
+  userAddress: number,
+  addressAdjust: AddressAdjustMode,
+): Result<number> {
+  return applyAddressTransform(
+    userAddress,
+    addressAdjust === "on" ? BUILTIN_ADDRESS_ADJUST_TRANSFORM : null,
+  );
 }

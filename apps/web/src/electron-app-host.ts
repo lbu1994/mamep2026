@@ -13,7 +13,9 @@
 import type {
   BatchReadHandle,
   BatchReadRow,
+  CodecRegistry,
   CommunicationLogEvent,
+  CommunicationSession,
   ConnectionState,
   WriteOutcome,
 } from "@mamep2026/communication";
@@ -76,6 +78,8 @@ export interface ElectronAppHostOptions {
   repository?: WorkspaceRepositoryPort | undefined;
   /** 插件存储（默认 BridgePluginStore 经 preload 桥；测试注入内存仓储）。 */
   pluginStore?: PluginStorePort | undefined;
+  /** codec 注册表（ADR-041 决策 A）：RTU 本地路径复用浏览器 AppHost，按活动表协议路由。 */
+  codecRegistry?: CodecRegistry | undefined;
 }
 
 export class ElectronAppHost implements AppHost {
@@ -143,6 +147,8 @@ export class ElectronAppHost implements AppHost {
       mockTransport: false,
       // 插件持久化（2026-08-30，ADR-038）：主进程插件存储薄桥（userData 目录 plugins.json）。
       pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
+      // codec 注册表（ADR-041 决策 A）：RTU 本地路径复用浏览器 AppHost。
+      codecRegistry: options.codecRegistry,
     });
     this.capabilities = electronCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;
@@ -370,8 +376,10 @@ export class ElectronAppHost implements AppHost {
   async connect(
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
+    options?: { protocol?: string },
   ): Promise<Result<void>> {
-    const result = await this.inner.connect(profile, handle);
+    const result = await this.inner.connect(profile, handle, options);
+    // RTU 路径恒为 rtu（codec 协议如 MEMOBUS 亦走 RTU 串口传输，activeProtocol 仅 rtu/tcp 判别）。
     if (result.ok) this.activeProtocol = "rtu";
     return result;
   }
@@ -432,6 +440,18 @@ export class ElectronAppHost implements AppHost {
       : this.inner.getConnectionState();
   }
 
+  /** 当前会话（ADR-044 Phase F-2）：RTU 本地路径返回内部会话；TCP 在主进程 → null。 */
+  getSession(): CommunicationSession | null {
+    return this.activeProtocol === "tcp"
+      ? null
+      : this.inner.getSession();
+  }
+
+  /** 插件隔离运行时（ADR-044 Phase F-2）：Renderer 内 Web Worker（与浏览器一致）。 */
+  createPluginRemoteRuntime(entrySource: string) {
+    return this.inner.createPluginRemoteRuntime(entrySource);
+  }
+
   getCommProperties(): CommProperties {
     if (this.activeProtocol === "tcp") {
       const profile = this.tcpProfile;
@@ -447,7 +467,6 @@ export class ElectronAppHost implements AppHost {
         timeoutMs: profile?.requestTimeoutMs ?? 1000,
         retryCount: profile?.retryCount ?? 1,
         rxDelayMs: profile?.interRequestDelayMs ?? 50,
-        addressAdjust: "off",
         connectionState: this.tcpConnectionState,
       };
     }
@@ -465,6 +484,16 @@ export class ElectronAppHost implements AppHost {
       void this.bridge.sessionSetUnitId(slave);
     } else {
       this.inner.setSlaveAddress(slave);
+    }
+  }
+
+  /** 更新活动表地址变换配置（ADR-042）：Electron RTU 会话本地（inner）；TCP 无地址变换（恒不调整）。 */
+  setAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  } | null): void {
+    if (this.activeProtocol !== "tcp") {
+      this.inner.setAddressTransform(config);
     }
   }
 

@@ -79,7 +79,6 @@ function rtuProfile(): Record<string, unknown> {
     requestTimeoutMs: 1000,
     retryCount: 1,
     interRequestDelayMs: 50,
-    addressAdjust: "off",
     recentPortHint: null,
   };
 }
@@ -197,6 +196,85 @@ async function runRtuLoop(): Promise<void> {
   assert.strictEqual(
     (stateAfter.payload as { connectionState: string }).connectionState,
     "disconnected",
+  );
+}
+
+/**
+ * VSCode 基础表 codec 闭环（ADR-043 E-6）：经真实 HostMessage RPC 路径验证
+ * session-connect 携带 protocol（modbus-basic-tables:coil）路由到 Extension Host
+ * codecRegistry 的 BasicTablesRtuCodec → FC01 读线圈 / FC0F 写线圈。
+ */
+async function runBasicTableLoop(): Promise<void> {
+  // 1. session-connect 带 protocol（线圈表 codecId）。
+  const connect = await rpcEnvelope("session-connect", {
+    portId: "FAKE-1",
+    profile: rtuProfile(),
+    slaveAddress: 1,
+    protocol: "modbus-basic-tables:coil",
+  });
+  assert.strictEqual(
+    connect.type,
+    "response",
+    "session-connect (coil codec) should succeed",
+  );
+
+  const baseline = await sessionStats();
+
+  // 2. session-write-row：地址 1 线圈写 ON（FC0F；verify off 专注 codec 路径）。
+  const write = await rpcEnvelope("session-write-row", {
+    row: registerRow(1, "1"),
+    writeVerify: { mode: "off", delayMs: null },
+  });
+  assert.strictEqual(
+    write.type,
+    "response",
+    "session-write-row (coil) should succeed",
+  );
+  assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
+  const afterWrite = await sessionStats();
+  assert.strictEqual(
+    afterWrite.requestFrames - baseline.requestFrames,
+    1,
+    "one FC0F write should send exactly one request frame",
+  );
+  assert.strictEqual(
+    afterWrite.responseFrames - baseline.responseFrames,
+    1,
+    "one FC0F write should receive exactly one response frame",
+  );
+
+  // 3. session-read-row：地址 1 读回 1（FC01 位解包）。
+  const read = await rpcEnvelope("session-read-row", {
+    row: registerRow(1, ""),
+  });
+  assert.strictEqual(
+    read.type,
+    "response",
+    "session-read-row (coil) should succeed",
+  );
+  assert.strictEqual(
+    read.payload,
+    1,
+    "FC01 read should return the coil ON value",
+  );
+  const afterRead = await sessionStats();
+  assert.strictEqual(
+    afterRead.requestFrames - afterWrite.requestFrames,
+    1,
+    "one FC01 read should send exactly one request frame",
+  );
+  assert.strictEqual(
+    afterRead.responseFrames - afterWrite.responseFrames,
+    1,
+    "one FC01 read should receive exactly one response frame",
+  );
+
+  // 4. session-disconnect → disconnected。
+  const disconnect = await rpcEnvelope("session-disconnect");
+  assert.strictEqual(
+    disconnect.type,
+    "response",
+    "session-disconnect should succeed",
   );
 }
 
@@ -719,6 +797,9 @@ export async function run(): Promise<void> {
 
   // 5. VSCode RTU 闭环（硬性 P0）：枚举 → 连接 → 写 → 读 → 断开。
   await runRtuLoop();
+
+  // 5.1 基础表 codec 闭环（ADR-043 E-6）：session-connect protocol → FC01/FC0F。
+  await runBasicTableLoop();
 
   // 5.25 多寄存器范围行闭环（ADR-030）：连接 → 多值写 → 多值读 → 断开。
   await runRangeMultiLoop();

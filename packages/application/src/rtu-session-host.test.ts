@@ -178,9 +178,11 @@ describe("RtuSessionHost 读/写", () => {
 
   it("Address Adjust ON：用户地址 1 发送到 0（发送 = 用户 − 1）", async () => {
     const h = createHarness();
-    const profile = createDefaultRtuProfile();
-    profile.addressAdjust = "on";
-    await connect(h, profile);
+    await connect(h);
+    h.host.setAddressTransform({
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
     h.device.setRegister(0, 0x00aa);
     const result = await h.host.readRow(makeRow(1));
     expect(result.ok).toBe(true);
@@ -189,9 +191,11 @@ describe("RtuSessionHost 读/写", () => {
 
   it("Address Adjust ON 且用户地址 0：下溢报错（不回绕）", async () => {
     const h = createHarness();
-    const profile = createDefaultRtuProfile();
-    profile.addressAdjust = "on";
-    await connect(h, profile);
+    await connect(h);
+    h.host.setAddressTransform({
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
     const result = await h.host.readRow(makeRow(0));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("ADDRESS_ADJUST_UNDERFLOW");

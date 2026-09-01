@@ -256,7 +256,7 @@ test("restore only affects the current sheet (不共享)", async ({ page }) => {
   await dragHeaderHandle(page, "Name", 60);
   // 新建表 2（侧边栏添加入口，自动激活）并自定义另一种布局（Data 移到 Write 后 + Type 加宽）。
   await page
-    .getByRole("button", { name: "New Register Table" })
+    .getByRole("button", { name: "New Register Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(

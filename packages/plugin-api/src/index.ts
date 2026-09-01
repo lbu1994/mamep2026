@@ -8,3 +8,5 @@ export * from "./compatibility";
 export * from "./lifecycle";
 export * from "./plugin-communication-api";
 export * from "./builtin-contribution-points";
+export * from "./address-transform";
+export * from "./data-type";

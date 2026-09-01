@@ -25,7 +25,6 @@ describe("connection-settings-model persistence mapping", () => {
       rxDelay: 120,
       timeout: 2000,
       retry: 3,
-      addressAdjust: "on",
       autoReconnect: false,
     };
     expect(extractPersistedSettings(values)).toEqual({
@@ -38,7 +37,6 @@ describe("connection-settings-model persistence mapping", () => {
       requestTimeoutMs: 2000,
       retryCount: 3,
       interRequestDelayMs: 120,
-      addressAdjust: "on",
     });
   });
 
@@ -52,7 +50,6 @@ describe("connection-settings-model persistence mapping", () => {
     profile.requestTimeoutMs = 2500;
     profile.retryCount = 2;
     profile.interRequestDelayMs = 150;
-    profile.addressAdjust = "on";
 
     expect(profileToValues(profile)).toEqual({
       protocol: "rtu",
@@ -64,7 +61,6 @@ describe("connection-settings-model persistence mapping", () => {
       rxDelay: 150,
       timeout: 2500,
       retry: 2,
-      addressAdjust: "on",
       host: "",
       port: 502,
       unitId: 0,
@@ -90,7 +86,6 @@ describe("connection-settings-model persistence mapping", () => {
       rxDelay: 50,
       timeout: 1500,
       retry: 2,
-      addressAdjust: "off",
       host: "192.168.1.10",
       port: 502,
       unitId: 7,
@@ -114,7 +109,6 @@ describe("settingsSchema（表单校验：host 非空仅 TCP 生效，2026-08-23
     rxDelay: 50,
     timeout: 1000,
     retry: 1,
-    addressAdjust: "off",
     autoReconnect: false,
   };
 

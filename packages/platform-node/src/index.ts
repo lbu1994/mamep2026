@@ -2,6 +2,8 @@ export * from "./error-mapping";
 export * from "./node-platform-host";
 export * from "./node-serial-transport";
 export * from "./node-tcp-transport";
+export * from "./plugin-node-worker-bootstrap";
+export * from "./plugin-remote-runtime";
 export * from "./real-clock";
 export * from "./real-serial-port";
 export * from "./real-socket";

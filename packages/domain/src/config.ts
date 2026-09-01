@@ -13,8 +13,6 @@ export const defaultConfig = {
     retryCount: 1,
     /** Rx Delay：请求间隔，兼作 WP 轮询间隔（ADR-013） */
     interRequestDelayMs: 50,
-    /** Address Adjust：默认 OFF（ON 时发送地址 = 用户地址 − 1） */
-    addressAdjust: "off",
   },
   tcp: {
     /** MBAP 单元标识默认 0（2026-08-23 确认：与 RTU Slave Address 默认 1 不同） */

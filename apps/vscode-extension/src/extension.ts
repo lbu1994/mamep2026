@@ -13,6 +13,11 @@
 import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
+import {
+  createCodecRegistry,
+  registerBasicTablesCodecs,
+} from "@mamep2026/communication";
+import { MemobusCodec } from "@mamep2026/yaskawa-memobus-67h-010dh-010eh";
 import { NodePlatformHost } from "@mamep2026/platform-node";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
@@ -83,8 +88,14 @@ function createSessionHost(
       ? new DevFakeSerialFactory()
       : undefined;
   const platform = new NodePlatformHost({ factory });
+  // codec 注册表（ADR-043 E-6）：基础表（coil/discrete-input/input-register）与安川
+  // MEMOBUS codec 注册进 Extension Host 会话，供 session-connect 的 protocol 字段路由。
+  const codecRegistry = createCodecRegistry();
+  registerBasicTablesCodecs(codecRegistry);
+  codecRegistry.register(new MemobusCodec());
   return new VscodeSessionHost({
     platform,
+    codecRegistry,
     events: {
       onLog: (event) => {
         // 会话层帧计数（与物理写帧 1:1）：e2e 断言一次读取恰好一次收发。

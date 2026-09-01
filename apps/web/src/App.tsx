@@ -2,18 +2,26 @@ import { useEffect, useMemo, useRef } from "react";
 import type { RowId } from "@mamep2026/domain";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
 import type { CommunicationLogEvent } from "@mamep2026/communication";
-import { formatBytesHex } from "@mamep2026/communication";
+import { createCodecRegistry, formatBytesHex, registerBasicTablesCodecs } from "@mamep2026/communication";
+import { createDataTypeResolver } from "@mamep2026/data-conversion";
 import type { ApplicationMessage } from "@mamep2026/logging";
 import { PluginRegistry } from "@mamep2026/plugin-api";
+import {
+  createAddressTransformRegistry,
+  type AddressTransformRegistry,
+} from "@mamep2026/plugin-api";
+import {
+  BUILTIN_ADDRESS_ADJUST_TRANSFORM,
+  applyPollResult,
+  buildPollingTargets,
+} from "@mamep2026/register-table";
+import { registerYaskawaPlugin } from "@mamep2026/yaskawa-memobus-67h-010dh-010eh";
+import { registerCustomFunctionPlugin } from "@mamep2026/custom-function-code";
 import {
   BrowserPlatformHost,
   createIdbKeyValueStore,
   IndexedDBWorkspaceRepository,
 } from "@mamep2026/platform-web";
-import {
-  applyPollResult,
-  buildPollingTargets,
-} from "@mamep2026/register-table";
 import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
 import { ElectronAppHost } from "./electron-app-host";
@@ -79,9 +87,49 @@ function registerExamplePlugin(registry: PluginRegistry): void {
   });
 }
 
+/**
+ * 内置 Address Adjust 插件（2026-09-01，ADR-042）：核心开箱即用的表级地址变换。
+ * 贡献点声明式数据（供工具栏/Plugin Manager 消费）；apply/validate 函数经 activate 注册进
+ * AddressTransformRegistry（函数不可序列化，不能进 payload——仿 codec 模式）。
+ */
+function registerBuiltinAddressAdjustPlugin(
+  registry: PluginRegistry,
+  transformRegistry: AddressTransformRegistry,
+): void {
+  registry.register(
+    {
+      id: "builtin-address-adjust",
+      name: "Address Adjust",
+      version: "1.0.0",
+      apiVersion: "1.0",
+      description:
+        "Built-in table-level Address Adjust: sent address = user address - 1.",
+      platform: { web: true, node: true },
+      permissions: [],
+      contributes: {
+        addressTransform: {
+          id: "builtin.address-adjust",
+          protocol: "rtu",
+          titleKey: "table.addressAdjust",
+          defaultConfig: { enabled: false },
+        },
+      },
+    },
+    {
+      source: "builtin",
+      runtime: {
+        activate() {
+          transformRegistry.register(BUILTIN_ADDRESS_ADJUST_TRANSFORM);
+        },
+      },
+    },
+  );
+}
+
 export default function App(): React.ReactNode {
   const hostRef = useRef<AppHost | null>(null);
   const setHost = useAppStore((s) => s.setHost);
+  const setDataTypeResolver = useAppStore((s) => s.setDataTypeResolver);
   const setWorkspace = useAppStore((s) => s.setWorkspace);
   const setLoaded = useAppStore((s) => s.setLoaded);
   const setConnectionModalOpen = useAppStore((s) => s.setConnectionModalOpen);
@@ -98,11 +146,13 @@ export default function App(): React.ReactNode {
   // Electron → ElectronAppHost；否则按浏览器 Host 装配（Web Serial + IndexedDB）。
   useEffect(() => {
     const bridge = window.mamepHost;
+    // codec 注册表（ADR-041 决策 A）：内置安川插件 activate 填充，connect 按活动表协议路由。
+    const codecRegistry = createCodecRegistry();
     const host: AppHost =
       bridge !== undefined
         ? bridge.platform === "vscode"
           ? new VscodeAppHost(bridge)
-          : new ElectronAppHost(bridge)
+          : new ElectronAppHost(bridge, { codecRegistry })
         : (() => {
             const serial = navigator.serial;
             const platformHost =
@@ -117,10 +167,30 @@ export default function App(): React.ReactNode {
               mockTransport,
               // 插件持久化（2026-08-30，ADR-038）：IndexedDB 独立 key。
               pluginStore: new IndexedDBPluginStore(kv),
+              // codec 注册表（ADR-041 决策 A）。
+              codecRegistry,
             });
           })();
     hostRef.current = host;
     registerExamplePlugin(host.pluginRegistry);
+    // 内置 Address Adjust（ADR-042）：贡献点 + apply 函数注册，核心开箱即用。
+    registerBuiltinAddressAdjustPlugin(
+      host.pluginRegistry,
+      createAddressTransformRegistry(),
+    );
+    // 安川插件（ADR-041 决策①1A）：内置同进程，activate 把 MemobusCodec 注册进 codecRegistry。
+    registerYaskawaPlugin(host.pluginRegistry, { codecRegistry });
+    // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，浏览器/Electron 共享装配。
+    registerBasicTablesCodecs(codecRegistry);
+    // 数据类型解析器（ADR-043 E-3）：内置 + 插件类型（插件 activate 经 resolver.register 注入）；
+    // 装配后注入 store，单元格解析/读取格式化/CSV 白名单经它转发。
+    const dataTypeResolver = createDataTypeResolver();
+    // 自定义功能码示例插件（ADR-043 E-4）：codec + 插件 dataType 运行时演示。
+    registerCustomFunctionPlugin(host.pluginRegistry, {
+      codecRegistry,
+      dataTypeResolver,
+    });
+    setDataTypeResolver(dataTypeResolver);
     setHost(host);
 
     // 日志/保存/连接状态/轮询结果接线。
@@ -136,16 +206,13 @@ export default function App(): React.ReactNode {
       useAppStore.getState().recordPollResult(key as RowId, result);
       if (!result.ok) return;
       const state = useAppStore.getState();
-      const profile =
-        state.workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
-      // 应用层纯函数完成 generation 校验与按 Type 格式化（§17）。
+      // 应用层纯函数完成 generation 校验与按 Type 格式化（§17）；
+      // 地址变换按各行所属 sheet 应用（ADR-042 表级 Address Adjust）。
       const updated = applyPollResult(
         state.workspace.sheets,
         key,
         address,
         result.value,
-        // TCP 恒为 off（ADR-022）；仅 RTU 才有 Address Adjust。
-        profile.protocol === "rtu" ? profile.addressAdjust : "off",
       );
       if (updated !== null) updateRow(key as RowId, () => updated);
     });
@@ -226,16 +293,8 @@ export default function App(): React.ReactNode {
       if (state.workspace.sheets.length === 0) return;
       host.scheduleSave(state.workspace);
 
-      const profile =
-        state.workspace.connectionProfiles[0] ?? createDefaultRtuProfile();
-      // 应用层纯函数构建轮询目标（含 Address Adjust 偏移与地址 0 跳过）；
-      // TCP 恒为 off（ADR-022），仅 RTU 才有 Address Adjust。
-      host.updatePollingTargets(
-        buildPollingTargets(
-          state.workspace.sheets,
-          profile.protocol === "rtu" ? profile.addressAdjust : "off",
-        ),
-      );
+      // 应用层纯函数构建轮询目标（含表级地址变换偏移与地址 0 跳过；ADR-042 按 sheet）。
+      host.updatePollingTargets(buildPollingTargets(state.workspace.sheets));
     });
   }, []);
 

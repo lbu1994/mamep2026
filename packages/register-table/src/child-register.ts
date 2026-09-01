@@ -23,10 +23,14 @@ import {
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import {
+  createDataTypeResolver,
   formatRawValues,
-  parseCellText,
   parseCompositeText,
+  type DataTypeResolver,
 } from "@mamep2026/data-conversion";
+
+/** 模块级缺省解析器（仅内置；ADR-043 E-3 插件类型由 UI 注入 resolver）。 */
+const defaultResolver: DataTypeResolver = createDataTypeResolver();
 
 /** 子行元数据补丁（name/comment/dataType 任意子集）。 */
 export interface ChildMetaPatch {
@@ -81,6 +85,7 @@ export function commitChildCellText(
   row: RegisterRow,
   index: number,
   text: string,
+  resolver?: DataTypeResolver,
 ): Result<RegisterRow> {
   if (row.registerCount <= 1) {
     return fail(
@@ -103,7 +108,7 @@ export function commitChildCellText(
     );
   }
   const type = childDataType(row, index);
-  const parsed = parseCellText(text, type);
+  const parsed = (resolver ?? defaultResolver).parse(text, type);
   if (!parsed.ok) return parsed;
   // registerValues 基准：优先父行 cellText 派生（用户可见文本为准），派生失败全 0 填充。
   let base: number[] | null = row.registerValues?.map((v) => v.value) ?? null;

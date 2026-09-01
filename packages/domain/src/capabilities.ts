@@ -42,7 +42,10 @@ export interface PlatformCapabilities {
  * 日志导出走浏览器 Blob 下载（logExport: "download"）；
  * 工作区导入走客户端文件选择（workspaceImport: "upload"）、导出走 Blob 下载（workspaceExport: "download"）；
  * 插件安装走客户端文件选择（pluginInstall: "upload"，2026-08-30，ADR-038）；
- * 可执行插件/表类型如实声明（Phase A：executablePlugins/hostPlugins=false、tableTypes 仅核心，ADR-039）。 */
+ * 可执行插件/表类型如实声明（Phase A：executablePlugins/hostPlugins=false，ADR-039；
+ * Phase C：协议扩展与表类型翻转——内置安川插件 + 本地 RTU codec 会话已可用，ADR-041；
+ * Phase F（2026-09-01，ADR-044）：Web Worker 隔离执行已落地 → executablePlugins=true；
+ * hostPlugins 维持 false（浏览器不加载 Host 插件，TECH_DESIGN §23.2）。 */
 export const browserCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: true,
   modbusTcp: false,
@@ -54,8 +57,23 @@ export const browserCapabilities: PlatformCapabilities = Object.freeze({
   workspaceImport: "upload",
   workspaceExport: "download",
   pluginInstall: "upload",
-  executablePlugins: false,
+  executablePlugins: true,
   hostPlugins: false,
-  protocolExtensions: [],
-  tableTypes: ["holding-register"],
+  protocolExtensions: [
+    "yaskawa-memobus-67h-010dh-010eh",
+    // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，RTU 承载。
+    "modbus-basic-tables:coil",
+    "modbus-basic-tables:discrete-input",
+    "modbus-basic-tables:input-register",
+    // 自定义功能码示例插件（ADR-043 E-4）。
+    "custom-function-code",
+  ],
+  tableTypes: [
+    "holding-register",
+    "coil",
+    "discrete-input",
+    "input-register",
+    "yaskawa-memobus-67h-010dh-010eh:holding-register",
+    "custom-function-code:holding-register",
+  ],
 });

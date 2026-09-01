@@ -22,8 +22,8 @@ export interface CommunicationLogEntry {
   timestamp: number;
   direction: "request" | "response";
   bytesHex: string;
-  /** 协议：rtu / tcp（2026-08-23 TCP 接线）。 */
-  protocol: "rtu" | "tcp";
+  /** 协议：rtu / tcp / codecId（2026-08-23 TCP 接线；2026-08-31 ADR-040 开放为 codecId）。 */
+  protocol: string;
   slaveAddress: number | null;
   functionCode: number | null;
   userAddress: number | null;

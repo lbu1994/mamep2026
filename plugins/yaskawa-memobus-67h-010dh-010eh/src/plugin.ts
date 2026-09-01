@@ -1,0 +1,120 @@
+/**
+ * 安川 MEMOBUS 插件（ADR-041 插件 Phase C，决策 ①1A / ⑤）。
+ * 内置同进程（source:"builtin"）：manifest 声明式贡献（protocolExtension / tableType /
+ * toolbarAction / command），runtime.activate 时把 MemobusCodec 注册进会话 CodecRegistry。
+ * 厂商专用功能码（67/010D、67/010E）全部在本插件内，软件仅提供调用接口（决策 B）。
+ */
+import type { CodecRegistry } from "@mamep2026/communication";
+import type { Result } from "@mamep2026/domain";
+import {
+  PLUGIN_API_VERSION,
+  type PluginManifest,
+  type PluginRegistry,
+} from "@mamep2026/plugin-api";
+import { MemobusCodec } from "./memobus-codec";
+
+export const YASKAWA_MEMOBUS_PLUGIN_ID = "yaskawa-memobus-67h-010dh-010eh";
+export const YASKAWA_MEMOBUS_PROTOCOL_ID = "yaskawa-memobus-67h-010dh-010eh";
+/** 安川表类型（sheet.type）：<pluginId>:<tableTypeId>（tableTypeId 复用核心 holding-register）。 */
+export const YASKAWA_MEMOBUS_TABLE_TYPE =
+  "yaskawa-memobus-67h-010dh-010eh:holding-register";
+
+export const yaskawaMemobusManifest: PluginManifest = {
+  id: YASKAWA_MEMOBUS_PLUGIN_ID,
+  name: "Yaskawa MEMOBUS",
+  version: "1.0.0",
+  apiVersion: PLUGIN_API_VERSION,
+  description:
+    "Yaskawa MEMOBUS non-continuous read/write (67H 010DH/010EH) example protocol extension plugin.",
+  author: "Mamep2026 Team",
+  license: "MIT",
+  platform: { web: true, node: true },
+  requiredCapabilities: ["modbus-rtu"],
+  permissions: ["communication", "device-write", "ui-contribution"],
+  contributes: {
+    protocolExtension: {
+      protocolId: YASKAWA_MEMOBUS_PROTOCOL_ID,
+      titleKey: "plugins.yaskawaMemobusTitle",
+    },
+    tableType: {
+      id: "holding-register",
+      protocolId: YASKAWA_MEMOBUS_PROTOCOL_ID,
+      titleKey: "plugins.yaskawaTableTypeTitle",
+    },
+    toolbarAction: [
+      {
+        id: "yaskawa.enter-rom",
+        titleKey: "table.enterRom",
+        icon: "SaveOutlined",
+        scope: "table-toolbar",
+        targetTableType: "holding-register",
+        requiresConfirm: true,
+      },
+      {
+        id: "yaskawa.enter-ram",
+        titleKey: "table.enterRam",
+        icon: "SaveOutlined",
+        scope: "table-toolbar",
+        targetTableType: "holding-register",
+        requiresConfirm: true,
+      },
+    ],
+    command: [
+      { id: "yaskawa.enter-rom", titleKey: "table.enterRom" },
+      { id: "yaskawa.enter-ram", titleKey: "table.enterRam" },
+    ],
+    // 寄存器手册（ADR-043 E-5）：documentation 贡献点，Help 弹窗轻量渲染。
+    documentation: {
+      id: "yaskawa.register-manual",
+      titleKey: "plugins.yaskawaManualTitle",
+      markdown: [
+        "# Yaskawa MEMOBUS 67H/010DH/010EH",
+        "",
+        "非连续读写：一次请求可读写任意不连续的保持寄存器（本表仍按连续行模型使用）。",
+        "",
+        "## 功能码",
+        "",
+        "- `67H 010DH`：非连续读（数量 1~120）",
+        "- `67H 010EH`：非连续写（数量 1~60）",
+        "",
+        "## 读请求帧",
+        "",
+        "```",
+        "从站 + 67H + 01H + 0DH + 个数(2) + 寄存器编号×N + CRC-16",
+        "```",
+        "",
+        "## 写请求帧",
+        "",
+        "```",
+        "从站 + 67H + 01H + 0EH + 个数(2) + 字节数(2) + (编号+数据)×N + CRC-16",
+        "```",
+        "",
+        "## 异常响应",
+        "",
+        "从站 + `E7H` + 错误代码 + CRC-16。常见错误码：`02` 非法数据地址、`03` 数量超限（读 >120 / 写 >60）。",
+        "",
+        "## 说明",
+        "",
+        "本插件仅为协议扩展示例，寄存器地址分配请查阅对应驱动器的 MEMOBUS 手册。",
+      ].join("\n"),
+    },
+  },
+};
+
+/**
+ * 注册安川插件（内置同进程，决策①1A）：activate 时把 MemobusCodec 注册进会话 CodecRegistry，
+ * 供会话按 protocol "yaskawa-memobus-67h-010dh-010eh" 注入使用（软件只提供调用接口）。
+ */
+export function registerYaskawaPlugin(
+  registry: PluginRegistry,
+  options: { codecRegistry: CodecRegistry },
+): Result<PluginManifest> {
+  return registry.register(yaskawaMemobusManifest, {
+    source: "builtin",
+    runtime: {
+      activate() {
+        options.codecRegistry.register(new MemobusCodec());
+      },
+    },
+  });
+}

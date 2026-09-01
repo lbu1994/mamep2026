@@ -170,6 +170,14 @@ const api: MamepHostApi = {
   sessionSetUnitId(unitId: number): Promise<Result<null>> {
     return invoke<null>("session-set-unit-id", { unitId });
   },
+  // 表级 Address Adjust（2026-09-01，ADR-042）：Electron RTU 会话在 Renderer，本桥保留契约；
+  // 主进程返回 SESSION_NOT_AVAILABLE 能力错误（穷尽守卫）。
+  sessionSetAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  }): Promise<Result<null>> {
+    return invoke<null>("session-set-address-transform", config);
+  },
   sessionReadRow(row: RegisterRowPayload): Promise<Result<number>> {
     return invoke<number>("session-read-row", { row });
   },

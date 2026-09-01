@@ -227,8 +227,12 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-/** 解码系统剪贴板 CSV；非法行保留可恢复字段并返回 issue，不静默丢弃。 */
-export function decodeClipboardCsv(text: string): {
+/** 解码系统剪贴板 CSV；非法行保留可恢复字段并返回 issue，不静默丢弃。
+ *  ADR-043 E-3：插件类型白名单经 knownTypes 传入（缺省仅内置）。 */
+export function decodeClipboardCsv(
+  text: string,
+  knownTypes?: readonly string[],
+): {
   rows: RowClipboardData[];
   issues: ClipboardIssue[];
 } {
@@ -285,7 +289,10 @@ export function decodeClipboardCsv(text: string): {
     }
     const typeText = type.trim();
     let dataType: DataType = "hex";
-    if ((dataTypes as readonly string[]).includes(typeText)) {
+    if (
+      (dataTypes as readonly string[]).includes(typeText) ||
+      (knownTypes ?? []).includes(typeText)
+    ) {
       dataType = typeText as DataType;
     } else if (typeText !== "") {
       issues.push({ rowIndex, code: "UNKNOWN_TYPE" });

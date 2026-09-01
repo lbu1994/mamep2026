@@ -20,11 +20,15 @@ import {
   ok,
 } from "@mamep2026/domain";
 import { RtuSessionHost } from "@mamep2026/application";
+import { createPluginCommunicationApi } from "@mamep2026/application";
+import { createWebPluginRemoteRuntime } from "@mamep2026/platform-web";
 import type {
   BatchReadHandle,
   BatchReadRow,
   Clock,
+  CodecRegistry,
   CommunicationLogEvent,
+  CommunicationSession,
   ConnectionState,
   TransportPort,
   WriteOutcome,
@@ -73,6 +77,11 @@ export interface AppHostOptions {
    * Electron/VSCode=主进程/扩展宿主持久化经桥。缺省不装配（无持久化，纯内存）。
    */
   pluginStore?: PluginStorePort | undefined;
+  /**
+   * codec 注册表（ADR-041 决策 A）：内置安川插件 activate 填充；connect 时按活动表类型
+   * 路由 codecId 会话（软件仅提供调用接口）。缺省不装配（纯 RTU/TCP）。
+   */
+  codecRegistry?: CodecRegistry | undefined;
 }
 
 export class BrowserAppHost implements AppHost {
@@ -91,6 +100,8 @@ export class BrowserAppHost implements AppHost {
   private readonly autoSave: AutoSaveCoordinator;
   /** 插件持久化协调器（2026-08-30，ADR-038）：null = 未注入插件存储端口（纯内存）。 */
   private readonly pluginPersistence: PluginPersistenceCoordinator | null;
+  /** codec 注册表（ADR-041 决策 A）：内置安川插件 activate 填充；connect 按活动表协议路由。 */
+  private readonly codecRegistry: CodecRegistry | null;
   /** RTU 会话宿主（Application 层）：会话/轮询/追踪/读写的单一编排，浏览器与 VSCode 共用。 */
   private readonly rtu: RtuSessionHost;
   /** 当前会话从站地址（每表独立，2026-08-19）：UI 切换表/修改值时同步，连接时作为初始值。 */
@@ -161,8 +172,12 @@ export class BrowserAppHost implements AppHost {
         ? new PluginPersistenceCoordinator(this.pluginRegistry, options.pluginStore)
         : null;
     if (this.pluginPersistence !== null) {
-      void this.pluginPersistence.init();
+      void this.pluginPersistence.init().then(() => {
+        void this.restoreRemotePluginRuntimes();
+      });
     }
+    // codec 注册表（ADR-041 决策 A）：内置安川插件 activate 填充；connect 按活动表协议路由。
+    this.codecRegistry = options.codecRegistry ?? null;
     this.messageStore.subscribe((message) => {
       for (const listener of this.messageListeners) listener(message);
     });
@@ -307,6 +322,7 @@ export class BrowserAppHost implements AppHost {
   async connect(
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
+    options?: { protocol?: string },
   ): Promise<Result<void>> {
     let transport: TransportPort;
     if (this.isMockMode) {
@@ -353,12 +369,30 @@ export class BrowserAppHost implements AppHost {
       transport = openResult.value;
     }
 
+    // 协议路由（ADR-041 决策 A）：缺省 rtu；活动表为安川表时 protocol=codecId，
+    // 需 codecRegistry 已装配（内置安川插件 activate 填充），否则返回能力错误而非崩溃。
+    const protocol = options?.protocol ?? "rtu";
+    if (protocol !== "rtu" && this.codecRegistry === null) {
+      return fail(
+        createMamepError({
+          code: "CODEC_NOT_FOUND",
+          category: "capability",
+          userMessageKey: "errors.internal",
+          technicalMessage: `codec not available for protocol: ${protocol}`,
+        }),
+      );
+    }
+
     // 会话/协调器编排委托 RtuSessionHost（连接失败时其内部关闭传输，避免端口占用）。
     return this.rtu.connect({
       profile,
       transport,
       slaveAddress: this.currentSlaveAddress,
       portLabel: this.isMockMode ? "Mock Device" : this.portLabel,
+      ...(protocol !== "rtu" ? { protocol } : {}),
+      ...(protocol !== "rtu" && this.codecRegistry !== null
+        ? { codecRegistry: this.codecRegistry }
+        : {}),
     });
   }
 
@@ -500,6 +534,43 @@ export class BrowserAppHost implements AppHost {
     return this.rtu.getConnectionState();
   }
 
+  /** 当前会话（ADR-044 Phase F-2）：插件通信面经统一调度器访问；未连接返回 null。 */
+  getSession(): CommunicationSession | null {
+    return this.rtu.getSession();
+  }
+
+  /** 插件隔离运行时（ADR-044 Phase F-2）：Web Worker 加载 entry；通信面按插件 id 动态绑定。 */
+  createPluginRemoteRuntime(entrySource: string) {
+    return createWebPluginRemoteRuntime(entrySource, (pluginId) =>
+      createPluginCommunicationApi({
+        getSession: () => this.rtu.getSession(),
+        pluginId,
+      }),
+    );
+  }
+
+  /**
+   * 重启后恢复可执行插件（ADR-044 Phase F-2）：hydrate 已注册的 installed 插件
+   * （entrySource 持久化）重新创建隔离运行时（load 提取 manifest 后附加并激活）。
+   */
+  private async restoreRemotePluginRuntimes(): Promise<void> {
+    for (const manifest of this.pluginRegistry.list()) {
+      const id = manifest.id;
+      if (this.pluginRegistry.getSource(id) !== "installed") continue;
+      if (this.pluginRegistry.getLifecycleState(id) === "active") continue;
+      const entrySource = this.pluginRegistry.getEntrySource(id);
+      if (entrySource === null) continue;
+      const runtime = this.createPluginRemoteRuntime(entrySource);
+      const loadResult = await runtime.load();
+      if (!loadResult.ok) {
+        // 加载失败（entry 损坏/不兼容）：关闭线程，插件保持注册但不激活（错误隔离）。
+        void runtime.dispose();
+        continue;
+      }
+      this.pluginRegistry.attachRemoteRuntime(id, runtime);
+    }
+  }
+
   subscribeConnectionState(
     listener: (state: ConnectionState) => void,
   ): () => void {
@@ -521,7 +592,6 @@ export class BrowserAppHost implements AppHost {
       timeoutMs: profile?.requestTimeoutMs ?? 1000,
       retryCount: profile?.retryCount ?? 1,
       rxDelayMs: profile?.interRequestDelayMs ?? 50,
-      addressAdjust: profile?.addressAdjust ?? "off",
       connectionState: this.getConnectionState(),
     };
   }
@@ -530,6 +600,14 @@ export class BrowserAppHost implements AppHost {
   setSlaveAddress(slave: number): void {
     this.currentSlaveAddress = slave;
     this.rtu.setSlaveAddress(slave);
+  }
+
+  /** 更新活动表地址变换配置（ADR-042）：浏览器 RTU 会话在本地，直接同步。 */
+  setAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  } | null): void {
+    this.rtu.setAddressTransform(config);
   }
 
   async readRow(row: RegisterRow): Promise<Result<number | number[]>> {

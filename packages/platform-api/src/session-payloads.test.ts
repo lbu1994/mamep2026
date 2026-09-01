@@ -43,7 +43,6 @@ describe("RtuConnectionProfile payload 往返", () => {
     const profile = createDefaultRtuProfile("RTU-COM4");
     profile.baudRate = 19200;
     profile.dataBits = 7;
-    profile.addressAdjust = "on";
     const restored = rtuConnectionProfileFromPayload(
       toRtuConnectionProfilePayload(profile),
     );
@@ -51,7 +50,6 @@ describe("RtuConnectionProfile payload 往返", () => {
     expect(restored.name).toBe("RTU-COM4");
     expect(restored.baudRate).toBe(19200);
     expect(restored.dataBits).toBe(7);
-    expect(restored.addressAdjust).toBe("on");
     expect(restored.recentPortHint).toBeNull();
   });
 });
@@ -150,6 +148,32 @@ describe("CommunicationLogEvent payload 往返", () => {
     expect(Array.from(restored.bytes)).toEqual(Array.from(event.bytes));
     expect(restored.status).toBe("success");
     expect(restored.source).toBe("manual-read");
+  });
+
+  it("codecId 协议（ADR-040）往返：protocol 接受 codecId 字符串", () => {
+    const event: CommunicationLogEvent = {
+      timestamp: 1,
+      direction: "request",
+      bytes: Uint8Array.from([0x01, 0x67, 0x01, 0x0d, 0x00, 0x01, 0x00, 0x24]),
+      protocol: "yaskawa-memobus",
+      slaveAddress: 1,
+      functionCode: null,
+      userAddress: 0x0024,
+      sentAddress: 0x0024,
+      quantity: 1,
+      attempt: 1,
+      status: "success",
+      errorCode: null,
+      exceptionCode: null,
+      source: "manual-read",
+      pluginId: null,
+      durationMs: 1,
+    };
+    const payload = toCommLogEventPayload(event);
+    expect(payload.protocol).toBe("yaskawa-memobus");
+    const restored = commLogEventFromPayload(payload);
+    expect(restored.protocol).toBe("yaskawa-memobus");
+    expect(restored.functionCode).toBeNull();
   });
 });
 

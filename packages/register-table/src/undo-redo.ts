@@ -13,6 +13,7 @@
  * - 纯函数、不可变、可单测；不依赖任何 UI / store 框架。
  */
 import {
+  type AddressTransformConfig,
   type DataType,
   type ReadVerifySettings,
   type RegisterAddress,
@@ -22,6 +23,7 @@ import {
   type RegisterSubRowMeta,
   type RowId,
   type SheetId,
+  type SheetType,
 } from "@mamep2026/domain";
 import { renumberRows } from "./row-operations";
 
@@ -99,11 +101,15 @@ export interface RowSnapshot {
 export interface SheetEditSnapshot {
   sheetId: SheetId;
   name: string;
+  /** 表类型（ADR-041）：撤销/重做携带，重建时保留插件表类型。 */
+  type: SheetType;
   order: number;
   open: boolean;
   registerRadix: RegisterRadix;
   slaveAddress: number;
   writeVerify: ReadVerifySettings;
+  /** 表级地址变换配置（ADR-042）：撤销/重做携带。 */
+  addressTransform: AddressTransformConfig | null;
   rows: RowSnapshot[];
 }
 
@@ -112,11 +118,13 @@ export function snapshotSheet(sheet: RegisterSheet): SheetEditSnapshot {
   return {
     sheetId: sheet.sheetId,
     name: sheet.name,
+    type: sheet.type,
     order: sheet.order,
     open: sheet.open,
     registerRadix: sheet.registerRadix,
     slaveAddress: sheet.slaveAddress,
     writeVerify: sheet.writeVerify,
+    addressTransform: sheet.addressTransform,
     rows: sheet.rows.map((row) => ({
       rowId: row.rowId,
       edit: extractRowEditFields(row),
@@ -149,11 +157,13 @@ export function applySheetSnapshot(
   return {
     ...current,
     name: snapshot.name,
+    type: snapshot.type,
     order: snapshot.order,
     open: snapshot.open,
     registerRadix: snapshot.registerRadix,
     slaveAddress: snapshot.slaveAddress,
     writeVerify: snapshot.writeVerify,
+    addressTransform: snapshot.addressTransform,
     rows: renumberRows(rows),
     updatedAt: Date.now(),
   };
@@ -166,7 +176,7 @@ export function sheetFromSnapshot(
   return {
     sheetId: snapshot.sheetId,
     name: snapshot.name,
-    type: "holding-register",
+    type: snapshot.type,
     order: snapshot.order,
     open: snapshot.open,
     rows: renumberRows(snapshot.rows.map((snap) => snap.full)),
@@ -176,6 +186,7 @@ export function sheetFromSnapshot(
     columnWidths: {},
     columnOrder: null,
     writeVerify: snapshot.writeVerify,
+    addressTransform: snapshot.addressTransform,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };

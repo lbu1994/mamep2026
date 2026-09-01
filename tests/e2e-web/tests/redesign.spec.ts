@@ -39,7 +39,9 @@ test("empty sheet shows a guided empty state with an Add Row CTA", async ({
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByLabel("Register").first()).toBeVisible();
+  await expect(
+    page.getByLabel("Register", { exact: true }).first(),
+  ).toBeVisible();
 });
 
 test("sheet sidebar collapses and the state persists after reload", async ({

@@ -64,6 +64,7 @@ describe("CommunicationLogStore", () => {
       errorCode: null,
       exceptionCode: null,
       source: "manual-read",
+      pluginId: null,
       durationMs: 5,
     });
     expect(store.entries[0]?.bytesHex).toBe("01 03 00 00");
@@ -87,6 +88,7 @@ describe("CommunicationLogStore", () => {
         errorCode: null,
         exceptionCode: null,
         source: "manual-read",
+        pluginId: null,
         durationMs: null,
       });
     }

@@ -3,11 +3,16 @@ import {
   RawRegisterValue,
   RegisterAddress,
   createEmptyRow,
+  ok,
 } from "@mamep2026/domain";
 import {
+  BUILTIN_ADDRESS_ADJUST_TRANSFORM,
+  applyAddressTransform,
   commitAddress,
   computeSentAddress,
   isRowTypeCountValid,
+  resolveBuiltinAddressTransform,
+  resolveSheetAddressTransform,
   rowTypeCountError,
 } from "./address";
 
@@ -291,6 +296,53 @@ describe("computeSentAddress (Address Adjust)", () => {
     const result = computeSentAddress(0, "off");
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toBe(0);
+  });
+});
+
+describe("applyAddressTransform / resolveSheetAddressTransform（ADR-042 表级地址变换）", () => {
+  it("null transform leaves the address unchanged", () => {
+    const result = applyAddressTransform(0x0100, null);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(0x0100);
+  });
+
+  it("applies the builtin transform（用户地址 − 1）", () => {
+    const result = applyAddressTransform(0x0100, BUILTIN_ADDRESS_ADJUST_TRANSFORM);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(0x00ff);
+  });
+
+  it("builtin transform rejects user address 0（下溢）", () => {
+    const result = applyAddressTransform(0, BUILTIN_ADDRESS_ADJUST_TRANSFORM);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("ADDRESS_ADJUST_UNDERFLOW");
+  });
+
+  it("resolveBuiltinAddressTransform 只解析内置 id", () => {
+    expect(resolveBuiltinAddressTransform("builtin.address-adjust")).not.toBeNull();
+    expect(resolveBuiltinAddressTransform("unknown.transform")).toBeNull();
+  });
+
+  it("resolveSheetAddressTransform：未配置/关闭 → null；启用 → 内置变换", () => {
+    expect(resolveSheetAddressTransform(null)).toBeNull();
+    expect(
+      resolveSheetAddressTransform({
+        transformId: "builtin.address-adjust",
+        enabled: false,
+      }),
+    ).toBeNull();
+    const enabled = resolveSheetAddressTransform({
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
+    expect(enabled).not.toBeNull();
+    expect(enabled?.apply(5)).toEqual(ok(4));
+  });
+
+  it("resolveSheetAddressTransform：未知 id 启用时回退 null（自定义变换由宿主注入）", () => {
+    expect(
+      resolveSheetAddressTransform({ transformId: "missing", enabled: true }),
+    ).toBeNull();
   });
 });
 

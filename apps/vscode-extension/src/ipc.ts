@@ -66,6 +66,7 @@ export interface VscodeSessionLike {
     portId: string,
     profile: RtuConnectionProfile,
     slaveAddress: number,
+    options?: { protocol?: string },
   ): Promise<Result<void>>;
   /** TCP 连接（2026-08-23 两端 TCP 接线）：profile 即连接参数，无串口句柄。 */
   connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
@@ -74,6 +75,11 @@ export interface VscodeSessionLike {
   setSlaveAddress(slave: number): void;
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）。 */
   setUnitId(unitId: number): void;
+  /** 表级 Address Adjust（session-set-address-transform，2026-09-01 ADR-042）。 */
+  setAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  } | null): void;
   readRow(row: RegisterRow): Promise<Result<number | number[]>>;
   writeRow(
     row: RegisterRow,
@@ -270,12 +276,15 @@ export async function handleVscodeRequest(
     case "serial-enumerate":
       return sessionResult(message, () => deps.session.enumerateSerialPorts());
     case "session-connect": {
-      const { portId, profile, slaveAddress } = message.payload;
+      const { portId, profile, slaveAddress, protocol } = message.payload;
       return sessionResult(message, () =>
         deps.session.connect(
           portId,
           rtuConnectionProfileFromPayload(profile),
           slaveAddress,
+          protocol !== undefined && protocol !== "rtu"
+            ? { protocol }
+            : undefined,
         ),
       );
     }
@@ -296,6 +305,11 @@ export async function handleVscodeRequest(
       // TCP Unit ID 会话内动态修改（2026-08-25）：渲染端按活动协议路由到本 kind。
       return sessionVoid(message, () =>
         deps.session.setUnitId(message.payload.unitId),
+      );
+    case "session-set-address-transform":
+      // 表级 Address Adjust（2026-09-01，ADR-042）：host 端会话同步活动表地址变换配置。
+      return sessionVoid(message, () =>
+        deps.session.setAddressTransform(message.payload),
       );
     case "session-read-row": {
       const { row } = message.payload;

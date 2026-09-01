@@ -181,3 +181,94 @@ test("重启持久化：安装 + 启停状态 reload 后仍在", async ({ page }
   expect(checked).toBe(false);
   expect(errors).toEqual([]);
 });
+
+test("卸载：确认后从列表移除并提示成功（内置插件无卸载按钮）", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
+  });
+
+  await openApp(page);
+  const modal = await openPluginManager(page);
+
+  // 内置插件（example-panel）无卸载按钮。
+  const builtinRow = modal
+    .locator(".ant-listy-item")
+    .filter({ hasText: "Example Panel" });
+  await expect(builtinRow.locator('button[aria-label="Uninstall"]')).toHaveCount(
+    0,
+  );
+
+  // 安装一个插件。
+  await modal.getByRole("button", { name: "Install Plugin" }).click();
+  await pickManifestFile(page, "plugin.json", JSON.stringify(manifest));
+  let confirm = await confirmModal(page);
+  await confirm.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(confirm).toBeHidden();
+  await expect(modal).toContainText("E2E Installed");
+
+  // 卸载：installed 行出现卸载按钮 → 确认。
+  const installedRow = modal
+    .locator(".ant-listy-item")
+    .filter({ hasText: "E2E Installed" });
+  await installedRow
+    .locator('button[aria-label="Uninstall"]')
+    .click();
+  confirm = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Uninstall this plugin?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Uninstall", exact: true }).click();
+  await expect(confirm).toBeHidden();
+
+  // 列表不再包含该插件；成功提示出现。
+  await expect(modal).not.toContainText("E2E Installed");
+  await expect(page.getByText("Plugin uninstalled.")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("卸载持久化：卸载后 reload 不再出现", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
+  });
+
+  await openApp(page);
+  let modal = await openPluginManager(page);
+  await modal.getByRole("button", { name: "Install Plugin" }).click();
+  await pickManifestFile(page, "plugin.json", JSON.stringify(manifest));
+  const confirm = await confirmModal(page);
+  await confirm.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(confirm).toBeHidden();
+  await expect(modal).toContainText("E2E Installed");
+
+  // 卸载。
+  const installedRow = modal
+    .locator(".ant-listy-item")
+    .filter({ hasText: "E2E Installed" });
+  await installedRow.locator('button[aria-label="Uninstall"]').click();
+  const uninstallConfirm = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Uninstall this plugin?" });
+  await expect(uninstallConfirm).toBeVisible();
+  await uninstallConfirm
+    .getByRole("button", { name: "Uninstall", exact: true })
+    .click();
+  await expect(uninstallConfirm).toBeHidden();
+  await expect(modal).not.toContainText("E2E Installed");
+
+  // 等 IndexedDB 自动保存落盘（防抖）再 reload → 卸载后插件不再出现。
+  await page.waitForTimeout(1000);
+  await page.reload();
+  await expect(page.locator(".ant-layout-header")).toContainText(
+    "Disconnect",
+    { timeout: 15000 },
+  );
+  modal = await openPluginManager(page);
+  await expect(modal).not.toContainText("E2E Installed");
+  expect(errors).toEqual([]);
+});

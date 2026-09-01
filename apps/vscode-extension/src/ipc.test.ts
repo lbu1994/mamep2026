@@ -46,6 +46,7 @@ function makeSession(
     getConnectionState: vi.fn(() => "disconnected" as ConnectionState),
     setSlaveAddress: vi.fn(),
     setUnitId: vi.fn(),
+    setAddressTransform: vi.fn(),
     readRow: vi.fn(async () => ok(0x1234)),
     writeRow: vi.fn(async () =>
       ok({ kind: "write-succeeded-no-verify" as const }),
@@ -502,7 +503,6 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     requestTimeoutMs: 1000,
     retryCount: 1,
     interRequestDelayMs: 50,
-    addressAdjust: "off",
     recentPortHint: null,
   };
 
@@ -553,6 +553,27 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
       "COM4",
       expect.objectContaining({ id: "conn-1", protocol: "rtu", baudRate: 9600 }),
       1,
+      undefined,
+    );
+  });
+
+  it("session-connect 透传 protocol 到 connect options", async () => {
+    const session = makeSession();
+    const result = await handleVscodeInvoke(
+      request("session-connect", {
+        portId: "COM4",
+        profile,
+        slaveAddress: 1,
+        protocol: "modbus-basic-tables:coil",
+      }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.connect).toHaveBeenCalledWith(
+      "COM4",
+      expect.objectContaining({ id: "conn-1", protocol: "rtu", baudRate: 9600 }),
+      1,
+      { protocol: "modbus-basic-tables:coil" },
     );
   });
 

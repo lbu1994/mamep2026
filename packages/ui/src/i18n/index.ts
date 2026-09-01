@@ -25,6 +25,9 @@ export const en = {
     workspace: "Workspace",
     registerTables: "Register Tables",
     newTable: "New Register Table",
+    // 分组父级菜单（ADR-041 决策②）：按协议分组，组头只读、可折叠。
+    groupModbus: "Read/write via 03H/10H",
+    groupMemobus: "Read/write via 67H 010DH/010EH",
     footer: "Browser v{{version}}",
   },
   connection: {
@@ -90,6 +93,14 @@ export const en = {
     tm: "TM",
     name: "Name",
     register: "Register",
+    // ROM/RAM Enter（ADR-041 Phase C，安川插件工具栏动作）。
+    enterRom: "Enter ROM (EEPROM)",
+    enterRam: "Enter RAM",
+    confirm: "Confirm",
+    enterRomConfirm:
+      "Write parameter data to EEPROM (persists after power off) via register 0900H? EEPROM endurance is limited to ~100,000 writes.",
+    enterRamConfirm:
+      "Update parameters in RAM only (lost after power off) via register 0910H?",
     registerDec: "Register[DEC]",
     registerHex: "Register[HEX]",
     addressFormat: "Register address format",
@@ -131,6 +142,18 @@ export const en = {
     signed: "Signed Dec.",
     binary: "Binary",
     string: "String",
+    bool: "Bool",
+    readOnlyTable: "This table is read-only (discrete inputs / input registers)",
+    // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）。
+    tableType: {
+      holdingRegister: "Read/write via 03H/10H",
+      coil: "Coils (01H/0FH)",
+      discreteInput: "Discrete Inputs (02H)",
+      inputRegister: "Input Registers (04H)",
+    },
+    // 自定义功能码示例插件（ADR-043 E-4）。
+    customZero: "Zero All (example)",
+    customScaled: "Scaled (x0.1, example)",
     sheet: "Sheet",
     renameSheet: "Rename",
     closeSheet: "Close",
@@ -165,6 +188,11 @@ export const en = {
     writeVerifyLabel: "Verify:",
     writeVerifyHint:
       "Read back (FC03) after a write for this table. ON = read back immediately; ON 100/200/500 ms = wait before reading back.",
+    // 表级 Address Adjust（2026-09-01，ADR-042）：每表独立 OFF/ON。
+    addressAdjust: "Address Adjust",
+    addressAdjustOff: "OFF",
+    addressAdjustOn: "ON",
+    addressAdjustHint: "ON: sent address = user address − 1 for this table.",
     writeVerifyOff: "OFF",
     writeVerifyOn: "ON",
     writeVerifyOnDelay: "ON {{ms}} ms",
@@ -263,6 +291,12 @@ export const en = {
       "Plugin settings will be provided by the plugin runtime.",
     toolbarActionPlaceholder:
       "This plugin action is not available yet (plugin runtime is Phase A).",
+    // 安川插件（ADR-041，Phase C）：表类型标题（侧边栏分组头/新建表类型名）与协议标题。
+    yaskawaTableTypeTitle: "Read/write via 67H 010DH/010EH",
+    yaskawaMemobusTitle: "Yaskawa MEMOBUS (67H 010DH/010EH)",
+    yaskawaManualTitle: "Yaskawa MEMOBUS Register Manual",
+    // 自定义功能码示例插件（ADR-043 E-4）。
+    customFunctionTitle: "Custom FC 65H/66H (example plugin)",
     permission: {
       uiPanel: "UI Panel",
       communication: "Communication",
@@ -275,6 +309,8 @@ export const en = {
       uiContribution: "UI Contribution",
       theme: "Theme",
     },
+    // 地址变换注册（2026-09-01，ADR-042）。
+    transformAlreadyRegistered: "Address transform already registered.",
     // 插件安装入口（2026-08-30，PRD §8.3 P1，ADR-038）。
     install: "Install Plugin",
     installUnsupported:
@@ -285,6 +321,19 @@ export const en = {
     installConfirmOk: "Install",
     installSuccess: "Plugin installed.",
     installedTag: "Installed",
+    // 插件卸载（2026-09-01，ADR-044 Phase F-1）：仅 installed 可卸载。
+    uninstall: "Uninstall",
+    uninstallConfirmTitle: "Uninstall this plugin?",
+    uninstallConfirmWarning:
+      "This will remove the plugin and its contributions from this environment. This cannot be undone.",
+    uninstallConfirmOk: "Uninstall",
+    uninstallSuccess: "Plugin uninstalled.",
+    // 单文件 JS 可执行插件（2026-09-01，ADR-044 Phase F-2/3）。
+    executableUnsupported:
+      "Executable plugins are not supported in this environment.",
+    executableEntryNotice:
+      "This plugin executes in an isolated worker. It can only access the device through the communication API declared in its manifest.",
+    entryIsolated: "Isolated worker",
   },
   help: {
     title: "Help / About",
@@ -322,6 +371,13 @@ export const en = {
     theme: "Theme",
     themeLight: "Light",
     themeDark: "Dark",
+    // 主题主色（2026-09-01，ADR-042）：浅/深分别可设，null=默认品牌蓝。
+    themeColor: "Accent color",
+    themeColorLight: "Accent color (light)",
+    themeColorDark: "Accent color (dark)",
+    themeColorReset: "Reset",
+    themeColorContrastWarning:
+      "Accent color {{color}} has insufficient contrast with white text (AA ≥4.5:1). Using the default color.",
     resetWorkspace: "Reset Workspace",
     resetConfirmTitle: "Reset Workspace",
     resetConfirmContent:
@@ -373,6 +429,8 @@ export const en = {
     readAllFailed: "Read All failed: {{detail}}",
     clipboardWriteFailed: "System clipboard write failed: {{detail}}",
     pasteIssues: "{{count}} pasted row(s) contain invalid data.",
+    clipboardTypeMismatch:
+      "Copy/paste between different table types is not allowed.",
     saveFailed: "Workspace save failed.",
     workspaceReset: "Workspace reset.",
     resetFailed: "Workspace reset failed: {{detail}}",
@@ -434,6 +492,10 @@ export const en = {
     pluginPlatformUnsupported:
       "This plugin requires a platform not supported in this environment.",
     pluginAlreadyRegistered: "This plugin is already registered.",
+    pluginNotFound: "This plugin is not registered.",
+    pluginBuiltinNotRemovable:
+      "Built-in plugins are bundled with the app and cannot be uninstalled.",
+    pluginLoadFailed: "Failed to load the plugin in the isolated worker.",
     pluginStoreError: "Failed to persist the installed plugin.",
     pluginStoreSchemaInvalid:
       "The stored plugin data is invalid or corrupted.",
@@ -467,6 +529,9 @@ export const zh: TranslationResources = {
     workspace: "工作区",
     registerTables: "寄存器表",
     newTable: "新建寄存器表",
+    // 分组父级菜单（ADR-041 决策②）。
+    groupModbus: "用 03H/10H 读写寄存器",
+    groupMemobus: "用 67H 010DH/010EH 读写寄存器",
     footer: "Browser v{{version}}",
   },
   connection: {
@@ -530,6 +595,13 @@ export const zh: TranslationResources = {
     tm: "TM",
     name: "名称",
     register: "寄存器",
+    // ROM/RAM Enter（ADR-041 Phase C，安川插件工具栏动作）。
+    enterRom: "Enter ROM（EEPROM）",
+    enterRam: "Enter RAM",
+    confirm: "确认",
+    enterRomConfirm:
+      "将参数数据写入 EEPROM（断电后仍保留，寄存器 0900H）？EEPROM 写入寿命约 10 万次，请勿频繁执行。",
+    enterRamConfirm: "仅更新 RAM 中的参数（断电后失效，寄存器 0910H）？",
     registerDec: "寄存器[DEC]",
     registerHex: "寄存器[HEX]",
     addressFormat: "寄存器地址格式",
@@ -566,7 +638,18 @@ export const zh: TranslationResources = {
     unsigned: "无符号十进制",
     signed: "有符号十进制",
     binary: "二进制",
-    string: "字符串",
+    string: "字符串",    bool: "BOOL",
+    readOnlyTable: "该表为只读（离散输入 / 输入寄存器）",
+    // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）。
+    tableType: {
+      holdingRegister: "用 03H/10H 读写寄存器",
+      coil: "线圈（01H/0FH）",
+      discreteInput: "离散输入（02H）",
+      inputRegister: "输入寄存器（04H）",
+    },
+    // 自定义功能码示例插件（ADR-043 E-4）。
+    customZero: "全部清零（示例）",
+    customScaled: "缩放（x0.1，示例）",
     sheet: "标签页",
     renameSheet: "重命名",
     closeSheet: "关闭",
@@ -599,6 +682,11 @@ export const zh: TranslationResources = {
     writeVerifyLabel: "回读:",
     writeVerifyHint:
       "本表写入后回读（FC03）校验。ON = 写入后立即回读；ON 100/200/500 ms = 等待后再回读。",
+    // 表级 Address Adjust（2026-09-01，ADR-042）：每表独立 OFF/ON。
+    addressAdjust: "地址调整",
+    addressAdjustOff: "OFF",
+    addressAdjustOn: "ON",
+    addressAdjustHint: "ON：本表发送地址 = 用户地址 − 1。",
     writeVerifyOff: "关闭",
     writeVerifyOn: "开启",
     writeVerifyOnDelay: "开启 {{ms}} ms",
@@ -694,7 +782,12 @@ export const zh: TranslationResources = {
     panelPlaceholder: "插件面板内容将由插件运行时提供。",
     settingsPlaceholder: "插件设置内容将由插件运行时提供。",
     toolbarActionPlaceholder:
-      "此插件动作暂不可用（插件运行时为 Phase A）。",
+      "此插件动作暂不可用（插件运行时为 Phase A）。",    // 安川插件（ADR-041，Phase C）：表类型标题与协议标题。
+    yaskawaTableTypeTitle: "用 67H 010DH/010EH 读写寄存器",
+    yaskawaMemobusTitle: "安川 MEMOBUS（67H 010DH/010EH）",
+    yaskawaManualTitle: "安川 MEMOBUS 寄存器手册",
+    // 自定义功能码示例插件（ADR-043 E-4）。
+    customFunctionTitle: "自定义 65H/66H（示例插件）",
     permission: {
       uiPanel: "界面面板",
       communication: "通信",
@@ -707,6 +800,8 @@ export const zh: TranslationResources = {
       uiContribution: "界面贡献",
       theme: "主题",
     },
+    // 地址变换注册（2026-09-01，ADR-042）。
+    transformAlreadyRegistered: "地址变换已注册。",
     // 插件安装入口（2026-08-30，PRD §8.3 P1，ADR-038）。
     install: "安装插件",
     installUnsupported: "当前环境不支持安装插件。",
@@ -716,6 +811,18 @@ export const zh: TranslationResources = {
     installConfirmOk: "安装",
     installSuccess: "插件安装成功。",
     installedTag: "已安装",
+    // 插件卸载（2026-09-01，ADR-044 Phase F-1）：仅 installed 可卸载。
+    uninstall: "卸载",
+    uninstallConfirmTitle: "卸载此插件？",
+    uninstallConfirmWarning:
+      "这将从当前环境中移除该插件及其贡献。此操作不可撤销。",
+    uninstallConfirmOk: "卸载",
+    uninstallSuccess: "插件已卸载。",
+    // 单文件 JS 可执行插件（2026-09-01，ADR-044 Phase F-2/3）。
+    executableUnsupported: "当前环境不支持可执行插件。",
+    executableEntryNotice:
+      "该插件将在隔离线程中执行。它只能通过清单声明的通信接口访问设备。",
+    entryIsolated: "隔离线程",
   },
   help: {
     title: "帮助 / 关于",
@@ -753,6 +860,13 @@ export const zh: TranslationResources = {
     theme: "主题",
     themeLight: "浅色",
     themeDark: "深色",
+    // 主题主色（2026-09-01，ADR-042）：浅/深分别可设，null=默认品牌蓝。
+    themeColor: "主题色",
+    themeColorLight: "主题色（浅色）",
+    themeColorDark: "主题色（深色）",
+    themeColorReset: "重置",
+    themeColorContrastWarning:
+      "主题色 {{color}} 与白色文字对比度不足（AA ≥4.5:1），已回退默认色。",
     resetWorkspace: "重置工作区",
     resetConfirmTitle: "重置工作区",
     resetConfirmContent: "将清除所有已保存数据并恢复默认工作区，是否继续？",
@@ -802,6 +916,7 @@ export const zh: TranslationResources = {
     readAllFailed: "全表读取失败：{{detail}}",
     clipboardWriteFailed: "系统剪贴板写入失败：{{detail}}",
     pasteIssues: "{{count}} 行粘贴数据包含无效内容。",
+    clipboardTypeMismatch: "不同类型的表之间不可复制粘贴。",
     saveFailed: "工作区保存失败。",
     workspaceReset: "工作区已重置。",
     resetFailed: "工作区重置失败：{{detail}}",
@@ -856,6 +971,9 @@ export const zh: TranslationResources = {
     pluginManifestInvalid: "插件清单无效。",
     pluginPlatformUnsupported: "该插件要求的平台能力当前环境不支持。",
     pluginAlreadyRegistered: "该插件已注册。",
+    pluginNotFound: "该插件未注册。",
+    pluginBuiltinNotRemovable: "内置插件随应用打包，无法卸载。",
+    pluginLoadFailed: "在隔离线程中加载插件失败。",
     pluginStoreError: "已安装插件持久化失败。",
     pluginStoreSchemaInvalid: "已存储的插件数据无效或已损坏。",
     clipboardUnavailable: "系统剪贴板不可用。",

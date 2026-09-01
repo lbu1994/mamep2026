@@ -22,6 +22,8 @@ export const PLUGIN_STORE_SCHEMA_VERSION = 2 as const;
 export interface StoredPlugin {
   manifest: PluginManifest;
   enabled: boolean;
+  /** 单文件 JS 插件源码（ADR-044 Phase F-2）：可执行插件持久化用；纯清单插件无此字段。 */
+  entrySource?: string;
 }
 
 export interface PluginStoreData {
@@ -33,6 +35,7 @@ export interface PluginStoreData {
 export const storedPluginSchema = z.object({
   manifest: pluginManifestSchema,
   enabled: z.boolean(),
+  entrySource: z.string().optional(),
 });
 export const pluginStoreDataSchema = z.object({
   schemaVersion: z.literal(PLUGIN_STORE_SCHEMA_VERSION),
@@ -60,11 +63,23 @@ export function migratePluginStoreData(input: unknown): Result<PluginStoreData> 
   const raw = input as { schemaVersion?: unknown; plugins?: unknown };
   if (raw.schemaVersion === PLUGIN_STORE_SCHEMA_VERSION) {
     const parsed = pluginStoreDataSchema.safeParse(input);
-    return parsed.success
-      ? ok(parsed.data)
-      : fail(
-          schemaInvalidError(`stored plugin store is invalid: ${parsed.error.message}`),
-        );
+    if (!parsed.success) {
+      return fail(
+        schemaInvalidError(
+          `stored plugin store is invalid: ${parsed.error.message}`,
+        ),
+      );
+    }
+    // 显式映射（exactOptionalPropertyTypes）：Zod optional 推断为必选属性 + undefined，
+    // 映射回可选属性形态的 StoredPlugin。
+    return ok({
+      schemaVersion: parsed.data.schemaVersion,
+      plugins: parsed.data.plugins.map((p) => ({
+        manifest: p.manifest,
+        enabled: p.enabled,
+        ...(p.entrySource !== undefined ? { entrySource: p.entrySource } : {}),
+      })),
+    });
   }
   if (!Array.isArray(raw.plugins)) {
     return fail(

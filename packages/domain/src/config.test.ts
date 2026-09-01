@@ -18,10 +18,6 @@ describe("defaultConfig (docs/AGENTS.md §42 集中默认值)", () => {
     expect(defaultConfig.rtu.interRequestDelayMs).toBe(50);
   });
 
-  it("uses Address Adjust default OFF", () => {
-    expect(defaultConfig.rtu.addressAdjust).toBe("off");
-  });
-
   it("defaults Register address radix to DEC", () => {
     expect(defaultConfig.registerTable.addressRadix).toBe("dec");
   });

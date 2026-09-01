@@ -39,6 +39,11 @@ import type {
   SerialPortOption,
 } from "@mamep2026/platform-api";
 import { useAppStore } from "../app-store";
+import { usePluginContributions } from "../plugin/use-contributions";
+import {
+  protocolForSheetType,
+  type TableTypeContribution,
+} from "../plugin/plugin-registries";
 import {
   extractPersistedSettings,
   profileToValues,
@@ -114,6 +119,22 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const serialPorts = host?.capabilities.serialPorts ?? "unsupported";
   const isEnumerated = serialPorts === "enumerated";
 
+  // 连接协议由活动表类型决定（ADR-041 决策 A）：核心表 → rtu；安川表 → codec 协议。
+  // tableType 贡献（插件声明）提供 表类型 → protocolId 映射；协议不在平台能力矩阵内回退 rtu。
+  const tableTypeContributions = usePluginContributions<TableTypeContribution>(
+    host,
+    "tableType",
+  );
+  const activeSheetType =
+    workspace.sheets.find(
+      (sheet) => sheet.sheetId === workspace.activeSheetId,
+    )?.type ?? "holding-register";
+  const sheetProtocol = protocolForSheetType(
+    activeSheetType,
+    tableTypeContributions,
+    host?.capabilities.protocolExtensions ?? [],
+  );
+
   /** enumerated：枚举可用串口（打开弹窗 / 点击刷新时调用）；返回端口列表（供配置自动匹配）。 */
   const enumeratePorts = async (): Promise<SerialPortOption[]> => {
     if (host === null || host === undefined) return [];
@@ -172,6 +193,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
           : await host.connect(
               toProfile(values, profile) as RtuConnectionProfile,
               isMock ? null : selectedHandle,
+              { protocol: sheetProtocol },
             );
       if (result.ok) {
         setOpen(false);
@@ -504,26 +526,6 @@ export function ConnectionSettingsModal(): React.ReactNode {
                     max={10}
                     value={field.value}
                     onChange={(v) => field.onChange(v ?? 1)}
-                  />
-                </Form.Item>
-              )}
-            />
-            <Controller
-              name="addressAdjust"
-              control={control}
-              render={({ field }) => (
-                <Form.Item
-                  label={t("connection.addressAdjust")}
-                  tooltip={t("connection.adjustHint")}
-                >
-                  <Select
-                    style={{ width: "100%" }}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v)}
-                    options={[
-                      { value: "off", label: t("connection.adjustOff") },
-                      { value: "on", label: t("connection.adjustOn") },
-                    ]}
                   />
                 </Form.Item>
               )}

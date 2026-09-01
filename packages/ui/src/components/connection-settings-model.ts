@@ -19,7 +19,6 @@ export const settingsSchema = z
     rxDelay: z.number().int().min(0).max(5000),
     timeout: z.number().int().min(50).max(60000),
     retry: z.number().int().min(0).max(10),
-    addressAdjust: z.enum(["off", "on"]),
     // ---- TCP（保持必填类型；非空校验仅 TCP 协议下经 superRefine 生效）----
     host: z.string(),
     port: z.number().int().min(1).max(65535),
@@ -49,7 +48,6 @@ export const rtuPersistedSettingsSchema = z.object({
   requestTimeoutMs: z.number().int().min(50).max(60000),
   retryCount: z.number().int().min(0).max(10),
   interRequestDelayMs: z.number().int().min(0).max(5000),
-  addressAdjust: z.enum(["off", "on"]),
 });
 
 /** TCP 随工作区持久化的连接设置子集（2026-08-23 两端 TCP 接线：host/port/unitId/超时/重试；2026-08-30 增 autoReconnect）。 */
@@ -108,7 +106,6 @@ export function profileToValues(
       rxDelay: profile.interRequestDelayMs,
       timeout: profile.requestTimeoutMs,
       retry: profile.retryCount,
-      addressAdjust: "off",
       host: profile.host,
       port: profile.port,
       unitId: profile.unitId,
@@ -126,7 +123,6 @@ export function profileToValues(
     rxDelay: profile.interRequestDelayMs,
     timeout: profile.requestTimeoutMs,
     retry: profile.retryCount,
-    addressAdjust: profile.addressAdjust,
     host: "",
     port: 502,
     unitId: 0,
@@ -161,6 +157,5 @@ export function extractPersistedSettings(
     requestTimeoutMs: values.timeout,
     retryCount: values.retry,
     interRequestDelayMs: values.rxDelay,
-    addressAdjust: values.addressAdjust,
   };
 }

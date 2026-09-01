@@ -449,6 +449,54 @@ describe("setSheetWriteVerify（2026-08-26）", () => {
   });
 });
 
+describe("setSheetAddressTransform / setThemePrimary（2026-09-01，ADR-042）", () => {
+  it("默认 null；setSheetAddressTransform 只改目标表并持久化", () => {
+    const first = firstSheetId();
+    expect(
+      useAppStore.getState().workspace.sheets[0]?.addressTransform,
+    ).toBeNull();
+    useAppStore.getState().addSheet(); // Sheet 2
+    const second = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (second === undefined) throw new Error("missing second sheet");
+
+    useAppStore.getState().setSheetAddressTransform(first, {
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
+    const after = useAppStore.getState().workspace.sheets;
+    expect(after.find((s) => s.sheetId === first)?.addressTransform).toEqual({
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
+    expect(after.find((s) => s.sheetId === second)?.addressTransform).toBeNull();
+  });
+
+  it("setSheetAddressTransform(null) 关闭表级调整", () => {
+    const first = firstSheetId();
+    useAppStore.getState().setSheetAddressTransform(first, {
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
+    useAppStore.getState().setSheetAddressTransform(first, null);
+    expect(useAppStore.getState().workspace.sheets[0]?.addressTransform).toBeNull();
+  });
+
+  it("setThemePrimary 持久化到 workspace.preferences.themePrimary；null 重置", () => {
+    useAppStore.getState().setThemePrimary({ light: "#123456", dark: "#654321" });
+    expect(useAppStore.getState().themePrimary).toEqual({
+      light: "#123456",
+      dark: "#654321",
+    });
+    expect(useAppStore.getState().workspace.preferences.themePrimary).toEqual({
+      light: "#123456",
+      dark: "#654321",
+    });
+    useAppStore.getState().setThemePrimary(null);
+    expect(useAppStore.getState().themePrimary).toBeNull();
+    expect(useAppStore.getState().workspace.preferences.themePrimary).toBeNull();
+  });
+});
+
 describe("commitRowAddress radix", () => {
   function rowInSheet(sheetId: SheetId) {
     const sheet = useAppStore
@@ -810,6 +858,40 @@ describe("row insert / batch actions", () => {
       1, 2, 3,
     ]);
   });
+
+  it("不同类型表之间复制粘贴被拒（ADR-041 决策⑥）", async () => {
+    const store = useAppStore.getState();
+    const coreSheetId = firstSheetId();
+    store.addRow(coreSheetId); // 空行
+    const rows = useAppStore.getState().workspace.sheets[0]?.rows;
+    const r1 = rows?.[0]?.rowId;
+    if (r1 === undefined) throw new Error("missing rowId");
+    store.setSelectedRowIds([r1]);
+    store.copySelectedRows(coreSheetId); // 复制到应用内剪贴板（来源=核心表）
+    // 新建安川类型表并尝试粘贴：应被拒（目标表类型 != 来源表类型）。
+    store.addSheet("yaskawa-memobus-67h-010dh-010eh:holding-register");
+    const yaskawaSheetId = useAppStore.getState().workspace.sheets[1]?.sheetId;
+    if (yaskawaSheetId === undefined) throw new Error("missing yaskawa sheet");
+    const yaskawaBeforeRows =
+      useAppStore.getState().workspace.sheets[1]?.rows.length ?? 0;
+    await store.pasteRows(yaskawaSheetId, null);
+    const after = useAppStore.getState();
+    // 新表自带默认行：粘贴被拒后行数不变。
+    expect(after.workspace.sheets[1]?.rows).toHaveLength(yaskawaBeforeRows);
+    expect(after.messages.at(-1)?.messageKey).toBe(
+      "messages.clipboardTypeMismatch",
+    );
+    // 同类型表（核心→核心）不受影响：粘贴 1 行 → 默认行 +1。
+    store.addSheet();
+    const core2 = useAppStore.getState().workspace.sheets[2]?.sheetId;
+    if (core2 === undefined) throw new Error("missing core2 sheet");
+    const core2BeforeRows =
+      useAppStore.getState().workspace.sheets[2]?.rows.length ?? 0;
+    await store.pasteRows(core2, null);
+    expect(useAppStore.getState().workspace.sheets[2]?.rows).toHaveLength(
+      core2BeforeRows + 1,
+    );
+  });
 });
 
 describe("updateRow 引用稳定性（性能：单行更新不重建其余表/行）", () => {
@@ -913,7 +995,6 @@ describe("setConnectionSettings", () => {
       requestTimeoutMs: 1800,
       retryCount: 4,
       interRequestDelayMs: 90,
-      addressAdjust: "on",
     });
 
     const stored = useAppStore.getState().workspace.connectionProfiles[0];
@@ -928,7 +1009,6 @@ describe("setConnectionSettings", () => {
     expect(profile?.requestTimeoutMs).toBe(1800);
     expect(profile?.retryCount).toBe(4);
     expect(profile?.interRequestDelayMs).toBe(90);
-    expect(profile?.addressAdjust).toBe("on");
     // id 保持不变。
     expect(profile?.id).toBe(before.id);
   });
@@ -944,7 +1024,6 @@ describe("setConnectionSettings", () => {
       requestTimeoutMs: 999999,
       retryCount: 4,
       interRequestDelayMs: 90,
-      addressAdjust: "on",
     });
     // 越界 requestTimeoutMs（>60000）使持久化 schema 校验失败，整个写入被拒绝。
     const stored = useAppStore.getState().workspace.connectionProfiles[0];
@@ -1437,7 +1516,7 @@ describe("workspaceImportDraft（工作区导入，2026-08-29）", () => {
         sheets: 1,
         rows: 0,
         connections: 1,
-        schemaVersion: 4,
+        schemaVersion: 5,
       },
     });
     useAppStore.getState().applyWorkspaceImport();

@@ -28,7 +28,6 @@
       "requestTimeoutMs": 1000,        // 单次请求响应超时，默认 1000
       "retryCount": 1,                 // 重试次数 0~10，默认 1
       "interRequestDelayMs": 50,       // Rx Delay（请求间隔，兼作 WP 轮询间隔），默认 50
-      "addressAdjust": "off"           // off|on，默认 off
     },
     {
       // TCP 连接对象

@@ -18,8 +18,8 @@ export const PANELS_CONTRIBUTION_SCHEMA = z.array(
   }),
 );
 
-/** toolbarAction：表格工具栏按钮（Phase A 无 handler → 按钮 disabled + tooltip 提示）。 */
-export const TOOLBAR_ACTION_CONTRIBUTION_SCHEMA = z.object({
+/** toolbarAction 单动作 schema（ADR-041 Phase C：数组元素）。 */
+const TOOLBAR_ACTION_ITEM_SCHEMA = z.object({
   id: z.string().min(1),
   titleKey: z.string().min(1),
   icon: z.string().optional(),
@@ -27,6 +27,11 @@ export const TOOLBAR_ACTION_CONTRIBUTION_SCHEMA = z.object({
   targetTableType: z.string().optional(),
   requiresConfirm: z.boolean().default(false),
 });
+
+/** toolbarAction：表格工具栏按钮（ADR-041 Phase C：数组，一插件可贡献多个动作）。 */
+export const TOOLBAR_ACTION_CONTRIBUTION_SCHEMA = z.array(
+  TOOLBAR_ACTION_ITEM_SCHEMA,
+);
 
 /** tableType：新寄存器表类型（Phase C 接线；payload 为声明式描述）。 */
 export const TABLE_TYPE_CONTRIBUTION_SCHEMA = z.object({
@@ -43,11 +48,13 @@ export const PROTOCOL_EXTENSION_CONTRIBUTION_SCHEMA = z.object({
   titleKey: z.string().min(1),
 });
 
-/** addressTransform：表级地址变换（Phase D 接线；payload 为声明式描述）。 */
+/** addressTransform：表级地址变换（Phase D 接线，ADR-042；payload 为声明式描述，apply/validate 由 activate 注册进 AddressTransformRegistry）。 */
 export const ADDRESS_TRANSFORM_CONTRIBUTION_SCHEMA = z.object({
   id: z.string().min(1),
   protocol: z.string().min(1),
   titleKey: z.string().optional(),
+  /** 默认启用状态（表级配置缺省时采用；核心内置默认 OFF）。 */
+  defaultConfig: z.object({ enabled: z.boolean() }).optional(),
 });
 
 /** theme：主题色贡献（Phase A 消费方 = 主题装配链，纯数据可全功能）。 */
@@ -70,16 +77,21 @@ export const DATA_TYPE_CONTRIBUTION_SCHEMA = z.object({
   titleKey: z.string().min(1),
 });
 
-/** command：命令分发（Phase A 消费方 = 分发注册表，handler Phase F）。 */
-export const COMMAND_CONTRIBUTION_SCHEMA = z.object({
+/** command 单命令 schema（ADR-041 Phase C：数组元素）。 */
+const COMMAND_ITEM_SCHEMA = z.object({
   id: z.string().min(1),
   titleKey: z.string().min(1),
 });
 
-/** documentation：文档/帮助面板（Phase E 接线）。 */
+/** command：命令分发（ADR-041 Phase C：数组，一插件可贡献多个命令）。 */
+export const COMMAND_CONTRIBUTION_SCHEMA = z.array(COMMAND_ITEM_SCHEMA);
+
+/** documentation：文档/帮助面板（ADR-043 E-5 接线）。payload 为纯字符串（可 JSON 序列化）。 */
 export const DOCUMENTATION_CONTRIBUTION_SCHEMA = z.object({
   id: z.string().min(1),
   titleKey: z.string().min(1),
+  /** Markdown 子集内容（标题/段落/列表/代码块；UI 轻量渲染，不引重库）。 */
+  markdown: z.string(),
 });
 
 export interface BuiltinContributionPoint {

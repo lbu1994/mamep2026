@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRawValue, parseCellText } from "./data-types";
+import { formatRawValue, isScaled, isSigned, parseCellText } from "./data-types";
 import type { DataType } from "@mamep2026/domain";
 
 function expectParse(text: string, type: DataType, expectedRaw: number): void {
@@ -107,6 +107,31 @@ describe("Binary type", () => {
     expectParseFail("10 1", "binary", "DATA_BINARY_INVALID");
     expectParseFail("11111111111111111", "binary", "DATA_BINARY_TOO_LONG");
     expectParseFail("", "binary", "DATA_EMPTY");
+  });
+});
+
+describe("Bool type (ADR-043 E-2)", () => {
+  it("formats as 0/1", () => {
+    expect(formatRawValue(0, "bool")).toBe("0");
+    expect(formatRawValue(1, "bool")).toBe("1");
+    expect(formatRawValue(0xffff, "bool")).toBe("1");
+  });
+
+  it("parses 0 and 1 only", () => {
+    expectParse("0", "bool", 0);
+    expectParse("1", "bool", 1);
+    expectParse(" 1 ", "bool", 1);
+  });
+
+  it("rejects non-bool input and empty", () => {
+    expectParseFail("2", "bool", "DATA_BOOL_INVALID");
+    expectParseFail("true", "bool", "DATA_BOOL_INVALID");
+    expectParseFail("", "bool", "DATA_EMPTY");
+  });
+
+  it("is not scaled nor signed", () => {
+    expect(isScaled("bool")).toBe(false);
+    expect(isSigned("bool")).toBe(false);
   });
 });
 

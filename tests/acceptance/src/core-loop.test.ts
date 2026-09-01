@@ -54,7 +54,7 @@ describe("acceptance: browser RTU core loop", () => {
     });
     const service = new RegisterTableService({
       getSession: () => session,
-      getAddressAdjustMode: () => profile.addressAdjust,
+      getAddressTransform: () => null,
       clock,
     });
 
@@ -92,7 +92,7 @@ describe("acceptance: browser RTU core loop", () => {
     });
     const service = new RegisterTableService({
       getSession: () => session,
-      getAddressAdjustMode: () => profile.addressAdjust,
+      getAddressTransform: () => null,
       clock,
     });
     await session.connect();
@@ -153,7 +153,8 @@ describe("acceptance: browser RTU core loop", () => {
     const polling = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
     });
-    const results: Array<{ address: number; value: number }> = [];
+    // 轮询结果可为单值或数组（ADR-030 多寄存器）；本用例仅单寄存器目标。
+    const results: Array<{ address: number; value: number | number[] }> = [];
     polling.onResult((_key, address, result) => {
       if (result.ok) results.push({ address, value: result.value });
     });

@@ -1,12 +1,22 @@
 /**
  * 轮询纯函数（docs/TECH_DESIGN.md §13、docs/AGENTS.md §17/§12.5）。
- * - 轮询目标：仅含 WP 开关且地址合法的行；Address Adjust ON 时发送地址 = 用户地址 − 1，地址 0 跳过；
+ * - 轮询目标：仅含 WP 开关且地址合法的行；表级地址变换（ADR-042）启用时发送地址 = 变换 apply
+ *   （内置 builtin.address-adjust = 用户地址 − 1），变换校验失败（地址 0）跳过；
  * - 结果应用：generation 校验（结果地址必须仍是该行当前的轮询发送地址，避免旧地址迟到结果覆盖）；
  *   全表读取结果（address = 0）不参与轮询 generation 校验。
+ * - 每表独立应用各自 addressTransform 配置（ADR-042：非活动表轮询同样按各行所属 sheet 配置）。
  * 本模块为纯函数，供 Application/Host 消费，不触碰 React 或平台 API。
  */
-import type { RegisterRow, RegisterSheet } from "@mamep2026/domain";
+import type {
+  AddressTransform,
+  RegisterRow,
+  RegisterSheet,
+} from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
+import {
+  applyAddressTransform,
+  resolveSheetAddressTransform,
+} from "./address";
 import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 
 export interface PollingTarget {
@@ -16,21 +26,32 @@ export interface PollingTarget {
   quantity?: number;
 }
 
-/** 从工作区表格构建轮询目标（Address Adjust 已应用到发送地址）。 */
+/** 解析表级地址变换（ADR-042）：启用时返回变换；未配置/关闭/未知 id 返回 null。 */
+function sheetTransform(
+  sheet: Pick<RegisterSheet, "addressTransform">,
+  resolve?: (transformId: string) => AddressTransform | null,
+): AddressTransform | null {
+  return resolveSheetAddressTransform(sheet.addressTransform, resolve);
+}
+
+/** 从工作区表格构建轮询目标（表级地址变换已应用到发送地址，ADR-042）。 */
 export function buildPollingTargets(
   sheets: readonly RegisterSheet[],
-  addressAdjust: "off" | "on",
+  options?: { resolveAddressTransform?: (id: string) => AddressTransform | null },
 ): PollingTarget[] {
+  const resolve = options?.resolveAddressTransform;
   const targets: PollingTarget[] = [];
   for (const sheet of sheets) {
+    const transform = sheetTransform(sheet, resolve);
     for (const row of sheet.rows) {
       if (!row.pollingEnabled) continue;
       const address = row.addressValue?.value;
       if (address === undefined) continue;
-      if (addressAdjust === "on" && address === 0) continue;
+      const sent = applyAddressTransform(address, transform);
+      if (!sent.ok) continue;
       targets.push({
         key: row.rowId,
-        address: addressAdjust === "on" ? address - 1 : address,
+        address: sent.value,
         // 多寄存器行（ADR-030）：一次 FC03 轮询全部连续寄存器。
         quantity: row.registerCount,
       });
@@ -39,18 +60,21 @@ export function buildPollingTargets(
   return targets;
 }
 
-/** 结果对应的请求地址是否仍是该行当前轮询发送地址（generation 失效检测）。 */
+/** 结果对应的请求地址是否仍是该行当前轮询发送地址（generation 失效检测，按行所属表变换）。 */
 export function pollResultAddressMatches(
   row: RegisterRow,
+  sheet: Pick<RegisterSheet, "addressTransform">,
   address: number,
-  addressAdjust: "off" | "on",
+  resolve?: (transformId: string) => AddressTransform | null,
 ): boolean {
   // 全表读取结果（address = 0）不参与轮询 generation 校验。
   if (address === 0) return true;
   const rowAddress = row.addressValue?.value;
   if (rowAddress === undefined) return false;
-  const expected = addressAdjust === "on" ? rowAddress - 1 : rowAddress;
-  return address === expected;
+  const transform = sheetTransform(sheet, resolve);
+  const sent = applyAddressTransform(rowAddress, transform);
+  if (!sent.ok) return false;
+  return address === sent.value;
 }
 
 /**
@@ -65,12 +89,13 @@ export function applyPollResult(
   key: string,
   address: number,
   raw: number | number[],
-  addressAdjust: "off" | "on",
+  options?: { resolveAddressTransform?: (id: string) => AddressTransform | null },
 ): RegisterRow | null {
+  const resolve = options?.resolveAddressTransform;
   for (const sheet of sheets) {
     const row = sheet.rows.find((r) => r.rowId === key);
     if (row === undefined) continue;
-    if (!pollResultAddressMatches(row, address, addressAdjust)) return null;
+    if (!pollResultAddressMatches(row, sheet, address, resolve)) return null;
     // 多寄存器行（ADR-030）：一次请求读回 values[]，按组合类型格式化。
     if (Array.isArray(raw)) {
       const applied = applyReadValuesToRow(row, raw);

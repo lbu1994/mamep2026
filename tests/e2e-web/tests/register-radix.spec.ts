@@ -15,9 +15,9 @@ async function openApp(page: Page): Promise<void> {
   });
 }
 
-/** 表格上方工具栏里的 DEC/HEX 切换控件。 */
+/** 表格上方工具栏里的 DEC/HEX 切换控件（ADR-014；Address Adjust 也是 Segmented，需收窄到 __radix 容器）。 */
 function radixGroup(page: Page) {
-  return page.locator(".table-toolbar .ant-segmented");
+  return page.locator(".table-toolbar__radix .ant-segmented");
 }
 
 function clickRadix(page: Page, label: "DEC" | "HEX"): Promise<void> {
@@ -151,7 +151,7 @@ test("radix is per-sheet and survives a reload", async ({ page }) => {
 
   // 新建 Sheet 2：默认仍为 DEC，不受 Sheet 1 影响。
   await page
-    .getByRole("button", { name: "New Register Table" })
+    .getByRole("button", { name: "New Register Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");

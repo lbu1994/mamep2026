@@ -286,7 +286,7 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
     ]);
   // 新建表 2（侧边栏添加入口，自动激活）。
   await page
-    .getByRole("button", { name: "New Register Table" })
+    .getByRole("button", { name: "New Register Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(

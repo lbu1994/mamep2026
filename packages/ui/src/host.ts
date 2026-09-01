@@ -16,11 +16,15 @@ import type {
   BatchReadHandle,
   BatchReadRow,
   CommunicationLogEvent,
+  CommunicationSession,
   ConnectionState,
   WriteOutcome,
 } from "@mamep2026/communication";
 import type { SaveStatus } from "@mamep2026/workspace";
-import type { PluginRegistry } from "@mamep2026/plugin-api";
+import type {
+  PluginRegistry,
+  PluginRemoteRuntime,
+} from "@mamep2026/plugin-api";
 import type {
   PluginContributionQueryResponse,
   PluginRpcPayload,
@@ -54,7 +58,6 @@ export interface CommProperties {
   timeoutMs: number;
   retryCount: number;
   rxDelayMs: number;
-  addressAdjust: "off" | "on";
   connectionState: ConnectionState;
 }
 
@@ -90,6 +93,7 @@ export interface AppHost {
   connect(
     profile: RtuConnectionProfile,
     handle: SerialDeviceHandle | null,
+    options?: { protocol?: string },
   ): Promise<Result<void>>;
   /**
    * TCP 连接（2026-08-23 两端 TCP 接线）：profile 即连接参数（host/port/unitId/超时/重试），
@@ -97,6 +101,16 @@ export interface AppHost {
    */
   connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
   disconnect(): Promise<Result<void>>;
+  /**
+   * 当前通信会话（ADR-044 Phase F-2）：插件通信面（PluginCommunicationApi）经统一
+   * 调度器访问会话；未连接 / 会话在远程宿主时返回 null（插件通信降级为能力错误）。
+   */
+  getSession(): CommunicationSession | null;
+  /**
+   * 创建插件隔离运行时（ADR-044 Phase F-2）：单文件 JS 插件 entry 在隔离线程
+   * （Web Worker）加载执行；通信面按插件 id 动态绑定到当前会话（统一调度器）。
+   */
+  createPluginRemoteRuntime(entrySource: string): PluginRemoteRuntime;
   /**
    * 释放全部资源（页面卸载 / Webview 销毁 / StrictMode 重复挂载清理）：
    * 断开会话、退订所有外部事件源（如 bridge.onEvent）并清空本地订阅集合，
@@ -107,6 +121,15 @@ export interface AppHost {
   getCommProperties(): CommProperties;
   /** 更新当前会话的从站地址（每表独立，2026-08-19）：对后续所有请求生效。 */
   setSlaveAddress(slave: number): void;
+  /**
+   * 更新活动表地址变换配置（2026-09-01，ADR-042 表级 Address Adjust）：
+   * 对后续读/写请求生效（轮询地址在 Renderer 生成时按表应用，不经本端口）。
+   * null=不调整；host 端会话（VSCode/Electron TCP）经 session-set-address-transform RPC。
+   */
+  setAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  } | null): void;
   subscribeConnectionState(
     listener: (state: ConnectionState) => void,
   ): () => void;

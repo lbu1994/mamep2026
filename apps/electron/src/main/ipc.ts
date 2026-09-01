@@ -224,10 +224,12 @@ export async function handleRequest(
         "color theme RPC is not supported on the Electron host",
       );
     // ---- RTU 会话 kind（2026-08-23）：Electron RTU 运行在 Renderer（Web Serial），
-    // 不发给主进程；此处返回能力错误并满足穷尽守卫。----
+    // 不发给主进程；此处返回能力错误并满足穷尽守卫。
+    // 表级 Address Adjust（2026-09-01，ADR-042）：Electron RTU 会话在 Renderer；TCP 无地址变换。----
     case "serial-enumerate":
     case "session-connect":
     case "session-set-slave-address":
+    case "session-set-address-transform":
       return errorEnvelope(
         message.messageId,
         "SESSION_NOT_AVAILABLE",

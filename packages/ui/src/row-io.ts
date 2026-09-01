@@ -55,9 +55,10 @@ export async function readRowById(
     // 多寄存器行（ADR-030）：applyReadValuesToRow 更新 registerValues（子行数据源）
     // + cellText（组合文本）；单寄存器行走原路径。
     deps.updateRow(rowId, (r) => {
+      const resolver = useAppStore.getState().dataTypeResolver;
       const applied = Array.isArray(result.value)
         ? applyReadValuesToRow(r, result.value)
-        : applyReadValueToRow(r, result.value);
+        : applyReadValueToRow(r, result.value, resolver);
       return applied.ok ? applied.value : r;
     });
   }
@@ -70,9 +71,10 @@ function applyReadBackValue(
   raws: readonly number[],
 ): void {
   deps.updateRow(rowId, (row) => {
+    const resolver = useAppStore.getState().dataTypeResolver;
     const applied =
       raws.length === 1
-        ? applyReadValueToRow(row, raws[0] ?? 0)
+        ? applyReadValueToRow(row, raws[0] ?? 0, resolver)
         : applyReadValuesToRow(row, raws);
     return applied.ok ? applied.value : row;
   });

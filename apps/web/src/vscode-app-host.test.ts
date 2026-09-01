@@ -173,6 +173,9 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
+    sessionSetAddressTransform: vi.fn(
+      async (): Promise<Result<null>> => ({ ok: true, value: null }),
+    ),
     sessionReadRow: vi.fn(async (): Promise<Result<number>> => ({
       ok: true,
       value: 0x1234,
@@ -430,6 +433,33 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
       }),
     );
     expect(host.getConnectionState()).toBe("connected");
+  });
+
+  it("connect 带 options.protocol 时透传到 session-connect（非 rtu 分支）", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const profile = createDefaultRtuProfile();
+    const result = await host.connect(profile, { id: "COM4", label: "Fake (COM4)" }, {
+      protocol: "modbus-basic-tables:coil",
+    });
+    expect(result.ok).toBe(true);
+    expect(bridge.sessionConnect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portId: "COM4",
+        protocol: "modbus-basic-tables:coil",
+        profile: expect.objectContaining({ protocol: "rtu", baudRate: 9600 }),
+      }),
+    );
+  });
+
+  it("connect 不带 protocol 或 protocol 为 rtu 时不携带 protocol 字段", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeHost(bridge);
+    const profile = createDefaultRtuProfile();
+    await host.connect(profile, { id: "COM4", label: "Fake (COM4)" }, { protocol: "rtu" });
+    const call = (bridge.sessionConnect as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(call).toBeDefined();
+    expect(call).not.toHaveProperty("protocol");
   });
 
   it("session-connect 失败时连接不虚报成功", async () => {

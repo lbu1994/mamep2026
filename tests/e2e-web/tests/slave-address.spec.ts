@@ -26,7 +26,7 @@ function slaveInput(page: Page) {
 /** 通过侧边栏「New Register Table」新建一张表（侧边栏为表格管理主入口，页签栏无加号）。 */
 async function addSheet(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "New Register Table" })
+    .getByRole("button", { name: "New Register Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(

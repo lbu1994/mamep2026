@@ -19,8 +19,19 @@
  *   {name:"", comment:"", dataType: 父行 dataType}，保证迁移后展示与迁移前一致）；
  * - 单寄存器行 registers=null；
  * - schemaVersion 升为 4。
+ *
+ * v4→v5（2026-08-31，表类型 ADR-041）：
+ * - 各 sheet 补齐 type="holding-register"（老数据即核心表；已有 type 保留）；
+ * - schemaVersion 升为 5。
+ *
+ * v5→v6（2026-09-01，表级 Address Adjust + 主题主色 ADR-042）：
+ * - 全局 profile.addressAdjust（RTU，off/on）复制到各 sheet.addressTransform
+ *   （{transformId:"builtin.address-adjust", enabled: 全局===on}；已有值保留）；
+ * - 删除各 profile 的 addressAdjust 字段（全局选项移出核心）；
+ * - preferences 补 themePrimary=null 缺省（无数据转换，仅版本）；
+ * - schemaVersion 升为 6。
  */
-import { createMamepError, type Result } from "@mamep2026/domain";
+import { createMamepError, BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID, type Result } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 
 export interface Migration {
@@ -123,10 +134,107 @@ const migrationV3ToV4: Migration = {
   },
 };
 
+const migrationV4ToV5: Migration = {
+  fromVersion: 4,
+  toVersion: 5,
+  migrate(data) {
+    const sheets = Array.isArray(data.sheets)
+      ? (data.sheets as Record<string, unknown>[])
+      : [];
+    const next = {
+      ...data,
+      schemaVersion: 5,
+      sheets: sheets.map((sheet) => ({
+        ...sheet,
+        type:
+          typeof sheet.type === "string" && sheet.type.length > 0
+            ? sheet.type
+            : "holding-register",
+      })),
+    };
+    return next;
+  },
+};
+
+const migrationV5ToV6: Migration = {
+  fromVersion: 5,
+  toVersion: 6,
+  migrate(data) {
+    // 全局 RTU profile 的 addressAdjust（ADR-013 全局选项，ADR-042 移出核心）。
+    const profiles = Array.isArray(data.connectionProfiles)
+      ? (data.connectionProfiles as Record<string, unknown>[])
+      : [];
+    const rtuProfile = profiles.find((p) => p.protocol === "rtu");
+    const globalAdjust =
+      rtuProfile !== undefined &&
+      typeof rtuProfile.addressAdjust === "string"
+        ? rtuProfile.addressAdjust
+        : "off";
+    const sheets = Array.isArray(data.sheets)
+      ? (data.sheets as Record<string, unknown>[])
+      : [];
+    const next = {
+      ...data,
+      schemaVersion: 6,
+      sheets: sheets.map((sheet) => {
+        const existing =
+          sheet.addressTransform !== null &&
+          typeof sheet.addressTransform === "object" &&
+          !Array.isArray(sheet.addressTransform)
+            ? (sheet.addressTransform as Record<string, unknown>)
+            : null;
+        return {
+          ...sheet,
+          addressTransform:
+            existing !== null
+              ? existing
+              : {
+                  transformId: BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID,
+                  enabled: globalAdjust === "on",
+                },
+        };
+      }),
+      // 全局 addressAdjust 移出核心：从各 profile 删除。
+      connectionProfiles: profiles.map((profile) => {
+        const next = { ...profile };
+        delete next.addressAdjust;
+        return next;
+      }),
+    };
+    // preferences.themePrimary 缺省 null（无数据转换，仅版本）。
+    const rawPreferences =
+      data.preferences !== null &&
+      typeof data.preferences === "object" &&
+      !Array.isArray(data.preferences)
+        ? (data.preferences as Record<string, unknown>)
+        : {};
+    return {
+      ...next,
+      preferences: {
+        ...rawPreferences,
+        themePrimary:
+          "themePrimary" in rawPreferences ? rawPreferences.themePrimary : null,
+      },
+    };
+  },
+};
+
+const migrationV6ToV7: Migration = {
+  fromVersion: 6,
+  toVersion: 7,
+  migrate(data) {
+    // ADR-043 E-3：dataType 开放（内置 + 插件字符串），无数据转换，仅升版本。
+    return { ...data, schemaVersion: 7 };
+  },
+};
+
 export const migrations: readonly Migration[] = [
   migrationV1ToV2,
   migrationV2ToV3,
   migrationV3ToV4,
+  migrationV4ToV5,
+  migrationV5ToV6,
+  migrationV6ToV7,
 ];
 
 /** 按版本顺序应用迁移；无法迁移的数据返回结构化错误。 */

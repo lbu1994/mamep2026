@@ -3,6 +3,7 @@
  * 的分类视图（docs/TECH_DESIGN.md §4.4）。
  */
 import type {
+  AddressTransformConfig,
   DataType,
   PanelLayout,
   ReadVerifySettings,
@@ -11,6 +12,7 @@ import type {
   RegisterSheet,
   RowId,
   SheetId,
+  SheetType,
   Workspace,
 } from "@mamep2026/domain";
 import {
@@ -28,6 +30,8 @@ import type {
 } from "@mamep2026/logging";
 import type { SaveStatus } from "@mamep2026/workspace";
 import type { Result } from "@mamep2026/domain";
+import type { DataTypeResolver } from "@mamep2026/data-conversion";
+import { createDataTypeResolver } from "@mamep2026/data-conversion";
 import {
   addRowAfter,
   commitAddress,
@@ -126,11 +130,15 @@ export interface AppStoreState {
   /** 批量关闭（关闭其他/右侧）确认弹窗状态；null 表示未在确认。 */
   pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null;
   theme: "light" | "dark";
+  /** 用户自定义主题主色（ADR-042）：null=默认品牌蓝；随工作区持久化。 */
+  themePrimary: { light: string; dark: string } | null;
   /**
    * 宿主提供的完整 antd 主题（VSCode 完整令牌映射，ui-theme buildVscodeTheme 产出，ADR-027）；
    * null=回退 buildTheme 两态。运行时派生（随宿主主题事件更新），不持久化。
    */
   themeConfig: ThemeConfig | null;
+  /** 数据类型解析器（ADR-043 E-3）：内置 + 插件类型；App.tsx 装配后注入。 */
+  dataTypeResolver: DataTypeResolver;
   saveStatus: SaveStatus;
   /** 撤销/重做历史栈（TECH_DESIGN §24.4；纯内存会话状态，不随工作区持久化）。 */
   undoStack: UndoEntry[];
@@ -149,6 +157,8 @@ export interface AppStoreState {
   workspaceImportDraft: WorkspaceImportDraft | null;
 
   setHost: (host: AppHost) => void;
+  /** 注入数据类型解析器（ADR-043 E-3）：App.tsx 装配插件 dataType 运行时后调用。 */
+  setDataTypeResolver: (resolver: DataTypeResolver) => void;
   setWorkspace: (workspace: Workspace) => void;
   /** 设置工作区导入草稿（解析通过待确认）；null 清除/关闭预览。 */
   setWorkspaceImportDraft: (draft: WorkspaceImportDraft | null) => void;
@@ -165,6 +175,11 @@ export interface AppStoreState {
     pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null,
   ) => void;
   setTheme: (theme: "light" | "dark") => void;
+  /**
+   * 用户自定义主题主色（ADR-042）：浅/深可分别设置；null=默认品牌蓝。
+   * 持久化到 workspace.preferences.themePrimary（随自动保存）。
+   */
+  setThemePrimary: (primary: { light: string; dark: string } | null) => void;
   /** 撤销上一步工作区编辑（TECH_DESIGN §24.4）；无可撤销项时 no-op。 */
   undo: () => void;
   /** 重做被撤销的编辑；无重做项时 no-op。 */
@@ -210,7 +225,10 @@ export interface AppStoreState {
   duplicateRowInSheet: (sheetId: SheetId, rowId: RowId) => void;
   /** 行多选与剪贴板：会话状态，不随工作区持久化（§19.2）。 */
   selectedRowIds: RowId[];
+  /** 应用内剪贴板（行级）：copy/cut 填充，paste 优先系统剪贴板、回退此处。 */
   clipboardPayload: RowClipboardData[] | null;
+  /** 剪贴板来源表类型（ADR-041 决策⑥）：跨类型粘贴被拒；null=无来源（外部 CSV）不限制。 */
+  clipboardSourceSheetType: SheetType | null;
   setSelectedRowIds: (rowIds: RowId[]) => void;
   insertRowAfter: (sheetId: SheetId, rowId: RowId) => void;
   insertRowBefore: (sheetId: SheetId, rowId: RowId) => void;
@@ -220,7 +238,8 @@ export interface AppStoreState {
   cutSelectedRows: (sheetId: SheetId) => void;
   /** 粘贴到 afterRowId 之后；afterRowId 为 null 时追加到表尾。 */
   pasteRows: (sheetId: SheetId, afterRowId: RowId | null) => Promise<void>;
-  addSheet: () => void;
+  /** 新建表（ADR-041）：type 缺省 holding-register；插件表类型（如安川表）由分组头新建入口传入。 */
+  addSheet: (type?: SheetType) => void;
   renameSheet: (sheetId: SheetId, name: string) => void;
   /** 关闭一张表（非破坏性）：表仍保留在工作区（侧边栏可见），仅从页签栏隐藏。 */
   closeSheet: (sheetId: SheetId) => void;
@@ -243,6 +262,11 @@ export interface AppStoreState {
   setSheetWriteVerify: (
     sheetId: SheetId,
     settings: ReadVerifySettings,
+  ) => void;
+  /** 设置某张表的表级地址变换配置（每表独立，随表持久化，ADR-042；可撤销）。 */
+  setSheetAddressTransform: (
+    sheetId: SheetId,
+    config: AddressTransformConfig | null,
   ) => void;
   /** 设置某张表的列宽（每表独立，随表持久化，IndexedDB 自动保存）。 */
   setSheetColumnWidths: (
@@ -424,7 +448,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   pendingDeleteSheetId: null,
   pendingBulkClose: null,
   theme: "light",
+  themePrimary: null,
   themeConfig: null,
+  // 缺省仅内置（ADR-043 E-3）；App.tsx 装配插件 dataType 运行时后 setDataTypeResolver 替换。
+  dataTypeResolver: createDataTypeResolver(),
   saveStatus: "idle",
   undoStack: [],
   redoStack: [],
@@ -434,10 +461,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   pollingKeys: {},
   selectedRowIds: [],
   clipboardPayload: null,
+  clipboardSourceSheetType: null,
   workspaceImportDraft: null,
   ...createEmptyRowStatusState(),
 
   setHost: (host) => set({ host }),
+  setDataTypeResolver: (dataTypeResolver) => set({ dataTypeResolver }),
   setWorkspaceImportDraft: (workspaceImportDraft) =>
     set({ workspaceImportDraft }),
   applyWorkspaceImport: () => {
@@ -455,6 +484,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       workspace,
       // 加载工作区时回填持久化的主题，避免刷新后恒为浅色。
       theme: workspace.preferences.theme ?? state.theme,
+      // 加载工作区时回填用户自定义主题主色（ADR-042；null=默认品牌蓝）。
+      themePrimary: workspace.preferences.themePrimary ?? null,
       // 加载/重置工作区后撤销历史无意义（新上下文），清空（会话状态不持久化，§24.4）。
       undoStack: [],
       redoStack: [],
@@ -475,6 +506,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       workspace: {
         ...state.workspace,
         preferences: { ...state.workspace.preferences, theme },
+      },
+    })),
+  setThemePrimary: (themePrimary) =>
+    set((state) => ({
+      themePrimary,
+      workspace: {
+        ...state.workspace,
+        preferences: {
+          ...state.workspace.preferences,
+          themePrimary,
+        },
       },
     })),
   undo: () => {
@@ -742,7 +784,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
       };
     }
-    const result = commitCellTextUseCase(row, text);
+    const result = commitCellTextUseCase(row, text, get().dataTypeResolver);
     // §23 校验失败保留用户输入：cellText 回写；成功时由 result.value 更新（原引用短路零更新）。
     get().updateRow(rowId, (r) =>
       result.ok
@@ -792,7 +834,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
       };
     }
-    const result = commitChildCellTextUseCase(row, index, text);
+    const result = commitChildCellTextUseCase(
+      row,
+      index,
+      text,
+      get().dataTypeResolver,
+    );
     // 成功：回写父行（registerValues[i] + 重算 cellText）；失败：子行草稿回退（不写坏父行组合文本）。
     if (result.ok) {
       get().updateRow(parentRowId, (r) =>
@@ -1038,7 +1085,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
     if (sheet === undefined || state.selectedRowIds.length === 0) return;
     const payload = copyRowsToClipboard(sheet, state.selectedRowIds);
-    set({ clipboardPayload: payload });
+    set({ clipboardPayload: payload, clipboardSourceSheetType: sheet.type });
     const host = state.host;
     if (host !== null) {
       void host
@@ -1075,6 +1122,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         updatedAt: Date.now(),
       },
       clipboardPayload: payload,
+      clipboardSourceSheetType: sheet.type,
       selectedRowIds: [],
     });
     const after = findSheetById(get().workspace, sheetId);
@@ -1103,6 +1151,20 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const state = get();
     const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
     if (sheet === undefined) return;
+    // 跨类型粘贴被拒（ADR-041 决策⑥）：不同类型表之间不可复制粘贴；外部 CSV（无来源）不限制。
+    if (
+      state.clipboardSourceSheetType !== null &&
+      state.clipboardSourceSheetType !== sheet.type
+    ) {
+      get().appendMessage({
+        timestamp: Date.now(),
+        level: "warning",
+        messageKey: "messages.clipboardTypeMismatch",
+        params: {},
+        detail: null,
+      });
+      return;
+    }
     const beforeSnapshot = snapshotSheet(sheet);
     let payload: RowClipboardData[] | null = null;
     let issues: ClipboardIssue[] = [];
@@ -1111,7 +1173,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     if (host !== null) {
       const readResult = await host.readTextFromClipboard();
       if (readResult.ok && readResult.value !== null) {
-        const decoded = decodeClipboardCsv(readResult.value);
+        const decoded = decodeClipboardCsv(
+          readResult.value,
+          get().dataTypeResolver.list(),
+        );
         payload = decoded.rows;
         issues = decoded.issues;
       }
@@ -1153,11 +1218,15 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }
   },
 
-  addSheet: () => {
+  addSheet: (type) => {
     const beforeSheets = get().workspace.sheets;
     set((state) => {
       const order = state.workspace.sheets.length;
-      const sheet = createRegisterSheet(`Sheet ${order + 1}`, order);
+      const sheet = createRegisterSheet(
+        `Sheet ${order + 1}`,
+        order,
+        type ?? "holding-register",
+      );
       return {
         workspace: {
           ...state.workspace,
@@ -1520,6 +1589,27 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         sheets: state.workspace.sheets.map((sheet) =>
           sheet.sheetId === sheetId
             ? { ...sheet, writeVerify: settings, updatedAt: Date.now() }
+            : sheet,
+        ),
+        updatedAt: Date.now(),
+      },
+    }));
+    const after = findSheetById(get().workspace, sheetId);
+    if (after !== undefined) {
+      pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
+    }
+  },
+
+  setSheetAddressTransform: (sheetId, config) => {
+    const before = findSheetById(get().workspace, sheetId);
+    if (before === undefined) return;
+    const beforeSnapshot = snapshotSheet(before);
+    set((state) => ({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId
+            ? { ...sheet, addressTransform: config, updatedAt: Date.now() }
             : sheet,
         ),
         updatedAt: Date.now(),

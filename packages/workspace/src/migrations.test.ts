@@ -63,18 +63,57 @@ function toV3Data(options: { rangeCount?: number } = {}): Record<string, unknown
   return data;
 }
 
+/** 把 v5 序列化数据降级为 v4 形态：sheet 去掉 type、版本设为 4（ADR-041）。 */
+function toV4Data(): Record<string, unknown> {
+  const data = JSON.parse(
+    serializeWorkspace(createEmptyWorkspace()),
+  ) as Record<string, unknown> & {
+    sheets: Array<Record<string, unknown>>;
+  };
+  for (const sheet of data.sheets) {
+    delete sheet.type;
+  }
+  data.schemaVersion = 4;
+  return data;
+}
+
+/** 把 v6 序列化数据降级为 v5 形态（ADR-042）：sheet 去掉 addressTransform、preferences 去掉 themePrimary、RTU profile 加回全局 addressAdjust、版本设为 5。 */
+function toV5Data(options: { addressAdjust?: string } = {}): Record<string, unknown> {
+  const data = JSON.parse(
+    serializeWorkspace(createEmptyWorkspace()),
+  ) as Record<string, unknown> & {
+    sheets: Array<Record<string, unknown>>;
+    connectionProfiles: Array<Record<string, unknown>>;
+    preferences: Record<string, unknown>;
+  };
+  for (const sheet of data.sheets) {
+    delete sheet.addressTransform;
+  }
+  delete data.preferences.themePrimary;
+  const rtu = data.connectionProfiles.find((p) => p.protocol === "rtu");
+  if (rtu !== undefined) rtu.addressAdjust = options.addressAdjust ?? "off";
+  data.schemaVersion = 5;
+  return data;
+}
+
 describe("migrations v1→v2（写后回读配置下放到每表）", () => {
-  it("迁移链为 v1→v2→v3→v4 且版本连续", () => {
-    expect(migrations).toHaveLength(3);
+  it("迁移链为 v1→v2→v3→v4→v5→v6→v7 且版本连续", () => {
+    expect(migrations).toHaveLength(6);
     expect(migrations[0]?.fromVersion).toBe(1);
     expect(migrations[0]?.toVersion).toBe(2);
     expect(migrations[1]?.fromVersion).toBe(2);
     expect(migrations[1]?.toVersion).toBe(3);
     expect(migrations[2]?.fromVersion).toBe(3);
     expect(migrations[2]?.toVersion).toBe(4);
+    expect(migrations[3]?.fromVersion).toBe(4);
+    expect(migrations[3]?.toVersion).toBe(5);
+    expect(migrations[4]?.fromVersion).toBe(5);
+    expect(migrations[4]?.toVersion).toBe(6);
+    expect(migrations[5]?.fromVersion).toBe(6);
+    expect(migrations[5]?.toVersion).toBe(7);
   });
 
-  it("v1 数据：把全局 readVerifySettings 迁移到各表并删除全局字段、版本升至 4（经 v2→v3→v4）", () => {
+  it("v1 数据：把全局 readVerifySettings 迁移到各表并删除全局字段、版本升至 7（经 v2→v3→v4→v5→v6）", () => {
     const migrated = migrateData(
       toV1Data({ globalReadVerify: { mode: "delayed", delayMs: 500 } }),
       migrations,
@@ -82,7 +121,7 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
     const value = migrated.value;
-    expect(value.schemaVersion).toBe(4);
+    expect(value.schemaVersion).toBe(7);
     expect("readVerifySettings" in value).toBe(false);
     const sheets = value.sheets as Array<Record<string, unknown>>;
     expect(sheets).toHaveLength(1);
@@ -100,20 +139,20 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     });
   });
 
-  it("经 parseWorkspace 完整走通：v1 全局 off → 各表 off（方案 B，旧工作区保持 off），版本升 4", () => {
+  it("经 parseWorkspace 完整走通：v1 全局 off → 各表 off（方案 B，旧工作区保持 off），版本升 7", () => {
     const parsed = parseWorkspace(
       toV1Data({ globalReadVerify: { mode: "off", delayMs: null } }),
     );
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    expect(parsed.value.schemaVersion).toBe(4);
+    expect(parsed.value.schemaVersion).toBe(7);
     expect(parsed.value.sheets[0]?.writeVerify).toEqual({
       mode: "off",
       delayMs: null,
     });
   });
 
-  it("v2 数据：走 v2→v3→v4（补 registerCount、lastKnownRawValue → registerValues），版本升 4", () => {
+  it("v2 数据：走 v2→v3→v4→v5→v6（补 registerCount、lastKnownRawValue → registerValues），版本升 7", () => {
     const migrated = migrateData(
       toV2Data({ lastKnownRawValue: 123 }),
       migrations,
@@ -121,7 +160,7 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
     const value = migrated.value;
-    expect(value.schemaVersion).toBe(4);
+    expect(value.schemaVersion).toBe(7);
     const rows =
       (value.sheets as Array<{ rows: Array<Record<string, unknown>> }>)[0]
         ?.rows ?? [];
@@ -131,11 +170,11 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     expect("lastKnownRawValue" in (row ?? {})).toBe(false);
   });
 
-  it("经 parseWorkspace 走通 v2→v3→v4：旧 lastKnownRawValue 恢复为 registerValues", () => {
+  it("经 parseWorkspace 走通 v2→v3→v4→v5→v6：旧 lastKnownRawValue 恢复为 registerValues", () => {
     const parsed = parseWorkspace(toV2Data({ lastKnownRawValue: 0x04d2 }));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    expect(parsed.value.schemaVersion).toBe(4);
+    expect(parsed.value.schemaVersion).toBe(7);
     expect(
       parsed.value.sheets[0]?.rows[0]?.registerValues?.[0]?.value,
     ).toBe(0x04d2);
@@ -148,7 +187,7 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     const migrated = migrateData(data, migrations);
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
-    expect(migrated.value.schemaVersion).toBe(4);
+    expect(migrated.value.schemaVersion).toBe(7);
     const rows =
       (migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>)[0]
         ?.rows ?? [];
@@ -179,7 +218,7 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     const parsed = parseWorkspace(toV3Data({ rangeCount: 2 }));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    expect(parsed.value.schemaVersion).toBe(4);
+    expect(parsed.value.schemaVersion).toBe(7);
     const row = parsed.value.sheets[0]?.rows[0];
     expect(row?.registerCount).toBe(2);
     expect(row?.registers).toHaveLength(2);
@@ -188,5 +227,112 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
       comment: "",
       dataType: "hex",
     });
+  });
+
+  it("v4 数据：sheet 补齐 type=holding-register，版本升至 7（经 v5→v6→v7，ADR-041/042/043）", () => {
+    const migrated = migrateData(toV4Data(), migrations);
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.value.schemaVersion).toBe(7);
+    const sheets = migrated.value.sheets as Array<Record<string, unknown>>;
+    expect(sheets[0]?.type).toBe("holding-register");
+  });
+
+  it("v5 数据（含插件表类型）round-trip 保留 type（ADR-041）", () => {
+    const data = JSON.parse(
+      serializeWorkspace(createEmptyWorkspace()),
+    ) as Record<string, unknown> & { sheets: Array<Record<string, unknown>> };
+    data.sheets[0] = {
+      ...data.sheets[0],
+      type: "yaskawa-memobus-67h-010dh-010eh:holding-register",
+    };
+    const migrated = migrateData(data, migrations);
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.value.schemaVersion).toBe(7);
+    const sheets = migrated.value.sheets as Array<Record<string, unknown>>;
+    expect(sheets[0]?.type).toBe(
+      "yaskawa-memobus-67h-010dh-010eh:holding-register",
+    );
+  });
+});
+
+describe("migrations v5→v6（表级 Address Adjust + 主题主色，ADR-042）", () => {
+  it("v5 数据：全局 profile.addressAdjust=on 复制到各表 addressTransform.enabled，并删除 profile 字段", () => {
+    const migrated = migrateData(toV5Data({ addressAdjust: "on" }), migrations);
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    const value = migrated.value;
+    expect(value.schemaVersion).toBe(7);
+    const sheets = value.sheets as Array<Record<string, unknown>>;
+    expect(sheets[0]?.addressTransform).toEqual({
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
+    const profiles = value.connectionProfiles as Array<Record<string, unknown>>;
+    expect("addressAdjust" in (profiles[0] ?? {})).toBe(false);
+  });
+
+  it("v5 数据：全局 off → 各表 addressTransform.enabled=false（旧工作区保持关闭）", () => {
+    const migrated = migrateData(toV5Data({ addressAdjust: "off" }), migrations);
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    const sheets = migrated.value.sheets as Array<Record<string, unknown>>;
+    expect(sheets[0]?.addressTransform).toEqual({
+      transformId: "builtin.address-adjust",
+      enabled: false,
+    });
+  });
+
+  it("v5 数据：preferences.themePrimary 缺省 null", () => {
+    const migrated = migrateData(toV5Data(), migrations);
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    const preferences = migrated.value.preferences as Record<string, unknown>;
+    expect(preferences.themePrimary).toBeNull();
+  });
+
+  it("经 parseWorkspace 走通 v5→v6：全局 on 的表在新工作区可 round-trip", () => {
+    const parsed = parseWorkspace(toV5Data({ addressAdjust: "on" }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.schemaVersion).toBe(7);
+    expect(parsed.value.sheets[0]?.addressTransform).toEqual({
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
+    expect(parsed.value.preferences.themePrimary).toBeNull();
+    const profile = parsed.value.connectionProfiles[0];
+    if (profile === undefined) throw new Error("missing profile");
+    expect("addressAdjust" in profile).toBe(false);
+  });
+});
+
+describe("migrations v6→v7（dataType 开放，ADR-043 E-3）", () => {
+  it("v6 数据：仅升版本，无数据转换（dataType 字符串透传）", () => {
+    const migrated = migrateData(toV5Data({ addressAdjust: "on" }), migrations);
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    expect(migrated.value.schemaVersion).toBe(7);
+    // 字段原样保留（v6 数据来自 toV5Data 走 v5→v6→v7）。
+    const sheets = migrated.value.sheets as Array<Record<string, unknown>>;
+    expect(sheets[0]?.addressTransform).toEqual({
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
+  });
+
+  it("v6 数据含插件 dataType：parseWorkspace round-trip 保留（E-3 开放字符串）", () => {
+    const data = JSON.parse(
+      serializeWorkspace(createEmptyWorkspace()),
+    ) as Record<string, unknown> & { sheets: Array<{ rows: Array<Record<string, unknown>> }> };
+    // 把 dataType 改成插件类型字符串。
+    const rows = data.sheets[0]?.rows ?? [];
+    if (rows[0] !== undefined) rows[0].dataType = "my-plugin:speed";
+    const parsed = parseWorkspace(data);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.schemaVersion).toBe(7);
+    expect(parsed.value.sheets[0]?.rows[0]?.dataType).toBe("my-plugin:speed");
   });
 });

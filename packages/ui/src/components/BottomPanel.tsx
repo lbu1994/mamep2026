@@ -424,9 +424,6 @@ export function BottomPanel(): React.ReactNode {
               <Descriptions.Item label={t("connection.rxDelay")}>
                 {properties.rxDelayMs}
               </Descriptions.Item>
-              <Descriptions.Item label={t("connection.addressAdjust")}>
-                {properties.addressAdjust.toUpperCase()}
-              </Descriptions.Item>
             </>
           )}
           <Descriptions.Item label={t("panel.status")}>

@@ -63,8 +63,6 @@ export class TcpSessionHost {
       clock: options.clock,
       events: options.events,
       getPollingIntervalMs: () => this.currentProfile?.interRequestDelayMs ?? 50,
-      // TCP 无 Address Adjust（发送地址 = 用户地址，恒 off）。
-      getAddressAdjustMode: () => "off",
     });
     // 自动重连仅在注入 openTransport（平台宿主提供重开能力）时启用。
     this.coordinator =

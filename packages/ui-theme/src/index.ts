@@ -19,6 +19,7 @@ export {
   blend,
   contrastRatio,
   ensureContrast,
+  isWhiteOnPrimaryAa,
   parseColor,
   relativeLuminance,
   toRgbaString,

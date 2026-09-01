@@ -69,11 +69,11 @@ test("non-mock startup opens Connection Settings modal with RTU defaults", async
 
   const modal = page.locator(".ant-modal-container:visible");
   await expect(modal).toContainText("Connection Settings");
-  // Defaults: Rx Delay=50, Address Adjust=OFF, Timeout=1000, Retry=1.
+  // Defaults: Rx Delay=50, Timeout=1000, Retry=1.
   // 从站地址已迁移为每表独立设置（2026-08-19），不再属于连接设置。
   await expect(modal).not.toContainText("Slave Address");
-  await expect(modal).toContainText("Address Adjust");
-  await expect(modal).toContainText("OFF");
+  // 全局 Address Adjust 已移出核心（ADR-042）：Connection Settings 不再有该选项。
+  await expect(modal).not.toContainText("Address Adjust");
   // No Modbus TCP entry in the browser.
   await expect(modal).not.toContainText("Modbus TCP");
   await closeModal(page);
@@ -356,7 +356,7 @@ test("sheets can be added and the workspace survives a reload", async ({
 
   // Add a second sheet.
   await page
-    .getByRole("button", { name: "New Register Table" })
+    .getByRole("button", { name: "New Register Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
@@ -398,9 +398,9 @@ test("plugin manager lists the built-in plugin with enable toggle", async ({
   await expect(modal).toContainText("1.0.0");
   // 作者（示例插件已声明 author）。
   await expect(modal).toContainText("Mamep2026 Team");
-  // 平台能力：Web/Node 双 Tag（web 支持着色，node 灰）。
-  await expect(modal.getByText("Web", { exact: true })).toBeVisible();
-  await expect(modal.getByText("Node", { exact: true })).toBeVisible();
+  // 平台能力：Web/Node 双 Tag（web 支持着色，node 灰）。多个内置插件（示例 + 安川）各有平台 Tag。
+  await expect(modal.getByText("Web", { exact: true }).first()).toBeVisible();
+  await expect(modal.getByText("Node", { exact: true }).first()).toBeVisible();
   // 权限：ui-contribution 的人类可读标签（2026-08-31，ADR-039 Manifest v2 权限枚举）。
   await expect(modal).toContainText("UI Contribution");
 });

@@ -5,6 +5,7 @@
  */
 import {
   createMamepError,
+  isBuiltinDataType,
   type DataType,
   type Result,
 } from "@mamep2026/domain";
@@ -36,6 +37,7 @@ const DATA_ERROR_MESSAGE_KEY: Record<string, string> = {
   DATA_OUT_OF_RANGE: "errors.dataOutOfRange",
   DATA_STRING_TOO_LONG: "errors.dataOutOfRange",
   DATA_STRING_NON_ASCII: "errors.dataInvalidNumber",
+  DATA_BOOL_INVALID: "errors.dataInvalidNumber",
   DATA_UNSUPPORTED_TYPE: "errors.internal",
 };
 
@@ -52,8 +54,15 @@ export function isScaled(type: DataType): boolean {
   return SCALE_DIGITS[type] !== undefined;
 }
 
+/**
+ * 是否为有符号内置类型（ADR-043 E-3：查内置表而非前缀推断，避免插件类型名如
+ * "signed-custom" 被误判为有符号缩放类型）。
+ */
 export function isSigned(type: DataType): boolean {
-  return type === "signed" || type.startsWith("signed-");
+  return (
+    type === "signed" ||
+    (type.startsWith("signed-") && isBuiltinDataType(type))
+  );
 }
 
 /** 缩放位数（0.1→1 … 0.0001→4）；非缩放类型返回 0（ADR-030 导出供组合转换复用）。 */
@@ -70,6 +79,8 @@ export function formatRawValue(raw: number, type: DataType): string {
       return raw.toString(2).padStart(16, "0");
     case "string":
       return String.fromCharCode((raw >> 8) & 0xff, raw & 0xff);
+    case "bool":
+      return raw === 0 ? "0" : "1";
     case "unsigned":
       return String(raw);
     case "signed": {
@@ -110,6 +121,8 @@ export function parseCellText(text: string, type: DataType): Result<number> {
       return parseBinary(trimmed);
     case "string":
       return parseSingleString(trimmed);
+    case "bool":
+      return parseBool(trimmed);
     case "unsigned":
       return parseInteger(trimmed, false);
     case "signed":
@@ -126,6 +139,18 @@ export function parseCellText(text: string, type: DataType): Result<number> {
       return parseScaled(trimmed, type);
     }
   }
+}
+
+/** bool（ADR-043 E-2）：仅接受 0/1（线圈/离散输入位值）。 */
+function parseBool(text: string): Result<number> {
+  if (text === "0") return ok(0);
+  if (text === "1") return ok(1);
+  return fail(
+    dataError(
+      "DATA_BOOL_INVALID",
+      `bool input must be 0 or 1: ${JSON.stringify(text)}`,
+    ),
+  );
 }
 
 function parseHex(text: string): Result<number> {

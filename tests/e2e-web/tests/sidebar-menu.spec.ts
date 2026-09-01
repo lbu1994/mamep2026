@@ -18,7 +18,7 @@ function sidebarItem(page: Page, name: string) {
 
 async function addSheet(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "New Register Table" })
+    .getByRole("button", { name: "New Register Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 }
@@ -401,7 +401,7 @@ test("tabs add, switch and close register table sheets", async ({ page }) => {
 
   // 侧边栏 "+" 新建 Sheet 2 并自动激活。
   await page
-    .getByRole("button", { name: "New Register Table" })
+    .getByRole("button", { name: "New Register Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByRole("tab", { name: "Sheet 2" })).toHaveAttribute(

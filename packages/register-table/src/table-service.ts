@@ -8,6 +8,7 @@
 import {
   createEmptyRow,
   createMamepError,
+  type AddressTransform,
   type ReadVerifySettings,
   type RegisterRow,
   type Result,
@@ -19,15 +20,25 @@ import {
   type CommunicationSession,
   type WriteOutcome,
 } from "@mamep2026/communication";
-import { parseCellText, parseCompositeText } from "@mamep2026/data-conversion";
-import { computeSentAddress } from "./address";
+import {
+  createDataTypeResolver,
+  parseCompositeText,
+  type DataTypeResolver,
+} from "@mamep2026/data-conversion";
+import { applyAddressTransform } from "./address";
 import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 
 export interface TableServiceDeps {
   getSession: () => CommunicationSession | null;
-  getAddressAdjustMode: () => "off" | "on";
+  /**
+   * 活动表配置解析出的地址变换（ADR-042）：null=不调整；
+   * ON（内置 builtin.address-adjust）时发送地址 = 用户地址 − 1。
+   */
+  getAddressTransform: () => AddressTransform | null;
   /** 时钟（写后回读延迟用，2026-08-26）：由调用方注入（测试用 Virtual Clock）。 */
   clock: Clock;
+  /** 数据类型解析器（ADR-043 E-3）：缺省仅内置；插件类型由 UI 装配点注入。 */
+  dataTypeResolver?: DataTypeResolver;
 }
 
 function notConnectedError() {
@@ -48,6 +59,9 @@ function addressEmptyError() {
   });
 }
 
+/** 模块级缺省解析器（仅内置；ADR-043 E-3 插件类型由 UI 装配点注入）。 */
+const defaultResolver: DataTypeResolver = createDataTypeResolver();
+
 export class RegisterTableService {
   private readonly deps: TableServiceDeps;
 
@@ -55,13 +69,13 @@ export class RegisterTableService {
     this.deps = deps;
   }
 
-  /** 单行读取（多寄存器行一次 FC03 读全部，ADR-030）：校验连接/地址/Address Adjust 后经统一调度器。 */
+  /** 单行读取（多寄存器行一次 FC03 读全部，ADR-030）：校验连接/地址/地址变换后经统一调度器。 */
   async readRow(row: RegisterRow): Promise<Result<number | number[]>> {
     const session = this.deps.getSession();
     if (session === null) return fail(notConnectedError());
     const address = row.addressValue?.value;
     if (address === undefined) return fail(addressEmptyError());
-    const sent = computeSentAddress(address, this.deps.getAddressAdjustMode());
+    const sent = applyAddressTransform(address, this.deps.getAddressTransform());
     if (!sent.ok) return sent;
     if (row.registerCount > 1) {
       return session.readRegisters(sent.value, row.registerCount, {
@@ -98,7 +112,7 @@ export class RegisterTableService {
     if (session === null) return fail(notConnectedError());
     const address = row.addressValue?.value;
     if (address === undefined) return fail(addressEmptyError());
-    const sent = computeSentAddress(address, this.deps.getAddressAdjustMode());
+    const sent = applyAddressTransform(address, this.deps.getAddressTransform());
     if (!sent.ok) return sent;
     const writeVerify = options.writeVerify;
 
@@ -126,7 +140,10 @@ export class RegisterTableService {
       });
     }
 
-    const parsed = parseCellText(row.cellText, row.dataType);
+    const parsed = (this.deps.dataTypeResolver ?? defaultResolver).parse(
+      row.cellText,
+      row.dataType,
+    );
     if (!parsed.ok) return parsed;
     if (writeVerify === undefined || writeVerify.mode === "off") {
       // 未启用回读：保持既有单次写入路径。

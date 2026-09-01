@@ -7,8 +7,14 @@
  */
 import type { DataType } from "@mamep2026/domain";
 
-/** 进制列取值（与 domain DataType 前缀对应）。 */
-export type DataRadix = "hex" | "unsigned" | "signed" | "binary" | "string";
+/** 进制列取值（与 domain DataType 前缀对应）。bool 为 ADR-043 E-2 基础表位值类型。 */
+export type DataRadix =
+  | "hex"
+  | "unsigned"
+  | "signed"
+  | "binary"
+  | "string"
+  | "bool";
 
 /** scale 列取值（字符串表示，便于 Select 直接使用）。 */
 export type ScaleValue = "1" | "0.1" | "0.01" | "0.001" | "0.0001";
@@ -19,6 +25,7 @@ export const RADIX_OPTIONS: readonly DataRadix[] = [
   "signed",
   "binary",
   "string",
+  "bool",
 ];
 
 export const SCALE_OPTIONS: readonly ScaleValue[] = [
@@ -36,12 +43,17 @@ export const RADIX_LABEL_KEYS: Record<DataRadix, string> = {
   signed: "table.signed",
   binary: "table.binary",
   string: "table.string",
+  bool: "table.bool",
 };
 
-/** DataType → 进制。 */
+/** DataType → 进制（ADR-043 E-3 开放联合：显式收窄，插件类型回退 signed 显示）。 */
 export function dataTypeToRadix(type: DataType): DataRadix {
-  if (type === "hex" || type === "binary" || type === "string") return type;
+  if (type === "hex" || type === "binary" || type === "string") {
+    return type as DataRadix;
+  }
+  if (type === "bool") return "bool";
   if (type === "unsigned" || type.startsWith("unsigned-")) return "unsigned";
+  if (type.startsWith("signed-")) return "signed";
   return "signed";
 }
 
@@ -56,12 +68,17 @@ export function dataTypeToScale(type: DataType): ScaleValue {
     : "1";
 }
 
-/** 进制 + scale → DataType（hex/binary/string 忽略 scale 返回自身）。 */
+/** 进制 + scale → DataType（hex/binary/string/bool 忽略 scale 返回自身）。 */
 export function combineRadixScale(
   radix: DataRadix,
   scale: ScaleValue,
 ): DataType {
-  if (radix === "hex" || radix === "binary" || radix === "string") {
+  if (
+    radix === "hex" ||
+    radix === "binary" ||
+    radix === "string" ||
+    radix === "bool"
+  ) {
     return radix;
   }
   return scale === "1" ? radix : (`${radix}-${scale}` as DataType);

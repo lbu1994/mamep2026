@@ -375,6 +375,7 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
         "sessionPollingStart",
         "sessionPollingStop",
         "sessionReadRow",
+        "sessionSetAddressTransform",
         "sessionSetSlaveAddress",
         "sessionSetUnitId",
         "sessionTraceStart",

@@ -109,3 +109,13 @@ export function ensureContrast(
   }
   return toRgbaString(withAlpha(fg, alpha));
 }
+
+/** 白字 on 主色是否满足 WCAG AA（≥4.5:1，用于主按钮/选中态文字；ADR-042 主题色校验）。 */
+export function isWhiteOnPrimaryAa(color: string): boolean {
+  const parsed = parseColor(color);
+  if (parsed === null) return false;
+  return contrastRatio(
+    { r: 255, g: 255, b: 255, a: 1 },
+    parsed,
+  ) >= 4.5;
+}

@@ -16,6 +16,7 @@ import type {
   BatchReadHandle,
   BatchReadRow,
   Clock,
+  CodecRegistry,
   CommunicationLogEvent,
   CommunicationSession,
   ConnectionState,
@@ -31,12 +32,14 @@ import {
   createMamepError,
   fail,
   ok,
-  type AddressAdjustMode,
+  type AddressTransform,
+  type AddressTransformConfig,
   type ReadVerifySettings,
   type RegisterRow,
   type Result,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
+import { resolveBuiltinAddressTransform } from "@mamep2026/register-table";
 import { RegisterTableService } from "@mamep2026/register-table";
 
 /** 会话编排对外事件（宿主负责分发到本地订阅者或经 RPC 推送）。 */
@@ -57,8 +60,13 @@ export interface SessionHostCoreOptions {
   events: SessionHostEvents;
   /** WP 轮询间隔源（RTU/TCP 均为 profile.interRequestDelayMs）。 */
   getPollingIntervalMs: () => number;
-  /** Address Adjust 模式源（RTU=profile.addressAdjust；TCP 恒 off）。 */
-  getAddressAdjustMode: () => AddressAdjustMode;
+  /**
+   * 地址变换解析（ADR-042 插件 Phase D）：按 transformId 返回运行时变换；
+   * 缺省仅内置 builtin.address-adjust（-1 语义）；自定义变换由宿主注入。
+   */
+  resolveAddressTransform?: (transformId: string) => AddressTransform | null;
+  /** codec 注册表（ADR-040 决策 5）：Phase C 宿主据此构建 codec 会话；协议无关，仅透传。 */
+  codecRegistry?: CodecRegistry;
 }
 
 export class SessionHostCore {
@@ -66,6 +74,13 @@ export class SessionHostCore {
   private readonly events: SessionHostEvents;
   private readonly tableService: RegisterTableService;
   private readonly getPollingIntervalMs: () => number;
+  private readonly resolveAddressTransform: (
+    transformId: string,
+  ) => AddressTransform | null;
+  /** 活动表地址变换配置（ADR-042）：渲染端在表切换/配置变化时同步（host 端经 RPC）。 */
+  private addressTransform: AddressTransformConfig | null = null;
+  /** codec 注册表（ADR-040 决策 5）：透传，供 Phase C 宿主构建 codec 会话。 */
+  private readonly codecRegistry: CodecRegistry | null;
   private session: CommunicationSession | null = null;
   private polling: PollingCoordinator | null = null;
   private trace: TraceCoordinator | null = null;
@@ -82,11 +97,26 @@ export class SessionHostCore {
     this.clock = options.clock;
     this.events = options.events;
     this.getPollingIntervalMs = options.getPollingIntervalMs;
+    this.resolveAddressTransform =
+      options.resolveAddressTransform ?? resolveBuiltinAddressTransform;
+    this.codecRegistry = options.codecRegistry ?? null;
     this.tableService = new RegisterTableService({
       getSession: () => this.session,
-      getAddressAdjustMode: options.getAddressAdjustMode,
+      getAddressTransform: () => this.getAddressTransform(),
       clock: options.clock,
     });
+  }
+
+  /** 设置活动表地址变换配置（ADR-042）：供表级 Address Adjust；null=不调整。 */
+  setAddressTransform(config: AddressTransformConfig | null): void {
+    this.addressTransform = config;
+  }
+
+  /** 解析活动表配置为运行时变换：未启用/未知 id 返回 null（不调整）。 */
+  private getAddressTransform(): AddressTransform | null {
+    const config = this.addressTransform;
+    if (config === null || !config.enabled) return null;
+    return this.resolveAddressTransform(config.transformId);
   }
 
   /** 打开并连接会话：替换旧会话，恢复轮询/追踪配置（与 BrowserAppHost 行为一致）。 */
@@ -149,8 +179,18 @@ export class SessionHostCore {
     return this.session?.getState() ?? "disconnected";
   }
 
+  /** 当前会话（ADR-044 Phase F-2）：插件通信面经统一调度器访问；未连接返回 null。 */
+  getSession(): CommunicationSession | null {
+    return this.session;
+  }
+
   getPortLabel(): string | null {
     return this.portLabel;
+  }
+
+  /** codec 注册表（ADR-040 决策 5）：Phase C 宿主据此构建 codec 会话；协议无关，仅透传。 */
+  getCodecRegistry(): CodecRegistry | null {
+    return this.codecRegistry;
   }
 
   /** 更新会话从站地址（RTU，每表独立）：对后续所有请求（读/写/轮询/追踪）生效。 */

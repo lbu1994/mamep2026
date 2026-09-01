@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
-import { PluginRegistry } from "@mamep2026/plugin-api";
+import { PluginRegistry, type PluginRemoteRuntime } from "@mamep2026/plugin-api";
 import type { OpenTextFileResponse } from "@mamep2026/platform-api";
 import type { Result } from "@mamep2026/domain";
 import type { AppHost } from "../host";
@@ -74,6 +74,7 @@ function setHostWithPlugin(
       pluginRegistry: registry,
       capabilities: browserCaps,
       openTextFile: vi.fn(),
+      createPluginRemoteRuntime: vi.fn(() => fakeRemoteRuntime()),
       ...overrides,
     } as unknown as AppHost,
     pluginModalOpen: true,
@@ -90,6 +91,45 @@ async function pickManifestFile(text: string): Promise<void> {
   await waitFor(() => {
     expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(0);
   });
+}
+
+/** 触发隐藏文件选择并读取单文件 JS 插件，等待安全确认框出现。 */
+async function pickPluginSourceFile(
+  text: string,
+  name = "plugin.mjs",
+): Promise<void> {
+  const input = screen.getByTestId(
+    "plugin-manifest-file-input",
+  ) as HTMLInputElement;
+  const file = new File([text], name, { type: "text/javascript" });
+  fireEvent.change(input, { target: { files: [file] } });
+  await waitFor(() => {
+    expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(0);
+  });
+}
+
+/** 假隔离线程运行时（ADR-044 Phase F-2 单测）。 */
+function fakeRemoteRuntime(
+  overrides: Record<string, unknown> = {},
+): PluginRemoteRuntime & {
+  load: ReturnType<typeof vi.fn>;
+  activate: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+} {
+  return {
+    load: vi.fn(async () => ({
+      ok: true,
+      value: manifestJson,
+    })),
+    activate: vi.fn(async () => {}),
+    deactivate: vi.fn(async () => {}),
+    dispose: vi.fn(async () => {}),
+    ...overrides,
+  } as unknown as PluginRemoteRuntime & {
+    load: ReturnType<typeof vi.fn>;
+    activate: ReturnType<typeof vi.fn>;
+    dispose: ReturnType<typeof vi.fn>;
+  };
 }
 
 /** 点击确认框的 OK（antd Modal primary 按钮）。 */
@@ -419,6 +459,204 @@ describe("PluginManagerModal", () => {
         ).toBeTruthy();
       });
       expect(openTextFile).not.toHaveBeenCalled();
+      expect(registry.list()).toHaveLength(0);
+    });
+  });
+
+  describe("插件卸载（2026-09-01，ADR-044 Phase F-1）", () => {
+    it("installed 插件显示卸载按钮，builtin 不显示", () => {
+      const registry = new PluginRegistry();
+      registry.register({
+        id: "builtin-x",
+        name: "Builtin Plugin",
+        version: "1.0.0",
+        apiVersion: "1.0",
+        description: "Builtin.",
+        platform: { web: true, node: false },
+        permissions: [],
+        contributes: { panels: [] },
+      });
+      registry.register(
+        {
+          id: "installed-x",
+          name: "User Plugin",
+          version: "1.0.0",
+          apiVersion: "1.0",
+          description: "Installed.",
+          platform: { web: true, node: false },
+          permissions: [],
+          contributes: { panels: [] },
+        },
+        { source: "installed" },
+      );
+      setHostWithPlugin(registry);
+      renderModal();
+
+      const installedRow = screen
+        .getByText("User Plugin")
+        .closest(".ant-listy-item");
+      expect(
+        installedRow?.querySelector('button[aria-label="Uninstall"]'),
+      ).not.toBeNull();
+      const builtinRow = screen
+        .getByText("Builtin Plugin")
+        .closest(".ant-listy-item");
+      expect(
+        builtinRow?.querySelector('button[aria-label="Uninstall"]'),
+      ).toBeNull();
+    });
+
+    it("确认卸载后从列表移除并提示成功", async () => {
+      const registry = new PluginRegistry();
+      registry.register(
+        {
+          id: "installed-x",
+          name: "User Plugin",
+          version: "1.0.0",
+          apiVersion: "1.0",
+          description: "Installed.",
+          platform: { web: true, node: false },
+          permissions: [],
+          contributes: { panels: [] },
+        },
+        { source: "installed" },
+      );
+      setHostWithPlugin(registry);
+      renderModal();
+      expect(registry.list()).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+      expect(screen.getAllByText("Uninstall this plugin?").length).toBeGreaterThan(
+        0,
+      );
+      clickConfirmOk();
+
+      await waitFor(() => {
+        expect(registry.list()).toHaveLength(0);
+      });
+      await waitFor(() => {
+        expect(screen.getByText("Plugin uninstalled.")).toBeTruthy();
+      });
+    });
+
+    it("取消确认不卸载", async () => {
+      const registry = new PluginRegistry();
+      registry.register(
+        {
+          id: "installed-x",
+          name: "User Plugin",
+          version: "1.0.0",
+          apiVersion: "1.0",
+          description: "Installed.",
+          platform: { web: true, node: false },
+          permissions: [],
+          contributes: { panels: [] },
+        },
+        { source: "installed" },
+      );
+      setHostWithPlugin(registry);
+      renderModal();
+
+      fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+      const cancel = document.querySelector(".ant-modal .ant-btn-default");
+      expect(cancel).not.toBeNull();
+      fireEvent.click(cancel as HTMLElement);
+      await waitFor(() => {
+        expect(registry.list()).toHaveLength(1);
+      });
+    });
+  });
+
+  describe("单文件 JS 可执行插件安装（2026-09-01，ADR-044 Phase F-2/3）", () => {
+    const executableCaps = { ...browserCaps, executablePlugins: true } as const;
+    const entrySource =
+      "export const manifest = {...};\nexport function activate(ctx) {}";
+
+    it("隔离线程加载 manifest → 确认（含 Isolated worker）→ 注册 remoteRuntime + entrySource", async () => {
+      const registry = new PluginRegistry();
+      const runtime = fakeRemoteRuntime();
+      const createPluginRemoteRuntime = vi.fn(() => runtime);
+      setHostWithPlugin(registry, {
+        capabilities: executableCaps,
+        createPluginRemoteRuntime,
+      });
+      renderModal();
+
+      fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
+      await pickPluginSourceFile(entrySource);
+
+      // 隔离运行时创建并加载 entry。
+      expect(createPluginRemoteRuntime).toHaveBeenCalledWith(entrySource);
+      expect(runtime.load).toHaveBeenCalledTimes(1);
+      // 确认框展示运行位置（Isolated worker）。
+      expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(
+        0,
+      );
+      expect(screen.getByText("Isolated worker")).toBeTruthy();
+      expect(screen.getByText("Installed A")).toBeTruthy();
+
+      clickConfirmOk();
+      await waitFor(() => {
+        expect(registry.list()).toHaveLength(1);
+        expect(registry.getSource("installed-a")).toBe("installed");
+        expect(registry.getEntrySource("installed-a")).toBe(entrySource);
+      });
+      // 注册时激活隔离线程。
+      await waitFor(() => {
+        expect(runtime.activate).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("取消确认 → 不注册且关闭隔离线程（dispose）", async () => {
+      const registry = new PluginRegistry();
+      const runtime = fakeRemoteRuntime();
+      setHostWithPlugin(registry, {
+        capabilities: executableCaps,
+        createPluginRemoteRuntime: vi.fn(() => runtime),
+      });
+      renderModal();
+
+      fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
+      await pickPluginSourceFile(entrySource);
+      // 确认框内的取消按钮（antd confirm 取消按钮 class）。
+      const confirmCancel = document.querySelector(
+        ".ant-modal-confirm .ant-btn-default",
+      );
+      expect(confirmCancel).not.toBeNull();
+      fireEvent.click(confirmCancel as HTMLElement);
+
+      await waitFor(() => {
+        expect(registry.list()).toHaveLength(0);
+        expect(runtime.dispose).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("executablePlugins 不支持 → 报错不注册", async () => {
+      const registry = new PluginRegistry();
+      const createPluginRemoteRuntime = vi.fn();
+      setHostWithPlugin(registry, {
+        capabilities: browserCaps, // executablePlugins: false
+        createPluginRemoteRuntime,
+      });
+      renderModal();
+
+      fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
+      const input = screen.getByTestId(
+        "plugin-manifest-file-input",
+      ) as HTMLInputElement;
+      fireEvent.change(input, {
+        target: {
+          files: [
+            new File([entrySource], "plugin.mjs", { type: "text/javascript" }),
+          ],
+        },
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Executable plugins are not supported/i),
+        ).toBeTruthy();
+      });
+      expect(createPluginRemoteRuntime).not.toHaveBeenCalled();
       expect(registry.list()).toHaveLength(0);
     });
   });

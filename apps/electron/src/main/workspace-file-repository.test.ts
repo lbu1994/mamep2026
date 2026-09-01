@@ -47,7 +47,7 @@ describe("WorkspaceFileRepository", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       // createEmptyWorkspace 含 Date.now()/随机 id（非确定性），做结构化断言。
-      expect(result.value.schemaVersion).toBe(4);
+      expect(result.value.schemaVersion).toBe(7);
       expect(result.value.name).toBe("Workspace");
       expect(result.value.sheets).toHaveLength(1);
     }
@@ -112,7 +112,7 @@ describe("WorkspaceFileRepository", () => {
     }
   });
 
-  it("v1 数据经 parseWorkspace 迁移到当前 schemaVersion（v1→v4）", async () => {
+  it("v1 数据经 parseWorkspace 迁移到当前 schemaVersion（v1→v6）", async () => {
     const { repo, dir } = await makeRepo();
     // 由 v4 空工作区降级构造 v1（含全局 readVerifySettings、无 per-sheet writeVerify）。
     const v4 = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
@@ -128,7 +128,7 @@ describe("WorkspaceFileRepository", () => {
     const loaded = await repo.load();
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
-      expect(loaded.value.schemaVersion).toBe(4);
+      expect(loaded.value.schemaVersion).toBe(7);
       expect(loaded.value.sheets[0]?.name).toBe("Sheet 1");
       // 全局 readVerifySettings 已迁移删除（v1→v2）。
       expect(

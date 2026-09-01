@@ -19,8 +19,8 @@ export interface CommunicationLogEvent {
   timestamp: number;
   direction: "request" | "response";
   bytes: Uint8Array;
-  /** 协议：rtu / tcp（2026-08-23 TCP 接线）。 */
-  protocol: "rtu" | "tcp";
+  /** 协议：rtu / tcp / codecId（2026-08-23 TCP 接线；2026-08-31 ADR-040 开放为 codecId）。 */
+  protocol: string;
   /** slaveAddressOrUnitId：RTU 为从站地址，TCP 为 Unit ID。 */
   slaveAddress: number | null;
   functionCode: number | null;

@@ -193,7 +193,6 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
     requestTimeoutMs: 1000,
     retryCount: 1,
     interRequestDelayMs: 50,
-    addressAdjust: "off",
     recentPortHint: null,
   };
 
@@ -257,7 +256,34 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
     expect(result.ok).toBe(true);
   });
 
-  it("rejects session-read-row with invalid dataType", () => {
+  it("accepts plugin dataType string（ADR-043 E-3 开放字符串）", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-read-plugin-type",
+      kind: "session-read-row",
+      payload: {
+        row: {
+          rowId: "row-1",
+          order: 1,
+          name: "",
+          comment: "",
+          addressDraft: "",
+          addressValue: { value: 1 },
+          dataType: "my-plugin:float32",
+          pollingEnabled: false,
+          traceEnabled: false,
+          cellText: "",
+          registerValues: null,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects session-read-row with empty dataType", () => {
     const result = parseHostMessage({
       protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
       type: "request",
@@ -271,7 +297,7 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
           comment: "",
           addressDraft: "",
           addressValue: { value: 1 },
-          dataType: "float32",
+          dataType: "",
           pollingEnabled: false,
           traceEnabled: false,
           cellText: "",
@@ -479,6 +505,34 @@ describe("host-message TCP session kinds（2026-08-23 两端 TCP 接线）", () 
       messageId: "req-set-unit-id-bad",
       kind: "session-set-unit-id",
       payload: {},
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a valid session-set-address-transform request（表级 Address Adjust，2026-09-01 ADR-042）", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-set-addr-transform",
+      kind: "session-set-address-transform",
+      payload: { transformId: "builtin.address-adjust", enabled: true },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.type === "request") {
+      expect(result.value.payload).toEqual({
+        transformId: "builtin.address-adjust",
+        enabled: true,
+      });
+    }
+  });
+
+  it("rejects session-set-address-transform with missing transformId", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-set-addr-transform-bad",
+      kind: "session-set-address-transform",
+      payload: { enabled: true },
     });
     expect(result.ok).toBe(false);
   });

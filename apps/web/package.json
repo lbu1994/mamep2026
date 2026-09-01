@@ -28,7 +28,9 @@
     "@mamep2026/register-table": "workspace:*",
     "@mamep2026/ui": "workspace:*",
     "@mamep2026/ui-theme": "workspace:*",
-    "@mamep2026/workspace": "workspace:*"
+    "@mamep2026/workspace": "workspace:*",
+    "@mamep2026/yaskawa-memobus-67h-010dh-010eh": "workspace:*",
+    "@mamep2026/custom-function-code": "workspace:*"
   },
   "devDependencies": {
     "@mamep2026/test-kit": "workspace:*",

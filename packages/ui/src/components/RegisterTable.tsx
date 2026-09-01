@@ -66,7 +66,7 @@ import type {
   RowId,
   SheetId,
 } from "@mamep2026/domain";
-import { defaultConfig } from "@mamep2026/domain";
+import { defaultConfig, sheetTypeWritable } from "@mamep2026/domain";
 import { formatRegisterAddress } from "@mamep2026/data-conversion";
 import { applyColumnOrder, isRowTypeCountValid } from "@mamep2026/register-table";
 import {
@@ -89,7 +89,11 @@ import { useAppStore } from "../app-store";
 import type { RowFailure } from "../row-result";
 import { computeNoColumnWidth } from "../no-column-width";
 import { usePluginContributions } from "../plugin/use-contributions";
-import type { ToolbarActionContribution } from "../plugin/plugin-registries";
+import type {
+  AddressTransformContribution,
+  DataTypeContribution,
+  ToolbarActionContribution,
+} from "../plugin/plugin-registries";
 import { clampColumnWidth } from "./column-resize";
 import { buildRowMenuItems, type RowMenuActions } from "./RegisterRowMenu";
 import { ReadAllResultMessage } from "./ReadAllResultMessage";
@@ -103,6 +107,10 @@ import {
   tableShortcut,
 } from "../keyboard/shortcuts";
 import { readRowById, writeRowById } from "../row-io";
+import {
+  hasBuiltinCommandWrite,
+  runPluginToolbarAction,
+} from "../plugin-toolbar-actions";
 
 /** 写后回读配置选项（PRD §6.5.12，2026-08-26）：Select value ↔ ReadVerifySettings。 */
 type WriteVerifyOptionValue = "off" | "immediate" | "100" | "200" | "500";
@@ -561,8 +569,15 @@ const WriteCell = memo(function WriteCell({
   const recordManualResult = useAppStore((s) => s.recordManualResult);
   const updateRow = useAppStore((s) => s.updateRow);
   const connected = useAppStore((s) => s.connectionState) === "connected";
-  // 离线、未配置合法地址或范围长度与类型合法集不匹配时禁用；无地址时提供 Tooltip 说明原因。
-  const disabled = !connected || !hasAddress || !typeCountValid;
+  // 只读表（ADR-043 E-2）：discrete-input/input-register 按表类型禁用写（WriteCell 守卫）。
+  const sheetType = useAppStore(
+    (s) =>
+      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.type ??
+      "holding-register",
+  );
+  const readOnly = !sheetTypeWritable(sheetType);
+  // 离线、未配置合法地址、范围长度与类型合法集不匹配或只读表时禁用；无地址时提供 Tooltip 说明原因。
+  const disabled = !connected || !hasAddress || !typeCountValid || readOnly;
 
   // 单行写逻辑（含每表写后回读配置）统一在 row-io.writeRowById
   // （与 Ctrl+Shift+Enter 写选中行快捷键共用，2026-08-30）。
@@ -584,9 +599,13 @@ const WriteCell = memo(function WriteCell({
       {t("table.write")}
     </Button>
   );
-  // 无合法地址时禁用并说明原因（禁用元素不触发 Tooltip，需包一层 span）。
+  // 无合法地址时禁用并说明原因（禁用元素不触发 Tooltip，需包一层 span）；只读表同理。
   return !hasAddress ? (
     <Tooltip title={t("table.emptyAddressTooltip")}>
+      <span>{button}</span>
+    </Tooltip>
+  ) : readOnly ? (
+    <Tooltip title={t("table.readOnlyTable")}>
       <span>{button}</span>
     </Tooltip>
   ) : (
@@ -606,9 +625,30 @@ const TypeCell = memo(function TypeCell({
 }) {
   const { t, i18n } = useTranslation();
   const setRowDataType = useAppStore((s) => s.setRowDataType);
+  const host = useAppStore((s) => s.host);
+  // 插件数据类型（ADR-043 E-3）：贡献点声明（id/titleKey）+ 已注册运行时（resolver.list）。
+  // 注意：订阅 resolver 对象本身（稳定引用），list() 在渲染时调用避免 selector 返回新数组触发无限重渲染。
+  const dataTypeResolver = useAppStore((s) => s.dataTypeResolver);
+  const dataTypeContributions = usePluginContributions<DataTypeContribution>(
+    host,
+    "dataType",
+  );
+  const registeredTypes = dataTypeResolver.list();
+  const pluginDataTypeOptions = dataTypeContributions
+    .filter((c) => registeredTypes.includes(c.payload.id))
+    .map((c) => ({
+      value: c.payload.id,
+      label: i18n.exists(c.payload.titleKey)
+        ? t(c.payload.titleKey)
+        : c.payload.id,
+    }));
   // Type 双列拆分（ADR-030）：进制列 + scale 列，组合映射回 dataType。
   const radix = dataTypeToRadix(dataType);
   const scale = dataTypeToScale(dataType);
+  // 插件类型行：Select 显示插件类型 id；内置行显示进制。
+  const selectValue = pluginDataTypeOptions.some((o) => o.value === dataType)
+    ? (dataType as string)
+    : radix;
   const errorTip =
     error !== undefined
       ? i18n.exists(error.messageKey)
@@ -624,15 +664,27 @@ const TypeCell = memo(function TypeCell({
       <Select
         size="small"
         style={{ width: "100%" }}
-        value={radix}
+        value={selectValue}
         aria-label="Type"
         placement="bottomLeft"
         variant="borderless"
         {...(error !== undefined ? { status: "error" as const } : {})}
-        onChange={(value: DataRadix) =>
-          setRowDataType(rowId, combineRadixScale(value, scale))
-        }
-        options={RADIX_OPTIONS.map((r) => ({ value: r, label: t(RADIX_LABEL_KEYS[r]) }))}
+        onChange={(value: string) => {
+          // 插件类型（ADR-043 E-3）：value 即 dataType id（单寄存器）；内置走进制+scale 组合。
+          const plugin = pluginDataTypeOptions.find((o) => o.value === value);
+          if (plugin !== undefined) {
+            setRowDataType(rowId, plugin.value as DataType);
+            return;
+          }
+          setRowDataType(rowId, combineRadixScale(value as DataRadix, scale));
+        }}
+        options={[
+          ...RADIX_OPTIONS.map((r) => ({
+            value: r,
+            label: t(RADIX_LABEL_KEYS[r]),
+          })),
+          ...pluginDataTypeOptions,
+        ]}
       />
     </Tooltip>
   );
@@ -1076,19 +1128,34 @@ export const RegisterTable = memo(function RegisterTable({
 }: RegisterTableProps): React.ReactNode {
   const { t } = useTranslation();
   // antd 全局 message（App.useApp，2026-08-28）：Read All 完成结果富内容提示；
+  // modal（ADR-041 Phase C）：ROM/RAM 确定指令安全确认（EEPROM 寿命提示）。
   // 应用已在 MamepApp 用 <AntApp> 包裹（测试须包 <AntApp>，见 BottomPanel.test.tsx）。
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const host = useAppStore((s) => s.host);
-  // 插件工具栏动作贡献（2026-08-31，ADR-039）：按目标表类型过滤（Phase A 仅核心表），
-  // 无 handler → 禁用按钮 + tooltip 占位（handler 随 Phase F 插件 runtime 提供）。
-  const toolbarActions = usePluginContributions<ToolbarActionContribution>(
+  // 插件工具栏动作贡献（2026-08-31，ADR-039/041）：payload 为数组（一插件可贡献多个动作），
+  // 按目标表类型过滤（ADR-041：核心表匹配 holding-register；插件表匹配 <pluginId>:<tableTypeId>）。
+  // Phase C 为安川 ROM/RAM 确定指令提供内置执行，其余动作保持占位（Phase F 插件 runtime）。
+  const sheetType = useAppStore(
+    (s) =>
+      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.type ??
+      "holding-register",
+  );
+  const toolbarActions = usePluginContributions<ToolbarActionContribution[]>(
     host,
     "toolbarAction",
-  ).filter(
-    (action) =>
-      action.payload.targetTableType === undefined ||
-      action.payload.targetTableType === "holding-register",
-  );
+  )
+    .flatMap((contribution) =>
+      contribution.payload.map((payload) => ({
+        pluginId: contribution.pluginId,
+        payload,
+      })),
+    )
+    .filter((action) => {
+      const target = action.payload.targetTableType;
+      if (target === undefined) return true;
+      if (sheetType === "holding-register") return target === "holding-register";
+      return sheetType === `${action.pluginId}:${target}`;
+    });
   // 连接状态订阅：连接/断开时刷新（工具栏「从站地址 / Unit ID」label 按活动协议切换，
   // 2026-08-25 TCP Unit ID 会话内动态修改；协议只在连接时变化）。
   const connectionState = useAppStore((s) => s.connectionState);
@@ -1112,6 +1179,37 @@ export const RegisterTable = memo(function RegisterTable({
   );
   const addRow = useAppStore((s) => s.addRow);
   const appendMessage = useAppStore((s) => s.appendMessage);
+  // 插件工具栏动作执行（ADR-041 Phase C）：requiresConfirm（安川 ROM/RAM 确定指令）先弹
+  // 安全确认（EEPROM 寿命提示，决策③），确认后经 host.writeRow 写 0 到 0900H/0910H，
+  // 不回读、不触发轮询刷新（决策③④）；其余动作无内置行为（hasBuiltinCommandWrite=false 置灰）。
+  const handlePluginToolbarAction = useCallback(
+    (action: { pluginId: string; payload: ToolbarActionContribution }) => {
+      const actionId = action.payload.id;
+      const run = () => {
+        if (host === null || host === undefined) return;
+        void runPluginToolbarAction(host, actionId, { appendMessage });
+      };
+      const isConfirmAction =
+        action.payload.requiresConfirm &&
+        (actionId === "yaskawa.enter-rom" || actionId === "yaskawa.enter-ram");
+      if (isConfirmAction) {
+        modal.confirm({
+          title: t(action.payload.titleKey),
+          content: t(
+            actionId === "yaskawa.enter-rom"
+              ? "table.enterRomConfirm"
+              : "table.enterRamConfirm",
+          ),
+          okText: t("table.confirm"),
+          cancelText: t("connection.cancel"),
+          onOk: run,
+        });
+      } else {
+        run();
+      }
+    },
+    [appendMessage, host, modal, t],
+  );
   const setSheetRegisterRadix = useAppStore((s) => s.setSheetRegisterRadix);
   const setSheetColumnWidths = useAppStore((s) => s.setSheetColumnWidths);
   const setSheetColumnOrder = useAppStore((s) => s.setSheetColumnOrder);
@@ -1223,6 +1321,18 @@ export const RegisterTable = memo(function RegisterTable({
       ),
   );
   const setSheetWriteVerify = useAppStore((s) => s.setSheetWriteVerify);
+  // 本表地址变换配置（每表独立，ADR-042）：默认不调整（null）。
+  const sheetAddressTransform = useAppStore(
+    (s) =>
+      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.addressTransform ??
+      null,
+  );
+  const setSheetAddressTransform = useAppStore(
+    (s) => s.setSheetAddressTransform,
+  );
+  // 地址变换贡献（ADR-042）：内置 builtin.address-adjust 恒在；工具栏按贡献渲染 OFF/ON。
+  const addressTransformContributions =
+    usePluginContributions<AddressTransformContribution>(host, "addressTransform");
   // 活动协议（2026-08-25）：TCP 连接时工具栏值语义为 Unit ID（label 随之切换）；
   // 未连接/RTU 时恒为从站地址。
   const activeProtocol =
@@ -2262,6 +2372,40 @@ export const RegisterTable = memo(function RegisterTable({
               />
             </span>
           </Tooltip>
+          {/* 表级 Address Adjust（2026-09-01，ADR-042）：每表独立 OFF/ON；
+              选项来自 addressTransform 贡献（内置恒在），仅 RTU 显示。 */}
+          {activeProtocol === "rtu" &&
+          addressTransformContributions.length > 0 ? (
+            <Tooltip title={t("table.addressAdjustHint")}>
+              <span className="table-toolbar__adjust">
+                <span className="table-toolbar__adjust-label">
+                  {t("table.addressAdjust")}
+                </span>
+                <Segmented
+                  size="small"
+                  aria-label={t("table.addressAdjust")}
+                  value={sheetAddressTransform?.enabled ? "on" : "off"}
+                  onChange={(value) => {
+                    const transform =
+                      addressTransformContributions[0]?.payload;
+                    setSheetAddressTransform(
+                      sheetId,
+                      value === "on" && transform !== undefined
+                        ? {
+                            transformId: transform.id,
+                            enabled: true,
+                          }
+                        : null,
+                    );
+                  }}
+                  options={[
+                    { value: "off", label: t("table.addressAdjustOff") },
+                    { value: "on", label: t("table.addressAdjustOn") },
+                  ]}
+                />
+              </span>
+            </Tooltip>
+          ) : null}
           <Tooltip title={t("table.restoreColumnLayoutHint")}>
             <Button
               size="small"
@@ -2283,13 +2427,18 @@ export const RegisterTable = memo(function RegisterTable({
               {toolbarActions.map((action) => (
                 <Tooltip
                   key={action.payload.id}
-                  title={t("plugins.toolbarActionPlaceholder")}
+                  title={
+                    hasBuiltinCommandWrite(action.payload.id)
+                      ? t(action.payload.titleKey)
+                      : t("plugins.toolbarActionPlaceholder")
+                  }
                 >
                   <Button
                     size="small"
-                    disabled
+                    disabled={!hasBuiltinCommandWrite(action.payload.id)}
                     aria-label={t(action.payload.titleKey)}
                     data-testid={`plugin-toolbar-action-${action.payload.id}`}
+                    onClick={() => handlePluginToolbarAction(action)}
                   >
                     {t(action.payload.titleKey)}
                   </Button>

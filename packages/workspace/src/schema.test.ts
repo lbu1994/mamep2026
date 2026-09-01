@@ -4,7 +4,7 @@ import {
   type RtuConnectionProfile,
   type Workspace,
 } from "@mamep2026/domain";
-import { parseWorkspace, serializeWorkspace } from "./schema";
+import { parseWorkspace, serializeWorkspace, workspaceSchema } from "./schema";
 
 function mutate(w: Workspace, patch: (mutable: Workspace) => void): Workspace {
   patch(w);
@@ -37,7 +37,6 @@ describe("connection profile persistence", () => {
       profile.requestTimeoutMs = 2000;
       profile.retryCount = 3;
       profile.interRequestDelayMs = 120;
-      profile.addressAdjust = "on";
       // 从站地址为表级字段（持久化）
       const sheet = w.sheets[0];
       if (sheet !== undefined) sheet.slaveAddress = 5;
@@ -63,7 +62,6 @@ describe("connection profile persistence", () => {
     expect(profile.requestTimeoutMs).toBe(2000);
     expect(profile.retryCount).toBe(3);
     expect(profile.interRequestDelayMs).toBe(120);
-    expect(profile.addressAdjust).toBe("on");
     // 每表独立从站地址恢复。
     expect(parsed.value.sheets[0]?.slaveAddress).toBe(5);
   });
@@ -132,6 +130,8 @@ describe("connection profile persistence", () => {
     expect(profile.requestTimeoutMs).toBe(3000);
     // 旧 profile 中的 slaveAddress 被剥离，不再进入领域对象。
     expect("slaveAddress" in profile).toBe(false);
+    // 旧全局 addressAdjust 已移出核心（ADR-042）：解析时被剥离，不再进入领域对象。
+    expect("addressAdjust" in profile).toBe(false);
     // 从站地址以表级默认 1 回退（sheet 缺省补默认）。
     expect(parsed.value.sheets[0]?.slaveAddress).toBe(1);
   });
@@ -190,7 +190,8 @@ describe("workspace schema round-trip", () => {
     expect(value.connectionProfiles).toHaveLength(1);
     const rtu = firstRtuProfile(value.connectionProfiles);
     expect(rtu.interRequestDelayMs).toBe(50);
-    expect(rtu.addressAdjust).toBe("off");
+    // 表级地址变换默认 null（ADR-042）：不调整。
+    expect(value.sheets[0]?.addressTransform).toBeNull();
     // 从站地址为表级字段：默认 1。
     expect(value.sheets[0]?.slaveAddress).toBe(1);
   });
@@ -579,8 +580,9 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
 
     const serialized = serializeWorkspace(workspace);
     // 导出文件为版本化 JSON（含 schemaVersion；TECH_DESIGN §6「版本化 JSON 更适合跨端导入导出」）。
+    // 当前为 v7（ADR-043 E-3：dataType 开放，仅升版本）。
     const raw = JSON.parse(serialized);
-    expect(raw.schemaVersion).toBe(4);
+    expect(raw.schemaVersion).toBe(7);
 
     // 导入路径：parseWorkspace（含迁移与断链检测）后字段完整。
     const parsed = parseWorkspace(raw);
@@ -630,5 +632,45 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.error.code).toBe("WORKSPACE_SCHEMA_INVALID");
+  });
+});
+
+describe("基础表类型与 bool dataType（ADR-043 E-2）", () => {
+  it("round-trip 基础表类型（coil/discrete-input/input-register）", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      w.sheets[0]!.type = "coil";
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.type).toBe("coil");
+  });
+
+  it("round-trip bool dataType", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      const row = w.sheets[0]?.rows[0];
+      if (row !== undefined) row.dataType = "bool";
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheets[0]?.rows[0]?.dataType).toBe("bool");
+  });
+
+  it("合法插件表类型仍通过（<pluginId>:<tableTypeId>）", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      w.sheets[0]!.type = "yaskawa-memobus:holding-register";
+    });
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+  });
+
+  it("非法表类型（裸字符串非核心类型）被拒绝", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      w.sheets[0]!.type = "not-a-valid-type";
+    });
+    // workspaceSchema 直接校验（serializeWorkspace 对非法数据会 throw ZodError）。
+    const result = workspaceSchema.safeParse(workspace);
+    expect(result.success).toBe(false);
   });
 });

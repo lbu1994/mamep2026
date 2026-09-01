@@ -20,21 +20,11 @@ import { fail, ok } from "@mamep2026/domain";
 import { z } from "zod";
 import { migrateData, migrations } from "./migrations";
 
-const dataTypeSchema = z.enum([
-  "hex",
-  "unsigned",
-  "unsigned-0.1",
-  "unsigned-0.01",
-  "unsigned-0.001",
-  "unsigned-0.0001",
-  "signed",
-  "signed-0.1",
-  "signed-0.01",
-  "signed-0.001",
-  "signed-0.0001",
-  "binary",
-  "string",
-]);
+/**
+ * dataType（ADR-043 E-3）：开放字符串——内置字面量 + 插件类型（单寄存器）；
+ * 不校验内容（插件类型在插件未加载时仍应可持久化往返）。
+ */
+const dataTypeSchema = z.string().min(1);
 
 const rowSchema = z.object({
   rowId: z.string(),
@@ -69,7 +59,14 @@ const rowSchema = z.object({
 const sheetSchema = z.object({
   sheetId: z.string(),
   name: z.string(),
-  type: z.literal("holding-register"),
+  /** 表类型（ADR-041）：核心 "holding-register" 或 "<pluginId>:<tableTypeId>"；老数据由 v4→v5 迁移补齐。ADR-043 E-2：核心再增 coil/discrete-input/input-register。 */
+  type: z.union([
+    z.literal("holding-register"),
+    z.literal("coil"),
+    z.literal("discrete-input"),
+    z.literal("input-register"),
+    z.string().regex(/^[^:]+:[^:]+$/, "sheet type must be a core type or <pluginId>:<tableTypeId>"),
+  ]).default("holding-register"),
   order: z.number().int(),
   /** 打开/关闭状态（2026-08-21）：关闭的表仍在工作区中（侧边栏保留），仅从页签栏隐藏；老数据缺省补 true，无需迁移 */
   open: z.boolean().default(true),
@@ -89,7 +86,16 @@ const sheetSchema = z.object({
       mode: z.enum(["off", "immediate", "delayed"]),
       delayMs: z.number().nullable(),
     })
-    .default({ mode: "immediate", delayMs: null }),  createdAt: z.number(),
+    .default({ mode: "immediate", delayMs: null }),
+  /** 表级地址变换配置（每表独立，随工作区持久化，2026-09-01 ADR-042）；老数据由 v5→v6 迁移补齐，缺省再补 null */
+  addressTransform: z
+    .object({
+      transformId: z.string().min(1),
+      enabled: z.boolean(),
+    })
+    .nullable()
+    .default(null),
+  createdAt: z.number(),
   updatedAt: z.number(),
 });
 
@@ -121,7 +127,6 @@ const rtuProfileSchema = z.object({
   requestTimeoutMs: z.number().int().min(0),
   retryCount: z.number().int().min(0).max(10),
   interRequestDelayMs: z.number().int().min(0),
-  addressAdjust: z.enum(["off", "on"]),
   recentPortHint: z.string().nullable().default(null),
 });
 
@@ -183,6 +188,14 @@ export const workspaceSchema = z.object({
     theme: z.enum(["light", "dark"]),
     /** 界面语言：默认 en-US；老数据缺省时补默认值，无需迁移。 */
     language: z.enum(["en-US", "zh-CN"]).default("en-US"),
+    /** 用户自定义主题主色（ADR-042）：null=默认品牌蓝；老数据缺省补 null。 */
+    themePrimary: z
+      .object({
+        light: z.string().min(1),
+        dark: z.string().min(1),
+      })
+      .nullable()
+      .default(null),
   }),
   notes: z.string(),
   pluginStates: z.array(pluginStateSchema),

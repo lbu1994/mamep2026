@@ -17,6 +17,7 @@ import {
 import type {
   BatchReadHandle,
   BatchReadRow,
+  CodecRegistry,
   ConnectionState,
   WriteOutcome,
 } from "@mamep2026/communication";
@@ -35,20 +36,28 @@ export interface VscodeSessionHostOptions {
   platform: NodePlatformHost;
   /** 会话事件（由装配方转换为 HostMessage v1 event 推送 Webview）。 */
   events: RtuSessionHostEvents;
+  /** codec 注册表（ADR-043 E-6）：基础表/安川 codec 会话经它解析。 */
+  codecRegistry?: CodecRegistry;
 }
 
 export class VscodeSessionHost {
   private readonly platform: NodePlatformHost;
   private readonly rtu: RtuSessionHost;
   private readonly tcp: TcpSessionHost;
+  /** codec 注册表（ADR-043 E-6）：基础表/安川 codec 会话解析用；null=未注入（缺省仅 rtu）。 */
+  private readonly codecRegistry: CodecRegistry | null;
   /** 当前活动协议会话（由最近一次 connect/connectTcp 决定）。 */
   private active: "rtu" | "tcp" | null = null;
 
   constructor(options: VscodeSessionHostOptions) {
     this.platform = options.platform;
+    this.codecRegistry = options.codecRegistry ?? null;
     this.rtu = new RtuSessionHost({
       clock: options.platform.clock,
       events: options.events,
+      ...(options.codecRegistry !== undefined
+        ? { codecRegistry: options.codecRegistry }
+        : {}),
     });
     this.tcp = new TcpSessionHost({
       clock: options.platform.clock,
@@ -76,11 +85,13 @@ export class VscodeSessionHost {
     );
   }
 
-  /** 打开并连接 RTU 会话（portId 为 enumerateSerialPorts 返回的端口）。 */
+  /** 打开并连接 RTU 会话（portId 为 enumerateSerialPorts 返回的端口）。
+   *  ADR-043 E-6：protocol 为 codecId 时走 codec 会话（基础表/安川），缺省 rtu。 */
   async connect(
     portId: string,
     profile: RtuConnectionProfile,
     slaveAddress: number,
+    options?: { protocol?: string },
   ): Promise<Result<void>> {
     const openResult = await this.platform.openSerialTransport(
       { id: portId, label: portId },
@@ -92,6 +103,14 @@ export class VscodeSessionHost {
       transport: openResult.value,
       slaveAddress,
       portLabel: portId,
+      ...(options?.protocol !== undefined && options.protocol !== "rtu"
+        ? { protocol: options.protocol }
+        : {}),
+      ...(options?.protocol !== undefined &&
+      options.protocol !== "rtu" &&
+      this.codecRegistry !== null
+        ? { codecRegistry: this.codecRegistry }
+        : {}),
     });
     if (result.ok) this.active = "rtu";
     return result;
@@ -126,6 +145,14 @@ export class VscodeSessionHost {
   /** TCP Unit ID 会话内动态修改（2026-08-25）：仅 TCP 活动时生效，对后续请求生效。 */
   setUnitId(unitId: number): void {
     if (this.active === "tcp") this.tcp.setUnitId(unitId);
+  }
+
+  /** 表级 Address Adjust（ADR-042）：仅 RTU 活动时生效（TCP 无地址变换），同步到宿主会话。 */
+  setAddressTransform(config: {
+    transformId: string;
+    enabled: boolean;
+  } | null): void {
+    if (this.active === "rtu") this.rtu.setAddressTransform(config);
   }
 
   readRow(row: RegisterRow): Promise<Result<number | number[]>> {

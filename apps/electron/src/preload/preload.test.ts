@@ -71,6 +71,7 @@ describe("preload 白名单桥", () => {
       "sessionPollingStart",
       "sessionPollingStop",
       "sessionReadRow",
+      "sessionSetAddressTransform",
       "sessionSetUnitId",
       "sessionTcpConnect",
       "sessionTraceStart",

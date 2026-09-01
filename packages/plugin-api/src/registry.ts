@@ -31,6 +31,7 @@ import {
   PLUGIN_HOOK_FAILED,
   type PluginContext,
   type PluginLifecycleState,
+  type PluginRemoteRuntime,
   type PluginRuntime,
 } from "./lifecycle";
 import {
@@ -50,7 +51,12 @@ export interface PluginLoadError {
 export type PluginRegistryEvent =
   | { type: "registered"; pluginId: string }
   | { type: "enabled-changed"; pluginId: string; enabled: boolean }
-  | { type: "lifecycle-changed"; pluginId: string; state: PluginLifecycleState };
+  | { type: "lifecycle-changed"; pluginId: string; state: PluginLifecycleState }
+  | { type: "unregistered"; pluginId: string };
+
+/** 卸载错误码（ADR-044 Phase F-1）。 */
+export const PLUGIN_NOT_FOUND = "PLUGIN_NOT_FOUND";
+export const PLUGIN_BUILTIN_NOT_REMOVABLE = "PLUGIN_BUILTIN_NOT_REMOVABLE";
 
 export interface PluginRegistryOptions {
   /** 贡献点注册表（ADR-039）：未提供则跳过 contributes 校验与聚合。 */
@@ -64,6 +70,10 @@ interface RegisteredPlugin {
   enabled: boolean;
   source: PluginSource;
   runtime: PluginRuntime | undefined;
+  /** 隔离线程运行时（ADR-044 Phase F-2）：installed 第三方插件 entry 在此执行。 */
+  remoteRuntime: PluginRemoteRuntime | undefined;
+  /** 单文件 JS 插件源码（installed 可执行插件持久化用；纯清单插件为 null）。 */
+  entrySource: string | null;
   lifecycleState: PluginLifecycleState;
 }
 
@@ -84,10 +94,19 @@ export class PluginRegistry {
 
   register(
     input: unknown,
-    options?: { source?: PluginSource; runtime?: PluginRuntime },
+    options?: {
+      source?: PluginSource;
+      runtime?: PluginRuntime;
+      /** 隔离线程运行时（ADR-044 Phase F-2）：installed 插件 entry 在 Worker/worker_threads 执行。 */
+      remoteRuntime?: PluginRemoteRuntime;
+      /** 单文件 JS 插件源码（随快照持久化，重启后重新创建隔离运行时）。 */
+      entrySource?: string;
+    },
   ): Result<PluginManifest> {
     const source = options?.source ?? "builtin";
     const runtime = options?.runtime;
+    const remoteRuntime = options?.remoteRuntime;
+    const entrySource = options?.entrySource ?? null;
 
     const validated = pluginManifestSchema.safeParse(input);
     if (!validated.success) {
@@ -175,6 +194,7 @@ export class PluginRegistry {
     }
 
     // runtime 仅限内置同进程使用（Phase A 不加载第三方 entry；隔离机制 Phase F）。
+    // ADR-044：同进程 runtime 仍仅 builtin；第三方代码经 remoteRuntime 隔离线程执行。
     if (runtime !== undefined && source !== "builtin") {
       const error: PluginLoadError = {
         pluginId: manifest.id,
@@ -188,6 +208,23 @@ export class PluginRegistry {
           category: "plugin",
           userMessageKey: "errors.pluginRuntimeNotAvailable",
           technicalMessage: `runtime is only allowed for builtin plugins (${manifest.id})`,
+        }),
+      );
+    }
+    // remoteRuntime 仅限 installed 来源（第三方隔离执行面）；builtin 直接用同进程 runtime。
+    if (remoteRuntime !== undefined && source !== "installed") {
+      const error: PluginLoadError = {
+        pluginId: manifest.id,
+        errorCode: PLUGIN_HOOK_FAILED,
+        message: `remoteRuntime is only allowed for installed plugins (${manifest.id})`,
+      };
+      this.loadErrors.push(error);
+      return fail(
+        createMamepError({
+          code: PLUGIN_HOOK_FAILED,
+          category: "plugin",
+          userMessageKey: "errors.pluginRuntimeNotAvailable",
+          technicalMessage: `remoteRuntime is only allowed for installed plugins (${manifest.id})`,
         }),
       );
     }
@@ -213,13 +250,68 @@ export class PluginRegistry {
       enabled: true,
       source,
       runtime,
-      lifecycleState: runtime !== undefined ? "active" : "registered",
+      remoteRuntime,
+      entrySource,
+      lifecycleState:
+        runtime !== undefined || remoteRuntime !== undefined
+          ? "active"
+          : "registered",
     });
     if (runtime !== undefined) {
       this.activatePlugin(manifest.id);
+    } else if (remoteRuntime !== undefined) {
+      void this.activateRemotePlugin(manifest.id);
     }
     this.emit({ type: "registered", pluginId: manifest.id });
     return ok(manifest);
+  }
+
+  /**
+   * 卸载插件（ADR-044 Phase F-1）：仅 installed 来源可卸载（builtin 随应用构建、不可卸载）。
+   * 流程：deactivate runtime（异常 → PLUGIN_HOOK_FAILED 错误隔离，仍继续卸载）→
+   * 回收贡献点（removePluginContributions）→ 从注册表删除 → emit unregistered。
+   * 未注册 → PLUGIN_NOT_FOUND；builtin → PLUGIN_BUILTIN_NOT_REMOVABLE。
+   */
+  unregister(pluginId: string): Result<void> {
+    const plugin = this.plugins.get(pluginId);
+    if (plugin === undefined) {
+      return fail(
+        createMamepError({
+          code: PLUGIN_NOT_FOUND,
+          category: "plugin",
+          userMessageKey: "errors.pluginNotFound",
+          technicalMessage: `plugin ${pluginId} is not registered`,
+        }),
+      );
+    }
+    if (plugin.source !== "installed") {
+      return fail(
+        createMamepError({
+          code: PLUGIN_BUILTIN_NOT_REMOVABLE,
+          category: "plugin",
+          userMessageKey: "errors.pluginBuiltinNotRemovable",
+          technicalMessage: `builtin plugin ${pluginId} cannot be uninstalled`,
+        }),
+      );
+    }
+    if (plugin.runtime !== undefined) {
+      try {
+        plugin.runtime.deactivate?.();
+      } catch (err) {
+        this.handleHookFailure(pluginId, err);
+      }
+    }
+    if (plugin.remoteRuntime !== undefined) {
+      // 关闭隔离线程（ADR-044 Phase F-2）：deactivate + dispose，异常不阻断卸载。
+      void plugin.remoteRuntime
+        .deactivate?.()
+        .then(() => plugin.remoteRuntime?.dispose())
+        .catch((err: unknown) => this.handleHookFailure(pluginId, err));
+    }
+    this.contributionRegistry?.removePluginContributions(pluginId);
+    this.plugins.delete(pluginId);
+    this.emit({ type: "unregistered", pluginId });
+    return ok(undefined);
   }
 
   list(): PluginManifest[] {
@@ -257,6 +349,16 @@ export class PluginRegistry {
           this.handleHookFailure(pluginId, err);
         }
       }
+    } else if (plugin.remoteRuntime !== undefined) {
+      if (enabled) {
+        plugin.lifecycleState = "active";
+        void this.activateRemotePlugin(pluginId);
+      } else {
+        plugin.lifecycleState = "deactivated";
+        void plugin.remoteRuntime
+          .deactivate?.()
+          .catch((err: unknown) => this.handleHookFailure(pluginId, err));
+      }
     }
     this.emit({ type: "enabled-changed", pluginId, enabled });
   }
@@ -277,7 +379,11 @@ export class PluginRegistry {
       schemaVersion: PLUGIN_STORE_SCHEMA_VERSION,
       plugins: [...this.plugins.values()]
         .filter((p) => p.source === "installed")
-        .map((p) => ({ manifest: p.manifest, enabled: p.enabled })),
+        .map((p) => ({
+          manifest: p.manifest,
+          enabled: p.enabled,
+          ...(p.entrySource !== null ? { entrySource: p.entrySource } : {}),
+        })),
     };
   }
 
@@ -288,11 +394,68 @@ export class PluginRegistry {
   hydrate(data: PluginStoreData): void {
     for (const stored of data.plugins) {
       if (this.plugins.has(stored.manifest.id)) continue;
-      const result = this.register(stored.manifest, { source: "installed" });
+      const result = this.register(stored.manifest, {
+        source: "installed",
+        ...(stored.entrySource !== undefined && stored.entrySource !== null
+          ? { entrySource: stored.entrySource }
+          : {}),
+      });
       if (result.ok && stored.enabled !== this.isEnabled(stored.manifest.id)) {
         this.setEnabled(stored.manifest.id, stored.enabled);
       }
     }
+  }
+
+  /** 单文件 JS 插件源码（ADR-044 Phase F-2）：未注册/纯清单插件返回 null。 */
+  getEntrySource(pluginId: string): string | null {
+    return this.plugins.get(pluginId)?.entrySource ?? null;
+  }
+
+  /**
+   * 为已注册的 installed 插件附加隔离线程运行时（ADR-044 Phase F-2）：
+   * 重启后 hydrate 注册的插件（entrySource 已持久化）由装配方重新创建远程运行时并激活。
+   * 已附加 / 未注册 / 非 installed → 返回错误。
+   */
+  attachRemoteRuntime(
+    pluginId: string,
+    remoteRuntime: PluginRemoteRuntime,
+  ): Result<void> {
+    const plugin = this.plugins.get(pluginId);
+    if (plugin === undefined) {
+      return fail(
+        createMamepError({
+          code: PLUGIN_NOT_FOUND,
+          category: "plugin",
+          userMessageKey: "errors.pluginNotFound",
+          technicalMessage: `plugin ${pluginId} is not registered`,
+        }),
+      );
+    }
+    if (plugin.source !== "installed") {
+      return fail(
+        createMamepError({
+          code: PLUGIN_BUILTIN_NOT_REMOVABLE,
+          category: "plugin",
+          userMessageKey: "errors.pluginBuiltinNotRemovable",
+          technicalMessage: `builtin plugin ${pluginId} cannot attach a remote runtime`,
+        }),
+      );
+    }
+    if (plugin.remoteRuntime !== undefined) {
+      return fail(
+        createMamepError({
+          code: "PLUGIN_RUNTIME_EXISTS",
+          category: "plugin",
+          userMessageKey: "errors.pluginRuntimeNotAvailable",
+          technicalMessage: `plugin ${pluginId} already has a remote runtime`,
+        }),
+      );
+    }
+    plugin.remoteRuntime = remoteRuntime;
+    if (plugin.enabled) {
+      void this.activateRemotePlugin(pluginId);
+    }
+    return ok(undefined);
   }
 
   getLoadErrors(): readonly PluginLoadError[] {
@@ -329,6 +492,32 @@ export class PluginRegistry {
     } catch (err) {
       this.handleHookFailure(pluginId, err);
     }
+  }
+
+  /** 隔离线程运行时激活（ADR-044 Phase F-2）：异步成功 → active；失败 → PLUGIN_HOOK_FAILED。 */
+  private activateRemotePlugin(pluginId: string): void {
+    const plugin = this.plugins.get(pluginId);
+    if (plugin?.remoteRuntime === undefined) return;
+    const ctx: PluginContext = {
+      pluginId,
+      communication: this.communicationApi,
+    };
+    plugin.remoteRuntime
+      .activate(ctx)
+      .then(() => {
+        const current = this.plugins.get(pluginId);
+        if (current !== undefined && current.enabled) {
+          current.lifecycleState = "active";
+          this.emit({
+            type: "lifecycle-changed",
+            pluginId,
+            state: "active",
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        this.handleHookFailure(pluginId, err);
+      });
   }
 
   private handleHookFailure(pluginId: string, err: unknown): void {

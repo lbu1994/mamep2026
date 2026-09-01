@@ -15,6 +15,7 @@ import {
 } from "@mamep2026/test-kit";
 import { appendCrc } from "@mamep2026/protocol-modbus";
 import { RegisterTableService } from "./table-service";
+import { BUILTIN_ADDRESS_ADJUST_TRANSFORM } from "./address";
 
 function setup(addressAdjust: "off" | "on" = "off") {
   const clock = new VirtualClock();
@@ -22,7 +23,6 @@ function setup(addressAdjust: "off" | "on" = "off") {
   const device = new ScriptedModbusRtuDevice();
   transport.device = device;
   const profile = createDefaultRtuProfile();
-  profile.addressAdjust = addressAdjust;
   const logs: CommunicationLogEvent[] = [];
   const session = new CommunicationSession({
     transport,
@@ -32,7 +32,8 @@ function setup(addressAdjust: "off" | "on" = "off") {
   });
   const service = new RegisterTableService({
     getSession: () => session,
-    getAddressAdjustMode: () => profile.addressAdjust,
+    getAddressTransform: () =>
+      addressAdjust === "on" ? BUILTIN_ADDRESS_ADJUST_TRANSFORM : null,
     clock,
   });
   return { clock, transport, device, session, service, logs, profile };

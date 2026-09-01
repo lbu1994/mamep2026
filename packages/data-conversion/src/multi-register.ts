@@ -12,6 +12,7 @@
  */
 import {
   createMamepError,
+  isBuiltinDataType,
   type DataType,
   type Result,
 } from "@mamep2026/domain";
@@ -51,6 +52,10 @@ export function allowedRegisterCounts(
 ): readonly number[] | "any" {
   if (type === "hex" || type === "string") return "any";
   if (type === "binary") return BINARY_ALLOWED;
+  // bool（ADR-043 E-2）：单寄存器（线圈/离散输入一行一个位）。
+  if (type === "bool") return [1];
+  // 插件类型（ADR-043 E-3 范围收敛）：仅单寄存器（registerCount 恒 1），范围行拒绝。
+  if (!isBuiltinDataType(type)) return [1];
   return DECIMAL_ALLOWED;
 }
 

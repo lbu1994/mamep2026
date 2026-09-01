@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { createEmptyRow, type DataType } from "@mamep2026/domain";
+import { createDataTypeResolver } from "@mamep2026/data-conversion";
 import { commitCellText } from "./cell-text";
 
 function makeRow(dataType: DataType) {
@@ -60,5 +61,24 @@ describe("commitCellText", () => {
     const result = commitCellText(row, "12.34");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("DATA_TOO_MANY_DECIMALS");
+  });
+
+  it("ADR-043 E-3：插件类型经 resolver 解析（缺省仅内置时失败）", () => {
+    const row = makeRow("my-plugin:speed" as DataType);
+    // 无 resolver：DATA_UNSUPPORTED_TYPE。
+    const without = commitCellText(row, "1500");
+    expect(without.ok).toBe(false);
+    if (!without.ok) expect(without.error.code).toBe("DATA_UNSUPPORTED_TYPE");
+
+    // 注入 resolver（注册插件处理函数）后成功。
+    const resolver = createDataTypeResolver();
+    resolver.register("my-plugin:speed", {
+      parse: (text) =>
+        ({ ok: true as const, value: Number(text) || 0 }) as const,
+      format: (raw) => `${raw} rpm`,
+    });
+    const withResolver = commitCellText(row, "1500", resolver);
+    expect(withResolver.ok).toBe(true);
+    if (withResolver.ok) expect(withResolver.value.cellText).toBe("1500");
   });
 });

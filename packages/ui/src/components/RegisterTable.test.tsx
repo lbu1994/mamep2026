@@ -21,6 +21,7 @@ import type {
 import {
   createEmptyWorkspace,
   ok,
+  RegisterAddress,
   type Result,
   type RowId,
   type SheetId,
@@ -29,6 +30,11 @@ import {
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import type { AppHost } from "../host";
+import { PluginRegistry } from "@mamep2026/plugin-api";
+import {
+  ADDRESS_TRANSFORM_CONTRIBUTION_SCHEMA,
+  ContributionPointRegistry,
+} from "@mamep2026/plugin-api";
 import { computeNoColumnWidth } from "../no-column-width";
 import { RegisterTable } from "./RegisterTable";
 
@@ -350,7 +356,6 @@ describe("RegisterTable 全表读取取消（ADR-025）", () => {
         timeoutMs: 1000,
         retryCount: 1,
         rxDelayMs: 50,
-        addressAdjust: "off",
         connectionState: "connected",
       })),
     } as unknown as AppHost;
@@ -430,7 +435,6 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
         timeoutMs: 1000,
         retryCount: 1,
         rxDelayMs: 50,
-        addressAdjust: "off",
         connectionState: "connected",
       })),
     } as unknown as AppHost;
@@ -542,6 +546,127 @@ describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
         .getState()
         .workspace.sheets.find((s) => s.sheetId === second)?.writeVerify,
     ).toEqual({ mode: "immediate", delayMs: null });
+  });
+});
+
+describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）", () => {
+  function makeHostWithAdjust(): AppHost {
+    const contributionRegistry = new ContributionPointRegistry();
+    contributionRegistry.registerPoint({
+      id: "addressTransform",
+      schema: ADDRESS_TRANSFORM_CONTRIBUTION_SCHEMA,
+    });
+    const registry = new PluginRegistry({ contributionRegistry });
+    registry.register(
+      {
+        id: "builtin-address-adjust",
+        name: "Address Adjust",
+        version: "1.0.0",
+        apiVersion: "1.0",
+        description: "Built-in table-level Address Adjust.",
+        platform: { web: true, node: true },
+        permissions: [],
+        contributes: {
+          addressTransform: {
+            id: "builtin.address-adjust",
+            protocol: "rtu",
+            titleKey: "table.addressAdjust",
+            defaultConfig: { enabled: false },
+          },
+        },
+      },
+      { source: "builtin" },
+    );
+    return {
+      capabilities: {
+        modbusRtu: true,
+        modbusTcp: false,
+        serialPorts: "browser-picker",
+        filesystem: "limited",
+        nodePlugins: false,
+        webPlugins: true,
+        logExport: "download",
+        workspaceImport: "upload",
+        workspaceExport: "download",
+        pluginInstall: "upload",
+        executablePlugins: false,
+        hostPlugins: false,
+        protocolExtensions: [],
+        tableTypes: ["holding-register"],
+      },
+      pluginRegistry: registry,
+      getCommProperties: () => ({
+        protocol: "rtu",
+        portLabel: null,
+        unitId: null,
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: 1000,
+        retryCount: 1,
+        rxDelayMs: 50,
+        connectionState: "connected",
+      }),
+    } as unknown as AppHost;
+  }
+
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({
+      host: makeHostWithAdjust(),
+      workspace: createEmptyWorkspace(),
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  it("默认 OFF；切到 ON 更新本表 addressTransform（内置 builtin.address-adjust）", async () => {
+    const sid = sheetId();
+    expect(useAppStore.getState().workspace.sheets[0]?.addressTransform).toBeNull();
+    render(<RegisterTable sheetId={sid} />);
+    // 工具栏 label 文本（i18n table.addressAdjust）+ 相邻 Segmented（.table-toolbar__adjust）。
+    const label = screen.getByText("Address Adjust");
+    const adjustSegmented = label
+      .closest(".table-toolbar__adjust")
+      ?.querySelector(".ant-segmented");
+    expect(adjustSegmented).toBeTruthy();
+    // Segmented 点击「ON」。
+    fireEvent.click(
+      Array.from(
+        adjustSegmented?.querySelectorAll(".ant-segmented-item") ?? [],
+      ).find((el) => el.textContent === "ON") as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(
+        useAppStore.getState().workspace.sheets[0]?.addressTransform,
+      ).toEqual({ transformId: "builtin.address-adjust", enabled: true });
+    });
+  });
+
+  it("切回 OFF 关闭本表调整", async () => {
+    const sid = sheetId();
+    useAppStore.getState().setSheetAddressTransform(sid, {
+      transformId: "builtin.address-adjust",
+      enabled: true,
+    });
+    render(<RegisterTable sheetId={sid} />);
+    const label = screen.getByText("Address Adjust");
+    const adjustSegmented = label
+      .closest(".table-toolbar__adjust")
+      ?.querySelector(".ant-segmented");
+    fireEvent.click(
+      Array.from(
+        adjustSegmented?.querySelectorAll(".ant-segmented-item") ?? [],
+      ).find((el) => el.textContent === "OFF") as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(useAppStore.getState().workspace.sheets[0]?.addressTransform).toBeNull();
+    });
   });
 });
 
@@ -772,7 +897,6 @@ describe("RegisterTable Read All 全局 message（2026-08-28）", () => {
         timeoutMs: 1000,
         retryCount: 1,
         rxDelayMs: 50,
-        addressAdjust: "off",
         connectionState: "connected",
       })),
     } as unknown as AppHost;
@@ -898,7 +1022,6 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
         timeoutMs: 1000,
         retryCount: 1,
         rxDelayMs: 50,
-        addressAdjust: "off",
         connectionState: "connected",
       })),
       ...overrides,
@@ -1050,5 +1173,68 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
 
     fireKeyOn(window, "F8");
     expect(readRow).not.toHaveBeenCalled();
+  });
+});
+
+describe("RegisterTable 基础表（ADR-043 E-2）", () => {
+  function withSheetType(type: string): void {
+    const workspace = useAppStore.getState().workspace;
+    const sheets = workspace.sheets.map((sheet, index) =>
+      index === 0 ? { ...sheet, type } : sheet,
+    );
+    useAppStore.setState({ workspace: { ...workspace, sheets } });
+  }
+
+  it("离散输入表（只读）：Write 按钮禁用并显示只读提示", () => {
+    initI18n();
+    withSheetType("discrete-input");
+    useAppStore.setState({
+      host: null,
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+    const writeButtons = screen.getAllByRole("button", { name: "Write" });
+    expect(writeButtons.length).toBeGreaterThan(0);
+    for (const button of writeButtons) {
+      expect((button as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+
+  it("线圈表（可读写）：Write 按钮可用（connected + 合法地址）", () => {
+    initI18n();
+    withSheetType("coil");
+    const workspace = useAppStore.getState().workspace;
+    const firstSheet = workspace.sheets[0];
+    const address = RegisterAddress.create(0);
+    const rows = (firstSheet?.rows ?? []).map((row, index) =>
+      index === 0
+        ? {
+            ...row,
+            addressDraft: "0",
+            addressValue: address.ok ? address.value : null,
+          }
+        : row,
+    );
+    const sheets = workspace.sheets.map((sheet, index) =>
+      index === 0 ? { ...sheet, rows } : sheet,
+    );
+    useAppStore.setState({
+      workspace: { ...workspace, sheets },
+      host: null,
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+    const writeButtons = screen.getAllByRole("button", { name: "Write" });
+    expect(writeButtons.length).toBeGreaterThan(0);
+    // 首行有合法地址：按钮可用。
+    expect((writeButtons[0] as HTMLButtonElement).disabled).toBe(false);
   });
 });

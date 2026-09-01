@@ -109,14 +109,21 @@ describe("isScaleApplicable", () => {
 });
 
 describe("options", () => {
-  it("contains the full radix and scale sets", () => {
+  it("contains the full radix and scale sets (bool added in ADR-043 E-2)", () => {
     expect(RADIX_OPTIONS).toEqual([
       "hex",
       "unsigned",
       "signed",
       "binary",
       "string",
+      "bool",
     ]);
     expect(SCALE_OPTIONS).toEqual(["1", "0.1", "0.01", "0.001", "0.0001"]);
+  });
+
+  it("bool maps to itself with scale ignored", () => {
+    expect(dataTypeToRadix("bool")).toBe("bool");
+    expect(combineRadixScale("bool", "0.1")).toBe("bool");
+    expect(isScaleApplicable("bool")).toBe(false);
   });
 });

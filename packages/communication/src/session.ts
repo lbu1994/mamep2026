@@ -28,6 +28,16 @@ import {
   type ExpectedResponse,
   type TcpExpectedResponse,
 } from "@mamep2026/protocol-modbus";
+import type {
+  CodecDecodedResponse,
+  CodecExpect,
+  CodecReadRequest,
+  CodecRegistry,
+  CodecWriteEntry,
+  CodecWriteRequest,
+  FrameParser,
+  ProtocolCodec,
+} from "./codec";
 import { TcpFrameParser } from "./tcp-frame-parser";
 import {
   createCancellationToken,
@@ -89,7 +99,8 @@ interface ExchangeMeta {
   source: RequestSource;
   userAddress: number | null;
   sentAddress: number | null;
-  functionCode: number;
+  /** 功能码（codec 路径由 codec 自定义，日志记录为 null；ADR-040）。 */
+  functionCode: number | null;
   quantity: number;
   pluginId: string | null;
 }
@@ -97,8 +108,38 @@ interface ExchangeMeta {
 /** 会话协议：rtu（默认）/ tcp（2026-08-23 TCP 接线）。 */
 export type SessionProtocol = "rtu" | "tcp";
 
-/** RTU 与 TCP 解码结果的公共形态（kind 判别兼容）。 */
+/** 内置 RTU 与 TCP 解码结果的公共形态（kind 判别兼容）。 */
 type DecodedResponse = DecodedRtuResponse | DecodedTcpResponse;
+
+/** 全部解码结果（内置 + codec，ADR-040）：判别名互斥，可安全判别。 */
+type AnyDecodedResponse = DecodedResponse | CodecDecodedResponse;
+
+/** 会话内部统一的分帧解析器形态：内置 Rtu/TcpFrameParser 与 codec FrameParser 均可赋值。 */
+interface SessionFrameParser {
+  push(
+    chunk: Uint8Array,
+  ):
+    | { done: false }
+    | { done: true; outcome: Result<AnyDecodedResponse>; frame: Uint8Array };
+}
+
+/** 单次交换尝试：内置路径（内置 expect，无 parser）或 codec 路径（CodecExpect + codec parser）。 */
+type SessionAttempt =
+  | {
+      frame: Uint8Array;
+      expect: ExpectedResponse | TcpExpectedResponse;
+      parser?: undefined;
+    }
+  | { frame: Uint8Array; expect: CodecExpect; parser: FrameParser };
+
+/** 内置路径分帧解析器：RTU 期望响应含 slaveAddress；TCP 含 transactionId/unitId（无歧义判别）。 */
+function builtinParserFor(
+  expect: ExpectedResponse | TcpExpectedResponse,
+): SessionFrameParser {
+  return "slaveAddress" in expect
+    ? new RtuFrameParser(expect)
+    : new TcpFrameParser(expect);
+}
 
 interface PendingExchange {
   cancelToken: CancellationToken;
@@ -106,7 +147,7 @@ interface PendingExchange {
   cancel: (reason: string) => void;
   /** 写入完成后开始超时计时（超时从完整请求实际发送后开始）。 */
   startTimeout: () => void;
-  promise: Promise<Result<{ result: DecodedResponse; frame: Uint8Array }>>;
+  promise: Promise<Result<{ result: AnyDecodedResponse; frame: Uint8Array }>>;
 }
 
 function cancelledError(reason: string): MamepError {
@@ -128,6 +169,30 @@ function notConnectedError(): MamepError {
     retryable: false,
     userMessageKey: "errors.notConnected",
     technicalMessage: "session is not connected",
+  });
+}
+
+/** 未知 codecId（ADR-040）：构造期报错，不静默回退。 */
+function codecNotFoundError(codecId: string): MamepError {
+  return createMamepError({
+    code: "CODEC_NOT_FOUND",
+    category: "capability",
+    severity: "error",
+    retryable: false,
+    userMessageKey: "errors.internal",
+    technicalMessage: `codec not found for protocol: ${codecId}`,
+  });
+}
+
+/** 非连续读写需要 codec 协议（内置 rtu/tcp 不支持，ADR-040）。 */
+function codecRequiredError(): MamepError {
+  return createMamepError({
+    code: "CODEC_REQUIRED",
+    category: "capability",
+    severity: "error",
+    retryable: false,
+    userMessageKey: "errors.internal",
+    technicalMessage: "codec protocol required for this operation",
   });
 }
 
@@ -166,6 +231,28 @@ function modbusExceptionError(exceptionCode: number): MamepError {
     userMessageKey: "errors.modbusException",
     technicalMessage: `modbus exception code ${exceptionCode}`,
   });
+}
+
+function unexpectedResponseKindError(
+  operation: string,
+  decoded: unknown,
+): MamepError {
+  return createMamepError({
+    code: "UNEXPECTED_RESPONSE_KIND",
+    category: "protocol",
+    severity: "error",
+    retryable: false,
+    userMessageKey: "errors.unexpectedResponse",
+    technicalMessage: `unexpected response kind for ${operation}: ${String(decoded)}`,
+  });
+}
+
+/** 连续地址列表（codec 路径把 sentAddress+quantity 映射为地址列表，ADR-040）。 */
+function contiguousAddresses(start: number, quantity: number): number[] {
+  return Array.from(
+    { length: quantity },
+    (_, index) => (start + index) & 0xffff,
+  );
 }
 
 type ParseOutcome =
@@ -241,8 +328,10 @@ export interface SessionOptions {
   clock: Clock;
   /** 连接配置快照；超时、重试、Rx Delay 的修改对后续请求生效。 */
   config: RtuConnectionProfile | TcpConnectionProfile;
-  /** 协议：rtu（默认）/ tcp。 */
-  protocol?: SessionProtocol;
+  /** 协议：rtu（默认）/ tcp / 注册表 codecId（ADR-040 插件 Phase B）。 */
+  protocol?: SessionProtocol | string;
+  /** codec 注册表：protocol 为 codecId 时用于解析 codec（ADR-040）。 */
+  codecRegistry?: CodecRegistry;
   /** 初始从站地址（RTU，默认 1）；连接后可经 setSlaveAddress 动态更新（2026-08-19）。 */
   slaveAddress?: number;
   /** TCP Unit ID（MBAP 单元标识，默认 0）：连接时由 profile 确定，连接后可经 setUnitId 动态更新（2026-08-25）。 */
@@ -257,8 +346,10 @@ export class CommunicationSession {
   private readonly options: SessionOptions;
   private readonly scheduler: RequestScheduler;
   private pendingExchange: PendingExchange | null = null;
-  /** 会话协议：rtu / tcp。 */
-  private readonly protocol: SessionProtocol;
+  /** 会话协议：rtu / tcp / codecId（ADR-040）。 */
+  private readonly protocol: string;
+  /** 自定义协议 codec（protocol 为 codecId 时非空；内置 rtu/tcp 为 null，走内置路径）。 */
+  private readonly codec: ProtocolCodec | null;
   /** TCP Unit ID（MBAP 单元标识，默认 0）：连接后可经 setUnitId 动态更新（2026-08-25）。 */
   private unitId: number;
   /** 当前从站地址（RTU）：连接后可动态更新（每表独立设置，2026-08-19）。 */
@@ -269,6 +360,17 @@ export class CommunicationSession {
   constructor(options: SessionOptions) {
     this.options = options;
     this.protocol = options.protocol ?? "rtu";
+    // ADR-040 决策 2（1B 通用注册表）：内置 rtu/tcp 走既有内置路径（双轨零回归）；
+    // codecId 从注册表解析，未知即构造期报错（不静默回退）。
+    if (this.protocol !== "rtu" && this.protocol !== "tcp") {
+      const codec = options.codecRegistry?.get(this.protocol);
+      if (!codec) {
+        throw codecNotFoundError(this.protocol);
+      }
+      this.codec = codec;
+    } else {
+      this.codec = null;
+    }
     this.unitId = options.unitId ?? 0;
     this.slaveAddress = options.slaveAddress ?? 1;
     this.scheduler = new RequestScheduler(options.clock, {
@@ -427,7 +529,7 @@ export class CommunicationSession {
     );
   }
 
-  /** 多寄存器读取（ADR-030）：一次 FC03 读 quantity 个连续寄存器。 */
+  /** 多寄存器读取（ADR-030）：一次 FC03 读 quantity 个连续寄存器。codec 路径映射为连续地址列表。 */
   readRegisters(
     sentAddress: number,
     quantity: number,
@@ -445,8 +547,45 @@ export class CommunicationSession {
         fail(quantityOutOfRangeError("read", quantity)),
       );
     }
+    const run =
+      this.codec !== null
+        ? () =>
+            this.executeCodecRead(
+              contiguousAddresses(sentAddress, quantity),
+              meta,
+            )
+        : () => this.executeRead(sentAddress, quantity, meta);
     return this.scheduler
-      .enqueue(() => this.executeRead(sentAddress, quantity, meta), {
+      .enqueue(run, {
+        priority: meta.priority ?? "manual-read",
+        group: meta.group,
+        cancelToken: meta.cancelToken,
+      })
+      .then((result) => result);
+  }
+
+  /**
+   * codec 路径：按寄存器编号列表非连续读取（ADR-040）。内置 rtu/tcp 不支持，返回能力错误。
+   * 一次请求可读任意不连续寄存器（如安川 MEMOBUS 67/010D，≤120）。
+   */
+  readRegistersAt(
+    addresses: number[],
+    meta: ReadRegistersMeta,
+  ): Promise<Result<number[]>> {
+    if (this.codec === null) {
+      return Promise.resolve(fail(codecRequiredError()));
+    }
+    if (this.stateMachine.getState() !== "connected") {
+      return Promise.resolve(fail(notConnectedError()));
+    }
+    const maxRead = this.codec.maxRead ?? MAX_READ_QUANTITY;
+    if (addresses.length < 1 || addresses.length > maxRead) {
+      return Promise.resolve(
+        fail(quantityOutOfRangeError("read", addresses.length)),
+      );
+    }
+    return this.scheduler
+      .enqueue(() => this.executeCodecRead(addresses, meta), {
         priority: meta.priority ?? "manual-read",
         group: meta.group,
         cancelToken: meta.cancelToken,
@@ -462,7 +601,7 @@ export class CommunicationSession {
     return this.writeRegisters(sentAddress, [rawValue], meta);
   }
 
-  /** 多寄存器写入（ADR-030）：一次 FC0x10 写 values.length 个连续寄存器。 */
+  /** 多寄存器写入（ADR-030）：一次 FC0x10 写 values.length 个连续寄存器。codec 路径映射为连续条目。 */
   writeRegisters(
     sentAddress: number,
     values: number[],
@@ -476,8 +615,44 @@ export class CommunicationSession {
         fail(quantityOutOfRangeError("write", values.length)),
       );
     }
+    const run =
+      this.codec !== null
+        ? () =>
+            this.executeCodecWrite(
+              values.map((value, index) => ({
+                address: (sentAddress + index) & 0xffff,
+                value,
+              })),
+              meta,
+            )
+        : () => this.executeWrite(sentAddress, values, meta);
+    return this.scheduler.enqueue(run, {
+      priority: meta.priority ?? "manual-write",
+    });
+  }
+
+  /**
+   * codec 路径：按（地址, 值）列表非连续写入（ADR-040）。内置 rtu/tcp 不支持，返回能力错误。
+   * 一次请求可写任意不连续寄存器（如安川 MEMOBUS 67/010E，≤60）。
+   */
+  writeRegistersAt(
+    entries: CodecWriteEntry[],
+    meta: WriteRegistersMeta,
+  ): Promise<Result<WriteOutcome>> {
+    if (this.codec === null) {
+      return Promise.resolve(fail(codecRequiredError()));
+    }
+    if (this.stateMachine.getState() !== "connected") {
+      return Promise.resolve(fail(notConnectedError()));
+    }
+    const maxWrite = this.codec.maxWrite ?? MAX_WRITE_QUANTITY;
+    if (entries.length < 1 || entries.length > maxWrite) {
+      return Promise.resolve(
+        fail(quantityOutOfRangeError("write", entries.length)),
+      );
+    }
     return this.scheduler.enqueue(
-      () => this.executeWrite(sentAddress, values, meta),
+      () => this.executeCodecWrite(entries, meta),
       { priority: meta.priority ?? "manual-write" },
     );
   }
@@ -487,7 +662,7 @@ export class CommunicationSession {
     quantity: number,
     meta: ReadRegistersMeta,
   ): Promise<Result<number[]>> {
-    const decoded = await this.executeExchange(
+    const decoded = await this.executeExchange<DecodedResponse>(
       () => this.buildReadAttempt(sentAddress, quantity),
       {
         source: meta.source,
@@ -522,7 +697,7 @@ export class CommunicationSession {
     values: number[],
     meta: WriteRegistersMeta,
   ): Promise<Result<WriteOutcome>> {
-    const decoded = await this.executeExchange(
+    const decoded = await this.executeExchange<DecodedResponse>(
       () => this.buildWriteAttempt(sentAddress, values),
       {
         source: meta.source,
@@ -553,32 +728,144 @@ export class CommunicationSession {
     );
   }
 
-  private async executeExchange(
-    buildAttempt: () => {
-      frame: Uint8Array;
-      expect: ExpectedResponse | TcpExpectedResponse;
-    },
+  /** codec 路径读执行（ADR-040）：编解码与分帧全委托 codec。 */
+  private async executeCodecRead(
+    addresses: number[],
+    meta: ReadRegistersMeta,
+  ): Promise<Result<number[]>> {
+    const codec = this.codec;
+    if (codec === null) return fail(codecRequiredError());
+    const decoded = await this.executeExchange<CodecDecodedResponse>(
+      () => this.buildCodecReadAttempt(codec, addresses),
+      {
+        source: meta.source,
+        userAddress: meta.userAddress ?? null,
+        sentAddress: addresses[0] ?? null,
+        functionCode: null,
+        quantity: addresses.length,
+        pluginId: meta.pluginId ?? null,
+      },
+    );
+    if (!decoded.ok) return decoded;
+    if (decoded.value.kind === "exception") {
+      return fail(this.mapCodecException(codec, decoded.value.exceptionCode));
+    }
+    if (decoded.value.kind === "read") {
+      return ok(decoded.value.values);
+    }
+    return fail(unexpectedResponseKindError("codec read", decoded.value));
+  }
+
+  /** codec 路径写执行（ADR-040）：编解码与分帧全委托 codec。 */
+  private async executeCodecWrite(
+    entries: CodecWriteEntry[],
+    meta: WriteRegistersMeta,
+  ): Promise<Result<WriteOutcome>> {
+    const codec = this.codec;
+    if (codec === null) return fail(codecRequiredError());
+    const decoded = await this.executeExchange<CodecDecodedResponse>(
+      () => this.buildCodecWriteAttempt(codec, entries),
+      {
+        source: meta.source,
+        userAddress: meta.userAddress ?? null,
+        sentAddress: entries[0]?.address ?? null,
+        functionCode: null,
+        quantity: entries.length,
+        pluginId: meta.pluginId ?? null,
+      },
+    );
+    if (!decoded.ok) return decoded;
+    if (decoded.value.kind === "exception") {
+      return fail(this.mapCodecException(codec, decoded.value.exceptionCode));
+    }
+    if (decoded.value.kind === "write") {
+      return ok({ kind: "write-succeeded-no-verify" });
+    }
+    return fail(unexpectedResponseKindError("codec write", decoded.value));
+  }
+
+  /** 构建 codec 读尝试（frame + expect + parser）。 */
+  private buildCodecReadAttempt(
+    codec: ProtocolCodec,
+    addresses: number[],
+  ): {
+    frame: Uint8Array;
+    expect: CodecExpect;
+    parser: FrameParser;
+  } {
+    const request: CodecReadRequest = {
+      slaveAddress: this.slaveAddress,
+      addresses,
+    };
+    const expect: CodecExpect = {
+      protocolId: codec.protocolId,
+      kind: "read",
+      request,
+    };
+    return {
+      frame: codec.encodeRead(request),
+      expect,
+      parser: codec.parserFactory(expect),
+    };
+  }
+
+  /** 构建 codec 写尝试（frame + expect + parser）。 */
+  private buildCodecWriteAttempt(
+    codec: ProtocolCodec,
+    entries: CodecWriteEntry[],
+  ): {
+    frame: Uint8Array;
+    expect: CodecExpect;
+    parser: FrameParser;
+  } {
+    const request: CodecWriteRequest = {
+      slaveAddress: this.slaveAddress,
+      entries,
+    };
+    const expect: CodecExpect = {
+      protocolId: codec.protocolId,
+      kind: "write",
+      request,
+    };
+    return {
+      frame: codec.encodeWrite(request),
+      expect,
+      parser: codec.parserFactory(expect),
+    };
+  }
+
+  /** 异常响应 → MamepError：优先 codec 自定义映射，缺省走通用设备异常。 */
+  private mapCodecException(
+    codec: ProtocolCodec,
+    exceptionCode: number,
+  ): MamepError {
+    return (
+      codec.mapException?.(exceptionCode) ??
+      modbusExceptionError(exceptionCode)
+    );
+  }
+
+  private async executeExchange<TDecoded extends AnyDecodedResponse>(
+    buildAttempt: () => SessionAttempt,
     meta: ExchangeMeta,
-  ): Promise<Result<DecodedResponse>> {
+  ): Promise<Result<TDecoded>> {
     const maxAttempts = this.options.config.retryCount + 1;
-    let lastResult: Result<DecodedResponse> | null = null;
+    let lastResult: Result<TDecoded> | null = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (this.stateMachine.getState() !== "connected") {
         return fail(notConnectedError());
       }
 
-      const { frame, expect } = buildAttempt();
+      const attemptBundle = buildAttempt();
+      const { frame } = attemptBundle;
       const startedAt = this.options.clock.now();
       this.emitLog({
         timestamp: startedAt,
         direction: "request",
         bytes: frame,
         protocol: this.protocol,
-        slaveAddress:
-          "slaveAddress" in expect
-            ? expect.slaveAddress
-            : this.logUnitAddress(),
+        slaveAddress: this.logUnitAddress(),
         functionCode: meta.functionCode,
         userAddress: meta.userAddress,
         sentAddress: meta.sentAddress,
@@ -593,7 +880,11 @@ export class CommunicationSession {
       });
 
       // 先注册数据监听，再写字节，避免设备响应在监听建立前到达而丢失。
-      const exchange = this.startExchange(expect);
+      const parser: SessionFrameParser =
+        attemptBundle.parser !== undefined
+          ? attemptBundle.parser
+          : builtinParserFor(attemptBundle.expect);
+      const exchange = this.startExchange(parser);
       const writeResult = await this.options.transport.write(frame);
       if (!writeResult.ok) {
         exchange.cancel("write-failed");
@@ -614,7 +905,7 @@ export class CommunicationSession {
 
       const single = await exchange.promise;
       if (single.ok) {
-        const decoded = single.value.result;
+        const decoded = single.value.result as TDecoded;
         if (decoded.kind === "exception") {
           this.emitExchangeLog(
             single.value.frame,
@@ -755,24 +1046,17 @@ export class CommunicationSession {
     return this.protocol === "tcp" ? this.unitId : this.slaveAddress;
   }
 
-  private startExchange(
-    expect: ExpectedResponse | TcpExpectedResponse,
-  ): PendingExchange {
-    // RTU 期望响应含 slaveAddress 字段；TCP 期望响应含 transactionId/unitId（无歧义判别）。
-    const parser =
-      "slaveAddress" in expect
-        ? new RtuFrameParser(expect)
-        : new TcpFrameParser(expect);
+  private startExchange(parser: SessionFrameParser): PendingExchange {
     const cancelToken = createCancellationToken();
     let settled = false;
     let timeoutHandle: { cancel(): void } | null = null;
     let unsubscribeData: (() => void) | null = null;
     let resolvePromise: (
-      result: Result<{ result: DecodedResponse; frame: Uint8Array }>,
+      result: Result<{ result: AnyDecodedResponse; frame: Uint8Array }>,
     ) => void = () => {};
 
     const finish = (
-      result: Result<{ result: DecodedResponse; frame: Uint8Array }>,
+      result: Result<{ result: AnyDecodedResponse; frame: Uint8Array }>,
     ): void => {
       if (settled) return;
       settled = true;
@@ -785,7 +1069,7 @@ export class CommunicationSession {
     };
 
     const promise = new Promise<
-      Result<{ result: DecodedResponse; frame: Uint8Array }>
+      Result<{ result: AnyDecodedResponse; frame: Uint8Array }>
     >((resolve) => {
       resolvePromise = resolve;
     });

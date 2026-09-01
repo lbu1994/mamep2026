@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
-import type { MenuProps, MenuRef } from "antd";
+import type { MenuProps } from "antd";
 import {
   App as AntApp,
   Avatar,
   Button,
+  Collapse,
+  ColorPicker,
   ConfigProvider,
   Divider,
   Dropdown,
@@ -28,7 +30,7 @@ import {
   collectThemeConfig,
   type ThemeContribution,
 } from "./plugin/theme-contributions";
-import type { SettingsContribution } from "./plugin/plugin-registries";
+import type { SettingsContribution, TableTypeContribution } from "./plugin/plugin-registries";
 import {
   ApiOutlined,
   AppstoreOutlined,
@@ -40,10 +42,14 @@ import {
   RightOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import type { RowId, SheetId } from "@mamep2026/domain";
-import { defaultConfig } from "@mamep2026/domain";
+import type { RowId, SheetId, SheetType } from "@mamep2026/domain";
+import {
+  basicTablesProtocolId,
+  CORE_TABLE_TYPES,
+  defaultConfig,
+} from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
-import { mergeThemeConfig } from "@mamep2026/ui-theme";
+import { mergeThemeConfig, isWhiteOnPrimaryAa } from "@mamep2026/ui-theme";
 import { STATE_DOT_COLOR } from "./connection-state";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
@@ -51,6 +57,8 @@ import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
 import { KeyboardShortcutsTable } from "./components/KeyboardShortcutsTable";
+import { DocumentationPanel } from "./components/DocumentationPanel";
+import type { DocumentationContribution } from "./components/documentation-markdown";
 import { PluginManagerModal } from "./components/PluginManagerModal";
 import { RegisterTable } from "./components/RegisterTable";
 import { SheetNameEditor } from "./components/SheetNameEditor";
@@ -81,14 +89,19 @@ export function MamepApp(): React.ReactNode {
   const sheetOpen = useAppStore(
     useShallow((s) => s.workspace.sheets.map((sh) => sh.open)),
   );
+  const sheetTypes = useAppStore(
+    useShallow((s) => s.workspace.sheets.map((sh) => sh.type)),
+  );
   const sheetMeta = useMemo(
     () =>
       sheetIds.map((sheetId, index) => ({
         sheetId,
         name: sheetNames[index] ?? "",
         open: sheetOpen[index] ?? true,
+        // 表类型（ADR-041）：侧边栏按协议分组用。
+        type: sheetTypes[index] ?? "holding-register",
       })),
-    [sheetIds, sheetNames, sheetOpen],
+    [sheetIds, sheetNames, sheetOpen, sheetTypes],
   );
   // 当前活动表的 Slave Address（每表独立，2026-08-19）：切换表/修改当前表值时
   // 同步到 host（会话请求使用当前表的值）。原语订阅不触发级联重渲染。
@@ -112,9 +125,12 @@ export function MamepApp(): React.ReactNode {
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
+  // 用户自定义主题主色（ADR-042）：null=默认品牌蓝；随工作区持久化。
+  const themePrimary = useAppStore((s) => s.themePrimary);
+  const setThemePrimary = useAppStore((s) => s.setThemePrimary);
   // 宿主完整主题（VSCode ui-theme 装配，ADR-027）；null=回退 buildTheme 两态。
   const themeConfig = useAppStore((s) => s.themeConfig);
-  // 插件主题贡献（2026-08-31，ADR-039）：插件 theme 贡献（纯数据）→ 用户设置（Phase D）→
+  // 插件主题贡献（2026-08-31，ADR-039）：插件 theme 贡献（纯数据）→ 用户设置（ADR-042）→
   // 默认 buildTheme。经 mergeThemeConfig 并入装配链，theme 贡献 Phase A 即可全功能。
   const themeContributions = usePluginContributions<ThemeContribution>(
     host,
@@ -124,18 +140,76 @@ export function MamepApp(): React.ReactNode {
     themeContributions,
     theme === "dark",
   );
+  // 用户设置层（ADR-042）：浅/深主色分别可设；VSCode 完整主题（themeConfig）下主色存活、
+  // 派生 token 跟随宿主（ADR-027 取舍）。用户主色不满足白字 AA（≥4.5:1）时回退默认并警告。
+  const baseThemeConfig = themeConfig ?? buildTheme(theme === "dark");
+  const userPrimary =
+    themePrimary?.[theme === "dark" ? "dark" : "light"] ?? null;
+  const userPrimaryAa = userPrimary === null || isWhiteOnPrimaryAa(userPrimary);
+  const userThemeConfig =
+    userPrimary === null || !userPrimaryAa
+      ? baseThemeConfig
+      : mergeThemeConfig(baseThemeConfig, {
+          token: {
+            colorPrimary: userPrimary,
+            colorLink: userPrimary,
+          },
+        });
   const effectiveThemeConfig =
     pluginThemeConfig === null
-      ? (themeConfig ?? buildTheme(theme === "dark"))
-      : mergeThemeConfig(
-          themeConfig ?? buildTheme(theme === "dark"),
-          pluginThemeConfig,
-        );
+      ? userThemeConfig
+      : mergeThemeConfig(userThemeConfig, pluginThemeConfig);
   // settings 贡献消费方（ADR-039）：Settings 弹窗分区（Phase A 声明式标题占位）。
   const settingsContributions = usePluginContributions<SettingsContribution>(
     host,
     "settings",
   );
+  // 文档贡献（ADR-043 E-5）：Help 弹窗渲染插件寄存器手册等。
+  const documentationContributions =
+    usePluginContributions<DocumentationContribution>(host, "documentation");
+  // 表类型贡献（ADR-041）：侧边栏按协议分组，插件组动态加载（插件启用 + 能力矩阵支持）。
+  const tableTypeContributions =
+    usePluginContributions<TableTypeContribution>(host, "tableType");
+  const sheetGroups = useMemo(() => {
+    const supportedProtocols = host?.capabilities.protocolExtensions ?? [];
+    const groups: Array<{ key: string; sheetType: SheetType; titleKey: string }> =
+      [
+        // 核心组：标准 Modbus 03H/10H 保持寄存器，恒存在。
+        {
+          key: "holding-register",
+          sheetType: "holding-register",
+          titleKey: "sidebar.groupModbus",
+        },
+      ];
+    // 核心基础表组（ADR-043 E-2）：coil/discrete-input/input-register，
+    // RTU 承载（codec 协议 ID），按能力矩阵 protocolExtensions 门控（VSCode 未接 codec 前不显示）。
+    for (const meta of CORE_TABLE_TYPES) {
+      if (meta.id === "holding-register") continue;
+      const protocol = basicTablesProtocolId(meta.id);
+      if (!supportedProtocols.includes(protocol)) continue;
+      groups.push({
+        key: meta.id,
+        sheetType: meta.id,
+        titleKey: meta.titleKey,
+      });
+    }
+    for (const contribution of tableTypeContributions) {
+      const { id, protocolId, titleKey } = contribution.payload;
+      if (!supportedProtocols.includes(protocolId)) continue;
+      const sheetType = `${contribution.pluginId}:${id}` as SheetType;
+      groups.push({ key: sheetType, sheetType, titleKey });
+    }
+    return groups;
+  }, [host, tableTypeContributions]);
+  // 分组折叠状态（ADR-041 决策②）：受控展开 + 记忆用户手动折叠的组。
+  // 不用 defaultActiveKey——插件贡献晚于 Collapse 挂载加载时，新组会默认折叠、
+  // 用户看不到「67H 组」入口；这里对未手动折叠的组恒展开（新组加入即展开）。
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const sheetGroupActiveKeys = sheetGroups
+    .filter((group) => !collapsedGroups.has(group.key))
+    .map((group) => group.key);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const addSheet = useAppStore((s) => s.addSheet);
   const renameSheet = useAppStore((s) => s.renameSheet);
@@ -189,12 +263,12 @@ export function MamepApp(): React.ReactNode {
   // Splitter 受控 size 拖拽过程缓冲：onResize 更新本地，onResizeEnd 才持久化到 panelLayout（避免高频写 store）。
   const [dragPanelHeight, setDragPanelHeight] = useState<number | null>(null);
   const dragIndex = useRef<number | null>(null);
-  const menuRef = useRef<MenuRef>(null);
+  // 侧边栏分组（ADR-041）容器：antd Menu 无法通过 items 配置直接给 <li> 设 draggable，
+  // 提交后在真实 DOM 上补齐（多个分组 Menu 统一经容器查找），保证表项可真实拖拽排序。
+  const sidebarListRef = useRef<HTMLDivElement>(null);
 
-  // antd Menu 无法通过 items 配置直接给 <li> 设 draggable，提交后在真实 DOM 上补齐，
-  // 保证表项可被真实拖拽排序（E2E 派发合成事件不依赖该属性，但真实用户拖拽需要）。
   useEffect(() => {
-    menuRef.current?.menu?.list
+    sidebarListRef.current
       ?.querySelectorAll<HTMLLIElement>("li[data-sheet-id]")
       .forEach((el) => {
         el.draggable = true;
@@ -227,6 +301,47 @@ export function MamepApp(): React.ReactNode {
       delete document.documentElement.dataset.mamepTheme;
     };
   }, [theme]);
+
+  // 主题主色同步到 --mamep-brand-primary / --mamep-focus-ring（ADR-042）：
+  // 消除 index.css 的第二份硬编码品牌色副本——CSS 变量经 document root 内联覆盖
+  // （内联样式优先于 :root / [data-mamep-theme] 规则）；CSS 保留默认值兜底。
+  useEffect(() => {
+    const primary = effectiveThemeConfig?.token?.colorPrimary;
+    if (typeof primary !== "string" || primary.length === 0) return;
+    document.documentElement.style.setProperty(
+      "--mamep-brand-primary",
+      primary,
+    );
+    document.documentElement.style.setProperty("--mamep-focus-ring", primary);
+  }, [effectiveThemeConfig]);
+
+  // 用户主题色不满足白字 AA 时警告一次（装配已回退默认，ADR-042 §2 对比度）。
+  const warnedContrastColor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userPrimaryAa && userPrimary !== null && warnedContrastColor.current !== userPrimary) {
+      warnedContrastColor.current = userPrimary;
+      appendMessage({
+        timestamp: Date.now(),
+        level: "warning",
+        messageKey: "settings.themeColorContrastWarning",
+        params: { color: userPrimary },
+        detail: userPrimary,
+      });
+    }
+  }, [userPrimary, userPrimaryAa, appendMessage]);
+
+  // 活动表 Address Transform（ADR-042 表级 Address Adjust）→ 会话：
+  // 切换表/修改当前表配置时同步（host 端会话经 session-set-address-transform RPC）。
+  const activeSheetAddressTransform = useAppStore(
+    (s) =>
+      s.workspace.sheets.find(
+        (sh) => sh.sheetId === (s.activeSheetId ?? s.workspace.activeSheetId),
+      )?.addressTransform ?? null,
+  );
+  useEffect(() => {
+    if (host === null || host === undefined) return;
+    host.setAddressTransform(activeSheetAddressTransform);
+  }, [host, activeSheetAddressTransform, connectionState]);
 
   // Trace 采样 -> store。
   useEffect(() => {
@@ -387,6 +502,120 @@ export function MamepApp(): React.ReactNode {
     },
   ];
 
+  // ---- 侧边栏分组（ADR-041 决策②）----
+  // 单个表项的 Menu item（含拖拽属性、右键/更多菜单、重命名）。
+  const sheetMenuItem = (
+    sheet: { sheetId: SheetId; name: string; open: boolean },
+    index: number,
+  ): NonNullable<MenuProps["items"]>[number] => ({
+    key: sheet.sheetId,
+    "data-sheet-id": sheet.sheetId,
+    "data-sheet-index": index,
+    // rc-menu 会给 inline 顶层 item 内联 padding-left: inlineIndent(24px)，
+    // 内联样式优先于 CSS，需在 item style 里覆盖回 6px 以保持原视觉。
+    style: { paddingInline: 6 },
+    className:
+      sheet.sheetId === currentSheet?.sheetId
+        ? "sheet-item sheet-item--active"
+        : sheet.open
+          ? "sheet-item"
+          : "sheet-item sheet-item--closed",
+    label: (
+      <Dropdown
+        trigger={["contextMenu"]}
+        menu={{
+          items: sheetMenu(sheet.sheetId, index, "sidebar"),
+        }}
+      >
+        <span className="sheet-item__label-wrap">
+          {sidebarRenamingSheetId === sheet.sheetId ? (
+            <SheetNameEditor
+              className="sheet-item__input"
+              name={sheet.name}
+              autoFocus
+              onCommit={(name) => {
+                renameSheet(sheet.sheetId, name);
+                setSidebarRenamingSheetId(null);
+              }}
+              onCancel={() => setSidebarRenamingSheetId(null)}
+            />
+          ) : (
+            <span className="sheet-item__name">{sheet.name}</span>
+          )}
+          <Dropdown
+            menu={{
+              items: sheetMenu(sheet.sheetId, index, "sidebar"),
+            }}
+            trigger={["click"]}
+          >
+            <Button
+              type="text"
+              size="small"
+              className="sheet-item__more"
+              aria-label={t("table.moreActions")}
+              icon={<MoreOutlined />}
+              onClick={(event) => event.stopPropagation()}
+            />
+          </Dropdown>
+        </span>
+      </Dropdown>
+    ),
+  });
+
+  // 单个分组的 Menu（组内表项拖拽排序；组与组之间因分属不同 Menu 不可跨组拖拽，
+  // 与「不同类型表之间不可随意复制粘贴」（决策⑥）一致）。
+  const renderGroupMenu = (
+    groupSheets: Array<{
+      sheetId: SheetId;
+      name: string;
+      open: boolean;
+      index: number;
+    }>,
+  ) => (
+    <Menu
+      className="sheet-sidebar__list sheet-sidebar__menu"
+      mode="inline"
+      inlineCollapsed={false}
+      selectable
+      selectedKeys={currentSheet !== undefined ? [currentSheet.sheetId] : []}
+      onClick={({ key, domEvent }) => {
+        // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
+        // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
+        // 而非“切换表”意图，忽略以免把 active 切回源表。
+        const target = domEvent.target as HTMLElement;
+        if (target.closest(".ant-dropdown") !== null) return;
+        // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
+        openSheet(key as SheetId);
+      }}
+      onDragStart={(event) => {
+        const li = (event.target as HTMLElement).closest<HTMLLIElement>(
+          "li[data-sheet-index]",
+        );
+        if (li?.dataset.sheetIndex !== undefined) {
+          dragIndex.current = Number(li.dataset.sheetIndex);
+        }
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        const li = (event.target as HTMLElement).closest<HTMLLIElement>(
+          "li[data-sheet-index]",
+        );
+        const fromIndex = dragIndex.current;
+        dragIndex.current = null;
+        if (li?.dataset.sheetIndex === undefined) return;
+        if (fromIndex === null) return;
+        const toIndex = Number(li.dataset.sheetIndex);
+        if (fromIndex === toIndex) return;
+        const source = sheetMeta[fromIndex];
+        if (source !== undefined) {
+          moveSheetTo(source.sheetId, toIndex);
+        }
+      }}
+      items={groupSheets.map((sheet) => sheetMenuItem(sheet, sheet.index))}
+    />
+  );
+
   return (
     <ConfigProvider theme={effectiveThemeConfig}>
       <AntApp>
@@ -523,119 +752,79 @@ export function MamepApp(): React.ReactNode {
                   />
                 </Tooltip>
               </div>
+              {/* 折叠窄条下的新建表按钮（原「＋」在分组头内，折叠时仅保留此按钮） */}
+              <Tooltip title={t("sidebar.newTable")}>
+                <Button
+                  type="text"
+                  size="small"
+                  className="sheet-sidebar__collapsed-add"
+                  aria-label={t("sidebar.newTable")}
+                  icon={<PlusOutlined />}
+                  onClick={() => addSheet()}
+                />
+              </Tooltip>
+              {/* 分区标题保留（新建入口已移入各分组头右侧 +，ADR-041 决策②） */}
               <div className="sheet-sidebar__section">
                 <span className="sheet-sidebar__section-title">
                   {t("sidebar.registerTables")}
                 </span>
-                <Tooltip title={t("sidebar.newTable")}>
-                  <Button
-                    type="text"
-                    size="small"
-                    className="sheet-sidebar__section-action"
-                    aria-label={t("sidebar.newTable")}
-                    icon={<PlusOutlined />}
-                    onClick={addSheet}
-                  />
-                </Tooltip>
               </div>
-              <Menu
-                ref={menuRef}
-                className="sheet-sidebar__list sheet-sidebar__menu"
-                mode="inline"
-                inlineCollapsed={false}
-                selectable
-                selectedKeys={
-                  currentSheet !== undefined ? [currentSheet.sheetId] : []
-                }
-                onClick={({ key, domEvent }) => {
-                  // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
-                  // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
-                  // 而非“切换表”意图，忽略以免把 active 切回源表。
-                  const target = domEvent.target as HTMLElement;
-                  if (target.closest(".ant-dropdown") !== null) return;
-                  // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
-                  openSheet(key as SheetId);
-                }}
-                onDragStart={(event) => {
-                  const li = (
-                    event.target as HTMLElement
-                  ).closest<HTMLLIElement>("li[data-sheet-index]");
-                  if (li?.dataset.sheetIndex !== undefined) {
-                    dragIndex.current = Number(li.dataset.sheetIndex);
-                  }
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const li = (
-                    event.target as HTMLElement
-                  ).closest<HTMLLIElement>("li[data-sheet-index]");
-                  const fromIndex = dragIndex.current;
-                  dragIndex.current = null;
-                  if (li?.dataset.sheetIndex === undefined) return;
-                  if (fromIndex === null) return;
-                  const toIndex = Number(li.dataset.sheetIndex);
-                  if (fromIndex === toIndex) return;
-                  const source = sheetMeta[fromIndex];
-                  if (source !== undefined) {
-                    moveSheetTo(source.sheetId, toIndex);
-                  }
-                }}
-                items={sheetMeta.map((sheet, index) => ({
-                  key: sheet.sheetId,
-                  "data-sheet-id": sheet.sheetId,
-                  "data-sheet-index": index,
-                  // rc-menu 会给 inline 顶层 item 内联 padding-left: inlineIndent(24px)，
-                  // 内联样式优先于 CSS，需在 item style 里覆盖回 6px 以保持原视觉。
-                  style: { paddingInline: 6 },
-                  className:
-                    sheet.sheetId === currentSheet?.sheetId
-                      ? "sheet-item sheet-item--active"
-                      : sheet.open
-                        ? "sheet-item"
-                        : "sheet-item sheet-item--closed",
-                  label: (
-                    <Dropdown
-                      trigger={["contextMenu"]}
-                      menu={{
-                        items: sheetMenu(sheet.sheetId, index, "sidebar"),
-                      }}
-                    >
-                      <span className="sheet-item__label-wrap">
-                        {sidebarRenamingSheetId === sheet.sheetId ? (
-                          <SheetNameEditor
-                            className="sheet-item__input"
-                            name={sheet.name}
-                            autoFocus
-                            onCommit={(name) => {
-                              renameSheet(sheet.sheetId, name);
-                              setSidebarRenamingSheetId(null);
-                            }}
-                            onCancel={() => setSidebarRenamingSheetId(null)}
-                          />
-                        ) : (
-                          <span className="sheet-item__name">{sheet.name}</span>
-                        )}
-                        <Dropdown
-                          menu={{
-                            items: sheetMenu(sheet.sheetId, index, "sidebar"),
-                          }}
-                          trigger={["click"]}
-                        >
+              <div ref={sidebarListRef} className="sheet-sidebar__groups">
+                <Collapse
+                  ghost
+                  className="sheet-sidebar__groups-collapse"
+                  activeKey={sheetGroupActiveKeys}
+                  onChange={(keys) => {
+                    const expanded = new Set(
+                      Array.isArray(keys) ? keys : [keys],
+                    );
+                    setCollapsedGroups(
+                      new Set(
+                        sheetGroups
+                          .filter((group) => !expanded.has(group.key))
+                          .map((group) => group.key),
+                      ),
+                    );
+                  }}
+                  items={sheetGroups.map((group) => ({
+                    key: group.key,
+                    label: (
+                      <span
+                        className="sheet-sidebar__group-head"
+                        data-sheet-group={group.key}
+                      >
+                        <span className="sheet-sidebar__group-title">
+                          {t(group.titleKey)}
+                        </span>
+                        <Tooltip title={t("sidebar.newTable")}>
                           <Button
                             type="text"
                             size="small"
-                            className="sheet-item__more"
-                            aria-label={t("table.moreActions")}
-                            icon={<MoreOutlined />}
-                            onClick={(event) => event.stopPropagation()}
+                            className="sheet-sidebar__group-action"
+                            // 核心组保持「New Register Table」（既有 e2e 定位依赖）；
+                            // 插件组用组标题作 aria-label（语义 = 在该组新建对应类型表）。
+                            aria-label={
+                              group.sheetType === "holding-register"
+                                ? t("sidebar.newTable")
+                                : t(group.titleKey)
+                            }
+                            icon={<PlusOutlined />}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              addSheet(group.sheetType);
+                            }}
                           />
-                        </Dropdown>
+                        </Tooltip>
                       </span>
-                    </Dropdown>
-                  ),
-                }))}
-              />
+                    ),
+                    children: renderGroupMenu(
+                      sheetMeta
+                        .map((sheet, index) => ({ ...sheet, index }))
+                        .filter((sheet) => sheet.type === group.sheetType),
+                    ),
+                  }))}
+                />
+              </div>
               <div className="sheet-sidebar__footer">
                 {t("sidebar.footer", { version: host?.appVersion ?? "" })}
               </div>
@@ -772,6 +961,42 @@ export function MamepApp(): React.ReactNode {
               />
             </div>
             <div>
+              <Typography.Text>{t("settings.themeColor")}</Typography.Text>
+              <ColorPicker
+                size="small"
+                style={{ marginLeft: 8 }}
+                aria-label={t("settings.themeColorLight")}
+                value={themePrimary?.light ?? "#1460d6"}
+                disabled={theme !== "light"}
+                onChange={(color) =>
+                  setThemePrimary({
+                    light: color.toHexString(),
+                    dark: themePrimary?.dark ?? "#1668dc",
+                  })
+                }
+              />
+              <ColorPicker
+                size="small"
+                style={{ marginLeft: 8 }}
+                aria-label={t("settings.themeColorDark")}
+                value={themePrimary?.dark ?? "#1668dc"}
+                disabled={theme !== "dark"}
+                onChange={(color) =>
+                  setThemePrimary({
+                    light: themePrimary?.light ?? "#1460d6",
+                    dark: color.toHexString(),
+                  })
+                }
+              />
+              <Button
+                size="small"
+                style={{ marginLeft: 8 }}
+                onClick={() => setThemePrimary(null)}
+              >
+                {t("settings.themeColorReset")}
+              </Button>
+            </div>
+            <div>
               <Typography.Text type="secondary">
                 {t("app.title")}
               </Typography.Text>{" "}
@@ -874,10 +1099,23 @@ export function MamepApp(): React.ReactNode {
           open={helpOpen}
           onCancel={() => setHelpOpen(false)}
           footer={null}
+          width={640}
         >
           <Typography.Paragraph>{t("settings.aboutText")}</Typography.Paragraph>
           <Divider />
           <KeyboardShortcutsTable />
+          {/* 插件文档（ADR-043 E-5）：documentation 贡献点轻量渲染。 */}
+          {documentationContributions.length > 0 ? (
+            <>
+              <Divider />
+              <DocumentationPanel
+                contributions={documentationContributions}
+                titleResolver={(key, fallback) =>
+                  i18n.exists(key) ? t(key) : fallback
+                }
+              />
+            </>
+          ) : null}
         </Modal>
         <AppShortcutLayer onOpenHelp={() => setHelpOpen(true)} />
       </AntApp>
