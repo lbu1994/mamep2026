@@ -16,12 +16,21 @@ export type PluginLifecycleState =
   | "deactivated" // 已禁用 / deactivate 已执行
   | "failed"; // activate/deactivate 抛错（贡献被禁用，插件仍可见于管理列表）
 
-/** 内置同进程插件运行时（ADR-039 最小执行面；第三方代码隔离见 PluginRemoteRuntime）。 */
+/** 内置/预装同进程插件运行时（ADR-039 最小执行面；第三方代码隔离见 PluginRemoteRuntime）。 */
 export interface PluginRuntime {
   activate(ctx: PluginContext): void | Promise<void>;
   deactivate?(): void | Promise<void>;
   /** 释放运行时资源（可选；远程运行时关闭隔离线程用）。 */
   dispose?(): void | Promise<void>;
+  /**
+   * 工具栏动作处理器（2026-09-02 插件外部化）：插件声明式 toolbarAction 贡献的执行面——
+   * 经 ctx.communication（PluginCommunicationApi，走统一调度器）完成设备操作
+   * （如安川 ROM/RAM 确定指令写 0900H/0910H）。未声明 = 动作不可用（UI 置灰）。
+   */
+  handleToolbarAction?(
+    actionId: string,
+    ctx: PluginContext,
+  ): Result<void> | Promise<Result<void>> | void;
 }
 
 /**

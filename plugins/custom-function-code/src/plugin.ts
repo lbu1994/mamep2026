@@ -1,10 +1,11 @@
 /**
- * 自定义功能码示例插件（ADR-043 E-4）。
+ * 自定义功能码示例插件（ADR-043 E-4；2026-09-02 插件外部化：随应用分发，installed 来源 +
+ * 同进程 runtime）。
  *
- * 演示插件开发范本（source:"builtin" 同进程）：
+ * 演示插件开发范本：
  * - `protocolExtension`：声明协议 "custom-function-code"；
  * - `tableType`：声明 "holding-register" 表类型映射到该协议（侧边栏分组）；
- * - `toolbarAction`：演示工具栏动作（声明式，Phase A 无 handler）；
+ * - `toolbarAction`：演示工具栏动作（声明式，无 handler → 界面置灰占位）；
  * - `dataType`：演示 ADR-043 E-3 插件数据类型（运行时经 resolver.register 注入，
  *   展示单寄存器插件类型的解析/格式化）。
  */
@@ -15,6 +16,7 @@ import {
   PLUGIN_API_VERSION,
   type PluginManifest,
   type PluginRegistry,
+  type PluginRuntime,
 } from "@mamep2026/plugin-api";
 import { CustomFunctionCodec } from "./codec";
 
@@ -67,55 +69,66 @@ export const customFunctionManifest: PluginManifest = {
 };
 
 /**
- * 注册示例插件（内置同进程）：activate 时把 CustomFunctionCodec 注册进 CodecRegistry，
- * 并把插件 dataType 的解析/格式化注册进 DataTypeResolver（ADR-043 E-3）。
+ * 构造示例插件运行时（installed 来源同进程 runtime）：activate 时把 CustomFunctionCodec
+ * 注册进 CodecRegistry，并把插件 dataType 的解析/格式化注册进 DataTypeResolver（ADR-043 E-3）。
+ * （2026-09-02 插件外部化：装配层在首次安装与重启恢复时复用同一工厂。）
+ */
+export function createCustomFunctionRuntime(options: {
+  codecRegistry: CodecRegistry;
+  dataTypeResolver: DataTypeResolver;
+}): PluginRuntime {
+  return {
+    activate() {
+      options.codecRegistry.register(new CustomFunctionCodec());
+      options.dataTypeResolver.register(CUSTOM_PLUGIN_DATA_TYPE, {
+        // 值语义：单元格文本 = 原始值 / 10（一位小数，无符号）。
+        parse: (text) => {
+          const match = /^(\d+)(?:\.(\d))?$/.exec(text.trim());
+          if (match === null) {
+            return {
+              ok: false as const,
+              error: {
+                code: "DATA_INVALID_NUMBER",
+                category: "validation" as const,
+                severity: "error" as const,
+                retryable: false,
+                userMessageKey: "errors.dataInvalidNumber",
+                technicalMessage: `invalid scaled input: ${text}`,
+              },
+            };
+          }
+          const value =
+            Number(match[1] ?? "0") * 10 + Number(match[2] ?? "0");
+          if (value > 65535) {
+            return {
+              ok: false as const,
+              error: {
+                code: "DATA_OUT_OF_RANGE",
+                category: "validation" as const,
+                severity: "error" as const,
+                retryable: false,
+                userMessageKey: "errors.dataOutOfRange",
+                technicalMessage: `scaled value out of range: ${text}`,
+              },
+            };
+          }
+          return { ok: true as const, value };
+        },
+        format: (raw) => `${Math.trunc(raw / 10)}.${raw % 10}`,
+      });
+    },
+  };
+}
+
+/**
+ * 注册示例插件（installed 来源 + 同进程 runtime）。
  */
 export function registerCustomFunctionPlugin(
   registry: PluginRegistry,
   options: { codecRegistry: CodecRegistry; dataTypeResolver: DataTypeResolver },
 ): Result<PluginManifest> {
   return registry.register(customFunctionManifest, {
-    source: "builtin",
-    runtime: {
-      activate() {
-        options.codecRegistry.register(new CustomFunctionCodec());
-        options.dataTypeResolver.register(CUSTOM_PLUGIN_DATA_TYPE, {
-          // 值语义：单元格文本 = 原始值 / 10（一位小数，无符号）。
-          parse: (text) => {
-            const match = /^(\d+)(?:\.(\d))?$/.exec(text.trim());
-            if (match === null) {
-              return {
-                ok: false as const,
-                error: {
-                  code: "DATA_INVALID_NUMBER",
-                  category: "validation" as const,
-                  severity: "error" as const,
-                  retryable: false,
-                  userMessageKey: "errors.dataInvalidNumber",
-                  technicalMessage: `invalid scaled input: ${text}`,
-                },
-              };
-            }
-            const value =
-              Number(match[1] ?? "0") * 10 + Number(match[2] ?? "0");
-            if (value > 65535) {
-              return {
-                ok: false as const,
-                error: {
-                  code: "DATA_OUT_OF_RANGE",
-                  category: "validation" as const,
-                  severity: "error" as const,
-                  retryable: false,
-                  userMessageKey: "errors.dataOutOfRange",
-                  technicalMessage: `scaled value out of range: ${text}`,
-                },
-              };
-            }
-            return { ok: true as const, value };
-          },
-          format: (raw) => `${Math.trunc(raw / 10)}.${raw % 10}`,
-        });
-      },
-    },
+    source: "installed",
+    runtime: createCustomFunctionRuntime(options),
   });
 }

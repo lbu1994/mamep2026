@@ -20,7 +20,7 @@ const manifest: PluginManifest = {
 };
 
 function storeData(): PluginStoreData {
-  return { schemaVersion: 2, plugins: [{ manifest, enabled: true }] };
+  return { schemaVersion: 3, plugins: [{ manifest, enabled: true }], seeded: false };
 }
 
 function makeMemento(initial?: unknown): {
@@ -49,7 +49,11 @@ describe("GlobalStatePluginStore", () => {
     const result = await store.load();
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value).toEqual({ schemaVersion: 2, plugins: [] });
+      expect(result.value).toEqual({
+        schemaVersion: 3,
+        plugins: [],
+        seeded: false,
+      });
     }
   });
 

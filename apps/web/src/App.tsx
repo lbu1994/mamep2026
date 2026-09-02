@@ -1,29 +1,41 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { RowId } from "@mamep2026/domain";
+import type { AddressTransform, RowId } from "@mamep2026/domain";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
 import type { CommunicationLogEvent } from "@mamep2026/communication";
 import { createCodecRegistry, formatBytesHex, registerBasicTablesCodecs } from "@mamep2026/communication";
 import { createDataTypeResolver } from "@mamep2026/data-conversion";
 import type { ApplicationMessage } from "@mamep2026/logging";
-import { PluginRegistry } from "@mamep2026/plugin-api";
+import { createAddressTransformRegistry } from "@mamep2026/plugin-api";
 import {
-  createAddressTransformRegistry,
-  type AddressTransformRegistry,
-} from "@mamep2026/plugin-api";
-import {
-  BUILTIN_ADDRESS_ADJUST_TRANSFORM,
   applyPollResult,
   buildPollingTargets,
 } from "@mamep2026/register-table";
-import { registerYaskawaPlugin } from "@mamep2026/yaskawa-memobus-67h-010dh-010eh";
-import { registerCustomFunctionPlugin } from "@mamep2026/custom-function-code";
+import { EXAMPLE_PANEL_PLUGIN_ID, examplePanelManifest } from "@mamep2026/example-panel";
+import {
+  ADDRESS_ADJUST_PLUGIN_ID,
+  addressAdjustManifest,
+  createAddressAdjustRuntime,
+} from "@mamep2026/address-adjust";
+import {
+  YASKAWA_MEMOBUS_PLUGIN_ID,
+  yaskawaMemobusManifest,
+  createYaskawaRuntime,
+} from "@mamep2026/yaskawa-memobus-67h-010dh-010eh";
+import {
+  CUSTOM_FUNCTION_PLUGIN_ID,
+  customFunctionManifest,
+  createCustomFunctionRuntime,
+} from "@mamep2026/custom-function-code";
 import {
   BrowserPlatformHost,
   createIdbKeyValueStore,
   IndexedDBWorkspaceRepository,
 } from "@mamep2026/platform-web";
 import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
-import { BrowserAppHost } from "./AppHost";
+import {
+  BrowserAppHost,
+  type BundledPluginEntry,
+} from "./AppHost";
 import { ElectronAppHost } from "./electron-app-host";
 import { VscodeAppHost } from "./vscode-app-host";
 import { IndexedDBPluginStore } from "./indexeddb-plugin-store";
@@ -61,71 +73,6 @@ function toCommLogEntry(event: CommunicationLogEvent) {
   };
 }
 
-/**
- * 内置示例插件（ADR-039，2026-08-31）：升级为 Manifest v2，演示两个贡献点——
- * panels（底部面板「插件」页签）与 theme（主题色贡献，经装配链生效）。
- * 可于 Plugin Manager 禁用恢复默认主题。仅声明式贡献，无代码执行。
- */
-function registerExamplePlugin(registry: PluginRegistry): void {
-  registry.register({
-    id: "example-panel",
-    name: "Example Panel",
-    version: "1.0.0",
-    apiVersion: "1.0",
-    description:
-      "A built-in UI-safe example plugin that validates the plugin boundary.",
-    author: "Mamep2026 Team",
-    platform: { web: true, node: false },
-    permissions: ["ui-contribution", "theme"],
-    contributes: {
-      panels: [{ id: "example-info", titleKey: "plugins.exampleTitle" }],
-      theme: {
-        colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
-        colorLink: { light: "#4f46e5", dark: "#818cf8" },
-      },
-    },
-  });
-}
-
-/**
- * 内置 Address Adjust 插件（2026-09-01，ADR-042）：核心开箱即用的表级地址变换。
- * 贡献点声明式数据（供工具栏/Plugin Manager 消费）；apply/validate 函数经 activate 注册进
- * AddressTransformRegistry（函数不可序列化，不能进 payload——仿 codec 模式）。
- */
-function registerBuiltinAddressAdjustPlugin(
-  registry: PluginRegistry,
-  transformRegistry: AddressTransformRegistry,
-): void {
-  registry.register(
-    {
-      id: "builtin-address-adjust",
-      name: "Address Adjust",
-      version: "1.0.0",
-      apiVersion: "1.0",
-      description:
-        "Built-in table-level Address Adjust: sent address = user address - 1.",
-      platform: { web: true, node: true },
-      permissions: [],
-      contributes: {
-        addressTransform: {
-          id: "builtin.address-adjust",
-          protocol: "rtu",
-          titleKey: "table.addressAdjust",
-          defaultConfig: { enabled: false },
-        },
-      },
-    },
-    {
-      source: "builtin",
-      runtime: {
-        activate() {
-          transformRegistry.register(BUILTIN_ADDRESS_ADJUST_TRANSFORM);
-        },
-      },
-    },
-  );
-}
-
 export default function App(): React.ReactNode {
   const hostRef = useRef<AppHost | null>(null);
   const setHost = useAppStore((s) => s.setHost);
@@ -140,19 +87,64 @@ export default function App(): React.ReactNode {
   const setConnectionState = useAppStore((s) => s.setConnectionState);
 
   const mockTransport = useMemo(() => isMockMode(), []);
+  // 地址变换解析（2026-09-02 插件外部化）：跨 effect 共享（装配效应用例与工作区订阅副作用），
+  // 初始 no-op 兜底，effect 内装配后指向随包 address-adjust 插件注册表。
+  const resolveTransformRef = useRef<
+    (transformId: string) => AddressTransform | null
+  >(() => null);
 
   // 启动装配（一次）。宿主 renderer 由 preload / vscode-bridge 暴露 window.mamepHost
   // （白名单桥），按 platform 判别窄化分支装配：VSCode Webview → VscodeAppHost、
   // Electron → ElectronAppHost；否则按浏览器 Host 装配（Web Serial + IndexedDB）。
   useEffect(() => {
     const bridge = window.mamepHost;
-    // codec 注册表（ADR-041 决策 A）：内置安川插件 activate 填充，connect 按活动表协议路由。
+    // codec 注册表（ADR-041 决策 A）：随包插件 activate 填充，connect 按活动表协议路由。
     const codecRegistry = createCodecRegistry();
+    // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，三端共享装配。
+    registerBasicTablesCodecs(codecRegistry);
+    // 地址变换注册表（ADR-042）+ 数据类型解析器（ADR-043 E-3）：随包插件 activate 注入，
+    // 装配后经闭包传宿主/插件；地址变换解析按表应用（2026-09-02 插件外部化）。
+    const transformRegistry = createAddressTransformRegistry();
+    const dataTypeResolver = createDataTypeResolver();
+    const resolveAddressTransform = (transformId: string) =>
+      transformRegistry.get(transformId) ?? null;
+    resolveTransformRef.current = resolveAddressTransform;
+    // 随应用分发的插件（2026-09-02 插件外部化）：manifest + 同进程 runtime 工厂。
+    // 首次启动由 host.startPlugins() 一次性安装（installed + 持久化），重启经 hydrate +
+    // attachRuntime 恢复同步能力；插件包代码位于 plugins/ 目录，核心不再内置任何插件。
+    const bundledPlugins: BundledPluginEntry[] = [
+      {
+        pluginId: EXAMPLE_PANEL_PLUGIN_ID,
+        manifest: examplePanelManifest,
+        createRuntime: () => undefined,
+      },
+      {
+        pluginId: ADDRESS_ADJUST_PLUGIN_ID,
+        manifest: addressAdjustManifest,
+        createRuntime: () =>
+          createAddressAdjustRuntime({ transformRegistry }),
+      },
+      {
+        pluginId: YASKAWA_MEMOBUS_PLUGIN_ID,
+        manifest: yaskawaMemobusManifest,
+        createRuntime: () => createYaskawaRuntime({ codecRegistry }),
+      },
+      {
+        pluginId: CUSTOM_FUNCTION_PLUGIN_ID,
+        manifest: customFunctionManifest,
+        createRuntime: () =>
+          createCustomFunctionRuntime({ codecRegistry, dataTypeResolver }),
+      },
+    ];
     const host: AppHost =
       bridge !== undefined
         ? bridge.platform === "vscode"
-          ? new VscodeAppHost(bridge)
-          : new ElectronAppHost(bridge, { codecRegistry })
+          ? new VscodeAppHost(bridge, { bundledPlugins, resolveAddressTransform })
+          : new ElectronAppHost(bridge, {
+              codecRegistry,
+              bundledPlugins,
+              resolveAddressTransform,
+            })
         : (() => {
             const serial = navigator.serial;
             const platformHost =
@@ -169,27 +161,15 @@ export default function App(): React.ReactNode {
               pluginStore: new IndexedDBPluginStore(kv),
               // codec 注册表（ADR-041 决策 A）。
               codecRegistry,
+              // 随应用分发插件 + 地址变换解析（2026-09-02 插件外部化）。
+              bundledPlugins,
+              resolveAddressTransform,
             });
           })();
     hostRef.current = host;
-    registerExamplePlugin(host.pluginRegistry);
-    // 内置 Address Adjust（ADR-042）：贡献点 + apply 函数注册，核心开箱即用。
-    registerBuiltinAddressAdjustPlugin(
-      host.pluginRegistry,
-      createAddressTransformRegistry(),
-    );
-    // 安川插件（ADR-041 决策①1A）：内置同进程，activate 把 MemobusCodec 注册进 codecRegistry。
-    registerYaskawaPlugin(host.pluginRegistry, { codecRegistry });
-    // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，浏览器/Electron 共享装配。
-    registerBasicTablesCodecs(codecRegistry);
-    // 数据类型解析器（ADR-043 E-3）：内置 + 插件类型（插件 activate 经 resolver.register 注入）；
-    // 装配后注入 store，单元格解析/读取格式化/CSV 白名单经它转发。
-    const dataTypeResolver = createDataTypeResolver();
-    // 自定义功能码示例插件（ADR-043 E-4）：codec + 插件 dataType 运行时演示。
-    registerCustomFunctionPlugin(host.pluginRegistry, {
-      codecRegistry,
-      dataTypeResolver,
-    });
+    // 插件系统启动（2026-09-02 插件外部化）：首次一次性安装随包插件；重启恢复 runtime。
+    void host.startPlugins();
+    // 数据类型解析器注入 store，单元格解析/读取格式化/CSV 白名单经它转发。
     setDataTypeResolver(dataTypeResolver);
     setHost(host);
 
@@ -207,12 +187,14 @@ export default function App(): React.ReactNode {
       if (!result.ok) return;
       const state = useAppStore.getState();
       // 应用层纯函数完成 generation 校验与按 Type 格式化（§17）；
-      // 地址变换按各行所属 sheet 应用（ADR-042 表级 Address Adjust）。
+      // 地址变换按各行所属 sheet 应用（ADR-042 表级 Address Adjust；2026-09-02 插件外部化：
+      // 变换经随包 address-adjust 插件注册表解析，核心不再内置）。
       const updated = applyPollResult(
         state.workspace.sheets,
         key,
         address,
         result.value,
+        { resolveAddressTransform: resolveTransformRef.current },
       );
       if (updated !== null) updateRow(key as RowId, () => updated);
     });
@@ -293,8 +275,13 @@ export default function App(): React.ReactNode {
       if (state.workspace.sheets.length === 0) return;
       host.scheduleSave(state.workspace);
 
-      // 应用层纯函数构建轮询目标（含表级地址变换偏移与地址 0 跳过；ADR-042 按 sheet）。
-      host.updatePollingTargets(buildPollingTargets(state.workspace.sheets));
+      // 应用层纯函数构建轮询目标（含表级地址变换偏移与地址 0 跳过；ADR-042 按 sheet；
+      // 2026-09-02 插件外部化：变换经随包插件注册表解析）。
+      host.updatePollingTargets(
+        buildPollingTargets(state.workspace.sheets, {
+          resolveAddressTransform: resolveTransformRef.current,
+        }),
+      );
     });
   }, []);
 

@@ -18,7 +18,7 @@ export const PANELS_CONTRIBUTION_SCHEMA = z.array(
   }),
 );
 
-/** toolbarAction 单动作 schema（ADR-041 Phase C：数组元素）。 */
+/** toolbarAction 单动作 schema（ADR-041 Phase C：数组元素；2026-09-02 增 confirmKey）。 */
 const TOOLBAR_ACTION_ITEM_SCHEMA = z.object({
   id: z.string().min(1),
   titleKey: z.string().min(1),
@@ -26,6 +26,8 @@ const TOOLBAR_ACTION_ITEM_SCHEMA = z.object({
   scope: z.literal("table-toolbar").default("table-toolbar"),
   targetTableType: z.string().optional(),
   requiresConfirm: z.boolean().default(false),
+  /** 安全确认文案 i18n key（2026-09-02 插件外部化）：requiresConfirm 时 UI 经此键弹确认框；缺省用插件名。 */
+  confirmKey: z.string().optional(),
 });
 
 /** toolbarAction：表格工具栏按钮（ADR-041 Phase C：数组，一插件可贡献多个动作）。 */

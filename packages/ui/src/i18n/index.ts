@@ -328,6 +328,10 @@ export const en = {
       "This will remove the plugin and its contributions from this environment. This cannot be undone.",
     uninstallConfirmOk: "Uninstall",
     uninstallSuccess: "Plugin uninstalled.",
+    // 随应用分发插件（2026-09-02 插件外部化）：一次性安装，可卸载/恢复。
+    restoreBundled: "Restore bundled",
+    restoreBundledSuccess: "Bundled plugins restored.",
+    actionSucceeded: "Plugin action completed.",
     // 单文件 JS 可执行插件（2026-09-01，ADR-044 Phase F-2/3）。
     executableUnsupported:
       "Executable plugins are not supported in this environment.",
@@ -495,6 +499,8 @@ export const en = {
     pluginNotFound: "This plugin is not registered.",
     pluginBuiltinNotRemovable:
       "Built-in plugins are bundled with the app and cannot be uninstalled.",
+    pluginActionNotHandled:
+      "This plugin does not handle the requested action.",
     pluginLoadFailed: "Failed to load the plugin in the isolated worker.",
     pluginStoreError: "Failed to persist the installed plugin.",
     pluginStoreSchemaInvalid:
@@ -818,6 +824,10 @@ export const zh: TranslationResources = {
       "这将从当前环境中移除该插件及其贡献。此操作不可撤销。",
     uninstallConfirmOk: "卸载",
     uninstallSuccess: "插件已卸载。",
+    // 随应用分发插件（2026-09-02 插件外部化）：一次性安装，可卸载/恢复。
+    restoreBundled: "恢复随包插件",
+    restoreBundledSuccess: "随包插件已恢复。",
+    actionSucceeded: "插件动作执行完成。",
     // 单文件 JS 可执行插件（2026-09-01，ADR-044 Phase F-2/3）。
     executableUnsupported: "当前环境不支持可执行插件。",
     executableEntryNotice:
@@ -973,6 +983,7 @@ export const zh: TranslationResources = {
     pluginAlreadyRegistered: "该插件已注册。",
     pluginNotFound: "该插件未注册。",
     pluginBuiltinNotRemovable: "内置插件随应用打包，无法卸载。",
+    pluginActionNotHandled: "该插件不支持此操作。",
     pluginLoadFailed: "在隔离线程中加载插件失败。",
     pluginStoreError: "已安装插件持久化失败。",
     pluginStoreSchemaInvalid: "已存储的插件数据无效或已损坏。",

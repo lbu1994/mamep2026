@@ -66,6 +66,23 @@ function createHarness(): Harness {
   const host = new RtuSessionHost({
     clock,
     events: events as RtuSessionHostEvents,
+    // 地址变换解析（2026-09-02 插件外部化）：模拟随包 address-adjust 插件提供的 resolver。
+    resolveAddressTransform: (id) =>
+      id === "builtin.address-adjust"
+        ? {
+            id,
+            apply: (v: number) =>
+              v === 0
+                ? fail(
+                    createMamepError({
+                      code: "ADDRESS_ADJUST_UNDERFLOW",
+                      category: "validation",
+                    }),
+                  )
+                : { ok: true as const, value: v - 1 },
+            validate: () => ok(null),
+          }
+        : null,
   });
   return { host, clock, transport, device, events };
 }

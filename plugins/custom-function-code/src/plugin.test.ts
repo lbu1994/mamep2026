@@ -84,4 +84,16 @@ describe("registerCustomFunctionPlugin（ADR-043 E-4）", () => {
   it("插件 id 唯一", () => {
     expect(CUSTOM_FUNCTION_PLUGIN_ID).toBe("custom-function-code");
   });
+
+  it("来源为 installed（2026-09-02 插件外部化：随应用分发一次性安装）", () => {
+    const { registry } = makeRegistry();
+    const codecRegistry = createCodecRegistry();
+    const dataTypeResolver = createDataTypeResolver();
+    registerCustomFunctionPlugin(registry, {
+      codecRegistry,
+      dataTypeResolver,
+    });
+    expect(registry.getSource(CUSTOM_FUNCTION_PLUGIN_ID)).toBe("installed");
+    expect(registry.getRuntime(CUSTOM_FUNCTION_PLUGIN_ID)).toBeDefined();
+  });
 });

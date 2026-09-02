@@ -567,6 +567,28 @@ describe("PluginManagerModal", () => {
     });
   });
 
+  describe("随应用分发插件恢复（2026-09-02 插件外部化）", () => {
+    it("footer 显示「Restore bundled」，点击调用 host.restoreAllBundledPlugins", async () => {
+      const restoreAllBundledPlugins = vi.fn(async (): Promise<void> => {});
+      setHostWithPlugin(new PluginRegistry(), {
+        restoreAllBundledPlugins,
+      });
+      renderModal();
+
+      const restoreButton = screen.getByRole("button", {
+        name: /Restore bundled/i,
+      });
+      expect(restoreButton).toBeTruthy();
+      fireEvent.click(restoreButton);
+      await waitFor(() => {
+        expect(restoreAllBundledPlugins).toHaveBeenCalledTimes(1);
+      });
+      await waitFor(() => {
+        expect(screen.getByText("Bundled plugins restored.")).toBeTruthy();
+      });
+    });
+  });
+
   describe("单文件 JS 可执行插件安装（2026-09-01，ADR-044 Phase F-2/3）", () => {
     const executableCaps = { ...browserCaps, executablePlugins: true } as const;
     const entrySource =

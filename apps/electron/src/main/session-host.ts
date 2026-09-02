@@ -23,12 +23,17 @@ import type {
   RegisterRow,
   Result,
   TcpConnectionProfile,
+  AddressTransform,
 } from "@mamep2026/domain";
 
 export interface ElectronSessionHostOptions {
   platform: NodeTcpPlatformHost;
   /** 会话事件（由 main.ts 转换为 HostMessage v1 event 推送 Renderer）。 */
   events: SessionHostEvents;
+  /** 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件提供（host 端直接引用插件导出）。 */
+  resolveAddressTransform?: (
+    transformId: string,
+  ) => AddressTransform | null;
 }
 
 export class ElectronSessionHost {
@@ -42,6 +47,9 @@ export class ElectronSessionHost {
       events: options.events,
       // 自动重连（2026-08-30）：重连时由协调器重新打开 TCP 传输。
       openTransport: (profile) => this.platform.openTcpTransport(profile),
+      ...(options.resolveAddressTransform !== undefined
+        ? { resolveAddressTransform: options.resolveAddressTransform }
+        : {}),
     });
   }
 

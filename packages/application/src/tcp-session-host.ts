@@ -24,6 +24,7 @@ import type {
   ReadVerifySettings,
   Result,
   TcpConnectionProfile,
+  AddressTransform,
 } from "@mamep2026/domain";
 import { createMamepError, fail } from "@mamep2026/domain";
 import type { SessionHostEvents } from "./session-host-core";
@@ -43,6 +44,10 @@ export interface TcpConnectInput {
 export interface TcpSessionHostOptions {
   clock: Clock;
   events: SessionHostEvents;
+  /** 地址变换解析（ADR-042；2026-09-02 插件外部化：宿主注入随包插件 resolver，缺省不调整）。 */
+  resolveAddressTransform?: (
+    transformId: string,
+  ) => AddressTransform | null;
   /**
    * 自动重连用的传输重开工厂（可选，仅 TCP）：由平台宿主注入（重新 openTcpTransport）。
    * 缺省时 TcpSessionHost 不启用自动重连（profile.autoReconnect 被忽略）。
@@ -63,6 +68,9 @@ export class TcpSessionHost {
       clock: options.clock,
       events: options.events,
       getPollingIntervalMs: () => this.currentProfile?.interRequestDelayMs ?? 50,
+      ...(options.resolveAddressTransform !== undefined
+        ? { resolveAddressTransform: options.resolveAddressTransform }
+        : {}),
     });
     // 自动重连仅在注入 openTransport（平台宿主提供重开能力）时启用。
     this.coordinator =

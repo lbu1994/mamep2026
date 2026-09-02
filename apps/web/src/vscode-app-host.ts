@@ -23,6 +23,7 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
   Workspace,
+  AddressTransform,
 } from "@mamep2026/domain";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
@@ -70,7 +71,10 @@ import {
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { useAppStore } from "@mamep2026/ui";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
-import { BrowserAppHost } from "./AppHost";
+import {
+  BrowserAppHost,
+  type BundledPluginEntry,
+} from "./AppHost";
 import { BridgePluginStore } from "./bridge-plugin-store";
 
 /** VscodeAppHost 可注入依赖（测试用；生产走默认装配）。 */
@@ -79,6 +83,12 @@ export interface VscodeAppHostOptions {
   repository?: WorkspaceRepositoryPort | undefined;
   /** 插件存储（默认 BridgePluginStore 经 vscode-bridge；测试注入内存仓储）。 */
   pluginStore?: PluginStorePort | undefined;
+  /** 随应用分发插件（2026-09-02 插件外部化）：透传 inner（首次一次性安装 + 重启恢复）。 */
+  bundledPlugins?: BundledPluginEntry[] | undefined;
+  /** 地址变换解析（2026-09-02 插件外部化）：透传 inner（本地只读会话不用于通信）。 */
+  resolveAddressTransform?: (
+    transformId: string,
+  ) => AddressTransform | null;
   /**
    * 主题 CSS 变量读取源（默认 getComputedStyle(document.documentElement) 惰性委托；
    * 测试注入 fake，避免 node 环境触碰 DOM）。
@@ -161,6 +171,9 @@ export class VscodeAppHost implements AppHost {
       mockTransport: false,
       // 插件持久化（2026-08-30，ADR-038）：Extension Host globalState 经 vscode-bridge 薄桥。
       pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
+      // 随应用分发插件 + 地址变换解析（2026-09-02 插件外部化）。
+      bundledPlugins: options.bundledPlugins,
+      resolveAddressTransform: options.resolveAddressTransform,
     });
     this.capabilities = vscodeCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;
@@ -389,6 +402,21 @@ export class VscodeAppHost implements AppHost {
 
   getConnectionState(): ConnectionState {
     return this.connectionState;
+  }
+
+  /** 启动插件系统（2026-09-02 插件外部化）：委托 inner（首次一次性安装随包插件 + 恢复）。 */
+  startPlugins(): Promise<void> {
+    return this.inner.startPlugins();
+  }
+
+  /** 恢复已卸载的随应用分发插件（2026-09-02 插件外部化）。 */
+  restoreBundledPlugin(pluginId: string): Promise<void> {
+    return this.inner.restoreBundledPlugin(pluginId);
+  }
+
+  /** 恢复全部已卸载的随应用分发插件（2026-09-02 插件外部化）。 */
+  restoreAllBundledPlugins(): Promise<void> {
+    return this.inner.restoreAllBundledPlugins();
   }
 
   /** 当前会话（ADR-044 Phase F-2）：VSCode 会话在 Extension Host，无本地会话 → null。 */

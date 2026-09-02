@@ -10,6 +10,7 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
   Workspace,
+  AddressTransform,
 } from "@mamep2026/domain";
 import {
   browserCapabilities,
@@ -56,7 +57,11 @@ import {
   PluginPersistenceCoordinator,
   PluginRegistry,
 } from "@mamep2026/plugin-api";
-import type { PluginStorePort } from "@mamep2026/plugin-api";
+import type {
+  PluginManifest,
+  PluginRuntime,
+  PluginStorePort,
+} from "@mamep2026/plugin-api";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { AutoSaveCoordinator } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
@@ -65,6 +70,18 @@ import {
   installMockHooks,
   MockTransport,
 } from "@mamep2026/platform-web";
+
+/**
+ * 随应用分发的插件条目（2026-09-02 插件外部化）：manifest + 同进程 runtime 工厂。
+ * 首次启动一次性安装（register + 持久化）；重启后经 hydrate 恢复注册后由装配层用
+ * createRuntime() 重建同进程 runtime（同步能力如 codec/dataType/transform 随代码包恢复）。
+ */
+export interface BundledPluginEntry {
+  pluginId: string;
+  manifest: PluginManifest;
+  /** 无 runtime 的纯清单插件返回 undefined（如 example-panel）。 */
+  createRuntime: () => PluginRuntime | undefined;
+}
 
 export interface AppHostOptions {
   capabilities?: PlatformCapabilities;
@@ -78,10 +95,22 @@ export interface AppHostOptions {
    */
   pluginStore?: PluginStorePort | undefined;
   /**
-   * codec 注册表（ADR-041 决策 A）：内置安川插件 activate 填充；connect 时按活动表类型
+   * codec 注册表（ADR-041 决策 A）：随包插件 activate 填充；connect 时按活动表类型
    * 路由 codecId 会话（软件仅提供调用接口）。缺省不装配（纯 RTU/TCP）。
    */
   codecRegistry?: CodecRegistry | undefined;
+  /**
+   * 随应用分发的插件（2026-09-02 插件外部化）：首次启动一次性安装，此后与用户安装
+   * 插件等同（可禁用/卸载/恢复，状态持久化）。缺省不装配（无随包插件）。
+   */
+  bundledPlugins?: BundledPluginEntry[] | undefined;
+  /**
+   * 地址变换解析（2026-09-02 插件外部化）：经随包 address-adjust 插件的
+   * AddressTransformRegistry 解析 transformId → 变换；缺省不调整（核心不再内置变换）。
+   */
+  resolveAddressTransform?: (
+    transformId: string,
+  ) => AddressTransform | null;
 }
 
 export class BrowserAppHost implements AppHost {
@@ -100,8 +129,14 @@ export class BrowserAppHost implements AppHost {
   private readonly autoSave: AutoSaveCoordinator;
   /** 插件持久化协调器（2026-08-30，ADR-038）：null = 未注入插件存储端口（纯内存）。 */
   private readonly pluginPersistence: PluginPersistenceCoordinator | null;
-  /** codec 注册表（ADR-041 决策 A）：内置安川插件 activate 填充；connect 按活动表协议路由。 */
+  /** codec 注册表（ADR-041 决策 A）：随包插件 activate 填充；connect 按活动表协议路由。 */
   private readonly codecRegistry: CodecRegistry | null;
+  /** 随应用分发的插件清单（2026-09-02 插件外部化）。 */
+  private readonly bundledPlugins: BundledPluginEntry[];
+  /** 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件注册表经装配注入。 */
+  private readonly resolveAddressTransform:
+    | ((transformId: string) => AddressTransform | null)
+    | null;
   /** RTU 会话宿主（Application 层）：会话/轮询/追踪/读写的单一编排，浏览器与 VSCode 共用。 */
   private readonly rtu: RtuSessionHost;
   /** 当前会话从站地址（每表独立，2026-08-19）：UI 切换表/修改值时同步，连接时作为初始值。 */
@@ -143,6 +178,13 @@ export class BrowserAppHost implements AppHost {
     }
     this.pluginRegistry = new PluginRegistry({
       contributionRegistry: this.contributionRegistry,
+      // 同进程 runtime 的插件通信面按 pluginId 绑定（2026-09-02 插件外部化）：
+      // 请求经统一调度器执行，日志携带来源插件 id（ADR-039 §3.4）。
+      communicationApiFactory: (pluginId) =>
+        createPluginCommunicationApi({
+          getSession: () => this.rtu.getSession(),
+          pluginId,
+        }),
     });
     this.mockTransportInstance = options.mockTransport
       ? new MockTransport()
@@ -166,17 +208,16 @@ export class BrowserAppHost implements AppHost {
     this.autoSave.onStatusChange((status) => {
       for (const listener of this.saveListeners) listener(status);
     });
-    // 插件持久化（2026-08-30，ADR-038）：注入存储端口时装配协调器并启动 hydrate。
+    // 插件持久化（2026-08-30，ADR-038）：注入存储端口时装配协调器；启动由 startPlugins()
+    // 显式执行（先注册随包插件再 hydrate/持久化，2026-09-02 插件外部化时序保证）。
     this.pluginPersistence =
       options.pluginStore !== undefined
         ? new PluginPersistenceCoordinator(this.pluginRegistry, options.pluginStore)
         : null;
-    if (this.pluginPersistence !== null) {
-      void this.pluginPersistence.init().then(() => {
-        void this.restoreRemotePluginRuntimes();
-      });
-    }
-    // codec 注册表（ADR-041 决策 A）：内置安川插件 activate 填充；connect 按活动表协议路由。
+    // 随应用分发插件清单（2026-09-02 插件外部化）。
+    this.bundledPlugins = options.bundledPlugins ?? [];
+    this.resolveAddressTransform = options.resolveAddressTransform ?? null;
+    // codec 注册表（ADR-041 决策 A）：随包插件 activate 填充；connect 按活动表协议路由。
     this.codecRegistry = options.codecRegistry ?? null;
     this.messageStore.subscribe((message) => {
       for (const listener of this.messageListeners) listener(message);
@@ -204,7 +245,99 @@ export class BrowserAppHost implements AppHost {
           this.messageStore.append(message);
         },
       },
+      ...(this.resolveAddressTransform !== null
+        ? { resolveAddressTransform: this.resolveAddressTransform }
+        : {}),
     });
+  }
+
+  /**
+   * 启动插件系统（2026-09-02 插件外部化；App 装配后显式调用）：
+   * 1. 首次启动（store 未 seeded）：一次性安装随包插件（register + runtime），
+   *    持久化快照（manifest + enabled）并标记 seeded；
+   * 2. 重启（seeded）：hydrate 恢复全部 installed 插件（含随包条目，无 runtime），
+   *    装配层按代码清单重建同进程 runtime（attachRuntime → 恢复同步能力）；用户已卸载的
+   *    随包插件不在 store 中 → 不再注册（卸载持久生效）；
+   * 3. 恢复用户安装的可执行插件（远程运行时）。
+   */
+  async startPlugins(): Promise<void> {
+    if (this.pluginPersistence === null) {
+      // 无持久化端口：直接注册随包插件（纯内存，测试/无存储环境）。
+      for (const entry of this.bundledPlugins) {
+        if (this.pluginRegistry.getSource(entry.pluginId) !== null) continue;
+        const runtime = entry.createRuntime();
+        this.pluginRegistry.register(entry.manifest, {
+          source: "installed",
+          ...(runtime !== undefined ? { runtime } : {}),
+        });
+      }
+      return;
+    }
+    const initResult = await this.pluginPersistence.init();
+    if (!initResult.ok) {
+      // 存储损坏/不可用：降级为内存注册随包插件（错误经协调器 onError 已上报）。
+      for (const entry of this.bundledPlugins) {
+        if (this.pluginRegistry.getSource(entry.pluginId) !== null) continue;
+        const runtime = entry.createRuntime();
+        this.pluginRegistry.register(entry.manifest, {
+          source: "installed",
+          ...(runtime !== undefined ? { runtime } : {}),
+        });
+      }
+      return;
+    }
+    if (!this.pluginPersistence.isSeeded()) {
+      // 首次启动：一次性安装随包插件。
+      for (const entry of this.bundledPlugins) {
+        if (this.pluginRegistry.getSource(entry.pluginId) !== null) continue;
+        const runtime = entry.createRuntime();
+        this.pluginRegistry.register(entry.manifest, {
+          source: "installed",
+          ...(runtime !== undefined ? { runtime } : {}),
+        });
+      }
+      this.pluginPersistence.markSeeded();
+      await this.pluginPersistence.flush();
+    } else {
+      // 重启：hydrate 已注册（store 中的随包条目，无 runtime）→ 按代码清单重建同进程 runtime。
+      for (const entry of this.bundledPlugins) {
+        if (this.pluginRegistry.getSource(entry.pluginId) !== "installed") {
+          continue;
+        }
+        const runtime = entry.createRuntime();
+        if (runtime === undefined) continue;
+        if (this.pluginRegistry.getRuntime(entry.pluginId) !== undefined) {
+          continue;
+        }
+        this.pluginRegistry.attachRuntime(entry.pluginId, runtime);
+      }
+    }
+    void this.restoreRemotePluginRuntimes();
+  }
+
+  /**
+   * 恢复随应用分发的插件（2026-09-02 插件外部化）：用户卸载后经 Plugin Manager
+   * 「恢复」重新安装（register + 持久化）。
+   */
+  async restoreBundledPlugin(pluginId: string): Promise<void> {
+    const entry = this.bundledPlugins.find((p) => p.pluginId === pluginId);
+    if (entry === undefined) return;
+    if (this.pluginRegistry.getSource(pluginId) !== null) return;
+    const runtime = entry.createRuntime();
+    this.pluginRegistry.register(entry.manifest, {
+      source: "installed",
+      ...(runtime !== undefined ? { runtime } : {}),
+    });
+    if (this.pluginPersistence !== null) {
+      await this.pluginPersistence.flush();
+    }
+  }
+
+  /** 恢复全部已卸载的随包插件（Plugin Manager「恢复全部」）。 */
+  async restoreAllBundledPlugins(): Promise<void> {
+    for (const entry of this.bundledPlugins) {
+      await this.restoreBundledPlugin(entry.pluginId);
+    }
   }
 
   async loadWorkspace(): Promise<Result<Workspace>> {

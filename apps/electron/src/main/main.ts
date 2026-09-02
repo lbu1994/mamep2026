@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
 import { NodeTcpPlatformHost } from "@mamep2026/platform-node/tcp";
+import { resolveAddressAdjustTransform } from "@mamep2026/address-adjust";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   MAMEP_IPC_EVENT_CHANNEL,
@@ -106,6 +107,8 @@ function ensureSessionHost(): ElectronSessionHost {
   if (electronSessionHost === null) {
     electronSessionHost = new ElectronSessionHost({
       platform: new NodeTcpPlatformHost(),
+      // 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件（host 端直接引用其导出）。
+      resolveAddressTransform: resolveAddressAdjustTransform,
       events: {
         onLog: (event) =>
           postSessionEvent({

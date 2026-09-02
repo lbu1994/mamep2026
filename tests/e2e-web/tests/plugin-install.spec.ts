@@ -111,7 +111,8 @@ test("坏文件：非法 JSON 报错且不注册", async ({ page }) => {
 
   await pickManifestFile(page, "bad.json", "{ not-json");
   await expect(page.getByText("The plugin manifest is invalid.")).toBeVisible();
-  await expect(modal).not.toContainText("Installed");
+  // 随包插件以 installed 来源注册（自带 Installed 标签），故断言按目标插件名。
+  await expect(modal).not.toContainText("E2E Installed");
   expect(errors).toEqual([]);
 });
 
@@ -182,7 +183,7 @@ test("重启持久化：安装 + 启停状态 reload 后仍在", async ({ page }
   expect(errors).toEqual([]);
 });
 
-test("卸载：确认后从列表移除并提示成功（内置插件无卸载按钮）", async ({
+test("卸载：确认后从列表移除并提示成功（随包插件可卸载）", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -194,12 +195,12 @@ test("卸载：确认后从列表移除并提示成功（内置插件无卸载�
   await openApp(page);
   const modal = await openPluginManager(page);
 
-  // 内置插件（example-panel）无卸载按钮。
-  const builtinRow = modal
+  // 随应用分发插件（2026-09-02 插件外部化）：以 installed 来源注册，可卸载（显示卸载按钮）。
+  const bundledRow = modal
     .locator(".ant-listy-item")
     .filter({ hasText: "Example Panel" });
-  await expect(builtinRow.locator('button[aria-label="Uninstall"]')).toHaveCount(
-    0,
+  await expect(bundledRow.locator('button[aria-label="Uninstall"]')).toHaveCount(
+    1,
   );
 
   // 安装一个插件。

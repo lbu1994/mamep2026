@@ -575,7 +575,8 @@ describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）
           },
         },
       },
-      { source: "builtin" },
+      // 2026-09-02 插件外部化：随应用分发插件以 installed 来源注册（可禁用/卸载）。
+      { source: "installed" },
     );
     return {
       capabilities: {

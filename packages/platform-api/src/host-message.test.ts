@@ -755,7 +755,8 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       kind: "plugin-store-save",
       payload: {
         data: {
-          schemaVersion: 2,
+          schemaVersion: 3,
+          seeded: false,
           plugins: [{ manifest: manifestPayload, enabled: true }],
         },
       },
@@ -782,7 +783,8 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       kind: "plugin-store-save",
       payload: {
         data: {
-          schemaVersion: 2,
+          schemaVersion: 3,
+          seeded: false,
           plugins: [{ manifest: { id: "x" }, enabled: true }],
         },
       },
@@ -792,7 +794,8 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
 
   it("validates a plugin store data response via pluginStoreDataResponseSchema", () => {
     const parsed = pluginStoreDataResponseSchema.safeParse({
-      schemaVersion: 2,
+      schemaVersion: 3,
+      seeded: false,
       plugins: [{ manifest: manifestPayload, enabled: false }],
     });
     expect(parsed.success).toBe(true);

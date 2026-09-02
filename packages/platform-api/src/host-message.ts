@@ -859,7 +859,7 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   // 执行面未装配 → hostPlugins 维持 false（如实声明，ADR-044 已知限制）。
   executablePlugins: true,
   hostPlugins: false,
-  // 协议扩展/表类型（ADR-041 Phase C）：内置安川插件 + 本地 RTU codec 会话已可用，如实声明。
+  // 协议扩展/表类型（ADR-041 Phase C）：随应用分发插件（yaskawa/自定义，ADR-045）+ 本地 RTU codec 会话已可用，如实声明。
   // ADR-043 E-2：基础表 codec（coil/discrete-input/input-register，RTU 承载）追加。
   protocolExtensions: [
     "yaskawa-memobus-67h-010dh-010eh",
@@ -901,7 +901,7 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   executablePlugins: true,
   hostPlugins: false,
   // 协议扩展/表类型（ADR-041 Phase C / ADR-043 E-6）：Extension Host 已注入 codecRegistry
-  // （基础表 + 安川 codec），session-connect 经 protocol 字段路由，如实声明。
+  // （基础表 + 随包安川 codec），session-connect 经 protocol 字段路由，如实声明。
   protocolExtensions: [
     "yaskawa-memobus-67h-010dh-010eh",
     "modbus-basic-tables:coil",

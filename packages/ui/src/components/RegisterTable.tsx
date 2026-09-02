@@ -107,10 +107,7 @@ import {
   tableShortcut,
 } from "../keyboard/shortcuts";
 import { readRowById, writeRowById } from "../row-io";
-import {
-  hasBuiltinCommandWrite,
-  runPluginToolbarAction,
-} from "../plugin-toolbar-actions";
+import { runPluginToolbarAction } from "../plugin-toolbar-actions";
 
 /** 写后回读配置选项（PRD §6.5.12，2026-08-26）：Select value ↔ ReadVerifySettings。 */
 type WriteVerifyOptionValue = "off" | "immediate" | "100" | "200" | "500";
@@ -1179,26 +1176,24 @@ export const RegisterTable = memo(function RegisterTable({
   );
   const addRow = useAppStore((s) => s.addRow);
   const appendMessage = useAppStore((s) => s.appendMessage);
-  // 插件工具栏动作执行（ADR-041 Phase C）：requiresConfirm（安川 ROM/RAM 确定指令）先弹
-  // 安全确认（EEPROM 寿命提示，决策③），确认后经 host.writeRow 写 0 到 0900H/0910H，
-  // 不回读、不触发轮询刷新（决策③④）；其余动作无内置行为（hasBuiltinCommandWrite=false 置灰）。
+  // 插件工具栏动作执行（ADR-041 Phase C；2026-09-02 插件外部化）：requiresConfirm 先弹
+  // 安全确认（文案经贡献点 confirmKey，安川 ROM/RAM 确定指令 EEPROM 寿命提示，决策③），
+  // 确认后经 PluginRegistry 委托插件同进程 runtime（handleToolbarAction → 通信面写
+  // 0900H/0910H，不回读、不触发轮询刷新，语义由插件承担）；无 handler 的动作按钮置灰。
   const handlePluginToolbarAction = useCallback(
     (action: { pluginId: string; payload: ToolbarActionContribution }) => {
       const actionId = action.payload.id;
       const run = () => {
         if (host === null || host === undefined) return;
-        void runPluginToolbarAction(host, actionId, { appendMessage });
+        void runPluginToolbarAction(host, action.pluginId, actionId, {
+          appendMessage,
+        });
       };
-      const isConfirmAction =
-        action.payload.requiresConfirm &&
-        (actionId === "yaskawa.enter-rom" || actionId === "yaskawa.enter-ram");
-      if (isConfirmAction) {
+      if (action.payload.requiresConfirm) {
         modal.confirm({
           title: t(action.payload.titleKey),
           content: t(
-            actionId === "yaskawa.enter-rom"
-              ? "table.enterRomConfirm"
-              : "table.enterRamConfirm",
+            action.payload.confirmKey ?? action.payload.titleKey,
           ),
           okText: t("table.confirm"),
           cancelText: t("connection.cancel"),
@@ -2424,26 +2419,35 @@ export const RegisterTable = memo(function RegisterTable({
           <>
             <span className="table-toolbar__sep" aria-hidden="true" />
             <div className="table-toolbar__group table-toolbar__plugins">
-              {toolbarActions.map((action) => (
-                <Tooltip
-                  key={action.payload.id}
-                  title={
-                    hasBuiltinCommandWrite(action.payload.id)
-                      ? t(action.payload.titleKey)
-                      : t("plugins.toolbarActionPlaceholder")
-                  }
-                >
-                  <Button
-                    size="small"
-                    disabled={!hasBuiltinCommandWrite(action.payload.id)}
-                    aria-label={t(action.payload.titleKey)}
-                    data-testid={`plugin-toolbar-action-${action.payload.id}`}
-                    onClick={() => handlePluginToolbarAction(action)}
+              {toolbarActions.map((action) => {
+                // 2026-09-02 插件外部化：动作可用性由插件 runtime 是否声明 handler 决定
+                // （安川 ROM/RAM 确定指令由插件自身承载；声明式占位动作置灰）。
+                const canHandle =
+                  host?.pluginRegistry.canHandleToolbarAction(
+                    action.pluginId,
+                    action.payload.id,
+                  ) ?? false;
+                return (
+                  <Tooltip
+                    key={action.payload.id}
+                    title={
+                      canHandle
+                        ? t(action.payload.titleKey)
+                        : t("plugins.toolbarActionPlaceholder")
+                    }
                   >
-                    {t(action.payload.titleKey)}
-                  </Button>
-                </Tooltip>
-              ))}
+                    <Button
+                      size="small"
+                      disabled={!canHandle}
+                      aria-label={t(action.payload.titleKey)}
+                      data-testid={`plugin-toolbar-action-${action.payload.id}`}
+                      onClick={() => handlePluginToolbarAction(action)}
+                    >
+                      {t(action.payload.titleKey)}
+                    </Button>
+                  </Tooltip>
+                );
+              })}
             </div>
           </>
         ) : null}

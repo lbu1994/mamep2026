@@ -18,6 +18,7 @@ import {
   registerBasicTablesCodecs,
 } from "@mamep2026/communication";
 import { MemobusCodec } from "@mamep2026/yaskawa-memobus-67h-010dh-010eh";
+import { resolveAddressAdjustTransform } from "@mamep2026/address-adjust";
 import { NodePlatformHost } from "@mamep2026/platform-node";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
@@ -96,6 +97,8 @@ function createSessionHost(
   return new VscodeSessionHost({
     platform,
     codecRegistry,
+    // 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件（host 端直接引用其导出）。
+    resolveAddressTransform: resolveAddressAdjustTransform,
     events: {
       onLog: (event) => {
         // 会话层帧计数（与物理写帧 1:1）：e2e 断言一次读取恰好一次收发。

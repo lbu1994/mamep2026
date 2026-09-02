@@ -126,7 +126,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     registry.setEnabled("installed-b", false);
 
     const data = registry.snapshot();
-    expect(data.schemaVersion).toBe(2);
+    expect(data.schemaVersion).toBe(3);
     expect(data.plugins.map((p) => p.manifest.id)).toEqual([
       "installed-a",
       "installed-b",
@@ -144,7 +144,8 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     registry.register(manifest());
 
     registry.hydrate({
-      schemaVersion: 2,
+      schemaVersion: 3,
+      seeded: false,
       plugins: [
         // 与内置同 id：跳过（内置优先），不产生加载错误。
         { manifest: manifest({ name: "Duplicate" }), enabled: false },
@@ -324,5 +325,135 @@ describe("PluginRegistry 隔离线程运行时（2026-09-01，ADR-044 Phase F-2�
     expect(
       registry.attachRemoteRuntime("installed-exec", fakeRemoteRuntime()).ok,
     ).toBe(false);
+  });
+});
+
+describe("PluginRegistry 同进程运行时（2026-09-02 插件外部化）", () => {
+  it("installed 插件可携带同进程 runtime（放宽限制：随包受信插件）", () => {
+    const registry = new PluginRegistry();
+    const activate = vi.fn();
+    const result = registry.register(
+      manifest({ id: "bundled-x", platform: { web: true, node: true } }),
+      {
+        source: "installed",
+        runtime: { activate },
+      },
+    );
+    expect(result.ok).toBe(true);
+    expect(registry.getSource("bundled-x")).toBe("installed");
+    expect(registry.getRuntime("bundled-x")).toBeDefined();
+    expect(activate).toHaveBeenCalledTimes(1);
+    expect(registry.getLifecycleState("bundled-x")).toBe("active");
+  });
+
+  it("同进程 runtime 激活失败 → failed + 贡献禁用（错误隔离）", () => {
+    const registry = new PluginRegistry();
+    registry.register(
+      manifest({ id: "bundled-fail", platform: { web: true, node: true } }),
+      {
+        source: "installed",
+        runtime: {
+          activate() {
+            throw new Error("boom");
+          },
+        },
+      },
+    );
+    expect(registry.getLifecycleState("bundled-fail")).toBe("failed");
+    expect(registry.getLoadErrors().some((e) => e.pluginId === "bundled-fail")).toBe(true);
+  });
+
+  it("canHandleToolbarAction：runtime 声明 handler 且启用 → true；禁用/无 handler → false", () => {
+    const registry = new PluginRegistry();
+    const handle = vi.fn();
+    registry.register(
+      manifest({ id: "acts", platform: { web: true, node: true } }),
+      {
+        source: "installed",
+        runtime: { activate() {}, handleToolbarAction: handle },
+      },
+    );
+    expect(registry.canHandleToolbarAction("acts", "a.b")).toBe(true);
+    registry.setEnabled("acts", false);
+    expect(registry.canHandleToolbarAction("acts", "a.b")).toBe(false);
+    expect(registry.canHandleToolbarAction("unknown", "a.b")).toBe(false);
+  });
+
+  it("invokeToolbarAction：委托 runtime handler，ctx.communication 按 pluginId 经工厂绑定", async () => {
+    const communicationApiFactory = vi.fn(() => ({
+      readRegisters: vi.fn(async () => ({ ok: true, value: [1] })),
+      writeRegisters: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    }));
+    const registry = new PluginRegistry({ communicationApiFactory });
+    const handle = vi.fn(
+      async (actionId: string, ctx: { communication: unknown }) => {
+        await (ctx.communication as { writeRegisters: () => Promise<unknown> }).writeRegisters();
+        return { ok: true as const, value: undefined };
+      },
+    );
+    registry.register(
+      manifest({ id: "acts", platform: { web: true, node: true } }),
+      {
+        source: "installed",
+        runtime: { activate() {}, handleToolbarAction: handle },
+      },
+    );
+    const result = await registry.invokeToolbarAction("acts", "a.b");
+    expect(result.ok).toBe(true);
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(communicationApiFactory).toHaveBeenCalledWith("acts");
+  });
+
+  it("invokeToolbarAction：无 handler → PLUGIN_ACTION_NOT_HANDLED；handler 抛错 → PLUGIN_HOOK_FAILED", async () => {
+    const registry = new PluginRegistry();
+    registry.register(
+      manifest({ id: "acts", platform: { web: true, node: true } }),
+      { source: "installed", runtime: { activate() {} } },
+    );
+    const missing = await registry.invokeToolbarAction("acts", "a.b");
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.error.code).toBe("PLUGIN_ACTION_NOT_HANDLED");
+
+    registry.register(
+      manifest({ id: "throws", platform: { web: true, node: true } }),
+      {
+        source: "installed",
+        runtime: {
+          activate() {},
+          handleToolbarAction() {
+            throw new Error("boom");
+          },
+        },
+      },
+    );
+    const failed = await registry.invokeToolbarAction("throws", "a.b");
+    expect(failed.ok).toBe(false);
+    if (!failed.ok) expect(failed.error.code).toBe("PLUGIN_HOOK_FAILED");
+  });
+
+  it("attachRuntime：为 hydrate 恢复的 installed 插件附加同进程 runtime 并激活（重启恢复）", async () => {
+    const registry = new PluginRegistry();
+    registry.register(
+      manifest({ id: "bundled-x", platform: { web: true, node: true } }),
+      { source: "installed" },
+    );
+    expect(registry.getRuntime("bundled-x")).toBeUndefined();
+    const activate = vi.fn();
+    const result = registry.attachRuntime("bundled-x", { activate });
+    expect(result.ok).toBe(true);
+    expect(activate).toHaveBeenCalledTimes(1);
+    expect(registry.getRuntime("bundled-x")).toBeDefined();
+  });
+
+  it("attachRuntime 对 builtin / 未注册 / 已附加返回错误", () => {
+    const registry = new PluginRegistry();
+    expect(registry.attachRuntime("unknown", { activate() {} }).ok).toBe(false);
+    registry.register(manifest());
+    expect(registry.attachRuntime("example-panel", { activate() {} }).ok).toBe(false);
+    registry.register(
+      manifest({ id: "bundled-x", platform: { web: true, node: true } }),
+      { source: "installed", runtime: { activate() {} } },
+    );
+    expect(registry.attachRuntime("bundled-x", { activate() {} }).ok).toBe(false);
   });
 });

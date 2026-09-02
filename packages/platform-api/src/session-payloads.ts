@@ -464,12 +464,14 @@ export const storedPluginPayloadSchema = z.object({
 export type StoredPluginPayload = z.infer<typeof storedPluginPayloadSchema>;
 
 export const pluginStoreDataPayloadSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   plugins: z.array(storedPluginPayloadSchema),
+  // 随包插件一次性安装标记（2026-09-02 插件外部化）：与 plugin-api PluginStoreData v3 对齐。
+  seeded: z.boolean(),
 });
 export type PluginStoreDataPayload = z.infer<typeof pluginStoreDataPayloadSchema>;
 
-/** plugin-store-load 响应载荷（结构同 PluginStoreData，空 store 返回 { schemaVersion:2, plugins:[] }）。 */
+/** plugin-store-load 响应载荷（结构同 PluginStoreData，空 store 返回 { schemaVersion:3, plugins:[], seeded:false }）。 */
 export const pluginStoreDataResponseSchema = pluginStoreDataPayloadSchema;
 export type PluginStoreDataResponse = z.infer<typeof pluginStoreDataResponseSchema>;
 

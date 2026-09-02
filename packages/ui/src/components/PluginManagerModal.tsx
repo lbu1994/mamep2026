@@ -14,7 +14,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, ReloadOutlined, UploadOutlined } from "@ant-design/icons";
 import {
   PERMISSION_LABEL_KEYS,
   pluginManifestSchema,
@@ -325,13 +325,28 @@ export function PluginManagerModal(): React.ReactNode {
     });
   };
 
+  /**
+   * 恢复随应用分发插件（2026-09-02 插件外部化）：用户卸载后经此处重新安装
+   * （host.restoreBundledPlugin：register + 持久化，已注册的自动跳过）。
+   */
+  const handleRestoreBundled = (): void => {
+    if (host === null) return;
+    void host.restoreAllBundledPlugins().then(() => {
+      message.success(t("plugins.restoreBundledSuccess"));
+      forceRender((v) => v + 1);
+    });
+  };
+
   return (
     <Modal
       title={t("plugins.title")}
       open={open}
       onCancel={() => setOpen(false)}
       footer={
-        <Flex justify="flex-end">
+        <Flex justify="flex-end" gap={8}>
+          <Button icon={<ReloadOutlined />} onClick={handleRestoreBundled}>
+            {t("plugins.restoreBundled")}
+          </Button>
           <Button icon={<UploadOutlined />} onClick={handleInstallClick}>
             {t("plugins.install")}
           </Button>

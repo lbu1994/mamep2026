@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   RegisterAddress,
+  fail,
+  ok,
+  type AddressTransform,
   type AddressTransformConfig,
   type RegisterRow,
   type RegisterSheet,
@@ -57,6 +60,24 @@ function adjustOn(): AddressTransformConfig {
   return { transformId: "builtin.address-adjust", enabled: true };
 }
 
+/** 注入式解析器（2026-09-02 插件外部化：核心不再内置，测试模拟随包插件 resolver）。 */
+const resolveBuiltin: (id: string) => AddressTransform | null = (id) =>
+  id === "builtin.address-adjust"
+    ? {
+        id,
+        protocol: "rtu",
+        titleKey: "table.addressAdjust",
+        apply: (v: number) =>
+          v === 0
+            ? fail({
+                code: "ADDRESS_ADJUST_UNDERFLOW",
+                category: "validation",
+              })
+            : ok(v - 1),
+        validate: () => ok(null),
+      }
+    : null;
+
 describe("buildPollingTargets", () => {
   it("includes only polling-enabled rows with an address", () => {
     const on = makeRow(0x0001);
@@ -73,9 +94,10 @@ describe("buildPollingTargets", () => {
   it("applies the table Address Adjust offset when enabled", () => {
     const row = makeRow(0x0003);
     row.pollingEnabled = true;
-    const targets = buildPollingTargets([
-      makeSheet("s", [row], { addressTransform: adjustOn() }),
-    ]);
+    const targets = buildPollingTargets(
+      [makeSheet("s", [row], { addressTransform: adjustOn() })],
+      { resolveAddressTransform: resolveBuiltin },
+    );
     expect(targets).toEqual([
       { key: row.rowId, address: 0x0002, quantity: 1 },
     ]);
@@ -85,9 +107,10 @@ describe("buildPollingTargets", () => {
     const row = makeRow(0x0000);
     row.pollingEnabled = true;
     expect(
-      buildPollingTargets([
-        makeSheet("s", [row], { addressTransform: adjustOn() }),
-      ]),
+      buildPollingTargets(
+        [makeSheet("s", [row], { addressTransform: adjustOn() })],
+        { resolveAddressTransform: resolveBuiltin },
+      ),
     ).toEqual([]);
   });
 
@@ -96,10 +119,13 @@ describe("buildPollingTargets", () => {
     onRow.pollingEnabled = true;
     const offRow = makeRow(0x0005);
     offRow.pollingEnabled = true;
-    const targets = buildPollingTargets([
-      makeSheet("a", [onRow], { addressTransform: adjustOn() }),
-      makeSheet("b", [offRow]),
-    ]);
+    const targets = buildPollingTargets(
+      [
+        makeSheet("a", [onRow], { addressTransform: adjustOn() }),
+        makeSheet("b", [offRow]),
+      ],
+      { resolveAddressTransform: resolveBuiltin },
+    );
     expect(targets).toEqual([
       { key: onRow.rowId, address: 0x0002, quantity: 1 },
       { key: offRow.rowId, address: 0x0005, quantity: 1 },
@@ -153,8 +179,8 @@ describe("applyPollResult", () => {
     const row = makeRow(0x0003);
     row.pollingEnabled = true;
     const sheet = makeSheet("s", [row], { addressTransform: adjustOn() });
-    expect(pollResultAddressMatches(row, sheet, 0x0002)).toBe(true);
-    expect(pollResultAddressMatches(row, sheet, 0x0003)).toBe(false);
+    expect(pollResultAddressMatches(row, sheet, 0x0002, resolveBuiltin)).toBe(true);
+    expect(pollResultAddressMatches(row, sheet, 0x0003, resolveBuiltin)).toBe(false);
   });
 
   it("returns the same row reference when the device value is unchanged (polling perf)", () => {

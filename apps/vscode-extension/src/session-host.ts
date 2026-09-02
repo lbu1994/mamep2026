@@ -29,6 +29,7 @@ import type {
   Result,
   RtuConnectionProfile,
   TcpConnectionProfile,
+  AddressTransform,
 } from "@mamep2026/domain";
 import { ok } from "@mamep2026/domain";
 
@@ -38,6 +39,10 @@ export interface VscodeSessionHostOptions {
   events: RtuSessionHostEvents;
   /** codec 注册表（ADR-043 E-6）：基础表/安川 codec 会话经它解析。 */
   codecRegistry?: CodecRegistry;
+  /** 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件提供（host 端直接引用插件导出）。 */
+  resolveAddressTransform?: (
+    transformId: string,
+  ) => AddressTransform | null;
 }
 
 export class VscodeSessionHost {
@@ -58,12 +63,18 @@ export class VscodeSessionHost {
       ...(options.codecRegistry !== undefined
         ? { codecRegistry: options.codecRegistry }
         : {}),
+      ...(options.resolveAddressTransform !== undefined
+        ? { resolveAddressTransform: options.resolveAddressTransform }
+        : {}),
     });
     this.tcp = new TcpSessionHost({
       clock: options.platform.clock,
       events: options.events,
       // 自动重连（2026-08-30）：重连时由协调器重新打开 TCP 传输。
       openTransport: (profile) => this.platform.openTcpTransport(profile),
+      ...(options.resolveAddressTransform !== undefined
+        ? { resolveAddressTransform: options.resolveAddressTransform }
+        : {}),
     });
   }
 

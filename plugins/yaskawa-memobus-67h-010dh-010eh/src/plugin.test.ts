@@ -97,4 +97,46 @@ describe("Yaskawa MEMOBUS 插件（ADR-041，决策①1A/⑤）", () => {
       registry.getLifecycleState(YASKAWA_MEMOBUS_PLUGIN_ID),
     ).toBe("deactivated");
   });
+
+  it("来源为 installed（2026-09-02 插件外部化：随应用分发一次性安装）", () => {
+    const { registry } = makeRegistry();
+    const codecRegistry = createCodecRegistry();
+    registerYaskawaPlugin(registry, { codecRegistry });
+    expect(registry.getSource(YASKAWA_MEMOBUS_PLUGIN_ID)).toBe("installed");
+  });
+
+  it("handleToolbarAction：enter-rom/enter-ram 经通信面写 0 到 0900H/0910H（2026-09-02 移入插件）", async () => {
+    const writes: Array<{ address: number; values: number[] }> = [];
+    const communicationApiFactory = vi.fn(() => ({
+      readRegisters: vi.fn(async () => ({ ok: true, value: [1] })),
+      writeRegisters: vi.fn(
+        async (req: { address: number; values: number[] }) => {
+          writes.push(req);
+          return { ok: true as const, value: undefined };
+        },
+      ),
+    }));
+    const contributionRegistry = new ContributionPointRegistry();
+    for (const point of BUILTIN_CONTRIBUTION_POINTS) {
+      contributionRegistry.registerPoint(point);
+    }
+    const registry = new PluginRegistry({ communicationApiFactory });
+    const codecRegistry = createCodecRegistry();
+    registerYaskawaPlugin(registry, { codecRegistry });
+
+    expect(registry.canHandleToolbarAction(YASKAWA_MEMOBUS_PLUGIN_ID, "yaskawa.enter-rom")).toBe(true);
+    const rom = await registry.invokeToolbarAction(
+      YASKAWA_MEMOBUS_PLUGIN_ID,
+      "yaskawa.enter-rom",
+    );
+    expect(rom.ok).toBe(true);
+    expect(writes).toEqual([{ address: 0x0900, values: [0] }]);
+
+    const ram = await registry.invokeToolbarAction(
+      YASKAWA_MEMOBUS_PLUGIN_ID,
+      "yaskawa.enter-ram",
+    );
+    expect(ram.ok).toBe(true);
+    expect(writes[1]).toEqual({ address: 0x0910, values: [0] });
+  });
 });

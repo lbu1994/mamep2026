@@ -57,12 +57,19 @@ export type PluginRegistryEvent =
 /** 卸载错误码（ADR-044 Phase F-1）。 */
 export const PLUGIN_NOT_FOUND = "PLUGIN_NOT_FOUND";
 export const PLUGIN_BUILTIN_NOT_REMOVABLE = "PLUGIN_BUILTIN_NOT_REMOVABLE";
+/** 工具栏动作错误码（2026-09-02 插件外部化）：插件未声明/无法处理该动作。 */
+export const PLUGIN_ACTION_NOT_HANDLED = "PLUGIN_ACTION_NOT_HANDLED";
 
 export interface PluginRegistryOptions {
   /** 贡献点注册表（ADR-039）：未提供则跳过 contributes 校验与聚合。 */
   contributionRegistry?: ContributionPointRegistry;
   /** 插件通信面（ADR-039）：未提供则使用「无会话」兜底（返回能力错误）。 */
   communicationApi?: PluginCommunicationApi;
+  /**
+   * 按插件 id 动态构造通信面（2026-09-02，插件外部化）：同进程 runtime（预装受信插件）
+   * 的 ctx.communication 按 pluginId 绑定，经统一调度器记录来源插件；优先于 communicationApi。
+   */
+  communicationApiFactory?: (pluginId: string) => PluginCommunicationApi;
 }
 
 interface RegisteredPlugin {
@@ -83,6 +90,10 @@ export class PluginRegistry {
   private readonly listeners = new Set<(event: PluginRegistryEvent) => void>();
   private readonly contributionRegistry: ContributionPointRegistry | undefined;
   private readonly communicationApi: PluginCommunicationApi;
+  /** 按插件 id 动态通信面工厂（2026-09-02 插件外部化）：优先于 communicationApi。 */
+  private readonly communicationApiFactory:
+    | ((pluginId: string) => PluginCommunicationApi)
+    | undefined;
   /** 变更版本号（注册/启停/生命周期变化时自增）：UI 消费方响应式订阅用（ADR-039）。 */
   private version = 0;
 
@@ -90,6 +101,7 @@ export class PluginRegistry {
     this.contributionRegistry = options.contributionRegistry;
     this.communicationApi =
       options.communicationApi ?? createUnavailableCommunicationApi();
+    this.communicationApiFactory = options.communicationApiFactory;
   }
 
   register(
@@ -193,24 +205,9 @@ export class PluginRegistry {
       return fail(permissionResult.error);
     }
 
-    // runtime 仅限内置同进程使用（Phase A 不加载第三方 entry；隔离机制 Phase F）。
-    // ADR-044：同进程 runtime 仍仅 builtin；第三方代码经 remoteRuntime 隔离线程执行。
-    if (runtime !== undefined && source !== "builtin") {
-      const error: PluginLoadError = {
-        pluginId: manifest.id,
-        errorCode: PLUGIN_HOOK_FAILED,
-        message: `runtime is only allowed for builtin plugins (${manifest.id})`,
-      };
-      this.loadErrors.push(error);
-      return fail(
-        createMamepError({
-          code: PLUGIN_HOOK_FAILED,
-          category: "plugin",
-          userMessageKey: "errors.pluginRuntimeNotAvailable",
-          technicalMessage: `runtime is only allowed for builtin plugins (${manifest.id})`,
-        }),
-      );
-    }
+    // runtime 允许 builtin 同进程（ADR-039 最小执行面）与 installed（2026-09-02 插件外部化：
+    // 随应用分发的受信插件保持同进程同步运行时，可贡献 codec/dataType/transform 等同步纯函数）。
+    // 用户安装入口（PluginManagerModal）不提供 runtime 来源 → 第三方代码仍仅经 remoteRuntime 隔离线程。
     // remoteRuntime 仅限 installed 来源（第三方隔离执行面）；builtin 直接用同进程 runtime。
     if (remoteRuntime !== undefined && source !== "installed") {
       const error: PluginLoadError = {
@@ -332,6 +329,112 @@ export class PluginRegistry {
     return this.plugins.get(pluginId)?.source ?? null;
   }
 
+  /** 插件同进程 runtime（2026-09-02 插件外部化）：未注册/无 runtime 返回 undefined。 */
+  getRuntime(pluginId: string): PluginRuntime | undefined {
+    return this.plugins.get(pluginId)?.runtime;
+  }
+
+  /**
+   * 为已注册的 installed 插件附加同进程 runtime（2026-09-02 插件外部化）：
+   * 随应用分发的插件首次启动时一次性安装（seeded）后，重启时经 hydrate 恢复注册
+   * （manifest 已持久化，无 runtime），由装配方按代码清单重建同进程 runtime 并附加激活，
+   * 恢复同步能力（codec/dataType/transform）与工具栏动作处理。
+   * 已附加 / 未注册 / 非 installed → 返回错误。
+   */
+  attachRuntime(pluginId: string, runtime: PluginRuntime): Result<void> {
+    const plugin = this.plugins.get(pluginId);
+    if (plugin === undefined) {
+      return fail(
+        createMamepError({
+          code: PLUGIN_NOT_FOUND,
+          category: "plugin",
+          userMessageKey: "errors.pluginNotFound",
+          technicalMessage: `plugin ${pluginId} is not registered`,
+        }),
+      );
+    }
+    if (plugin.source !== "installed") {
+      return fail(
+        createMamepError({
+          code: PLUGIN_BUILTIN_NOT_REMOVABLE,
+          category: "plugin",
+          userMessageKey: "errors.pluginBuiltinNotRemovable",
+          technicalMessage: `builtin plugin ${pluginId} cannot attach a runtime`,
+        }),
+      );
+    }
+    if (plugin.runtime !== undefined) {
+      return fail(
+        createMamepError({
+          code: "PLUGIN_RUNTIME_EXISTS",
+          category: "plugin",
+          userMessageKey: "errors.pluginRuntimeNotAvailable",
+          technicalMessage: `plugin ${pluginId} already has a runtime`,
+        }),
+      );
+    }
+    plugin.runtime = runtime;
+    if (plugin.enabled) {
+      this.activatePlugin(pluginId);
+    }
+    return ok(undefined);
+  }
+
+  /** 插件是否可处理工具栏动作（2026-09-02 插件外部化）：runtime 声明了 handler 且已注册。 */
+  canHandleToolbarAction(pluginId: string, actionId: string): boolean {
+    return (
+      this.plugins.get(pluginId)?.runtime?.handleToolbarAction !== undefined &&
+      this.plugins.get(pluginId)?.enabled === true
+    );
+  }
+
+  /**
+   * 执行插件工具栏动作（2026-09-02 插件外部化）：委托相应插件同进程 runtime 的
+   * handleToolbarAction（经 PluginCommunicationApi 走统一调度器）。未注册/无 handler/
+   * 已禁用 → PLUGIN_ACTION_NOT_HANDLED 能力错误（UI 层置灰，不会到这里）。
+   */
+  async invokeToolbarAction(
+    pluginId: string,
+    actionId: string,
+  ): Promise<Result<void>> {
+    const plugin = this.plugins.get(pluginId);
+    if (plugin?.runtime?.handleToolbarAction === undefined) {
+      return fail(
+        createMamepError({
+          code: PLUGIN_ACTION_NOT_HANDLED,
+          category: "plugin",
+          userMessageKey: "errors.pluginActionNotHandled",
+          technicalMessage: `plugin ${pluginId} does not handle toolbar action ${actionId}`,
+        }),
+      );
+    }
+    const ctx: PluginContext = {
+      pluginId,
+      communication:
+        this.communicationApiFactory?.(pluginId) ?? this.communicationApi,
+    };
+    try {
+      const result = plugin.runtime.handleToolbarAction.call(plugin.runtime, actionId, ctx);
+      if (typeof (result as Promise<Result<void>> | undefined)?.then === "function") {
+        const awaited = await result;
+        if (awaited === undefined) return ok(undefined);
+        return awaited;
+      }
+      return result === undefined ? ok(undefined) : result;
+    } catch (err) {
+      this.handleHookFailure(pluginId, err);
+      return fail(
+        createMamepError({
+          code: PLUGIN_HOOK_FAILED,
+          category: "plugin",
+          userMessageKey: "errors.pluginRuntimeNotAvailable",
+          technicalMessage:
+            err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
   setEnabled(pluginId: string, enabled: boolean): void {
     const plugin = this.plugins.get(pluginId);
     if (plugin === undefined || plugin.enabled === enabled) return;
@@ -371,8 +474,9 @@ export class PluginRegistry {
   }
 
   /**
-   * 持久化快照（ADR-038）：仅返回 installed 来源插件 + 启用状态，内置插件不入库
-   * （避免重启重复注册报 PLUGIN_ALREADY_REGISTERED）。
+   * 持久化快照（ADR-038）：返回全部 installed 来源插件 + 启用状态；内置插件不入库
+   * （避免重启重复注册报 PLUGIN_ALREADY_REGISTERED）。随应用分发的插件（2026-09-02
+   * 插件外部化）首次启动时一次性安装（seeded），此后与用户安装插件同样入库。
    */
   snapshot(): PluginStoreData {
     return {
@@ -477,7 +581,8 @@ export class PluginRegistry {
     if (plugin?.runtime === undefined) return;
     const ctx: PluginContext = {
       pluginId,
-      communication: this.communicationApi,
+      communication:
+        this.communicationApiFactory?.(pluginId) ?? this.communicationApi,
     };
     try {
       const result = plugin.runtime.activate(ctx);

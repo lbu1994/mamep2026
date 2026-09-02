@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@mamep2026/application": "workspace:*",
+    "@mamep2026/address-adjust": "workspace:*",
     "@mamep2026/communication": "workspace:*",
     "@mamep2026/domain": "workspace:*",
     "@mamep2026/logging": "workspace:*",

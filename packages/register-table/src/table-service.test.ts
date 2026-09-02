@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDefaultRtuProfile,
   RegisterAddress,
+  ok,
   type DataType,
 } from "@mamep2026/domain";
 import {
@@ -15,7 +16,13 @@ import {
 } from "@mamep2026/test-kit";
 import { appendCrc } from "@mamep2026/protocol-modbus";
 import { RegisterTableService } from "./table-service";
-import { BUILTIN_ADDRESS_ADJUST_TRANSFORM } from "./address";
+
+/** 注入式 Address Adjust 变换（2026-09-02 插件外部化：测试模拟随包插件提供）。 */
+const minusOneTransform = {
+  id: "builtin.address-adjust",
+  apply: (v: number) => ok(v - 1),
+  validate: (v: number) => ok(v === 0 ? null : null),
+};
 
 function setup(addressAdjust: "off" | "on" = "off") {
   const clock = new VirtualClock();
@@ -33,7 +40,7 @@ function setup(addressAdjust: "off" | "on" = "off") {
   const service = new RegisterTableService({
     getSession: () => session,
     getAddressTransform: () =>
-      addressAdjust === "on" ? BUILTIN_ADDRESS_ADJUST_TRANSFORM : null,
+      addressAdjust === "on" ? minusOneTransform : null,
     clock,
   });
   return { clock, transport, device, session, service, logs, profile };

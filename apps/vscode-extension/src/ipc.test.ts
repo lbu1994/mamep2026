@@ -352,7 +352,11 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     expect(result.type).toBe("response");
     expect(pluginStore.load).toHaveBeenCalled();
     if (result.type === "response") {
-      expect(result.payload).toEqual({ schemaVersion: 2, plugins: [] });
+      expect(result.payload).toEqual({
+        schemaVersion: 3,
+        plugins: [],
+        seeded: false,
+      });
     }
   });
 
@@ -388,7 +392,8 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
       save: vi.fn(async () => ok(undefined)),
     };
     const data = {
-      schemaVersion: 2,
+      schemaVersion: 3,
+      seeded: false,
       plugins: [
         {
           manifest: {

@@ -28,6 +28,7 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
   Workspace,
+  AddressTransform,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
 import {
@@ -66,7 +67,10 @@ import {
 } from "@mamep2026/platform-web";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
-import { BrowserAppHost } from "./AppHost";
+import {
+  BrowserAppHost,
+  type BundledPluginEntry,
+} from "./AppHost";
 import { BridgePluginStore } from "./bridge-plugin-store";
 import { FileWorkspaceRepository } from "./file-workspace-repository";
 
@@ -80,6 +84,12 @@ export interface ElectronAppHostOptions {
   pluginStore?: PluginStorePort | undefined;
   /** codec 注册表（ADR-041 决策 A）：RTU 本地路径复用浏览器 AppHost，按活动表协议路由。 */
   codecRegistry?: CodecRegistry | undefined;
+  /** 随应用分发插件（2026-09-02 插件外部化）：透传 inner（首次一次性安装 + 重启恢复）。 */
+  bundledPlugins?: BundledPluginEntry[] | undefined;
+  /** 地址变换解析（2026-09-02 插件外部化）：透传 inner（RTU 本地会话按表应用）。 */
+  resolveAddressTransform?: (
+    transformId: string,
+  ) => AddressTransform | null;
 }
 
 export class ElectronAppHost implements AppHost {
@@ -149,6 +159,9 @@ export class ElectronAppHost implements AppHost {
       pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
       // codec 注册表（ADR-041 决策 A）：RTU 本地路径复用浏览器 AppHost。
       codecRegistry: options.codecRegistry,
+      // 随应用分发插件 + 地址变换解析（2026-09-02 插件外部化）。
+      bundledPlugins: options.bundledPlugins,
+      resolveAddressTransform: options.resolveAddressTransform,
     });
     this.capabilities = electronCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;
@@ -438,6 +451,21 @@ export class ElectronAppHost implements AppHost {
     return this.activeProtocol === "tcp"
       ? this.tcpConnectionState
       : this.inner.getConnectionState();
+  }
+
+  /** 启动插件系统（2026-09-02 插件外部化）：委托 inner（首次一次性安装随包插件 + 恢复）。 */
+  startPlugins(): Promise<void> {
+    return this.inner.startPlugins();
+  }
+
+  /** 恢复已卸载的随应用分发插件（2026-09-02 插件外部化）。 */
+  restoreBundledPlugin(pluginId: string): Promise<void> {
+    return this.inner.restoreBundledPlugin(pluginId);
+  }
+
+  /** 恢复全部已卸载的随应用分发插件（2026-09-02 插件外部化）。 */
+  restoreAllBundledPlugins(): Promise<void> {
+    return this.inner.restoreAllBundledPlugins();
   }
 
   /** 当前会话（ADR-044 Phase F-2）：RTU 本地路径返回内部会话；TCP 在主进程 → null。 */

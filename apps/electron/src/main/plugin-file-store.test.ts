@@ -28,8 +28,9 @@ const manifest: PluginManifest = {
 
 function storeData(name: string): PluginStoreData {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     plugins: [{ manifest: { ...manifest, id: name, name }, enabled: true }],
+    seeded: false,
   };
 }
 

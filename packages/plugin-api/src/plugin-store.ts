@@ -16,8 +16,14 @@ import {
 } from "./manifest";
 import { normalizePermissions } from "./permissions";
 
-/** 插件存储 schema 版本（v2：Manifest v2 字段，ADR-039）。 */
-export const PLUGIN_STORE_SCHEMA_VERSION = 2 as const;
+/**
+ * 插件存储 schema 版本（v2：Manifest v2 字段，ADR-039；
+ * v3：随应用分发插件「一次性安装」标记，2026-09-02 插件外部化——首次启动时装配方
+ * 自动安装随包插件（register + 持久化 manifest/启用状态），此后与用户安装插件完全等同
+ * （含卸载=从存储删除、禁用=enabled 覆盖）；seeded=true 表示首次安装已完成，
+ * 重启后不再自动安装（卸载持久生效），仅经 hydrate 恢复。
+ */
+export const PLUGIN_STORE_SCHEMA_VERSION = 3 as const;
 
 export interface StoredPlugin {
   manifest: PluginManifest;
@@ -29,6 +35,8 @@ export interface StoredPlugin {
 export interface PluginStoreData {
   schemaVersion: typeof PLUGIN_STORE_SCHEMA_VERSION;
   plugins: StoredPlugin[];
+  /** 随包插件首次自动安装是否已完成（2026-09-02 插件外部化）。 */
+  seeded: boolean;
 }
 
 /** 存储数据 Zod 校验（主进程/扩展宿主/测试在落盘前校验，与 manifest 校验一致）。 */
@@ -40,13 +48,18 @@ export const storedPluginSchema = z.object({
 export const pluginStoreDataSchema = z.object({
   schemaVersion: z.literal(PLUGIN_STORE_SCHEMA_VERSION),
   plugins: z.array(storedPluginSchema),
+  seeded: z.boolean(),
 });
 export type StoredPluginZod = z.infer<typeof storedPluginSchema>;
 export type PluginStoreDataZod = z.infer<typeof pluginStoreDataSchema>;
 
 /** 空插件存储（首次启动 / 无已安装插件时 load 的兜底）。 */
 export function createEmptyPluginStoreData(): PluginStoreData {
-  return { schemaVersion: PLUGIN_STORE_SCHEMA_VERSION, plugins: [] };
+  return {
+    schemaVersion: PLUGIN_STORE_SCHEMA_VERSION,
+    plugins: [],
+    seeded: false,
+  };
 }
 
 /**
@@ -79,6 +92,7 @@ export function migratePluginStoreData(input: unknown): Result<PluginStoreData> 
         enabled: p.enabled,
         ...(p.entrySource !== undefined ? { entrySource: p.entrySource } : {}),
       })),
+      seeded: parsed.data.seeded,
     });
   }
   if (!Array.isArray(raw.plugins)) {
@@ -114,7 +128,13 @@ export function migratePluginStoreData(input: unknown): Result<PluginStoreData> 
     if (!parsed.success) continue;
     migrated.push({ manifest: parsed.data, enabled: stored.enabled === true });
   }
-  return ok({ schemaVersion: PLUGIN_STORE_SCHEMA_VERSION, plugins: migrated });
+  // v2 → v3 迁移（2026-09-02 插件外部化）：旧数据无 seeded 标记，视为尚未执行随包插件
+  // 一次性安装（升级后首次启动将自动安装随包插件）。
+  return ok({
+    schemaVersion: PLUGIN_STORE_SCHEMA_VERSION,
+    plugins: migrated,
+    seeded: false,
+  });
 }
 
 function schemaInvalidError(technicalMessage: string) {

@@ -207,6 +207,9 @@ importers:
 
   apps/electron:
     dependencies:
+      '@mamep2026/address-adjust':
+        specifier: workspace:*
+        version: link:../../plugins/address-adjust
       '@mamep2026/application':
         specifier: workspace:*
         version: link:../../packages/application
@@ -244,6 +247,9 @@ importers:
 
   apps/vscode-extension:
     dependencies:
+      '@mamep2026/address-adjust':
+        specifier: workspace:*
+        version: link:../../plugins/address-adjust
       '@mamep2026/application':
         specifier: workspace:*
         version: link:../../packages/application
@@ -299,6 +305,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@mamep2026/address-adjust':
+        specifier: workspace:*
+        version: link:../../plugins/address-adjust
       '@mamep2026/application':
         specifier: workspace:*
         version: link:../../packages/application
@@ -314,6 +323,9 @@ importers:
       '@mamep2026/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@mamep2026/example-panel':
+        specifier: workspace:*
+        version: link:../../plugins/example-panel
       '@mamep2026/logging':
         specifier: workspace:*
         version: link:../../packages/logging
@@ -771,6 +783,28 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))
 
+  plugins/address-adjust:
+    dependencies:
+      '@mamep2026/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@mamep2026/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
+    devDependencies:
+      '@mamep2026/test-kit':
+        specifier: workspace:*
+        version: link:../../packages/test-kit
+      '@mamep2026/typescript-config':
+        specifier: workspace:*
+        version: link:../../tooling/typescript-config
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))
+
   plugins/custom-function-code:
     dependencies:
       '@mamep2026/communication':
@@ -788,6 +822,25 @@ importers:
       '@mamep2026/protocol-modbus':
         specifier: workspace:*
         version: link:../../packages/protocol-modbus
+    devDependencies:
+      '@mamep2026/test-kit':
+        specifier: workspace:*
+        version: link:../../packages/test-kit
+      '@mamep2026/typescript-config':
+        specifier: workspace:*
+        version: link:../../tooling/typescript-config
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0))
+
+  plugins/example-panel:
+    dependencies:
+      '@mamep2026/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
     devDependencies:
       '@mamep2026/test-kit':
         specifier: workspace:*

@@ -37,14 +37,32 @@ describe("plugin store v1→v2 迁移（ADR-039）", () => {
     });
   });
 
-  it("schemaVersion 2 严格校验：损坏数据 → PLUGIN_STORE_SCHEMA_INVALID", () => {
-    const bad = migratePluginStoreData({ schemaVersion: 2, plugins: "oops" });
+  it("schemaVersion 3 严格校验：损坏数据 → PLUGIN_STORE_SCHEMA_INVALID", () => {
+    const bad = migratePluginStoreData({ schemaVersion: 3, plugins: "oops" });
     expect(bad.ok).toBe(false);
     const badManifest = migratePluginStoreData({
-      schemaVersion: 2,
+      schemaVersion: 3,
       plugins: [{ manifest: { id: "x" }, enabled: true }],
+      seeded: true,
     });
     expect(badManifest.ok).toBe(false);
+    // 缺 seeded（v3 必填）视为损坏（旧 v2 数据走迁移分支补齐）。
+    const missingSeeded = migratePluginStoreData({
+      schemaVersion: 3,
+      plugins: [],
+    });
+    expect(missingSeeded.ok).toBe(false);
+  });
+
+  it("v2 → v3 迁移：补 seeded:false（升级后首次启动触发随包插件一次性安装）", () => {
+    const result = migratePluginStoreData({
+      schemaVersion: 2,
+      plugins: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.schemaVersion).toBe(3);
+    expect(result.value.seeded).toBe(false);
   });
 
   it("v1 且 plugins 非数组 → 视为损坏（PLUGIN_STORE_SCHEMA_INVALID）", () => {

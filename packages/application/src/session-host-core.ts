@@ -39,7 +39,6 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
-import { resolveBuiltinAddressTransform } from "@mamep2026/register-table";
 import { RegisterTableService } from "@mamep2026/register-table";
 
 /** 会话编排对外事件（宿主负责分发到本地订阅者或经 RPC 推送）。 */
@@ -61,8 +60,8 @@ export interface SessionHostCoreOptions {
   /** WP 轮询间隔源（RTU/TCP 均为 profile.interRequestDelayMs）。 */
   getPollingIntervalMs: () => number;
   /**
-   * 地址变换解析（ADR-042 插件 Phase D）：按 transformId 返回运行时变换；
-   * 缺省仅内置 builtin.address-adjust（-1 语义）；自定义变换由宿主注入。
+   * 地址变换解析（ADR-042 插件 Phase D；2026-09-02 插件外部化）：按 transformId 返回运行时
+   * 变换；缺省不调整（核心不再内置变换，由宿主装配点注入随包插件 resolver）。
    */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
   /** codec 注册表（ADR-040 决策 5）：Phase C 宿主据此构建 codec 会话；协议无关，仅透传。 */
@@ -97,8 +96,9 @@ export class SessionHostCore {
     this.clock = options.clock;
     this.events = options.events;
     this.getPollingIntervalMs = options.getPollingIntervalMs;
-    this.resolveAddressTransform =
-      options.resolveAddressTransform ?? resolveBuiltinAddressTransform;
+    // 地址变换解析（2026-09-02 插件外部化）：核心不再内置变换；由宿主装配点注入
+    // （Renderer 经插件的 AddressTransformRegistry；桌面端 host 经随包插件导出 resolver）。
+    this.resolveAddressTransform = options.resolveAddressTransform ?? (() => null);
     this.codecRegistry = options.codecRegistry ?? null;
     this.tableService = new RegisterTableService({
       getSession: () => this.session,
