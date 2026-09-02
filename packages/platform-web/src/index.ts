@@ -1,3 +1,4 @@
+export * from "./browser-compatibility";
 export * from "./indexeddb-repository";
 export * from "./mock-scenarios";
 export * from "./mock-transport";

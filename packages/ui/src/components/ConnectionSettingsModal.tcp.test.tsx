@@ -15,12 +15,14 @@ import { useAppStore } from "../app-store";
 import type { AppHost } from "../host";
 import { ConnectionSettingsModal } from "./ConnectionSettingsModal";
 
-function makeHost(
-  caps: Partial<PlatformCapabilities>,
-): { host: AppHost; connectTcp: ReturnType<typeof vi.fn> } {
-  const connectTcp = vi.fn(
-    async (): Promise<Result<void>> => ({ ok: true as const, value: undefined }),
-  );
+function makeHost(caps: Partial<PlatformCapabilities>): {
+  host: AppHost;
+  connectTcp: ReturnType<typeof vi.fn>;
+} {
+  const connectTcp = vi.fn(async (): Promise<Result<void>> => ({
+    ok: true as const,
+    value: undefined,
+  }));
   const host: AppHost = {
     capabilities: {
       modbusRtu: true,
@@ -44,6 +46,10 @@ function makeHost(
     // 贡献，空对象 mock 缺 getVersion 会崩）。
     pluginRegistry: new PluginRegistry(),
     appVersion: "0.0.0-test",
+    // 2026-09-02 插件外部化（ADR-045）：AppHost 接口新增方法。
+    startPlugins: vi.fn(async () => undefined),
+    restoreBundledPlugin: vi.fn(async () => undefined),
+    restoreAllBundledPlugins: vi.fn(async () => undefined),
     loadWorkspace: vi.fn(async () => ({
       ok: true as const,
       value: createEmptyWorkspace(),
@@ -56,9 +62,11 @@ function makeHost(
     getSaveStatus: vi.fn(() => "saved" as const),
     subscribeSaveStatus: vi.fn(() => () => undefined),
     supportsWebSerial: vi.fn(() => false),
-    enumerateSerialPorts: vi.fn(
-      async () => ({ ok: true as const, value: [] as never[] }),
-    ),
+    browserCompatibility: null,
+    enumerateSerialPorts: vi.fn(async () => ({
+      ok: true as const,
+      value: [] as never[],
+    })),
     selectSerialPort: vi.fn(async () => ({ ok: true as const, value: null })),
     connect: vi.fn(async () => ({ ok: true as const, value: undefined })),
     connectTcp,
@@ -102,13 +110,15 @@ function makeHost(
     })),
     // 插件运行时桥（2026-08-31，ADR-039：Phase A 契约，测试不实际调用）。
     pluginRuntimeLoad: vi.fn(async () => ({ ok: true as const, value: null })),
-    pluginRuntimeUnload: vi.fn(
-      async () => ({ ok: true as const, value: null }),
-    ),
+    pluginRuntimeUnload: vi.fn(async () => ({
+      ok: true as const,
+      value: null,
+    })),
     pluginRpc: vi.fn(async () => ({ ok: true as const, value: null })),
-    pluginContributionQuery: vi.fn(
-      async () => ({ ok: true as const, value: { points: [] } }),
-    ),
+    pluginContributionQuery: vi.fn(async () => ({
+      ok: true as const,
+      value: { points: [] },
+    })),
   };
   return { host, connectTcp };
 }

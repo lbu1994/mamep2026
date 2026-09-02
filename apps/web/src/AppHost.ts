@@ -18,7 +18,9 @@ import {
   createMamepError,
   defaultConfig,
   fail,
+  FULL_BROWSER_COMPATIBILITY,
   ok,
+  type BrowserCompatibility,
 } from "@mamep2026/domain";
 import { RtuSessionHost } from "@mamep2026/application";
 import { createPluginCommunicationApi } from "@mamep2026/application";
@@ -67,8 +69,11 @@ import { AutoSaveCoordinator } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
 import {
   createMockScenarioRows,
+  detectBrowserCompatibility,
+  detectFromBrowser,
   installMockHooks,
   MockTransport,
+  type CompatibilityEnv,
 } from "@mamep2026/platform-web";
 
 /**
@@ -85,6 +90,11 @@ export interface BundledPluginEntry {
 
 export interface AppHostOptions {
   capabilities?: PlatformCapabilities;
+  /**
+   * 浏览器兼容性检测输入（PRD §8.3 / §15.7）：默认从真实 window/navigator 读取；
+   * 单测与 e2e 开发覆盖（?compatMiss=1）可注入。桌面端不适用。
+   */
+  compatibilityEnv?: CompatibilityEnv | undefined;
   platform: PlatformHost | null;
   repository: WorkspaceRepositoryPort;
   mockTransport: boolean;
@@ -108,9 +118,8 @@ export interface AppHostOptions {
    * 地址变换解析（2026-09-02 插件外部化）：经随包 address-adjust 插件的
    * AddressTransformRegistry 解析 transformId → 变换；缺省不调整（核心不再内置变换）。
    */
-  resolveAddressTransform?: (
-    transformId: string,
-  ) => AddressTransform | null;
+  resolveAddressTransform?:
+    ((transformId: string) => AddressTransform | null) | undefined;
 }
 
 export class BrowserAppHost implements AppHost {
@@ -120,6 +129,8 @@ export class BrowserAppHost implements AppHost {
   /** 贡献点注册表（ADR-039）：注册内置贡献点并注入 PluginRegistry 校验插件 contributes。 */
   private readonly contributionRegistry: ContributionPointRegistry;
   readonly isMockMode: boolean;
+  /** 浏览器兼容性检测结果（PRD §8.3 / §15.7 / TECH_DESIGN §40.2）。 */
+  readonly browserCompatibility: BrowserCompatibility;
   private readonly platform: PlatformHost | null;
   private readonly repository: WorkspaceRepositoryPort;
   private readonly clock: Clock;
@@ -135,8 +146,7 @@ export class BrowserAppHost implements AppHost {
   private readonly bundledPlugins: BundledPluginEntry[];
   /** 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件注册表经装配注入。 */
   private readonly resolveAddressTransform:
-    | ((transformId: string) => AddressTransform | null)
-    | null;
+    ((transformId: string) => AddressTransform | null) | null;
   /** RTU 会话宿主（Application 层）：会话/轮询/追踪/读写的单一编排，浏览器与 VSCode 共用。 */
   private readonly rtu: RtuSessionHost;
   /** 当前会话从站地址（每表独立，2026-08-19）：UI 切换表/修改值时同步，连接时作为初始值。 */
@@ -155,11 +165,7 @@ export class BrowserAppHost implements AppHost {
   >();
   private readonly saveListeners = new Set<(status: SaveStatus) => void>();
   private readonly pollResultListeners = new Set<
-    (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void
+    (key: string, address: number, result: Result<number | number[]>) => void
   >();
   private readonly traceListeners = new Set<
     (sample: TraceSampleEvent) => void
@@ -170,6 +176,13 @@ export class BrowserAppHost implements AppHost {
     this.platform = options.platform;
     this.repository = options.repository;
     this.isMockMode = options.mockTransport;
+    // 浏览器兼容性检测（PRD §8.3 / §15.7）：mock 为 dev 模拟传输，不依赖 Web Serial，
+    // 视为全部可用；否则按注入环境（默认真实 window/navigator）检测。
+    this.browserCompatibility = this.isMockMode
+      ? FULL_BROWSER_COMPATIBILITY
+      : detectBrowserCompatibility(
+          options.compatibilityEnv ?? detectFromBrowser(),
+        );
     // 贡献点注册表（2026-08-31，ADR-039）：注册 10 个内置贡献点，插件 contributes 按点校验；
     // 消费方由 UI 层经 host.pluginRegistry.getContributions(id) 读取（启用/失败过滤）。
     this.contributionRegistry = new ContributionPointRegistry();
@@ -212,7 +225,10 @@ export class BrowserAppHost implements AppHost {
     // 显式执行（先注册随包插件再 hydrate/持久化，2026-09-02 插件外部化时序保证）。
     this.pluginPersistence =
       options.pluginStore !== undefined
-        ? new PluginPersistenceCoordinator(this.pluginRegistry, options.pluginStore)
+        ? new PluginPersistenceCoordinator(
+            this.pluginRegistry,
+            options.pluginStore,
+          )
         : null;
     // 随应用分发插件清单（2026-09-02 插件外部化）。
     this.bundledPlugins = options.bundledPlugins ?? [];
@@ -410,8 +426,7 @@ export class BrowserAppHost implements AppHost {
 
   supportsWebSerial(): boolean {
     if (this.isMockMode) return true;
-    const serial = navigator.serial;
-    return serial !== undefined;
+    return this.browserCompatibility.webSerial;
   }
 
   async enumerateSerialPorts(): Promise<Result<SerialPortOption[]>> {
@@ -641,9 +656,7 @@ export class BrowserAppHost implements AppHost {
   // ---- 插件运行时桥（2026-08-31，ADR-039）：浏览器无宿主桥，如实返回能力错误；
   // 契约与穷尽守卫先行，运行时语义 Phase F 补齐。----
 
-  pluginRuntimeLoad(
-    _payload: PluginRuntimeLoadPayload,
-  ): Promise<Result<null>> {
+  pluginRuntimeLoad(_payload: PluginRuntimeLoadPayload): Promise<Result<null>> {
     return Promise.resolve(fail(pluginRuntimeUnavailableError()));
   }
 
@@ -736,10 +749,12 @@ export class BrowserAppHost implements AppHost {
   }
 
   /** 更新活动表地址变换配置（ADR-042）：浏览器 RTU 会话在本地，直接同步。 */
-  setAddressTransform(config: {
-    transformId: string;
-    enabled: boolean;
-  } | null): void {
+  setAddressTransform(
+    config: {
+      transformId: string;
+      enabled: boolean;
+    } | null,
+  ): void {
     this.rtu.setAddressTransform(config);
   }
 
@@ -783,7 +798,12 @@ export class BrowserAppHost implements AppHost {
     return () => this.pollResultListeners.delete(listener);
   }
 
-  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+  ): void {
     this.rtu.traceStart(key, address, speedMs, quantity);
   }
 

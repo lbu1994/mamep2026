@@ -123,3 +123,49 @@ describe("BrowserAppHost 工作区导入端口（2026-08-29，PRD §8.3 P1）", 
     }
   });
 });
+
+describe("BrowserAppHost 浏览器兼容性检测（2026-09-02，PRD §8.3 / §15.7）", () => {
+  function makeRealHost(env: {
+    serial: unknown;
+    isSecureContext: boolean;
+  }): BrowserAppHost {
+    return new BrowserAppHost({
+      platform: null,
+      repository: new InMemoryWorkspaceRepository(),
+      mockTransport: false,
+      compatibilityEnv: env,
+    });
+  }
+
+  it("注入无 Web Serial 环境：不可用且 supportsWebSerial=false", () => {
+    const host = makeRealHost({ serial: undefined, isSecureContext: true });
+    expect(host.browserCompatibility.usable).toBe(false);
+    expect(host.browserCompatibility.issues).toContain("web-serial-missing");
+    expect(host.supportsWebSerial()).toBe(false);
+  });
+
+  it("注入完整环境：可用且 supportsWebSerial=true", () => {
+    const host = makeRealHost({ serial: {}, isSecureContext: true });
+    expect(host.browserCompatibility.usable).toBe(true);
+    expect(host.browserCompatibility.issues).toEqual([]);
+    expect(host.supportsWebSerial()).toBe(true);
+  });
+
+  it("非安全上下文：标记 insecure-context（即使 Web Serial 存在）", () => {
+    const host = makeRealHost({ serial: {}, isSecureContext: false });
+    expect(host.browserCompatibility.usable).toBe(false);
+    expect(host.browserCompatibility.issues).toContain("insecure-context");
+    expect(host.supportsWebSerial()).toBe(true);
+  });
+
+  it("mock 模式：即使无 Web Serial 也视为全部可用（dev 模拟传输）", () => {
+    const host = new BrowserAppHost({
+      platform: null,
+      repository: new InMemoryWorkspaceRepository(),
+      mockTransport: true,
+      compatibilityEnv: { serial: undefined, isSecureContext: true },
+    });
+    expect(host.browserCompatibility.usable).toBe(true);
+    expect(host.supportsWebSerial()).toBe(true);
+  });
+});

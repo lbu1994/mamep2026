@@ -118,6 +118,10 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const isMock = host?.isMockMode ?? false;
   const serialPorts = host?.capabilities.serialPorts ?? "unsupported";
   const isEnumerated = serialPorts === "enumerated";
+  // 浏览器兼容性（PRD §8.3 / §15.7）：检测失败时明确提示替代方案并禁用 CONNECT，
+  // 禁止执行不可用的串口操作，但工作区仍可查看。
+  const compat = host?.browserCompatibility ?? null;
+  const serialBlocked = !isMock && !supportsSerial && !isEnumerated;
 
   // 连接协议由活动表类型决定（ADR-041 决策 A）：核心表 → rtu；安川表 → codec 协议。
   // tableType 贡献（插件声明）提供 表类型 → protocolId 映射；协议不在平台能力矩阵内回退 rtu。
@@ -126,9 +130,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
     "tableType",
   );
   const activeSheetType =
-    workspace.sheets.find(
-      (sheet) => sheet.sheetId === workspace.activeSheetId,
-    )?.type ?? "holding-register";
+    workspace.sheets.find((sheet) => sheet.sheetId === workspace.activeSheetId)
+      ?.type ?? "holding-register";
   const sheetProtocol = protocolForSheetType(
     activeSheetType,
     tableTypeContributions,
@@ -259,6 +262,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
           type={connected ? "default" : "primary"}
           danger={connected}
           loading={connecting || disconnecting}
+          disabled={!connected && serialBlocked}
           icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
           onClick={() => {
             if (connected) {
@@ -272,9 +276,17 @@ export function ConnectionSettingsModal(): React.ReactNode {
         </Button>,
       ]}
     >
-      {!isMock && !supportsSerial && !isEnumerated ? (
+      {serialBlocked ? (
         <Typography.Paragraph type="warning">
           {t("connection.unsupportedWebSerial")}
+          {compat?.issues.includes("insecure-context") === true ? (
+            <>
+              <br />
+              {t("connection.unsupportedSecureContext")}
+            </>
+          ) : null}
+          <br />
+          {t("connection.unsupportedWebSerialHint")}
         </Typography.Paragraph>
       ) : null}
       <Form layout="vertical" size="small">
@@ -314,224 +326,227 @@ export function ConnectionSettingsModal(): React.ReactNode {
         />
         {protocol === "rtu" ? (
           <>
-        <Divider
-          titlePlacement="left"
-          plain
-          style={{ marginTop: 0, marginBottom: 8 }}
-        >
-          {t("connection.groupCommunication")}
-        </Divider>
-        <Row gutter={16}>
-          <Col span={12}>
-            <Form.Item label={t("connection.port")}>
-              {isMock ? (
-                <Tag>{t("connection.portMock")}</Tag>
-              ) : isEnumerated ? (
-                <Flex gap={8} align="center">
-                  <Select
-                    style={{ flex: 1 }}
-                    placeholder={t("connection.portSelectPlaceholder")}
-                    loading={enumerating}
-                    value={selectedPortId ?? undefined}
-                    // 用户点开下拉框即枚举（用户手势，满足 requestPort 的权限要求）。
-                    // 注：antd v6 用 onOpenChange（onDropdownVisibleChange 已弃用）。
-                    onOpenChange={(open) => {
-                      if (open) void enumeratePorts();
-                    }}
-                    notFoundContent={
-                      <Flex
-                        vertical
-                        align="center"
-                        gap={4}
-                        style={{ padding: "8px 0" }}
+            <Divider
+              titlePlacement="left"
+              plain
+              style={{ marginTop: 0, marginBottom: 8 }}
+            >
+              {t("connection.groupCommunication")}
+            </Divider>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item label={t("connection.port")}>
+                  {isMock ? (
+                    <Tag>{t("connection.portMock")}</Tag>
+                  ) : isEnumerated ? (
+                    <Flex gap={8} align="center">
+                      <Select
+                        style={{ flex: 1 }}
+                        placeholder={t("connection.portSelectPlaceholder")}
+                        loading={enumerating}
+                        value={selectedPortId ?? undefined}
+                        // 用户点开下拉框即枚举（用户手势，满足 requestPort 的权限要求）。
+                        // 注：antd v6 用 onOpenChange（onDropdownVisibleChange 已弃用）。
+                        onOpenChange={(open) => {
+                          if (open) void enumeratePorts();
+                        }}
+                        notFoundContent={
+                          <Flex
+                            vertical
+                            align="center"
+                            gap={4}
+                            style={{ padding: "8px 0" }}
+                          >
+                            <Typography.Text type="secondary">
+                              {t("connection.portEmpty")}
+                            </Typography.Text>
+                            <Button
+                              size="small"
+                              icon={<ReloadOutlined />}
+                              onClick={() => void enumeratePorts()}
+                            >
+                              {t("connection.portRefresh")}
+                            </Button>
+                          </Flex>
+                        }
+                        options={portOptions.map((p) => ({
+                          value: p.portId,
+                          label: p.label,
+                        }))}
+                        onChange={(portId) => void selectPort(portId)}
+                      />
+                      <Button
+                        icon={<ReloadOutlined />}
+                        onClick={() => void enumeratePorts()}
+                        title={t("connection.portRefresh")}
+                      />
+                    </Flex>
+                  ) : (
+                    <Flex gap={8} align="center">
+                      <Button
+                        icon={<UsbOutlined />}
+                        onClick={() => void selectPort()}
                       >
-                        <Typography.Text type="secondary">
-                          {t("connection.portEmpty")}
-                        </Typography.Text>
-                        <Button
-                          size="small"
-                          icon={<ReloadOutlined />}
-                          onClick={() => void enumeratePorts()}
-                        >
-                          {t("connection.portRefresh")}
-                        </Button>
-                      </Flex>
-                    }
-                    options={portOptions.map((p) => ({
-                      value: p.portId,
-                      label: p.label,
-                    }))}
-                    onChange={(portId) => void selectPort(portId)}
-                  />
-                  <Button
-                    icon={<ReloadOutlined />}
-                    onClick={() => void enumeratePorts()}
-                    title={t("connection.portRefresh")}
-                  />
-                </Flex>
-              ) : (
-                <Flex gap={8} align="center">
-                  <Button
-                    icon={<UsbOutlined />}
-                    onClick={() => void selectPort()}
-                  >
-                    {t("connection.portSelect")}
-                  </Button>
-                  {selectedHandle !== null ? (
-                    <Tag style={{ marginInlineEnd: 0 }}>
-                      {selectedHandle.label}
-                    </Tag>
-                  ) : null}
-                </Flex>
-              )}
-            </Form.Item>
-            <Controller
-              name="baudRate"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.baudRate")}>
-                  <Select
-                    style={{ width: "100%" }}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v)}
-                    options={[
-                      1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200,
-                    ].map((v) => ({ value: v, label: String(v) }))}
-                  />
+                        {t("connection.portSelect")}
+                      </Button>
+                      {selectedHandle !== null ? (
+                        <Tag style={{ marginInlineEnd: 0 }}>
+                          {selectedHandle.label}
+                        </Tag>
+                      ) : null}
+                    </Flex>
+                  )}
                 </Form.Item>
-              )}
-            />
-            <Controller
-              name="dataBits"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.dataBits")}>
-                  <Select
-                    style={{ width: "100%" }}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v)}
-                    options={[7, 8].map((v) => ({
-                      value: v,
-                      label: `${v} BIT`,
-                    }))}
-                  />
-                </Form.Item>
-              )}
-            />
-          </Col>
-          <Col span={12}>
-            <Controller
-              name="stopBits"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.stopBits")}>
-                  <Select
-                    style={{ width: "100%" }}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v)}
-                    options={[1, 2].map((v) => ({
-                      value: v,
-                      label: `${v} BIT`,
-                    }))}
-                  />
-                </Form.Item>
-              )}
-            />
-            <Controller
-              name="parity"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.parity")}>
-                  <Select
-                    style={{ width: "100%" }}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v)}
-                    options={[
-                      { value: "none", label: t("connection.parityNone") },
-                      { value: "even", label: t("connection.parityEven") },
-                      { value: "odd", label: t("connection.parityOdd") },
-                    ]}
-                  />
-                </Form.Item>
-              )}
-            />
-            <Controller
-              name="flowControl"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.flowControl")}>
-                  <Select
-                    style={{ width: "100%" }}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v)}
-                    options={[
-                      { value: "off", label: t("connection.flowOff") },
-                      { value: "rts-cts", label: t("connection.flowRtsCts") },
-                    ]}
-                  />
-                </Form.Item>
-              )}
-            />
-          </Col>
-        </Row>
-        <Divider
-          titlePlacement="left"
-          plain
-          style={{ marginTop: 16, marginBottom: 8 }}
-        >
-          {t("connection.groupOption")}
-        </Divider>
-        <Row gutter={16}>
-          <Col span={12}>
-            <Controller
-              name="rxDelay"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.rxDelay")}>
-                  <InputNumber
-                    style={{ width: "100%" }}
-                    min={0}
-                    max={5000}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v ?? 50)}
-                  />
-                </Form.Item>
-              )}
-            />
-            <Controller
-              name="timeout"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.timeout")}>
-                  <InputNumber
-                    style={{ width: "100%" }}
-                    min={50}
-                    max={60000}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v ?? 1000)}
-                  />
-                </Form.Item>
-              )}
-            />
-          </Col>
-          <Col span={12}>
-            <Controller
-              name="retry"
-              control={control}
-              render={({ field }) => (
-                <Form.Item label={t("connection.retry")}>
-                  <InputNumber
-                    style={{ width: "100%" }}
-                    min={0}
-                    max={10}
-                    value={field.value}
-                    onChange={(v) => field.onChange(v ?? 1)}
-                  />
-                </Form.Item>
-              )}
-            />
-          </Col>
-        </Row>
+                <Controller
+                  name="baudRate"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.baudRate")}>
+                      <Select
+                        style={{ width: "100%" }}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v)}
+                        options={[
+                          1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200,
+                        ].map((v) => ({ value: v, label: String(v) }))}
+                      />
+                    </Form.Item>
+                  )}
+                />
+                <Controller
+                  name="dataBits"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.dataBits")}>
+                      <Select
+                        style={{ width: "100%" }}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v)}
+                        options={[7, 8].map((v) => ({
+                          value: v,
+                          label: `${v} BIT`,
+                        }))}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+              <Col span={12}>
+                <Controller
+                  name="stopBits"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.stopBits")}>
+                      <Select
+                        style={{ width: "100%" }}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v)}
+                        options={[1, 2].map((v) => ({
+                          value: v,
+                          label: `${v} BIT`,
+                        }))}
+                      />
+                    </Form.Item>
+                  )}
+                />
+                <Controller
+                  name="parity"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.parity")}>
+                      <Select
+                        style={{ width: "100%" }}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v)}
+                        options={[
+                          { value: "none", label: t("connection.parityNone") },
+                          { value: "even", label: t("connection.parityEven") },
+                          { value: "odd", label: t("connection.parityOdd") },
+                        ]}
+                      />
+                    </Form.Item>
+                  )}
+                />
+                <Controller
+                  name="flowControl"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.flowControl")}>
+                      <Select
+                        style={{ width: "100%" }}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v)}
+                        options={[
+                          { value: "off", label: t("connection.flowOff") },
+                          {
+                            value: "rts-cts",
+                            label: t("connection.flowRtsCts"),
+                          },
+                        ]}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+            </Row>
+            <Divider
+              titlePlacement="left"
+              plain
+              style={{ marginTop: 16, marginBottom: 8 }}
+            >
+              {t("connection.groupOption")}
+            </Divider>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Controller
+                  name="rxDelay"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.rxDelay")}>
+                      <InputNumber
+                        style={{ width: "100%" }}
+                        min={0}
+                        max={5000}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v ?? 50)}
+                      />
+                    </Form.Item>
+                  )}
+                />
+                <Controller
+                  name="timeout"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.timeout")}>
+                      <InputNumber
+                        style={{ width: "100%" }}
+                        min={50}
+                        max={60000}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v ?? 1000)}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+              <Col span={12}>
+                <Controller
+                  name="retry"
+                  control={control}
+                  render={({ field }) => (
+                    <Form.Item label={t("connection.retry")}>
+                      <InputNumber
+                        style={{ width: "100%" }}
+                        min={0}
+                        max={10}
+                        value={field.value}
+                        onChange={(v) => field.onChange(v ?? 1)}
+                      />
+                    </Form.Item>
+                  )}
+                />
+              </Col>
+            </Row>
           </>
         ) : null}
         {protocol === "tcp" ? (

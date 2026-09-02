@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef } from "react";
 import type { AddressTransform, RowId } from "@mamep2026/domain";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
 import type { CommunicationLogEvent } from "@mamep2026/communication";
-import { createCodecRegistry, formatBytesHex, registerBasicTablesCodecs } from "@mamep2026/communication";
+import {
+  createCodecRegistry,
+  formatBytesHex,
+  registerBasicTablesCodecs,
+} from "@mamep2026/communication";
 import { createDataTypeResolver } from "@mamep2026/data-conversion";
 import type { ApplicationMessage } from "@mamep2026/logging";
 import { createAddressTransformRegistry } from "@mamep2026/plugin-api";
@@ -10,7 +14,10 @@ import {
   applyPollResult,
   buildPollingTargets,
 } from "@mamep2026/register-table";
-import { EXAMPLE_PANEL_PLUGIN_ID, examplePanelManifest } from "@mamep2026/example-panel";
+import {
+  EXAMPLE_PANEL_PLUGIN_ID,
+  examplePanelManifest,
+} from "@mamep2026/example-panel";
 import {
   ADDRESS_ADJUST_PLUGIN_ID,
   addressAdjustManifest,
@@ -32,20 +39,27 @@ import {
   IndexedDBWorkspaceRepository,
 } from "@mamep2026/platform-web";
 import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
-import {
-  BrowserAppHost,
-  type BundledPluginEntry,
-} from "./AppHost";
+import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
 import { ElectronAppHost } from "./electron-app-host";
 import { VscodeAppHost } from "./vscode-app-host";
 import { IndexedDBPluginStore } from "./indexeddb-plugin-store";
 
 const MOCK_FLAG = "mockTransport";
+const COMPAT_MISS_FLAG = "compatMiss";
 
 function isMockMode(): boolean {
   return (
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get(MOCK_FLAG) === "1"
+  );
+}
+
+/** dev 门控覆盖开关（沿用 ?mockTransport=1 先例）：强制把检测输入置为「无 Web Serial」，
+ * 供 e2e 确定性触发浏览器兼容性提示（PRD §8.3 / §15.7）。 */
+function isCompatMissMode(): boolean {
+  return (
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get(COMPAT_MISS_FLAG) === "1"
   );
 }
 
@@ -121,8 +135,7 @@ export default function App(): React.ReactNode {
       {
         pluginId: ADDRESS_ADJUST_PLUGIN_ID,
         manifest: addressAdjustManifest,
-        createRuntime: () =>
-          createAddressAdjustRuntime({ transformRegistry }),
+        createRuntime: () => createAddressAdjustRuntime({ transformRegistry }),
       },
       {
         pluginId: YASKAWA_MEMOBUS_PLUGIN_ID,
@@ -139,7 +152,10 @@ export default function App(): React.ReactNode {
     const host: AppHost =
       bridge !== undefined
         ? bridge.platform === "vscode"
-          ? new VscodeAppHost(bridge, { bundledPlugins, resolveAddressTransform })
+          ? new VscodeAppHost(bridge, {
+              bundledPlugins,
+              resolveAddressTransform,
+            })
           : new ElectronAppHost(bridge, {
               codecRegistry,
               bundledPlugins,
@@ -147,6 +163,7 @@ export default function App(): React.ReactNode {
             })
         : (() => {
             const serial = navigator.serial;
+            const compatMiss = isCompatMissMode();
             const platformHost =
               serial !== undefined
                 ? new BrowserPlatformHost({ serial })
@@ -155,6 +172,10 @@ export default function App(): React.ReactNode {
             const kv = createIdbKeyValueStore();
             return new BrowserAppHost({
               platform: platformHost,
+              // 浏览器兼容性检测（PRD §8.3 / §15.7）：默认真实环境；?compatMiss=1 强制缺失。
+              compatibilityEnv: compatMiss
+                ? { serial: undefined, isSecureContext: true }
+                : { serial, isSecureContext: window.isSecureContext === true },
               repository: new IndexedDBWorkspaceRepository(kv),
               mockTransport,
               // 插件持久化（2026-08-30，ADR-038）：IndexedDB 独立 key。

@@ -39,6 +39,15 @@ export interface PluginStoreData {
   seeded: boolean;
 }
 
+/**
+ * 注册表快照（不含 seeded）：seeded 属于持久化协调器的装配状态（ADR-045），
+ * 由 PluginPersistenceCoordinator 合并进 PluginStoreData 落盘。
+ */
+export type PluginStoreSnapshot = Pick<
+  PluginStoreData,
+  "schemaVersion" | "plugins"
+>;
+
 /** 存储数据 Zod 校验（主进程/扩展宿主/测试在落盘前校验，与 manifest 校验一致）。 */
 export const storedPluginSchema = z.object({
   manifest: pluginManifestSchema,
@@ -69,7 +78,9 @@ export function createEmptyPluginStoreData(): PluginStoreData {
  * - schemaVersion 1 / 缺失：迁移——plugins 必须为数组（否则视为损坏），非法条目跳过
  *   （不阻断其余条目），permissions 非法项丢弃。
  */
-export function migratePluginStoreData(input: unknown): Result<PluginStoreData> {
+export function migratePluginStoreData(
+  input: unknown,
+): Result<PluginStoreData> {
   if (typeof input !== "object" || input === null) {
     return fail(schemaInvalidError("plugin store data is not an object"));
   }
@@ -97,14 +108,17 @@ export function migratePluginStoreData(input: unknown): Result<PluginStoreData> 
   }
   if (!Array.isArray(raw.plugins)) {
     return fail(
-      schemaInvalidError("stored plugin store is invalid: plugins must be an array"),
+      schemaInvalidError(
+        "stored plugin store is invalid: plugins must be an array",
+      ),
     );
   }
   const migrated: StoredPlugin[] = [];
   for (const entry of raw.plugins) {
     if (typeof entry !== "object" || entry === null) continue;
     const stored = entry as { manifest?: unknown; enabled?: unknown };
-    if (typeof stored.manifest !== "object" || stored.manifest === null) continue;
+    if (typeof stored.manifest !== "object" || stored.manifest === null)
+      continue;
     const m = stored.manifest as Record<string, unknown>;
     const manifest: Record<string, unknown> = {
       ...m,

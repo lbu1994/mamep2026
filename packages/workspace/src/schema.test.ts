@@ -580,9 +580,9 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
 
     const serialized = serializeWorkspace(workspace);
     // 导出文件为版本化 JSON（含 schemaVersion；TECH_DESIGN §6「版本化 JSON 更适合跨端导入导出」）。
-    // 当前为 v7（ADR-043 E-3：dataType 开放，仅升版本）。
+    // 当前为 v8（ADR-047：themePrimary 改预设 ID；ADR-043 E-3：dataType 开放）。
     const raw = JSON.parse(serialized);
-    expect(raw.schemaVersion).toBe(7);
+    expect(raw.schemaVersion).toBe(8);
 
     // 导入路径：parseWorkspace（含迁移与断链检测）后字段完整。
     const parsed = parseWorkspace(raw);

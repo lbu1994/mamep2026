@@ -14,10 +14,7 @@ import {
   incompatibleError,
   type CompatibilityResult,
 } from "./compatibility";
-import {
-  validatePermissions,
-  type PermissionId,
-} from "./permissions";
+import { validatePermissions, type PermissionId } from "./permissions";
 import {
   ContributionPointRegistry,
   type Contribution,
@@ -26,6 +23,7 @@ import {
 import {
   PLUGIN_STORE_SCHEMA_VERSION,
   type PluginStoreData,
+  type PluginStoreSnapshot,
 } from "./plugin-store";
 import {
   PLUGIN_HOOK_FAILED,
@@ -92,8 +90,7 @@ export class PluginRegistry {
   private readonly communicationApi: PluginCommunicationApi;
   /** 按插件 id 动态通信面工厂（2026-09-02 插件外部化）：优先于 communicationApi。 */
   private readonly communicationApiFactory:
-    | ((pluginId: string) => PluginCommunicationApi)
-    | undefined;
+    ((pluginId: string) => PluginCommunicationApi) | undefined;
   /** 变更版本号（注册/启停/生命周期变化时自增）：UI 消费方响应式订阅用（ADR-039）。 */
   private version = 0;
 
@@ -381,7 +378,7 @@ export class PluginRegistry {
   }
 
   /** 插件是否可处理工具栏动作（2026-09-02 插件外部化）：runtime 声明了 handler 且已注册。 */
-  canHandleToolbarAction(pluginId: string, actionId: string): boolean {
+  canHandleToolbarAction(pluginId: string, _actionId: string): boolean {
     return (
       this.plugins.get(pluginId)?.runtime?.handleToolbarAction !== undefined &&
       this.plugins.get(pluginId)?.enabled === true
@@ -414,8 +411,15 @@ export class PluginRegistry {
         this.communicationApiFactory?.(pluginId) ?? this.communicationApi,
     };
     try {
-      const result = plugin.runtime.handleToolbarAction.call(plugin.runtime, actionId, ctx);
-      if (typeof (result as Promise<Result<void>> | undefined)?.then === "function") {
+      const result = plugin.runtime.handleToolbarAction.call(
+        plugin.runtime,
+        actionId,
+        ctx,
+      );
+      if (
+        typeof (result as Promise<Result<void>> | undefined)?.then ===
+        "function"
+      ) {
         const awaited = await result;
         if (awaited === undefined) return ok(undefined);
         return awaited;
@@ -428,8 +432,7 @@ export class PluginRegistry {
           code: PLUGIN_HOOK_FAILED,
           category: "plugin",
           userMessageKey: "errors.pluginRuntimeNotAvailable",
-          technicalMessage:
-            err instanceof Error ? err.message : String(err),
+          technicalMessage: err instanceof Error ? err.message : String(err),
         }),
       );
     }
@@ -478,7 +481,7 @@ export class PluginRegistry {
    * （避免重启重复注册报 PLUGIN_ALREADY_REGISTERED）。随应用分发的插件（2026-09-02
    * 插件外部化）首次启动时一次性安装（seeded），此后与用户安装插件同样入库。
    */
-  snapshot(): PluginStoreData {
+  snapshot(): PluginStoreSnapshot {
     return {
       schemaVersion: PLUGIN_STORE_SCHEMA_VERSION,
       plugins: [...this.plugins.values()]

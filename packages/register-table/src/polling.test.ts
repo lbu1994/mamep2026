@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   RegisterAddress,
+  createMamepError,
   fail,
   ok,
   type AddressTransform,
@@ -47,9 +48,7 @@ function makeSheet(
     columnOrder: null,
     writeVerify: { mode: "off", delayMs: null },
     addressTransform:
-      options?.addressTransform !== undefined
-        ? options.addressTransform
-        : null,
+      options?.addressTransform !== undefined ? options.addressTransform : null,
     createdAt: 0,
     updatedAt: 0,
   };
@@ -69,10 +68,14 @@ const resolveBuiltin: (id: string) => AddressTransform | null = (id) =>
         titleKey: "table.addressAdjust",
         apply: (v: number) =>
           v === 0
-            ? fail({
-                code: "ADDRESS_ADJUST_UNDERFLOW",
-                category: "validation",
-              })
+            ? fail(
+                createMamepError({
+                  code: "ADDRESS_ADJUST_UNDERFLOW",
+                  category: "validation",
+                  userMessageKey: "errors.addressAdjustUnderflow",
+                  technicalMessage: "address 0 cannot be adjusted by -1",
+                }),
+              )
             : ok(v - 1),
         validate: () => ok(null),
       }
@@ -86,9 +89,7 @@ describe("buildPollingTargets", () => {
     const noAddr = RegisterTableService.createRow();
     noAddr.pollingEnabled = true;
     const targets = buildPollingTargets([makeSheet("s", [on, off, noAddr])]);
-    expect(targets).toEqual([
-      { key: on.rowId, address: 0x0001, quantity: 1 },
-    ]);
+    expect(targets).toEqual([{ key: on.rowId, address: 0x0001, quantity: 1 }]);
   });
 
   it("applies the table Address Adjust offset when enabled", () => {
@@ -98,9 +99,7 @@ describe("buildPollingTargets", () => {
       [makeSheet("s", [row], { addressTransform: adjustOn() })],
       { resolveAddressTransform: resolveBuiltin },
     );
-    expect(targets).toEqual([
-      { key: row.rowId, address: 0x0002, quantity: 1 },
-    ]);
+    expect(targets).toEqual([{ key: row.rowId, address: 0x0002, quantity: 1 }]);
   });
 
   it("skips address 0 rows when table Address Adjust is enabled", () => {
@@ -179,8 +178,12 @@ describe("applyPollResult", () => {
     const row = makeRow(0x0003);
     row.pollingEnabled = true;
     const sheet = makeSheet("s", [row], { addressTransform: adjustOn() });
-    expect(pollResultAddressMatches(row, sheet, 0x0002, resolveBuiltin)).toBe(true);
-    expect(pollResultAddressMatches(row, sheet, 0x0003, resolveBuiltin)).toBe(false);
+    expect(pollResultAddressMatches(row, sheet, 0x0002, resolveBuiltin)).toBe(
+      true,
+    );
+    expect(pollResultAddressMatches(row, sheet, 0x0003, resolveBuiltin)).toBe(
+      false,
+    );
   });
 
   it("returns the same row reference when the device value is unchanged (polling perf)", () => {

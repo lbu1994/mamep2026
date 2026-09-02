@@ -3,6 +3,7 @@
  * 实现由 apps/web 的 composition root 提供。
  */
 import type {
+  BrowserCompatibility,
   FlowControl,
   PlatformCapabilities,
   ReadVerifySettings,
@@ -88,6 +89,12 @@ export interface AppHost {
 
   supportsWebSerial(): boolean;
   /**
+   * 浏览器兼容性检测结果（PRD §8.3 / §15.7 / TECH_DESIGN §40.2）。
+   * 浏览器端返回运行时检测结果（Web Serial 存在性 + 安全上下文）；
+   * Electron/VSCode 返回 null（串口能力经能力矩阵声明，不走浏览器兼容性提示）。
+   */
+  readonly browserCompatibility: BrowserCompatibility | null;
+  /**
    * 枚举可用串口（serialPorts === "enumerated" 时调用，如 Electron）：
    * 返回下拉框可展示的端口列表；不支持枚举的平台返回 fail（浏览器端不用该方法）。
    */
@@ -137,10 +144,12 @@ export interface AppHost {
    * 对后续读/写请求生效（轮询地址在 Renderer 生成时按表应用，不经本端口）。
    * null=不调整；host 端会话（VSCode/Electron TCP）经 session-set-address-transform RPC。
    */
-  setAddressTransform(config: {
-    transformId: string;
-    enabled: boolean;
-  } | null): void;
+  setAddressTransform(
+    config: {
+      transformId: string;
+      enabled: boolean;
+    } | null,
+  ): void;
   subscribeConnectionState(
     listener: (state: ConnectionState) => void,
   ): () => void;

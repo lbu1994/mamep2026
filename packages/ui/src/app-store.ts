@@ -130,8 +130,8 @@ export interface AppStoreState {
   /** 批量关闭（关闭其他/右侧）确认弹窗状态；null 表示未在确认。 */
   pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null;
   theme: "light" | "dark";
-  /** 用户自定义主题主色（ADR-042）：null=默认品牌蓝；随工作区持久化。 */
-  themePrimary: { light: string; dark: string } | null;
+  /** 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。 */
+  themePrimary: string | null;
   /**
    * 宿主提供的完整 antd 主题（VSCode 完整令牌映射，ui-theme buildVscodeTheme 产出，ADR-027）；
    * null=回退 buildTheme 两态。运行时派生（随宿主主题事件更新），不持久化。
@@ -176,10 +176,10 @@ export interface AppStoreState {
   ) => void;
   setTheme: (theme: "light" | "dark") => void;
   /**
-   * 用户自定义主题主色（ADR-042）：浅/深可分别设置；null=默认品牌蓝。
+   * 所选主题色预设（ADR-047）：null=内置默认蓝；插件色 = `<pluginId>:<colorId>`（完整预设 ID）。
    * 持久化到 workspace.preferences.themePrimary（随自动保存）。
    */
-  setThemePrimary: (primary: { light: string; dark: string } | null) => void;
+  setThemePrimary: (primary: string | null) => void;
   /** 撤销上一步工作区编辑（TECH_DESIGN §24.4）；无可撤销项时 no-op。 */
   undo: () => void;
   /** 重做被撤销的编辑；无重做项时 no-op。 */

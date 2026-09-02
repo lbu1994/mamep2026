@@ -16,6 +16,7 @@ import type {
   WriteOutcome,
 } from "@mamep2026/communication";
 import type {
+  BrowserCompatibility,
   PlatformCapabilities,
   ReadVerifySettings,
   RegisterRow,
@@ -52,10 +53,7 @@ import {
   type TraceSamplePayload,
   type VscodeHostApi,
 } from "@mamep2026/platform-api";
-import type {
-  PluginRegistry,
-  PluginStorePort,
-} from "@mamep2026/plugin-api";
+import type { PluginRegistry, PluginStorePort } from "@mamep2026/plugin-api";
 import { createUnavailableCommunicationApi } from "@mamep2026/plugin-api";
 import {
   buildVscodeTheme,
@@ -71,10 +69,7 @@ import {
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { useAppStore } from "@mamep2026/ui";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
-import {
-  BrowserAppHost,
-  type BundledPluginEntry,
-} from "./AppHost";
+import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
 import { BridgePluginStore } from "./bridge-plugin-store";
 
 /** VscodeAppHost 可注入依赖（测试用；生产走默认装配）。 */
@@ -86,9 +81,7 @@ export interface VscodeAppHostOptions {
   /** 随应用分发插件（2026-09-02 插件外部化）：透传 inner（首次一次性安装 + 重启恢复）。 */
   bundledPlugins?: BundledPluginEntry[] | undefined;
   /** 地址变换解析（2026-09-02 插件外部化）：透传 inner（本地只读会话不用于通信）。 */
-  resolveAddressTransform?: (
-    transformId: string,
-  ) => AddressTransform | null;
+  resolveAddressTransform?: (transformId: string) => AddressTransform | null;
   /**
    * 主题 CSS 变量读取源（默认 getComputedStyle(document.documentElement) 惰性委托；
    * 测试注入 fake，避免 node 环境触碰 DOM）。
@@ -118,6 +111,8 @@ function portLabelOf(ports: SerialPortOption[], portId: string): string {
 export class VscodeAppHost implements AppHost {
   readonly capabilities: PlatformCapabilities;
   readonly isMockMode = false;
+  /** 桌面端不走浏览器兼容性提示（串口能力经能力矩阵声明）。 */
+  readonly browserCompatibility: BrowserCompatibility | null = null;
   readonly pluginRegistry: PluginRegistry;
   readonly appVersion = __APP_VERSION__;
 
@@ -150,11 +145,7 @@ export class VscodeAppHost implements AppHost {
     (message: ApplicationMessage) => void
   >();
   private readonly pollResultListeners = new Set<
-    (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void
+    (key: string, address: number, result: Result<number | number[]>) => void
   >();
   private readonly traceListeners = new Set<
     (sample: TraceSampleEvent) => void
@@ -177,8 +168,7 @@ export class VscodeAppHost implements AppHost {
     });
     this.capabilities = vscodeCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;
-    this.cssVarSource =
-      options.cssVarSource ??
+    this.cssVarSource = options.cssVarSource ??
       // 惰性委托：构造时不触碰 DOM（测试 node 环境安全），读取时才访问 document。
       {
         getPropertyValue: (name) =>
@@ -323,7 +313,10 @@ export class VscodeAppHost implements AppHost {
     if (portId === null || portId === undefined || portId === "") {
       return ok(null);
     }
-    return ok({ id: portId, label: portLabelOf(this.lastEnumeratedPorts, portId) });
+    return ok({
+      id: portId,
+      label: portLabelOf(this.lastEnumeratedPorts, portId),
+    });
   }
 
   connect(
@@ -481,10 +474,12 @@ export class VscodeAppHost implements AppHost {
   }
 
   /** 更新活动表地址变换配置（ADR-042）：VSCode 会话在 Extension Host，经 session-set-address-transform RPC。 */
-  setAddressTransform(config: {
-    transformId: string;
-    enabled: boolean;
-  } | null): void {
+  setAddressTransform(
+    config: {
+      transformId: string;
+      enabled: boolean;
+    } | null,
+  ): void {
     // TCP 无地址变换（恒不调整）：仍同步 null 使宿主复位。
     if (config === null) {
       void this.bridge.sessionSetAddressTransform({
@@ -552,7 +547,12 @@ export class VscodeAppHost implements AppHost {
     void this.bridge.sessionPollingStop();
   }
 
-  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+  ): void {
     void this.bridge.sessionTraceStart(key, address, speedMs, quantity);
   }
 

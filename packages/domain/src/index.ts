@@ -1,3 +1,4 @@
+export * from "./browser-compatibility";
 export * from "./capabilities";
 export * from "./config";
 export * from "./errors";

@@ -6,6 +6,7 @@ import {
   PLUGIN_CONTRIBUTION_POINT_EXISTS,
   PLUGIN_CONTRIBUTION_UNKNOWN,
 } from "./contributions";
+import { THEME_CONTRIBUTION_SCHEMA } from "./builtin-contribution-points";
 
 const PANELS_SCHEMA = z.array(z.object({ id: z.string(), titleKey: z.string() }));
 const THEME_SCHEMA = z.object({ colorPrimary: z.string().optional() });
@@ -72,5 +73,46 @@ describe("ContributionPointRegistry（ADR-039：贡献点注册表）", () => {
     expect(active[0]?.pluginId).toBe("p2");
     registry.removePluginContributions("p2");
     expect(registry.getContributions("theme")).toHaveLength(0);
+  });
+});
+
+describe("THEME_CONTRIBUTION_SCHEMA（ADR-047：多色数组）", () => {
+  it("接受一个或多个可选主题色（colors[]，含 colorLink 可选）", () => {
+    const parsed = THEME_CONTRIBUTION_SCHEMA.parse({
+      colors: [
+        {
+          id: "indigo",
+          titleKey: "plugins.exampleThemeColor",
+          colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
+          colorLink: { light: "#4f46e5", dark: "#818cf8" },
+        },
+        {
+          id: "teal",
+          titleKey: "plugins.exampleThemeTeal",
+          colorPrimary: { light: "#0d9488", dark: "#2dd4bf" },
+        },
+      ],
+    });
+    expect(parsed.colors).toHaveLength(2);
+  });
+
+  it("colors 缺省合法（空贡献 = 不注册可选色）", () => {
+    expect(THEME_CONTRIBUTION_SCHEMA.parse({}).colors).toBeUndefined();
+  });
+
+  it("非法：color 缺少 colorPrimary → 拒绝", () => {
+    const result = THEME_CONTRIBUTION_SCHEMA.safeParse({
+      colors: [{ id: "x", titleKey: "k" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("非法：preset 缺 id/titleKey → 拒绝", () => {
+    const result = THEME_CONTRIBUTION_SCHEMA.safeParse({
+      colors: [
+        { colorPrimary: { light: "#fff", dark: "#000" } },
+      ],
+    });
+    expect(result.success).toBe(false);
   });
 });

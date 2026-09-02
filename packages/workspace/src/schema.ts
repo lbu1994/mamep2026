@@ -188,14 +188,8 @@ export const workspaceSchema = z.object({
     theme: z.enum(["light", "dark"]),
     /** 界面语言：默认 en-US；老数据缺省时补默认值，无需迁移。 */
     language: z.enum(["en-US", "zh-CN"]).default("en-US"),
-    /** 用户自定义主题主色（ADR-042）：null=默认品牌蓝；老数据缺省补 null。 */
-    themePrimary: z
-      .object({
-        light: z.string().min(1),
-        dark: z.string().min(1),
-      })
-      .nullable()
-      .default(null),
+    /** 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色 = `<pluginId>:<colorId>`；老数据缺省补 null。 */
+    themePrimary: z.string().nullable().default(null),
   }),
   notes: z.string(),
   pluginStates: z.array(pluginStateSchema),

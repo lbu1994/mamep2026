@@ -30,6 +30,14 @@
  * - 删除各 profile 的 addressAdjust 字段（全局选项移出核心）；
  * - preferences 补 themePrimary=null 缺省（无数据转换，仅版本）；
  * - schemaVersion 升为 6。
+ *
+ * v6→v7（2026-09-01，dataType 开放 ADR-043 E-3）：
+ * - 无数据转换（dataType 字符串透传），仅升版本；
+ * - schemaVersion 升为 7。
+ *
+ * v7→v8（2026-09-02，主题色预设 ID ADR-047，逆转 ADR-042 任意取色）：
+ * - 旧 preferences.themePrimary 的 {light,dark} 任意 HEX 无可映射预设 → 一律置 null（内置默认蓝）；
+ * - schemaVersion 升为 8。
  */
 import { createMamepError, BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID, type Result } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
@@ -228,6 +236,28 @@ const migrationV6ToV7: Migration = {
   },
 };
 
+const migrationV7ToV8: Migration = {
+  fromVersion: 7,
+  toVersion: 8,
+  migrate(data) {
+    // ADR-047：任意取色移除 → 预设 ID；旧 {light,dark} 任意 HEX 无预设可映射 → 一律置 null（默认蓝）。
+    const rawPreferences =
+      data.preferences !== null &&
+      typeof data.preferences === "object" &&
+      !Array.isArray(data.preferences)
+        ? (data.preferences as Record<string, unknown>)
+        : {};
+    return {
+      ...data,
+      schemaVersion: 8,
+      preferences: {
+        ...rawPreferences,
+        themePrimary: null,
+      },
+    };
+  },
+};
+
 export const migrations: readonly Migration[] = [
   migrationV1ToV2,
   migrationV2ToV3,
@@ -235,6 +265,7 @@ export const migrations: readonly Migration[] = [
   migrationV4ToV5,
   migrationV5ToV6,
   migrationV6ToV7,
+  migrationV7ToV8,
 ];
 
 /** 按版本顺序应用迁移；无法迁移的数据返回结构化错误。 */

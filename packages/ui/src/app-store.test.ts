@@ -449,7 +449,7 @@ describe("setSheetWriteVerify（2026-08-26）", () => {
   });
 });
 
-describe("setSheetAddressTransform / setThemePrimary（2026-09-01，ADR-042）", () => {
+describe("setSheetAddressTransform（ADR-042）/ setThemePrimary（2026-09-02，ADR-047）", () => {
   it("默认 null；setSheetAddressTransform 只改目标表并持久化", () => {
     const first = firstSheetId();
     expect(
@@ -481,16 +481,12 @@ describe("setSheetAddressTransform / setThemePrimary（2026-09-01，ADR-042）",
     expect(useAppStore.getState().workspace.sheets[0]?.addressTransform).toBeNull();
   });
 
-  it("setThemePrimary 持久化到 workspace.preferences.themePrimary；null 重置", () => {
-    useAppStore.getState().setThemePrimary({ light: "#123456", dark: "#654321" });
-    expect(useAppStore.getState().themePrimary).toEqual({
-      light: "#123456",
-      dark: "#654321",
-    });
-    expect(useAppStore.getState().workspace.preferences.themePrimary).toEqual({
-      light: "#123456",
-      dark: "#654321",
-    });
+  it("setThemePrimary 持久化到 workspace.preferences.themePrimary（预设 ID）；null 重置", () => {
+    useAppStore.getState().setThemePrimary("example-panel:indigo");
+    expect(useAppStore.getState().themePrimary).toBe("example-panel:indigo");
+    expect(useAppStore.getState().workspace.preferences.themePrimary).toBe(
+      "example-panel:indigo",
+    );
     useAppStore.getState().setThemePrimary(null);
     expect(useAppStore.getState().themePrimary).toBeNull();
     expect(useAppStore.getState().workspace.preferences.themePrimary).toBeNull();

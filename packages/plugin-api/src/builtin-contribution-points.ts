@@ -59,12 +59,17 @@ export const ADDRESS_TRANSFORM_CONTRIBUTION_SCHEMA = z.object({
   defaultConfig: z.object({ enabled: z.boolean() }).optional(),
 });
 
-/** theme：主题色贡献（Phase A 消费方 = 主题装配链，纯数据可全功能）。 */
-export const THEME_CONTRIBUTION_SCHEMA = z.object({
-  colorPrimary: z
-    .object({ light: z.string(), dark: z.string() })
-    .optional(),
+/** theme 色板预设：单条可选主题色（ADR-047，2016-09-02：支持一个或多个）。 */
+export const THEME_COLOR_PRESET_SCHEMA = z.object({
+  id: z.string().min(1),
+  titleKey: z.string().min(1),
+  colorPrimary: z.object({ light: z.string(), dark: z.string() }),
   colorLink: z.object({ light: z.string(), dark: z.string() }).optional(),
+});
+
+/** theme：主题色贡献（ADR-047：注册一个或多个可选主题色，Settings 选择器消费；不再自动应用）。 */
+export const THEME_CONTRIBUTION_SCHEMA = z.object({
+  colors: z.array(THEME_COLOR_PRESET_SCHEMA).optional(),
 });
 
 /** settings：Settings 弹窗分区（Phase A 消费方 = 分区标题渲染，组件 Phase F）。 */

@@ -131,12 +131,12 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
       "installed-a",
       "installed-b",
     ]);
-    expect(data.plugins.find((p) => p.manifest.id === "installed-a")?.enabled).toBe(
-      true,
-    );
-    expect(data.plugins.find((p) => p.manifest.id === "installed-b")?.enabled).toBe(
-      false,
-    );
+    expect(
+      data.plugins.find((p) => p.manifest.id === "installed-a")?.enabled,
+    ).toBe(true);
+    expect(
+      data.plugins.find((p) => p.manifest.id === "installed-b")?.enabled,
+    ).toBe(false);
   });
 
   it("hydrate 恢复 installed 插件与启用状态；内置同 id 跳过不报错", () => {
@@ -165,7 +165,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     const registry = new PluginRegistry();
     registry.register(manifest({ id: "installed-a" }), { source: "installed" });
     const data = registry.snapshot();
-    registry.hydrate(data);
+    registry.hydrate({ ...data, seeded: false });
     expect(registry.list()).toHaveLength(1);
     expect(registry.getLoadErrors()).toHaveLength(0);
   });
@@ -216,10 +216,11 @@ describe("PluginRegistry 隔离线程运行时（2026-09-01，ADR-044 Phase F-2�
   it("installed 插件可携带 remoteRuntime 注册并激活", async () => {
     const registry = new PluginRegistry();
     const remote = fakeRemoteRuntime();
-    const result = registry.register(
-      manifest({ id: "installed-exec" }),
-      { source: "installed", remoteRuntime: remote, entrySource: "export const manifest = {}" },
-    );
+    const result = registry.register(manifest({ id: "installed-exec" }), {
+      source: "installed",
+      remoteRuntime: remote,
+      entrySource: "export const manifest = {}",
+    });
     expect(result.ok).toBe(true);
     expect(registry.getLifecycleState("installed-exec")).toBe("active");
     // 激活为异步调用（注册后触发）。
@@ -283,7 +284,7 @@ describe("PluginRegistry 隔离线程运行时（2026-09-01，ADR-044 Phase F-2�
     );
 
     const restored = new PluginRegistry();
-    restored.hydrate(data);
+    restored.hydrate({ ...data, seeded: false });
     expect(restored.getSource("installed-exec")).toBe("installed");
     expect(restored.getEntrySource("installed-exec")).toBe(
       "export const manifest = { id: 'x' }",
@@ -360,7 +361,9 @@ describe("PluginRegistry 同进程运行时（2026-09-02 插件外部化）", ()
       },
     );
     expect(registry.getLifecycleState("bundled-fail")).toBe("failed");
-    expect(registry.getLoadErrors().some((e) => e.pluginId === "bundled-fail")).toBe(true);
+    expect(
+      registry.getLoadErrors().some((e) => e.pluginId === "bundled-fail"),
+    ).toBe(true);
   });
 
   it("canHandleToolbarAction：runtime 声明 handler 且启用 → true；禁用/无 handler → false", () => {
@@ -381,13 +384,18 @@ describe("PluginRegistry 同进程运行时（2026-09-02 插件外部化）", ()
 
   it("invokeToolbarAction：委托 runtime handler，ctx.communication 按 pluginId 经工厂绑定", async () => {
     const communicationApiFactory = vi.fn(() => ({
-      readRegisters: vi.fn(async () => ({ ok: true, value: [1] })),
-      writeRegisters: vi.fn(async () => ({ ok: true as const, value: undefined })),
+      readRegisters: vi.fn(async () => ({ ok: true as const, value: [1] })),
+      writeRegisters: vi.fn(async () => ({
+        ok: true as const,
+        value: undefined,
+      })),
     }));
     const registry = new PluginRegistry({ communicationApiFactory });
     const handle = vi.fn(
-      async (actionId: string, ctx: { communication: unknown }) => {
-        await (ctx.communication as { writeRegisters: () => Promise<unknown> }).writeRegisters();
+      async (_actionId: string, ctx: { communication: unknown }) => {
+        await (
+          ctx.communication as { writeRegisters: () => Promise<unknown> }
+        ).writeRegisters();
         return { ok: true as const, value: undefined };
       },
     );
@@ -412,7 +420,8 @@ describe("PluginRegistry 同进程运行时（2026-09-02 插件外部化）", ()
     );
     const missing = await registry.invokeToolbarAction("acts", "a.b");
     expect(missing.ok).toBe(false);
-    if (!missing.ok) expect(missing.error.code).toBe("PLUGIN_ACTION_NOT_HANDLED");
+    if (!missing.ok)
+      expect(missing.error.code).toBe("PLUGIN_ACTION_NOT_HANDLED");
 
     registry.register(
       manifest({ id: "throws", platform: { web: true, node: true } }),
@@ -449,11 +458,15 @@ describe("PluginRegistry 同进程运行时（2026-09-02 插件外部化）", ()
     const registry = new PluginRegistry();
     expect(registry.attachRuntime("unknown", { activate() {} }).ok).toBe(false);
     registry.register(manifest());
-    expect(registry.attachRuntime("example-panel", { activate() {} }).ok).toBe(false);
+    expect(registry.attachRuntime("example-panel", { activate() {} }).ok).toBe(
+      false,
+    );
     registry.register(
       manifest({ id: "bundled-x", platform: { web: true, node: true } }),
       { source: "installed", runtime: { activate() {} } },
     );
-    expect(registry.attachRuntime("bundled-x", { activate() {} }).ok).toBe(false);
+    expect(registry.attachRuntime("bundled-x", { activate() {} }).ok).toBe(
+      false,
+    );
   });
 });

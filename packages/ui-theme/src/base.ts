@@ -39,12 +39,10 @@ export function buildTheme(dark: boolean): ThemeConfig {
       controlHeight: 28,
       controlHeightSM: 24,
       borderRadius: 4,
-      // 品牌蓝（scripts/check-contrast.mjs 实测）：
-      // - 浅色 #1460d6：白字主按钮 ≈5.7:1（AA）
-      // - 暗色 #1668dc（antd 暗色默认主色，更亮，在深底上可读）
-      // - colorLink：暗色用更亮的 #6ba1ff，保证链接/品牌文字在深底上 ≥4.5:1
-      colorPrimary: dark ? "#1668dc" : "#1460d6",
-      colorLink: dark ? "#6ba1ff" : "#1460d6",
+      // 品牌蓝（2026-09-02，ADR-047）：字面取 antd 默认——浅 #1677ff / 暗 #1668dc（antd 暗色默认主色）；
+      // colorLink 与主色同色（antd 默认）；hover/active 维持 antd 派生值。接受浅色白字对比度约 4.1:1（antd 默认水平）。
+      colorPrimary: dark ? "#1668dc" : "#1677ff",
+      colorLink: dark ? "#1668dc" : "#1677ff",
       colorLinkHover: dark ? "#8cb8ff" : "#4096ff",
       colorLinkActive: dark ? "#4a8ff7" : "#0958d9",
       // 状态色（浅色加深以保证图形对象 ≥3:1，暗色用 antd 暗色派生态）：

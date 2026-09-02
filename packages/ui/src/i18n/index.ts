@@ -63,6 +63,10 @@ export const en = {
     adjustHint: "ON: sent address = user address − 1",
     unsupportedWebSerial:
       "Web Serial is not supported in this browser. The workspace is still available.",
+    unsupportedWebSerialHint:
+      "Alternative: use a Chromium-based browser (Chrome / Edge), or use the Electron / VSCode desktop version. The workspace remains viewable.",
+    unsupportedSecureContext:
+      "Web Serial requires a secure context (HTTPS or localhost).",
     selectDeviceFirst: "Please select a serial port first.",
     // ---- TCP（2026-08-23 两端 TCP 接线）----
     protocol: "Protocol",
@@ -76,6 +80,15 @@ export const en = {
     autoReconnect: "Auto Reconnect",
     autoReconnectHint:
       "Automatically reconnect when the TCP link drops (limited attempts with backoff).",
+  },
+  compat: {
+    title: "Browser compatibility",
+    webSerialMissing:
+      "This browser does not support Web Serial, so serial communication is unavailable.",
+    insecureContext:
+      "Web Serial requires a secure context (HTTPS or localhost).",
+    alternative:
+      "Alternative: use a Chromium-based browser (Chrome / Edge), or use the Electron / VSCode desktop version. The workspace remains viewable.",
   },
   state: {
     disconnected: "Offline",
@@ -143,7 +156,8 @@ export const en = {
     binary: "Binary",
     string: "String",
     bool: "Bool",
-    readOnlyTable: "This table is read-only (discrete inputs / input registers)",
+    readOnlyTable:
+      "This table is read-only (discrete inputs / input registers)",
     // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）。
     tableType: {
       holdingRegister: "Read/write via 03H/10H",
@@ -270,6 +284,7 @@ export const en = {
     loadErrors: "Load errors",
     empty: "No built-in plugins registered.",
     exampleTitle: "Example Plugin",
+    exampleThemeColor: "Indigo",
     author: "Author",
     platform: "Platform",
     permissions: "Permissions",
@@ -375,13 +390,9 @@ export const en = {
     theme: "Theme",
     themeLight: "Light",
     themeDark: "Dark",
-    // 主题主色（2026-09-01，ADR-042）：浅/深分别可设，null=默认品牌蓝。
+    // 主题色预设（2026-09-02，ADR-047）：内置默认蓝（Ant Design 默认）+ 插件注册可选色。
     themeColor: "Accent color",
-    themeColorLight: "Accent color (light)",
-    themeColorDark: "Accent color (dark)",
-    themeColorReset: "Reset",
-    themeColorContrastWarning:
-      "Accent color {{color}} has insufficient contrast with white text (AA ≥4.5:1). Using the default color.",
+    themeColorDefault: "Default blue",
     resetWorkspace: "Reset Workspace",
     resetConfirmTitle: "Reset Workspace",
     resetConfirmContent:
@@ -463,8 +474,7 @@ export const en = {
     dataTooManyDecimals: "Too many decimal places for this type.",
     dataInvalidNumber: "Invalid number.",
     dataOutOfRange: "Value out of 16-bit range.",
-    dataInvalidRegisterCount:
-      "Register count is not valid for this type.",
+    dataInvalidRegisterCount: "Register count is not valid for this type.",
     dataEmpty: "Value is empty.",
     persistenceError: "Persistence error.",
     webSerialUnsupported: "Web Serial API is not supported.",
@@ -488,8 +498,7 @@ export const en = {
     tcpHostInvalid: "Invalid TCP host.",
     tcpPortOutOfRange: "TCP port is out of range (1..65535).",
     tcpUnitIdOutOfRange: "TCP unit ID is out of range (0..255).",
-    workspaceSchemaInvalid:
-      "The workspace file is invalid or corrupted.",
+    workspaceSchemaInvalid: "The workspace file is invalid or corrupted.",
     workspaceImportUnsupported:
       "Importing a workspace file is not supported in this environment.",
     pluginManifestInvalid: "The plugin manifest is invalid.",
@@ -499,12 +508,10 @@ export const en = {
     pluginNotFound: "This plugin is not registered.",
     pluginBuiltinNotRemovable:
       "Built-in plugins are bundled with the app and cannot be uninstalled.",
-    pluginActionNotHandled:
-      "This plugin does not handle the requested action.",
+    pluginActionNotHandled: "This plugin does not handle the requested action.",
     pluginLoadFailed: "Failed to load the plugin in the isolated worker.",
     pluginStoreError: "Failed to persist the installed plugin.",
-    pluginStoreSchemaInvalid:
-      "The stored plugin data is invalid or corrupted.",
+    pluginStoreSchemaInvalid: "The stored plugin data is invalid or corrupted.",
     clipboardUnavailable: "System clipboard is not available.",
     internal: "Internal error.",
     unexpectedResponse: "Unexpected response from the device.",
@@ -572,6 +579,10 @@ export const zh: TranslationResources = {
     adjustOn: "ON",
     adjustHint: "ON：发送地址 = 用户地址 − 1",
     unsupportedWebSerial: "当前浏览器不支持 Web Serial。工作区仍可查看。",
+    unsupportedWebSerialHint:
+      "替代方案：请使用 Chromium 内核浏览器（Chrome / Edge），或使用 Electron / VSCode 桌面版。工作区仍可查看。",
+    unsupportedSecureContext:
+      "Web Serial 需要安全上下文（HTTPS 或 localhost）。",
     selectDeviceFirst: "请先选择串口。",
     // ---- TCP（2026-08-23 两端 TCP 接线）----
     protocol: "协议",
@@ -584,6 +595,13 @@ export const zh: TranslationResources = {
     unitIdHint: "MBAP 单元标识：0~255；0=广播（未实现）。",
     autoReconnect: "自动重连",
     autoReconnectHint: "TCP 断线后自动重连（有限次数 + 指数退避）。",
+  },
+  compat: {
+    title: "浏览器兼容性",
+    webSerialMissing: "当前浏览器不支持 Web Serial，无法进行串口通信。",
+    insecureContext: "Web Serial 需要安全上下文（HTTPS 或 localhost）。",
+    alternative:
+      "替代方案：请使用 Chromium 内核浏览器（Chrome / Edge），或使用 Electron / VSCode 桌面版。工作区仍可查看。",
   },
   state: {
     disconnected: "离线",
@@ -644,7 +662,8 @@ export const zh: TranslationResources = {
     unsigned: "无符号十进制",
     signed: "有符号十进制",
     binary: "二进制",
-    string: "字符串",    bool: "BOOL",
+    string: "字符串",
+    bool: "BOOL",
     readOnlyTable: "该表为只读（离散输入 / 输入寄存器）",
     // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）。
     tableType: {
@@ -770,6 +789,7 @@ export const zh: TranslationResources = {
     loadErrors: "加载错误",
     empty: "没有已注册的内置插件。",
     exampleTitle: "示例插件",
+    exampleThemeColor: "靛蓝",
     author: "作者",
     platform: "平台能力",
     permissions: "权限",
@@ -787,8 +807,7 @@ export const zh: TranslationResources = {
     // 贡献点占位（2026-08-31，ADR-039）：交互内容随 Phase F 插件 runtime 提供。
     panelPlaceholder: "插件面板内容将由插件运行时提供。",
     settingsPlaceholder: "插件设置内容将由插件运行时提供。",
-    toolbarActionPlaceholder:
-      "此插件动作暂不可用（插件运行时为 Phase A）。",    // 安川插件（ADR-041，Phase C）：表类型标题与协议标题。
+    toolbarActionPlaceholder: "此插件动作暂不可用（插件运行时为 Phase A）。", // 安川插件（ADR-041，Phase C）：表类型标题与协议标题。
     yaskawaTableTypeTitle: "用 67H 010DH/010EH 读写寄存器",
     yaskawaMemobusTitle: "安川 MEMOBUS（67H 010DH/010EH）",
     yaskawaManualTitle: "安川 MEMOBUS 寄存器手册",
@@ -870,13 +889,9 @@ export const zh: TranslationResources = {
     theme: "主题",
     themeLight: "浅色",
     themeDark: "深色",
-    // 主题主色（2026-09-01，ADR-042）：浅/深分别可设，null=默认品牌蓝。
+    // 主题色预设（2026-09-02，ADR-047）：内置默认蓝（Ant Design 默认）+ 插件注册可选色。
     themeColor: "主题色",
-    themeColorLight: "主题色（浅色）",
-    themeColorDark: "主题色（深色）",
-    themeColorReset: "重置",
-    themeColorContrastWarning:
-      "主题色 {{color}} 与白色文字对比度不足（AA ≥4.5:1），已回退默认色。",
+    themeColorDefault: "默认蓝",
     resetWorkspace: "重置工作区",
     resetConfirmTitle: "重置工作区",
     resetConfirmContent: "将清除所有已保存数据并恢复默认工作区，是否继续？",
@@ -891,7 +906,8 @@ export const zh: TranslationResources = {
     importHint: "导入工作区文件并替换当前工作区。",
     exportHint: "将当前工作区导出为 JSON 文件。",
     importConfirmTitle: "导入工作区",
-    importConfirmContent: "将用导入的文件替换当前工作区，建议先断开连接。是否继续？",
+    importConfirmContent:
+      "将用导入的文件替换当前工作区，建议先断开连接。是否继续？",
     importOk: "导入",
     importSuccess: "工作区已导入。",
     importCancelled: "导入已取消。",

@@ -3,10 +3,7 @@
  * Phase A：聚合贡献为只读注册表（查询用）；handler / 解析接入随 Phase E/F 扩展。
  */
 import type { Contribution } from "@mamep2026/plugin-api";
-import {
-  basicTablesProtocolId,
-  isBasicSheetType,
-} from "@mamep2026/domain";
+import { basicTablesProtocolId, isBasicSheetType } from "@mamep2026/domain";
 
 /** command 贡献 payload（Phase A 声明式；handler 随 Phase F 插件 runtime 提供）。 */
 export interface CommandContribution {
@@ -34,6 +31,8 @@ export interface ToolbarActionContribution {
   scope?: "table-toolbar";
   targetTableType?: string;
   requiresConfirm?: boolean;
+  /** 安全确认文案键（2026-09-02 插件外部化，ADR-045：缺省回退 titleKey）。 */
+  confirmKey?: string;
 }
 
 /** tableType 贡献 payload（ADR-041 Phase C：声明式；createDefaultRow 等交互随插件 runtime）。 */

@@ -156,9 +156,9 @@ describe("commitAddress 范围行（ADR-030）", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.registers).toHaveLength(2);
-    expect(result.value.registers?.every((m) => m.dataType === "unsigned")).toBe(
-      true,
-    );
+    expect(
+      result.value.registers?.every((m) => m.dataType === "unsigned"),
+    ).toBe(true);
     expect(result.value.registers?.every((m) => m.name === "")).toBe(true);
   });
 
@@ -243,12 +243,12 @@ describe("isRowTypeCountValid / rowTypeCountError（ADR-030）", () => {
     expect(
       isRowTypeCountValid({ dataType: "unsigned", registerCount: 3 }),
     ).toBe(false);
-    expect(
-      isRowTypeCountValid({ dataType: "binary", registerCount: 3 }),
-    ).toBe(true);
-    expect(
-      isRowTypeCountValid({ dataType: "binary", registerCount: 5 }),
-    ).toBe(false);
+    expect(isRowTypeCountValid({ dataType: "binary", registerCount: 3 })).toBe(
+      true,
+    );
+    expect(isRowTypeCountValid({ dataType: "binary", registerCount: 5 })).toBe(
+      false,
+    );
   });
 
   it("allows any count for hex and string", () => {
@@ -282,6 +282,7 @@ describe("applyAddressTransform / resolveSheetAddressTransform（ADR-042 表级�
   it("applies an injected transform（用户地址 − 1）", () => {
     const minusOne = {
       id: "builtin.address-adjust",
+      protocol: "rtu",
       apply: (v: number) => ok(v - 1),
       validate: () => ok(null),
     };
@@ -293,9 +294,17 @@ describe("applyAddressTransform / resolveSheetAddressTransform（ADR-042 表级�
   it("transform reject user address 0（下溢 → 结构化错误）", () => {
     const minusOne = {
       id: "builtin.address-adjust",
+      protocol: "rtu",
       apply: (v: number) =>
         v === 0
-          ? fail(createMamepError({ code: "ADDRESS_ADJUST_UNDERFLOW", category: "validation" }))
+          ? fail(
+              createMamepError({
+                code: "ADDRESS_ADJUST_UNDERFLOW",
+                category: "validation",
+                userMessageKey: "errors.addressAdjustUnderflow",
+                technicalMessage: "address 0 cannot be adjusted by -1",
+              }),
+            )
           : ok(v - 1),
       validate: () => ok(null),
     };
@@ -319,7 +328,12 @@ describe("applyAddressTransform / resolveSheetAddressTransform（ADR-042 表级�
       },
       (id) =>
         id === "builtin.address-adjust"
-          ? { id, apply: (v: number) => ok(v - 1), validate: () => ok(null) }
+          ? {
+              id,
+              protocol: "rtu",
+              apply: (v: number) => ok(v - 1),
+              validate: () => ok(null),
+            }
           : null,
     );
     expect(enabled).not.toBeNull();

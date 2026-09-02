@@ -21,6 +21,7 @@ import type {
 } from "@mamep2026/communication";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type {
+  BrowserCompatibility,
   PlatformCapabilities,
   ReadVerifySettings,
   RegisterRow,
@@ -54,10 +55,7 @@ import {
   type SerialPortOption,
   type TraceSamplePayload,
 } from "@mamep2026/platform-api";
-import type {
-  PluginRegistry,
-  PluginStorePort,
-} from "@mamep2026/plugin-api";
+import type { PluginRegistry, PluginStorePort } from "@mamep2026/plugin-api";
 import {
   BrowserPlatformHost,
   usbDeviceLabel,
@@ -67,10 +65,7 @@ import {
 } from "@mamep2026/platform-web";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
-import {
-  BrowserAppHost,
-  type BundledPluginEntry,
-} from "./AppHost";
+import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
 import { BridgePluginStore } from "./bridge-plugin-store";
 import { FileWorkspaceRepository } from "./file-workspace-repository";
 
@@ -87,14 +82,14 @@ export interface ElectronAppHostOptions {
   /** 随应用分发插件（2026-09-02 插件外部化）：透传 inner（首次一次性安装 + 重启恢复）。 */
   bundledPlugins?: BundledPluginEntry[] | undefined;
   /** 地址变换解析（2026-09-02 插件外部化）：透传 inner（RTU 本地会话按表应用）。 */
-  resolveAddressTransform?: (
-    transformId: string,
-  ) => AddressTransform | null;
+  resolveAddressTransform?: (transformId: string) => AddressTransform | null;
 }
 
 export class ElectronAppHost implements AppHost {
   readonly capabilities: PlatformCapabilities;
   readonly isMockMode = false;
+  /** 桌面端不走浏览器兼容性提示（串口能力经能力矩阵声明）。 */
+  readonly browserCompatibility: BrowserCompatibility | null = null;
   readonly pluginRegistry: PluginRegistry;
   readonly appVersion = __APP_VERSION__;
 
@@ -135,13 +130,11 @@ export class ElectronAppHost implements AppHost {
     (message: ApplicationMessage) => void
   >();
   private readonly pollResultListeners = new Set<
-    (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void
+    (key: string, address: number, result: Result<number | number[]>) => void
   >();
-  private readonly traceListeners = new Set<(sample: TraceSampleEvent) => void>();
+  private readonly traceListeners = new Set<
+    (sample: TraceSampleEvent) => void
+  >();
 
   constructor(bridge: MamepHostApi, options: ElectronAppHostOptions = {}) {
     this.bridge = bridge;
@@ -176,7 +169,8 @@ export class ElectronAppHost implements AppHost {
       for (const listener of this.messageListeners) listener(message);
     });
     this.inner.subscribePollResult((key, address, result) => {
-      for (const listener of this.pollResultListeners) listener(key, address, result);
+      for (const listener of this.pollResultListeners)
+        listener(key, address, result);
     });
     this.inner.subscribeTraceSample((sample) => {
       for (const listener of this.traceListeners) listener(sample);
@@ -470,9 +464,7 @@ export class ElectronAppHost implements AppHost {
 
   /** 当前会话（ADR-044 Phase F-2）：RTU 本地路径返回内部会话；TCP 在主进程 → null。 */
   getSession(): CommunicationSession | null {
-    return this.activeProtocol === "tcp"
-      ? null
-      : this.inner.getSession();
+    return this.activeProtocol === "tcp" ? null : this.inner.getSession();
   }
 
   /** 插件隔离运行时（ADR-044 Phase F-2）：Renderer 内 Web Worker（与浏览器一致）。 */
@@ -500,7 +492,11 @@ export class ElectronAppHost implements AppHost {
     }
     const props = this.inner.getCommProperties();
     // 枚举路径的已选端口标签由本 Host 记录（inner 仅在浏览器路径自行记录）。
-    return { ...props, protocol: "rtu", portLabel: this.portLabel ?? props.portLabel };
+    return {
+      ...props,
+      protocol: "rtu",
+      portLabel: this.portLabel ?? props.portLabel,
+    };
   }
 
   /**
@@ -516,10 +512,12 @@ export class ElectronAppHost implements AppHost {
   }
 
   /** 更新活动表地址变换配置（ADR-042）：Electron RTU 会话本地（inner）；TCP 无地址变换（恒不调整）。 */
-  setAddressTransform(config: {
-    transformId: string;
-    enabled: boolean;
-  } | null): void {
+  setAddressTransform(
+    config: {
+      transformId: string;
+      enabled: boolean;
+    } | null,
+  ): void {
     if (this.activeProtocol !== "tcp") {
       this.inner.setAddressTransform(config);
     }
@@ -628,7 +626,12 @@ export class ElectronAppHost implements AppHost {
     };
   }
 
-  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+  ): void {
     if (this.activeProtocol === "tcp") {
       void this.bridge.sessionTraceStart(key, address, speedMs, quantity);
       return;
@@ -729,4 +732,3 @@ export class ElectronAppHost implements AppHost {
     return this.bridge.pluginContributionQuery(payload);
   }
 }
-

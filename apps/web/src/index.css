@@ -42,8 +42,8 @@
   --mamep-border-default: #d9d9d9;
   --mamep-border-strong: rgba(0, 0, 0, 0.15);
 
-  /* 品牌与状态（Light） */
-  --mamep-brand-primary: #1460d6;
+  /* 品牌与状态（Light；品牌蓝 = antd 默认 #1677ff，ADR-047） */
+  --mamep-brand-primary: #1677ff;
   --mamep-status-info: #1677ff;
   --mamep-status-success: #389e0d;
   --mamep-status-warning: #c08a00;
@@ -51,7 +51,7 @@
   --mamep-status-danger-action: #cf1322;
 
   /* 焦点环 / 阴影 / 圆角 / 间距 */
-  --mamep-focus-ring: #1460d6;
+  --mamep-focus-ring: #1677ff;
   --mamep-shadow-overlay: 0 6px 16px 0 rgba(0, 0, 0, 0.08);
   --mamep-radius-control: 4px;
   --mamep-radius-panel: 4px;

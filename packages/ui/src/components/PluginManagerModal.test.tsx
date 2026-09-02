@@ -1,7 +1,10 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
-import { PluginRegistry, type PluginRemoteRuntime } from "@mamep2026/plugin-api";
+import {
+  PluginRegistry,
+  type PluginRemoteRuntime,
+} from "@mamep2026/plugin-api";
 import type { OpenTextFileResponse } from "@mamep2026/platform-api";
 import type { Result } from "@mamep2026/domain";
 import type { AppHost } from "../host";
@@ -75,6 +78,10 @@ function setHostWithPlugin(
       capabilities: browserCaps,
       openTextFile: vi.fn(),
       createPluginRemoteRuntime: vi.fn(() => fakeRemoteRuntime()),
+      // 2026-09-02 插件外部化（ADR-045）：Restore bundled 按钮调用点，桩需提供。
+      startPlugins: vi.fn(async () => undefined),
+      restoreBundledPlugin: vi.fn(async () => undefined),
+      restoreAllBundledPlugins: vi.fn(async () => undefined),
       ...overrides,
     } as unknown as AppHost,
     pluginModalOpen: true,
@@ -89,7 +96,9 @@ async function pickManifestFile(text: string): Promise<void> {
   const file = new File([text], "plugin.json", { type: "application/json" });
   fireEvent.change(input, { target: { files: [file] } });
   await waitFor(() => {
-    expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(
+      0,
+    );
   });
 }
 
@@ -104,7 +113,9 @@ async function pickPluginSourceFile(
   const file = new File([text], name, { type: "text/javascript" });
   fireEvent.change(input, { target: { files: [file] } });
   await waitFor(() => {
-    expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(
+      0,
+    );
   });
 }
 
@@ -259,9 +270,9 @@ describe("PluginManagerModal", () => {
       await pickManifestFile(JSON.stringify(manifestJson));
 
       // 安全确认展示来源/版本/权限/平台（§6.10.4）。
-      expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(
-        0,
-      );
+      expect(
+        screen.getAllByText("Install this plugin?").length,
+      ).toBeGreaterThan(0);
       expect(screen.getByText("Installed A")).toBeTruthy();
       expect(screen.getByText("1.0.0")).toBeTruthy();
       expect(screen.getByText("UI Contribution")).toBeTruthy();
@@ -296,7 +307,9 @@ describe("PluginManagerModal", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("The plugin manifest is invalid.")).toBeTruthy();
+        expect(
+          screen.getByText("The plugin manifest is invalid."),
+        ).toBeTruthy();
       });
       expect(registry.list()).toHaveLength(0);
     });
@@ -313,16 +326,16 @@ describe("PluginManagerModal", () => {
       fireEvent.change(input, {
         target: {
           files: [
-            new File(
-              [JSON.stringify({ id: "x" })],
-              "bad-schema.json",
-              { type: "application/json" },
-            ),
+            new File([JSON.stringify({ id: "x" })], "bad-schema.json", {
+              type: "application/json",
+            }),
           ],
         },
       });
       await waitFor(() => {
-        expect(screen.getByText("The plugin manifest is invalid.")).toBeTruthy();
+        expect(
+          screen.getByText("The plugin manifest is invalid."),
+        ).toBeTruthy();
       });
       // 确认框不会出现（校验失败直接报错）。
       expect(screen.queryByText("Install this plugin?")).toBeNull();
@@ -400,9 +413,9 @@ describe("PluginManagerModal", () => {
         });
       });
       await waitFor(() => {
-        expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(
-          0,
-        );
+        expect(
+          screen.getAllByText("Install this plugin?").length,
+        ).toBeGreaterThan(0);
       });
       clickConfirmOk();
       await waitFor(() => {
@@ -526,9 +539,9 @@ describe("PluginManagerModal", () => {
       expect(registry.list()).toHaveLength(1);
 
       fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
-      expect(screen.getAllByText("Uninstall this plugin?").length).toBeGreaterThan(
-        0,
-      );
+      expect(
+        screen.getAllByText("Uninstall this plugin?").length,
+      ).toBeGreaterThan(0);
       clickConfirmOk();
 
       await waitFor(() => {
@@ -611,9 +624,9 @@ describe("PluginManagerModal", () => {
       expect(createPluginRemoteRuntime).toHaveBeenCalledWith(entrySource);
       expect(runtime.load).toHaveBeenCalledTimes(1);
       // 确认框展示运行位置（Isolated worker）。
-      expect(screen.getAllByText("Install this plugin?").length).toBeGreaterThan(
-        0,
-      );
+      expect(
+        screen.getAllByText("Install this plugin?").length,
+      ).toBeGreaterThan(0);
       expect(screen.getByText("Isolated worker")).toBeTruthy();
       expect(screen.getByText("Installed A")).toBeTruthy();
 
@@ -683,4 +696,3 @@ describe("PluginManagerModal", () => {
     });
   });
 });
-

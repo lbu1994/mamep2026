@@ -46,11 +46,11 @@ const LIGHT = {
   textSecondary: "#595959", // rgba(0,0,0,0.65)
   textTertiary: "#737373", // rgba(0,0,0,0.55)
   textDisabled: "#949494", // rgba(0,0,0,0.42)
-  brandPrimary: "#1460d6", // Primary 按钮/焦点
-  link: "#1460d6", // colorLink（浅）
+  brandPrimary: "#1677ff", // Primary 按钮/焦点（antd 默认，ADR-047）
+  link: "#1677ff", // colorLink（浅，antd 默认）
   brandBg: "#e6f4ff", // antd primaryBg（浅）
   brandOnBrandBg: "#0958d9", // antd primaryText（浅，选中态文字）
-  focusRing: "#1460d6",
+  focusRing: "#1677ff",
   success: "#389e0d",
   warning: "#c08a00",
   error: "#cf1322",
@@ -68,7 +68,7 @@ const DARK = {
   textTertiary: "#a6a6a6", // rgba(255,255,255,0.62) on #141414
   textDisabled: "#6d6d6d", // rgba(255,255,255,0.38) on #141414
   brandPrimary: "#1668dc", // Primary 按钮/焦点（暗色主色）
-  link: "#6ba1ff", // colorLink（暗色，深底上可读）
+  link: "#1668dc", // colorLink（暗色，antd 默认，ADR-047）
   brandBg: "#111a2c", // antd dark primaryBg（近似）
   brandOnBrandBg: "#6ba1ff", // antd dark primaryText（近似）
   focusRing: "#1668dc",

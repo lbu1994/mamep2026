@@ -338,10 +338,11 @@ export interface Preferences {
   /** 界面语言（用户偏好，随工作区持久化；默认 en-US）。 */
   language: "en-US" | "zh-CN";
   /**
-   * 用户自定义主题主色（ADR-042 插件 Phase D，随工作区持久化；null=默认品牌蓝）。
-   * 装配优先级：插件 theme 贡献 → 用户设置 → 默认 buildTheme。
+   * 所选主题色预设（ADR-047，逆转 ADR-042 任意取色；随工作区持久化）。
+   * null=内置 Ant Design 默认蓝；插件注册色 = `<pluginId>:<colorId>`（完整预设 ID）。
+   * 禁用/卸载插件后解析不到 → 回退默认；schema v7→v8 迁移旧任意 HEX → null。
    */
-  themePrimary: { light: string; dark: string } | null;
+  themePrimary: string | null;
 }
 
 export interface PluginState {
@@ -376,8 +377,8 @@ export interface Workspace {
   migrationHistory: MigrationRecord[];
 }
 
-/** 当前工作区 Schema 版本（2026-08-27 v4：范围行子行元数据 registers 落盘；2026-08-31 v5：sheet.type 表类型，ADR-041；2026-09-01 v6：sheet.addressTransform + preferences.themePrimary，ADR-042）。 */
-export const workspaceSchemaVersion = 7;
+/** 当前工作区 Schema 版本（2026-08-27 v4：范围行子行元数据 registers 落盘；2026-08-31 v5：sheet.type 表类型，ADR-041；2026-09-01 v6：sheet.addressTransform + preferences.themePrimary，ADR-042；2026-09-01 v7：dataType 开放，ADR-043；2026-09-02 v8：themePrimary 改预设 ID，ADR-047）。 */
+export const workspaceSchemaVersion = 8;
 
 let idCounter = 0;
 

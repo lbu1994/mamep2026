@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  collectThemeConfig,
+  buildThemeColorOptions,
+  DEFAULT_THEME_COLOR_ID,
+  findThemeColorOption,
+  themeConfigForColorOption,
   type ThemeContribution,
 } from "./theme-contributions";
 import type { Contribution } from "@mamep2026/plugin-api";
@@ -12,53 +15,102 @@ function contribution(
   return { pluginId, payload };
 }
 
-describe("collectThemeConfig（ADR-039：theme 贡献收集）", () => {
-  it("无贡献 → null", () => {
-    expect(collectThemeConfig([], true)).toBeNull();
+describe("theme 贡献消费方（ADR-047：注册可选主题色）", () => {
+  it("无贡献 → 空选项", () => {
+    expect(buildThemeColorOptions([])).toEqual([]);
   });
 
-  it("收集浅色主色 → token.colorPrimary（按 dark 模式取对应值）", () => {
-    const config = collectThemeConfig(
-      [
-        contribution("p1", {
-          colorPrimary: { light: "#111111", dark: "#222222" },
-        }),
-      ],
-      false,
-    );
-    expect(config).toEqual({ token: { colorPrimary: "#111111" } });
-    const darkConfig = collectThemeConfig(
-      [
-        contribution("p1", {
-          colorPrimary: { light: "#111111", dark: "#222222" },
-        }),
-      ],
-      true,
-    );
-    expect(darkConfig).toEqual({ token: { colorPrimary: "#222222" } });
+  it("多色注册：扁平化为 `<pluginId>:<colorId>`，保留顺序", () => {
+    const options = buildThemeColorOptions([
+      contribution("p1", {
+        colors: [
+          {
+            id: "indigo",
+            titleKey: "plugins.p1Indigo",
+            colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
+          },
+          {
+            id: "teal",
+            titleKey: "plugins.p1Teal",
+            colorPrimary: { light: "#0d9488", dark: "#2dd4bf" },
+          },
+        ],
+      }),
+      contribution("p2", {
+        colors: [
+          {
+            id: "amber",
+            titleKey: "plugins.p2Amber",
+            colorPrimary: { light: "#d97706", dark: "#fbbf24" },
+            colorLink: { light: "#d97706", dark: "#fbbf24" },
+          },
+        ],
+      }),
+    ]);
+    expect(options).toEqual([
+      {
+        id: "p1:indigo",
+        titleKey: "plugins.p1Indigo",
+        colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
+      },
+      {
+        id: "p1:teal",
+        titleKey: "plugins.p1Teal",
+        colorPrimary: { light: "#0d9488", dark: "#2dd4bf" },
+      },
+      {
+        id: "p2:amber",
+        titleKey: "plugins.p2Amber",
+        colorPrimary: { light: "#d97706", dark: "#fbbf24" },
+        colorLink: { light: "#d97706", dark: "#fbbf24" },
+      },
+    ]);
   });
 
-  it("多插件贡献浅合并，后者优先", () => {
-    const config = collectThemeConfig(
-      [
-        contribution("p1", { colorPrimary: { light: "#111111", dark: "#111" } }),
-        contribution("p2", {
-          colorLink: { light: "#333333", dark: "#333" },
-          colorPrimary: { light: "#222222", dark: "#222" },
-        }),
-      ],
-      false,
+  it("findThemeColorOption：按完整预设 ID 查找；未找到/插件禁用后返回 null", () => {
+    const contributions = [
+      contribution("p1", {
+        colors: [
+          {
+            id: "indigo",
+            titleKey: "plugins.p1Indigo",
+            colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
+          },
+        ],
+      }),
+    ];
+    expect(findThemeColorOption(contributions, "p1:indigo")?.id).toBe(
+      "p1:indigo",
     );
-    expect(config).toEqual({
-      token: { colorPrimary: "#222222", colorLink: "#333333" },
+    expect(findThemeColorOption(contributions, "p1:nope")).toBeNull();
+    expect(findThemeColorOption([], "p1:indigo")).toBeNull();
+  });
+
+  it("themeConfigForColorOption：按 dark 模式取对应值；无 colorLink 不覆盖", () => {
+    const option = {
+      id: "p1:indigo",
+      titleKey: "plugins.p1Indigo",
+      colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
+      colorLink: { light: "#4f46e5", dark: "#818cf8" },
+    };
+    expect(themeConfigForColorOption(option, false)).toEqual({
+      token: { colorPrimary: "#4f46e5", colorLink: "#4f46e5" },
+    });
+    expect(themeConfigForColorOption(option, true)).toEqual({
+      token: { colorPrimary: "#818cf8", colorLink: "#818cf8" },
+    });
+
+    const noLink = {
+      id: "p2:amber",
+      titleKey: "plugins.p2Amber",
+      colorPrimary: { light: "#d97706", dark: "#fbbf24" },
+    };
+    expect(themeConfigForColorOption(noLink, false)).toEqual({
+      token: { colorPrimary: "#d97706" },
     });
   });
 
-  it("仅 colorLink 贡献不产生 colorPrimary", () => {
-    const config = collectThemeConfig(
-      [contribution("p1", { colorLink: { light: "#999", dark: "#888" } })],
-      false,
-    );
-    expect(config).toEqual({ token: { colorLink: "#999" } });
+  it("DEFAULT_THEME_COLOR_ID 为内置默认蓝哨兵（无冒号，不与插件 ID 冲突）", () => {
+    expect(DEFAULT_THEME_COLOR_ID).toBe("default");
   });
 });

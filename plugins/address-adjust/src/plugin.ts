@@ -28,6 +28,7 @@ export const addressAdjustManifest: PluginManifest = {
     "Built-in table-level Address Adjust: sent address = user address - 1.",
   author: "Mamep2026 Team",
   platform: { web: true, node: true },
+  requiredCapabilities: [],
   permissions: [],
   contributes: {
     addressTransform: {

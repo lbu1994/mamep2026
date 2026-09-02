@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import type { MenuProps } from "antd";
@@ -7,7 +7,6 @@ import {
   Avatar,
   Button,
   Collapse,
-  ColorPicker,
   ConfigProvider,
   Divider,
   Dropdown,
@@ -27,10 +26,16 @@ import {
 import { AppIcon } from "./assets/AppIcon";
 import { usePluginContributions } from "./plugin/use-contributions";
 import {
-  collectThemeConfig,
+  buildThemeColorOptions,
+  DEFAULT_THEME_COLOR_ID,
+  findThemeColorOption,
+  themeConfigForColorOption,
   type ThemeContribution,
 } from "./plugin/theme-contributions";
-import type { SettingsContribution, TableTypeContribution } from "./plugin/plugin-registries";
+import type {
+  SettingsContribution,
+  TableTypeContribution,
+} from "./plugin/plugin-registries";
 import {
   ApiOutlined,
   AppstoreOutlined,
@@ -49,12 +54,13 @@ import {
   defaultConfig,
 } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
-import { mergeThemeConfig, isWhiteOnPrimaryAa } from "@mamep2026/ui-theme";
+import { mergeThemeConfig } from "@mamep2026/ui-theme";
 import { STATE_DOT_COLOR } from "./connection-state";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
 import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
+import { BrowserCompatibilityBanner } from "./components/BrowserCompatibilityBanner";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
 import { KeyboardShortcutsTable } from "./components/KeyboardShortcutsTable";
 import { DocumentationPanel } from "./components/DocumentationPanel";
@@ -72,6 +78,24 @@ const COLLAPSED_BOTTOM_PANEL_HEIGHT = 40;
 
 /** Sheet 名重命名入口来源：页签头（tab）或侧边栏（sidebar），决定编辑态落在哪一处。 */
 type RenameSource = "tab" | "sidebar";
+
+/** Settings 主题色选项 label：色块 + 名称（ADR-047）。 */
+function themeColorOptionLabel(title: string, color: string): ReactNode {
+  return (
+    <Space size={4}>
+      <span
+        style={{
+          display: "inline-block",
+          width: 10,
+          height: 10,
+          borderRadius: 2,
+          background: color,
+        }}
+      />
+      {title}
+    </Space>
+  );
+}
 
 export function MamepApp(): React.ReactNode {
   const { t, i18n } = useTranslation();
@@ -125,40 +149,36 @@ export function MamepApp(): React.ReactNode {
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
-  // 用户自定义主题主色（ADR-042）：null=默认品牌蓝；随工作区持久化。
+  // 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。
   const themePrimary = useAppStore((s) => s.themePrimary);
   const setThemePrimary = useAppStore((s) => s.setThemePrimary);
   // 宿主完整主题（VSCode ui-theme 装配，ADR-027）；null=回退 buildTheme 两态。
   const themeConfig = useAppStore((s) => s.themeConfig);
-  // 插件主题贡献（2026-08-31，ADR-039）：插件 theme 贡献（纯数据）→ 用户设置（ADR-042）→
-  // 默认 buildTheme。经 mergeThemeConfig 并入装配链，theme 贡献 Phase A 即可全功能。
+  // 插件主题贡献（2026-09-02，ADR-047）：插件经 theme 贡献点注册一个或多个可选主题色
+  // （colors[]）→ Settings 主题色选择器选项；**不再自动应用**（ADR-042 插件层最高优先已移除）。
   const themeContributions = usePluginContributions<ThemeContribution>(
     host,
     "theme",
   );
-  const pluginThemeConfig = collectThemeConfig(
-    themeContributions,
-    theme === "dark",
+  // 主题色选择器选项（内置默认蓝恒在 + 各启用插件注册色；禁用/卸载后选项消失）。
+  const themeColorOptions = useMemo(
+    () => buildThemeColorOptions(themeContributions),
+    [themeContributions],
   );
-  // 用户设置层（ADR-042）：浅/深主色分别可设；VSCode 完整主题（themeConfig）下主色存活、
-  // 派生 token 跟随宿主（ADR-027 取舍）。用户主色不满足白字 AA（≥4.5:1）时回退默认并警告。
+  // 装配链（ADR-047）：base = VSCode 完整主题或 buildTheme 两态（ADR-027）→
+  // 用户所选预设（themePrimary 预设 ID；解析不到 = 插件禁用/卸载 → 回退默认蓝）merge 覆盖。
   const baseThemeConfig = themeConfig ?? buildTheme(theme === "dark");
-  const userPrimary =
-    themePrimary?.[theme === "dark" ? "dark" : "light"] ?? null;
-  const userPrimaryAa = userPrimary === null || isWhiteOnPrimaryAa(userPrimary);
-  const userThemeConfig =
-    userPrimary === null || !userPrimaryAa
-      ? baseThemeConfig
-      : mergeThemeConfig(baseThemeConfig, {
-          token: {
-            colorPrimary: userPrimary,
-            colorLink: userPrimary,
-          },
-        });
+  const selectedThemeColor =
+    themePrimary === null
+      ? null
+      : findThemeColorOption(themeContributions, themePrimary);
   const effectiveThemeConfig =
-    pluginThemeConfig === null
-      ? userThemeConfig
-      : mergeThemeConfig(userThemeConfig, pluginThemeConfig);
+    selectedThemeColor === null
+      ? baseThemeConfig
+      : mergeThemeConfig(
+          baseThemeConfig,
+          themeConfigForColorOption(selectedThemeColor, theme === "dark") ?? {},
+        );
   // settings 贡献消费方（ADR-039）：Settings 弹窗分区（Phase A 声明式标题占位）。
   const settingsContributions = usePluginContributions<SettingsContribution>(
     host,
@@ -168,19 +188,24 @@ export function MamepApp(): React.ReactNode {
   const documentationContributions =
     usePluginContributions<DocumentationContribution>(host, "documentation");
   // 表类型贡献（ADR-041）：侧边栏按协议分组，插件组动态加载（插件启用 + 能力矩阵支持）。
-  const tableTypeContributions =
-    usePluginContributions<TableTypeContribution>(host, "tableType");
+  const tableTypeContributions = usePluginContributions<TableTypeContribution>(
+    host,
+    "tableType",
+  );
   const sheetGroups = useMemo(() => {
     const supportedProtocols = host?.capabilities.protocolExtensions ?? [];
-    const groups: Array<{ key: string; sheetType: SheetType; titleKey: string }> =
-      [
-        // 核心组：标准 Modbus 03H/10H 保持寄存器，恒存在。
-        {
-          key: "holding-register",
-          sheetType: "holding-register",
-          titleKey: "sidebar.groupModbus",
-        },
-      ];
+    const groups: Array<{
+      key: string;
+      sheetType: SheetType;
+      titleKey: string;
+    }> = [
+      // 核心组：标准 Modbus 03H/10H 保持寄存器，恒存在。
+      {
+        key: "holding-register",
+        sheetType: "holding-register",
+        titleKey: "sidebar.groupModbus",
+      },
+    ];
     // 核心基础表组（ADR-043 E-2）：coil/discrete-input/input-register，
     // RTU 承载（codec 协议 ID），按能力矩阵 protocolExtensions 门控（VSCode 未接 codec 前不显示）。
     for (const meta of CORE_TABLE_TYPES) {
@@ -314,21 +339,6 @@ export function MamepApp(): React.ReactNode {
     );
     document.documentElement.style.setProperty("--mamep-focus-ring", primary);
   }, [effectiveThemeConfig]);
-
-  // 用户主题色不满足白字 AA 时警告一次（装配已回退默认，ADR-042 §2 对比度）。
-  const warnedContrastColor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!userPrimaryAa && userPrimary !== null && warnedContrastColor.current !== userPrimary) {
-      warnedContrastColor.current = userPrimary;
-      appendMessage({
-        timestamp: Date.now(),
-        level: "warning",
-        messageKey: "settings.themeColorContrastWarning",
-        params: { color: userPrimary },
-        detail: userPrimary,
-      });
-    }
-  }, [userPrimary, userPrimaryAa, appendMessage]);
 
   // 活动表 Address Transform（ADR-042 表级 Address Adjust）→ 会话：
   // 切换表/修改当前表配置时同步（host 端会话经 session-set-address-transform RPC）。
@@ -830,6 +840,11 @@ export function MamepApp(): React.ReactNode {
               </div>
             </Layout.Sider>
             <Layout.Content className="mamep-body">
+              {/* 浏览器兼容性提示（PRD §8.3 / §15.7）：不支持 Web Serial / 非安全上下文时展示 */}
+              <BrowserCompatibilityBanner
+                compatibility={host?.browserCompatibility ?? null}
+                isMock={host?.isMockMode ?? false}
+              />
               <Splitter
                 orientation="vertical"
                 style={{ flex: 1, minHeight: 0 }}
@@ -962,39 +977,30 @@ export function MamepApp(): React.ReactNode {
             </div>
             <div>
               <Typography.Text>{t("settings.themeColor")}</Typography.Text>
-              <ColorPicker
+              <Select
                 size="small"
-                style={{ marginLeft: 8 }}
-                aria-label={t("settings.themeColorLight")}
-                value={themePrimary?.light ?? "#1460d6"}
-                disabled={theme !== "light"}
-                onChange={(color) =>
-                  setThemePrimary({
-                    light: color.toHexString(),
-                    dark: themePrimary?.dark ?? "#1668dc",
-                  })
+                style={{ marginLeft: 8, minWidth: 160 }}
+                aria-label={t("settings.themeColor")}
+                value={themePrimary ?? DEFAULT_THEME_COLOR_ID}
+                onChange={(value) =>
+                  setThemePrimary(
+                    value === DEFAULT_THEME_COLOR_ID ? null : value,
+                  )
                 }
+                options={[
+                  {
+                    value: DEFAULT_THEME_COLOR_ID,
+                    label: t("settings.themeColorDefault"),
+                  },
+                  ...themeColorOptions.map((option) => ({
+                    value: option.id,
+                    label: themeColorOptionLabel(
+                      t(option.titleKey),
+                      option.colorPrimary.light,
+                    ),
+                  })),
+                ]}
               />
-              <ColorPicker
-                size="small"
-                style={{ marginLeft: 8 }}
-                aria-label={t("settings.themeColorDark")}
-                value={themePrimary?.dark ?? "#1668dc"}
-                disabled={theme !== "dark"}
-                onChange={(color) =>
-                  setThemePrimary({
-                    light: themePrimary?.light ?? "#1460d6",
-                    dark: color.toHexString(),
-                  })
-                }
-              />
-              <Button
-                size="small"
-                style={{ marginLeft: 8 }}
-                onClick={() => setThemePrimary(null)}
-              >
-                {t("settings.themeColorReset")}
-              </Button>
             </div>
             <div>
               <Typography.Text type="secondary">
@@ -1034,10 +1040,7 @@ export function MamepApp(): React.ReactNode {
               <WorkspaceFileActions />
             </div>
             {settingsContributions.length > 0 && (
-              <div
-                className="plugin-settings"
-                data-testid="plugin-settings"
-              >
+              <div className="plugin-settings" data-testid="plugin-settings">
                 {settingsContributions.map((contribution) => (
                   <div key={contribution.payload.id}>
                     <Divider titlePlacement="left" plain>
