@@ -30,6 +30,39 @@ export const MONO_FONT_STACK =
   'ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, Menlo, ' +
   '"PingFang SC", "Microsoft YaHei", monospace';
 
+/**
+ * 默认品牌色组（2026-09-02，ADR-048）：运行时取自 antd 公开令牌（theme.getDesignToken），
+ * 不再硬编码字面量——antd 升级仅改默认色值时，本软件零代码修改即自动跟随。
+ */
+export interface DefaultBrandColors {
+  colorPrimary: string;
+  colorLink: string;
+  colorLinkHover: string;
+  colorLinkActive: string;
+}
+
+/**
+ * 经 antd 公开 API `theme.getDesignToken({ algorithm })` 计算当前默认品牌色组：
+ * 浅色 = defaultAlgorithm、暗色 = darkAlgorithm（derived token 已含 colorPrimary/colorLink 派生）。
+ * 注意：返回值为「antd 以默认种子运行算法」的最终值；若把它们作为 token 覆盖再喂回
+ * ConfigProvider（带 algorithm），antd 会把覆盖值当种子**二次派生**（暗色主色会被再次
+ * 映射为更深的派生色），因此 buildTheme **不覆盖**品牌色 token，直接让 antd 默认种子生效
+ * （本函数仅供测试/校验/文档消费）。
+ */
+export function getAntdDefaultBrandColors(dark: boolean): DefaultBrandColors {
+  const token = antdTheme.getDesignToken(
+    dark
+      ? { algorithm: antdTheme.darkAlgorithm }
+      : { algorithm: antdTheme.defaultAlgorithm },
+  );
+  return {
+    colorPrimary: token.colorPrimary,
+    colorLink: token.colorLink,
+    colorLinkHover: token.colorLinkHover,
+    colorLinkActive: token.colorLinkActive,
+  };
+}
+
 export function buildTheme(dark: boolean): ThemeConfig {
   return {
     cssVar: { key: "ant" },
@@ -39,12 +72,10 @@ export function buildTheme(dark: boolean): ThemeConfig {
       controlHeight: 28,
       controlHeightSM: 24,
       borderRadius: 4,
-      // 品牌蓝（2026-09-02，ADR-047）：字面取 antd 默认——浅 #1677ff / 暗 #1668dc（antd 暗色默认主色）；
-      // colorLink 与主色同色（antd 默认）；hover/active 维持 antd 派生值。接受浅色白字对比度约 4.1:1（antd 默认水平）。
-      colorPrimary: dark ? "#1668dc" : "#1677ff",
-      colorLink: dark ? "#1668dc" : "#1677ff",
-      colorLinkHover: dark ? "#8cb8ff" : "#4096ff",
-      colorLinkActive: dark ? "#4a8ff7" : "#0958d9",
+      // 品牌蓝（2026-09-02，ADR-048）：**不覆盖** colorPrimary/colorLink/colorLinkHover/
+      // colorLinkActive——直接采用 antd 默认种子（当前值即 antd 默认浅/暗主色），
+      // 库升级改默认色自动跟随；覆盖会造成 antd 二次派生（暗色主色被再次映射）。
+      // 接受浅色白字对比度约 4.1:1（antd 默认水平）。
       // 状态色（浅色加深以保证图形对象 ≥3:1，暗色用 antd 暗色派生态）：
       colorSuccess: dark ? "#49aa19" : "#389e0d",
       colorWarning: dark ? "#d89614" : "#c08a00",

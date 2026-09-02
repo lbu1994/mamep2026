@@ -141,13 +141,13 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
     await coordinator.init();
     expect(coordinator.isSeeded()).toBe(false);
 
-    // 首次安装随包插件：注册 → markSeeded → 保存快照（含 seeded:true）。
+    // 首次安装随包插件：注册 → markSeeded → flush 保存快照（含 seeded:true，对齐 AppHost.startPlugins）。
     registry.register(
       manifest({ id: "bundled-x", platform: { web: true, node: true } }),
       { source: "installed" },
     );
     coordinator.markSeeded();
-    await vi.waitFor(() => expect(store.save).toHaveBeenCalled());
+    await coordinator.flush();
     const last = saves[saves.length - 1];
     expect(last?.seeded).toBe(true);
     expect(last?.plugins.map((p) => p.manifest.id)).toEqual(["bundled-x"]);

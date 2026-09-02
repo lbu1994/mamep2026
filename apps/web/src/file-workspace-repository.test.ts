@@ -3,7 +3,7 @@
  * Renderer 薄桥 → preload 桥（workspace-load/save/clear），parse/serialize 在本层完成。
  */
 import { describe, expect, it, vi } from "vitest";
-import { createEmptyWorkspace } from "@mamep2026/domain";
+import { createEmptyWorkspace, workspaceSchemaVersion } from "@mamep2026/domain";
 import type { Result, Workspace } from "@mamep2026/domain";
 import { serializeWorkspace } from "@mamep2026/workspace";
 import type { WorkspaceLoadResponse } from "@mamep2026/platform-api";
@@ -50,7 +50,7 @@ describe("FileWorkspaceRepository", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       // createEmptyWorkspace 含 Date.now()/随机 id（非确定性），做结构化断言。
-      expect(result.value.schemaVersion).toBe(7);
+      expect(result.value.schemaVersion).toBe(workspaceSchemaVersion);
       expect(result.value.name).toBe("Workspace");
       expect(result.value.sheets).toHaveLength(1);
     }

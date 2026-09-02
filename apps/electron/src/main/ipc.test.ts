@@ -4,7 +4,13 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectionState } from "@mamep2026/communication";
-import { createEmptyWorkspace, createMamepError, fail, ok } from "@mamep2026/domain";
+import {
+  createEmptyWorkspace,
+  createMamepError,
+  fail,
+  ok,
+  workspaceSchemaVersion,
+} from "@mamep2026/domain";
 import type { TcpConnectionProfile } from "@mamep2026/domain";
 import { serializeWorkspace } from "@mamep2026/workspace";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
@@ -652,7 +658,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     );
     expect(result.type).toBe("response");
     expect(workspace.save).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "SaveMe", schemaVersion: 7 }),
+      expect.objectContaining({ name: "SaveMe", schemaVersion: workspaceSchemaVersion }),
     );
   });
 

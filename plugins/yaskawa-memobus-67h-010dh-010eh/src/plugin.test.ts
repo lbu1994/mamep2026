@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCodecRegistry } from "@mamep2026/communication";
 import {
   BUILTIN_CONTRIBUTION_POINTS,
   ContributionPointRegistry,
   PluginRegistry,
+  type PluginCommunicationApi,
 } from "@mamep2026/plugin-api";
 import {
   YASKAWA_MEMOBUS_PLUGIN_ID,
@@ -107,15 +108,17 @@ describe("Yaskawa MEMOBUS 插件（ADR-041，决策①1A/⑤）", () => {
 
   it("handleToolbarAction：enter-rom/enter-ram 经通信面写 0 到 0900H/0910H（2026-09-02 移入插件）", async () => {
     const writes: Array<{ address: number; values: number[] }> = [];
-    const communicationApiFactory = vi.fn(() => ({
-      readRegisters: vi.fn(async () => ({ ok: true, value: [1] })),
-      writeRegisters: vi.fn(
-        async (req: { address: number; values: number[] }) => {
-          writes.push(req);
-          return { ok: true as const, value: undefined };
-        },
-      ),
-    }));
+    const communicationApiFactory = vi.fn(
+      (_pluginId: string): PluginCommunicationApi => ({
+        readRegisters: vi.fn(async () => ({ ok: true as const, value: [1] })),
+        writeRegisters: vi.fn(
+          async (req: { address: number; values: number[] }) => {
+            writes.push(req);
+            return { ok: true as const, value: undefined };
+          },
+        ),
+      }),
+    );
     const contributionRegistry = new ContributionPointRegistry();
     for (const point of BUILTIN_CONTRIBUTION_POINTS) {
       contributionRegistry.registerPoint(point);

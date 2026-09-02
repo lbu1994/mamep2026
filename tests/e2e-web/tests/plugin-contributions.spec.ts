@@ -2,13 +2,35 @@
  * 插件贡献点机制 e2e（mockTransport=1，浏览器端，2026-08-31，ADR-039 Phase A）。
  * 内置示例插件（example-panel）声明 panels + theme 两个贡献点，验证：
  * - panels 贡献：底部面板出现「插件」页签，展示示例插件标题与占位内容；
- * - theme 贡献（ADR-047）：插件注册的可选主题色**不再自动应用**——主色保持默认蓝（#1677ff）；
+ * - theme 贡献（ADR-047）：插件注册的可选主题色**不再自动应用**——主色保持默认蓝
+ *   （ADR-048：默认蓝为 antd 运行时令牌，断言与页面 --ant-color-primary 对比，不写死色值）；
  * - 禁用插件后：插件页签消失、主色仍为默认蓝（无插件自动应用层）；
  * - 全程无 console 错误。
  */
 import { expect, test, type Page } from "@playwright/test";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
+
+/** 读取 .ant-app 上的 --ant-color-primary（antd cssVar 运行时值）。 */
+async function antdPrimary(page: Page): Promise<string> {
+  const value = await page.evaluate(() => {
+    const el = document.querySelector(".ant-app");
+    return el === null
+      ? ""
+      : getComputedStyle(el).getPropertyValue("--ant-color-primary");
+  });
+  return value.trim();
+}
+
+/** 按当前 antd 令牌 hex 换算 expected computed rgb（不依赖字面量）。 */
+function hexToRgb(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (m === null) throw new Error(`invalid hex: ${hex}`);
+  const raw = m[1];
+  if (raw === undefined) throw new Error(`invalid hex: ${hex}`);
+  const n = parseInt(raw, 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+}
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
@@ -44,10 +66,10 @@ test("内置插件贡献：底部面板插件页签 + 插件主题色不自动�
     "Plugin panel content will be provided by the plugin runtime.",
   );
 
-  // 3. theme 贡献（ADR-047）：注册为可选预设，不再自动应用——主色为默认蓝（#1677ff）。
+  // 3. theme 贡献（ADR-047）：注册为可选预设，不再自动应用——主色为默认蓝（antd 运行时令牌）。
   await expect
     .poll(() => primaryButtonColor(page), { timeout: 5000 })
-    .toBe("rgb(22, 119, 255)");
+    .toBe(hexToRgb(await antdPrimary(page)));
 });
 
 test("禁用插件：插件页签消失、主色回退默认", async ({ page }) => {
@@ -74,10 +96,10 @@ test("禁用插件：插件页签消失、主色回退默认", async ({ page }) 
     page.locator(".ant-tabs-tab").filter({ hasText: "Plugins" }),
   ).toHaveCount(0);
 
-  // theme 无自动应用层（ADR-047）：禁用后主色仍为默认蓝（#1677ff）。
+  // theme 无自动应用层（ADR-047）：禁用后主色仍为默认蓝（antd 运行时令牌）。
   await expect
     .poll(() => primaryButtonColor(page), { timeout: 5000 })
-    .toBe("rgb(22, 119, 255)");
+    .toBe(hexToRgb(await antdPrimary(page)));
 });
 
 test("无 console 错误（含 antd 弃用）", async ({ page }) => {

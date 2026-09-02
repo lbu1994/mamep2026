@@ -1,13 +1,23 @@
 // scripts/check-contrast.mjs
-// Mamep2026 设计令牌 WCAG 2.2 AA 对比度实测（Node 运行，无依赖）。
+// Mamep2026 设计令牌 WCAG 2.2 AA 对比度实测（Node 运行）。
 //
 // 颜色值来源：
-//   - packages/ui/src/theme.ts 的 token 覆盖（品牌色 / 文字灰阶 / 背景）
-//   - antd defaultAlgorithm / darkAlgorithm 输出的中性色（已在下方按背景合成 alpha）
-//   - antd 派生的 primaryBg / primaryText（选中态）
+//   - antd 公开令牌 theme.getDesignToken({ algorithm })（品牌色 / 链接色 / 选中态，
+//     2026-09-02，ADR-048：随库升级自动跟随，无硬编码字面量）
+//   - packages/ui-theme/src/base.ts 的 token 覆盖（文字灰阶 / 背景）
 //
 // 用法：node scripts/check-contrast.mjs
 // 输出逐项比值表；任何 AA 项不达标退出码 1。
+
+import { theme as antdTheme } from "antd";
+
+/* antd 运行时默认令牌（浅/暗算法） */
+const lightToken = antdTheme.getDesignToken({
+  algorithm: antdTheme.defaultAlgorithm,
+});
+const darkToken = antdTheme.getDesignToken({
+  algorithm: antdTheme.darkAlgorithm,
+});
 
 /* ---------- 工具 ---------- */
 
@@ -46,11 +56,11 @@ const LIGHT = {
   textSecondary: "#595959", // rgba(0,0,0,0.65)
   textTertiary: "#737373", // rgba(0,0,0,0.55)
   textDisabled: "#949494", // rgba(0,0,0,0.42)
-  brandPrimary: "#1677ff", // Primary 按钮/焦点（antd 默认，ADR-047）
-  link: "#1677ff", // colorLink（浅，antd 默认）
-  brandBg: "#e6f4ff", // antd primaryBg（浅）
-  brandOnBrandBg: "#0958d9", // antd primaryText（浅，选中态文字）
-  focusRing: "#1677ff",
+  brandPrimary: lightToken.colorPrimary, // Primary 按钮/焦点（antd 运行时令牌，ADR-048）
+  link: lightToken.colorLink, // colorLink（浅，antd 运行时令牌）
+  brandBg: lightToken.colorPrimaryBg, // antd primaryBg（浅）
+  brandOnBrandBg: lightToken.colorPrimaryText, // antd primaryText（浅，选中态文字）
+  focusRing: lightToken.colorPrimary,
   success: "#389e0d",
   warning: "#c08a00",
   error: "#cf1322",
@@ -67,11 +77,11 @@ const DARK = {
   textSecondary: "#adadad", // rgba(255,255,255,0.65) on #141414
   textTertiary: "#a6a6a6", // rgba(255,255,255,0.62) on #141414
   textDisabled: "#6d6d6d", // rgba(255,255,255,0.38) on #141414
-  brandPrimary: "#1668dc", // Primary 按钮/焦点（暗色主色）
-  link: "#1668dc", // colorLink（暗色，antd 默认，ADR-047）
-  brandBg: "#111a2c", // antd dark primaryBg（近似）
-  brandOnBrandBg: "#6ba1ff", // antd dark primaryText（近似）
-  focusRing: "#1668dc",
+  brandPrimary: darkToken.colorPrimary, // Primary 按钮/焦点（暗色主色，antd 运行时令牌）
+  link: darkToken.colorLink, // colorLink（暗色，antd 运行时令牌）
+  brandBg: darkToken.colorPrimaryBg, // antd dark primaryBg
+  brandOnBrandBg: darkToken.colorPrimaryText, // antd dark primaryText
+  focusRing: darkToken.colorPrimary,
   success: "#49aa19",
   warning: "#d89614",
   error: "#dc4446",

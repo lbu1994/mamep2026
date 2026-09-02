@@ -17,6 +17,7 @@ import {
   createEmptyRow,
   createMamepError,
   fail,
+  ok,
   RegisterAddress,
   type RegisterRow,
   type Result,
@@ -71,12 +72,16 @@ function createHarness(): Harness {
       id === "builtin.address-adjust"
         ? {
             id,
+            protocol: "rtu",
+            titleKey: "table.addressAdjust",
             apply: (v: number) =>
               v === 0
                 ? fail(
                     createMamepError({
                       code: "ADDRESS_ADJUST_UNDERFLOW",
                       category: "validation",
+                      userMessageKey: "errors.addressAdjustUnderflow",
+                      technicalMessage: "address 0 cannot be adjusted by -1",
                     }),
                   )
                 : { ok: true as const, value: v - 1 },

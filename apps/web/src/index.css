@@ -10,8 +10,10 @@
    命名与任务清单一一对应；组件样式不得散落固定颜色，统一取这里的变量。
    Light（:root）与 Dark（[data-mamep-theme="dark"]）使用相同 Token 名，仅赋值不同。
    注意：antd cssVar 的 --ant-* 变量只在 antd 组件作用域（.ant 后代）可解析，
-   :root 上无法引用，因此本令牌全部显式赋值（与 scripts/check-contrast.mjs 的
-   调色板保持一致），不依赖 antd CSS 变量；antd 组件自身的配色仍由 antd 主题负责。 */
+   :root 上无法引用。品牌/焦点环/信息色（--mamep-brand-primary / --mamep-focus-ring /
+   --mamep-status-info）为「默认主题色」映射，直接在 .ant-app 作用域引用 antd CSS 变量
+   （ADR-048：零硬编码、随库升级自动跟随）；其余令牌为独立设计值显式赋值
+   （与 scripts/check-contrast.mjs 的调色板保持一致）。 */
 
 :root {
   /* 字体角色 */
@@ -42,16 +44,13 @@
   --mamep-border-default: #d9d9d9;
   --mamep-border-strong: rgba(0, 0, 0, 0.15);
 
-  /* 品牌与状态（Light；品牌蓝 = antd 默认 #1677ff，ADR-047） */
-  --mamep-brand-primary: #1677ff;
-  --mamep-status-info: #1677ff;
+  /* 状态（Light）：品牌/信息色与默认主题色由 .ant-app 作用域映射 antd cssVar（ADR-048） */
   --mamep-status-success: #389e0d;
   --mamep-status-warning: #c08a00;
   --mamep-status-error: #cf1322;
   --mamep-status-danger-action: #cf1322;
 
-  /* 焦点环 / 阴影 / 圆角 / 间距 */
-  --mamep-focus-ring: #1677ff;
+  /* 阴影 / 圆角 / 间距（焦点环见 .ant-app 映射） */
   --mamep-shadow-overlay: 0 6px 16px 0 rgba(0, 0, 0, 0.08);
   --mamep-radius-control: 4px;
   --mamep-radius-panel: 4px;
@@ -85,19 +84,25 @@
   --mamep-border-default: #424242;
   --mamep-border-strong: rgba(255, 255, 255, 0.2);
 
-  --mamep-brand-primary: #1668dc;
-  --mamep-status-info: #1668dc;
   --mamep-status-success: #49aa19;
   --mamep-status-warning: #d89614;
   --mamep-status-error: #dc4446;
   --mamep-status-danger-action: #dc4446;
 
-  --mamep-focus-ring: #6ba1ff;
-
   /* 滚动条（Dark）：亮化、低饱和，深底上可辨识 */
   --mamep-scrollbar-thumb: rgba(255, 255, 255, 0.24);
   --mamep-scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
   --mamep-scrollbar-track: transparent;
+}
+
+/* 默认主题色（品牌/信息/焦点环）跟随 antd cssVar（ADR-048）：
+   --ant-* 仅在 antd 组件作用域（.ant 后代）可解析，:root 不可引用，
+   故在此声明；消费点（主表/侧栏/追踪窗/工具栏）均位于 .ant-app 子树内，
+   弹窗 portal 由 MamepApp 注入 effect（同源 antd 令牌）覆盖。 */
+.ant-app {
+  --mamep-brand-primary: var(--ant-color-primary);
+  --mamep-status-info: var(--ant-color-info);
+  --mamep-focus-ring: var(--ant-color-primary);
 }
 
 html,

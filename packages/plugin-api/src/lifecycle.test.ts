@@ -94,13 +94,14 @@ describe("PluginRegistry 生命周期骨架（ADR-039）", () => {
     expect(registry.getContributions("panels")).toHaveLength(0);
   });
 
-  it("runtime 仅限内置来源（installed 拒绝）", () => {
+  it("installed 允许同进程 runtime（随包受信插件，ADR-045 放宽；第三方仍仅 remoteRuntime）", () => {
     const registry = makeRegistry();
     const result = registry.register(manifest(), {
       source: "installed",
       runtime: { activate: () => undefined },
     });
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    expect(registry.getLifecycleState("lifecycle-plugin")).toBe("active");
   });
 
   it("getVersion 随注册/启停事件自增（UI 响应式订阅用）", () => {

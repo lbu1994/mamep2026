@@ -4,14 +4,17 @@ import {
   ContributionPointRegistry,
   PluginRegistry,
   createAddressTransformRegistry,
+  createUnavailableCommunicationApi,
 } from "@mamep2026/plugin-api";
 import {
   ADDRESS_ADJUST_PLUGIN_ID,
   createAddressAdjustRuntime,
   registerAddressAdjustPlugin,
-  resolveAddressAdjustTransform,
 } from "./plugin";
-import { ADDRESS_ADJUST_TRANSFORM } from "./address-adjust-transform";
+import {
+  ADDRESS_ADJUST_TRANSFORM,
+  resolveAddressAdjustTransform,
+} from "./address-adjust-transform";
 
 function makeRegistry() {
   const contributionRegistry = new ContributionPointRegistry();
@@ -45,8 +48,9 @@ describe("address-adjust 插件（2026-09-02 插件外部化：自 App.tsx/regis
       expect(underflow.error.code).toBe("ADDRESS_ADJUST_UNDERFLOW");
       expect(underflow.error.category).toBe("validation");
     }
-    const validateResult = ADDRESS_ADJUST_TRANSFORM.validate(1);
-    expect(validateResult.ok).toBe(true);
+    // AddressTransform.validate 为可选字段（domain 类型），此处用可选链调用。
+    const validateResult = ADDRESS_ADJUST_TRANSFORM.validate?.(1);
+    expect(validateResult?.ok).toBe(true);
   });
 
   it("resolveAddressAdjustTransform：仅解析内建 id；未知返回 null", () => {
@@ -59,7 +63,10 @@ describe("address-adjust 插件（2026-09-02 插件外部化：自 App.tsx/regis
   it("createAddressAdjustRuntime 可重复构造（重启恢复 attach 用）", () => {
     const transformRegistry = createAddressTransformRegistry();
     const runtime = createAddressAdjustRuntime({ transformRegistry });
-    runtime.activate();
+    runtime.activate({
+      pluginId: ADDRESS_ADJUST_PLUGIN_ID,
+      communication: createUnavailableCommunicationApi(),
+    });
     expect(transformRegistry.get("builtin.address-adjust")).toBeDefined();
   });
 });
