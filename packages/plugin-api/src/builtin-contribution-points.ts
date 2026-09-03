@@ -59,12 +59,21 @@ export const ADDRESS_TRANSFORM_CONTRIBUTION_SCHEMA = z.object({
   defaultConfig: z.object({ enabled: z.boolean() }).optional(),
 });
 
-/** theme 色板预设：单条可选主题色（ADR-047，2016-09-02：支持一个或多个）。 */
+/** theme 色板预设：单条可选主题色（ADR-047，2016-09-02：支持一个或多个；
+ * 2026-09-03 方案 A：插件可经 title 字段自带翻译，缺失语言由消费方回退英文；
+ * 2026-09-03：只要求提供**单一明亮模式主色**，暗色/hover/active 由 antd 色彩算法自动派生）。 */
 export const THEME_COLOR_PRESET_SCHEMA = z.object({
   id: z.string().min(1),
   titleKey: z.string().min(1),
-  colorPrimary: z.object({ light: z.string(), dark: z.string() }),
-  colorLink: z.object({ light: z.string(), dark: z.string() }).optional(),
+  /** 插件自带标题翻译（en-US 必填 / zh-CN 可选）；缺失语言时消费方回退英文。 */
+  title: z
+    .object({
+      "en-US": z.string().min(1),
+      "zh-CN": z.string().min(1).optional(),
+    })
+    .optional(),
+  /** 单一明亮模式主色（种子）。链接色默认跟随主色；暗色主色/hover/active 由 antd 算法自动派生。 */
+  colorPrimary: z.string().min(1),
 });
 
 /** theme：主题色贡献（ADR-047：注册一个或多个可选主题色，Settings 选择器消费；不再自动应用）。 */

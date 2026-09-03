@@ -1,0 +1,23 @@
+{
+  "id": "example-theme",
+  "name": "Example Theme",
+  "version": "1.0.0",
+  "apiVersion": "1.0",
+  "description": "An example plugin that demonstrates contributing an optional theme color preset via the theme contribution point.",
+  "author": "Mamep2026 Team",
+  "platform": { "web": true, "node": false },
+  "requiredCapabilities": [],
+  "permissions": ["theme"],
+  "contributes": {
+    "theme": {
+      "colors": [
+        {
+          "id": "indigo",
+          "titleKey": "plugins.exampleThemeColor",
+          "title": { "en-US": "Indigo", "zh-CN": "靛蓝" },
+          "colorPrimary": "#4f46e5"
+        }
+      ]
+    }
+  }
+}

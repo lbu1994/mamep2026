@@ -76,24 +76,27 @@ describe("ContributionPointRegistry（ADR-039：贡献点注册表）", () => {
   });
 });
 
-describe("THEME_CONTRIBUTION_SCHEMA（ADR-047：多色数组）", () => {
-  it("接受一个或多个可选主题色（colors[]，含 colorLink 可选）", () => {
+describe("THEME_CONTRIBUTION_SCHEMA（ADR-047：多色数组；2026-09-03 方案 A：title 多语言）", () => {
+  it("接受一个或多个可选主题色（colors[]，仅需单一明亮主色）", () => {
     const parsed = THEME_CONTRIBUTION_SCHEMA.parse({
       colors: [
         {
           id: "indigo",
           titleKey: "plugins.exampleThemeColor",
-          colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
-          colorLink: { light: "#4f46e5", dark: "#818cf8" },
+          title: { "en-US": "Indigo", "zh-CN": "靛蓝" },
+          colorPrimary: "#4f46e5",
         },
         {
           id: "teal",
           titleKey: "plugins.exampleThemeTeal",
-          colorPrimary: { light: "#0d9488", dark: "#2dd4bf" },
+          colorPrimary: "#0d9488",
         },
       ],
     });
     expect(parsed.colors).toHaveLength(2);
+    // 方案 A：插件自带 title；zh-CN 可选，缺失时消费方回退英文。
+    expect(parsed.colors?.[0]?.title?.["en-US"]).toBe("Indigo");
+    expect(parsed.colors?.[0]?.title?.["zh-CN"]).toBe("靛蓝");
   });
 
   it("colors 缺省合法（空贡献 = 不注册可选色）", () => {
@@ -110,7 +113,21 @@ describe("THEME_CONTRIBUTION_SCHEMA（ADR-047：多色数组）", () => {
   it("非法：preset 缺 id/titleKey → 拒绝", () => {
     const result = THEME_CONTRIBUTION_SCHEMA.safeParse({
       colors: [
-        { colorPrimary: { light: "#fff", dark: "#000" } },
+        { colorPrimary: "#fff" },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("非法：title 缺 en-US → 拒绝（方案 A 英文必填）", () => {
+    const result = THEME_CONTRIBUTION_SCHEMA.safeParse({
+      colors: [
+        {
+          id: "indigo",
+          titleKey: "k",
+          title: { "zh-CN": "靛蓝" },
+          colorPrimary: "#4f46e5",
+        },
       ],
     });
     expect(result.success).toBe(false);

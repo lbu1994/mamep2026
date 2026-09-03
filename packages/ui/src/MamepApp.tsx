@@ -28,7 +28,9 @@ import { usePluginContributions } from "./plugin/use-contributions";
 import {
   buildThemeColorOptions,
   DEFAULT_THEME_COLOR_ID,
+  deriveAppliedPrimary,
   findThemeColorOption,
+  themeColorTitle,
   themeConfigForColorOption,
   type ThemeContribution,
 } from "./plugin/theme-contributions";
@@ -177,7 +179,7 @@ export function MamepApp(): React.ReactNode {
       ? baseThemeConfig
       : mergeThemeConfig(
           baseThemeConfig,
-          themeConfigForColorOption(selectedThemeColor, theme === "dark") ?? {},
+          themeConfigForColorOption(selectedThemeColor),
         );
   // settings 贡献消费方（ADR-039）：Settings 弹窗分区（Phase A 声明式标题占位）。
   const settingsContributions = usePluginContributions<SettingsContribution>(
@@ -330,15 +332,19 @@ export function MamepApp(): React.ReactNode {
   // 主题主色同步到 --mamep-brand-primary / --mamep-focus-ring（ADR-042）：
   // 消除 index.css 的第二份硬编码品牌色副本——CSS 变量经 document root 内联覆盖
   // （内联样式优先于 :root / [data-mamep-theme] 规则）；CSS 保留默认值兜底。
+  // 2026-09-03：插件色只提供单一明亮主色（种子），暗色下 antd 算法会派生出不同主色，
+  // 这里取「当前模式派生后的真实主色」写入变量，与 antd 实际渲染保持一致
+  // （getDesignToken 只读计算，不喂回 ConfigProvider，避免二次派生）。
   useEffect(() => {
-    const primary = effectiveThemeConfig?.token?.colorPrimary;
-    if (typeof primary !== "string" || primary.length === 0) return;
+    const seed = effectiveThemeConfig?.token?.colorPrimary;
+    if (typeof seed !== "string" || seed.length === 0) return;
+    const applied = deriveAppliedPrimary(seed, theme === "dark");
     document.documentElement.style.setProperty(
       "--mamep-brand-primary",
-      primary,
+      applied,
     );
-    document.documentElement.style.setProperty("--mamep-focus-ring", primary);
-  }, [effectiveThemeConfig]);
+    document.documentElement.style.setProperty("--mamep-focus-ring", applied);
+  }, [effectiveThemeConfig, theme]);
 
   // 活动表 Address Transform（ADR-042 表级 Address Adjust）→ 会话：
   // 切换表/修改当前表配置时同步（host 端会话经 session-set-address-transform RPC）。
@@ -995,8 +1001,8 @@ export function MamepApp(): React.ReactNode {
                   ...themeColorOptions.map((option) => ({
                     value: option.id,
                     label: themeColorOptionLabel(
-                      t(option.titleKey),
-                      option.colorPrimary.light,
+                      themeColorTitle(option, i18n.language, t),
+                      option.colorPrimary,
                     ),
                   })),
                 ]}

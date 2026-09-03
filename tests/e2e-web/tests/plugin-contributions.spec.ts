@@ -1,9 +1,8 @@
 /**
  * 插件贡献点机制 e2e（mockTransport=1，浏览器端，2026-08-31，ADR-039 Phase A）。
- * 内置示例插件（example-panel）声明 panels + theme 两个贡献点，验证：
+ * 内置示例插件（example-panel）声明 panels 贡献点（2026-09-03：theme 已剥离到
+ * `plugins/example-theme`，不随包、需手动安装），验证：
  * - panels 贡献：底部面板出现「插件」页签，展示示例插件标题与占位内容；
- * - theme 贡献（ADR-047）：插件注册的可选主题色**不再自动应用**——主色保持默认蓝
- *   （ADR-048：默认蓝为 antd 运行时令牌，断言与页面 --ant-color-primary 对比，不写死色值）；
  * - 禁用插件后：插件页签消失、主色仍为默认蓝（无插件自动应用层）；
  * - 全程无 console 错误。
  */
@@ -49,7 +48,7 @@ async function primaryButtonColor(page: Page): Promise<string> {
   return color;
 }
 
-test("内置插件贡献：底部面板插件页签 + 插件主题色不自动应用", async ({ page }) => {
+test("内置插件贡献：底部面板插件页签；无随包主题色自动应用", async ({ page }) => {
   await openApp(page);
 
   // 1. panels 贡献：底部面板出现「插件」页签。
@@ -66,7 +65,8 @@ test("内置插件贡献：底部面板插件页签 + 插件主题色不自动�
     "Plugin panel content will be provided by the plugin runtime.",
   );
 
-  // 3. theme 贡献（ADR-047）：注册为可选预设，不再自动应用——主色为默认蓝（antd 运行时令牌）。
+  // 3. example-panel 已无 theme 贡献（剥离到 example-theme，未安装）：
+  //    主色为默认蓝（antd 运行时令牌，无插件自动应用层）。
   await expect
     .poll(() => primaryButtonColor(page), { timeout: 5000 })
     .toBe(hexToRgb(await antdPrimary(page)));

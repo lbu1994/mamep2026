@@ -1,17 +1,25 @@
 /**
- * 主题色预设选择器 e2e（mockTransport=1，浏览器端，2026-09-02，ADR-047；ADR-048 去字面量）。
+ * 主题色预设选择器 e2e（mockTransport=1，浏览器端，2026-09-02，ADR-047；ADR-048 去字面量；
+ * 2026-09-03：主题色示例已剥离为独立插件 `plugins/example-theme`，不随包，需手动安装）。
  * 验证：
  * - 内置仅一个选项：Ant Design 默认蓝（其值由 antd 运行时令牌决定，ADR-048：不写死色值）；
- *   --mamep-brand-primary 与页面 --ant-color-primary 同步（浅/深）；插件颜色不再自动应用；
- * - 插件（example-panel）注册的可选主题色出现在 Settings 选择器；
+ *   --mamep-brand-primary 与页面 --ant-color-primary 同步（浅/深）；
+ * - 默认（未安装 example-theme）仅默认蓝；经 Plugin Manager 手动安装后可选主题色出现且**不自动应用**；
  * - 选中插件色 → antd token / --mamep-brand-primary 同步 + reload 持久化；
  * - 禁用插件后选项消失、已选色回退默认；
  * - 全程无 console 错误。
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 const INDIGO = "#4f46e5";
+/** example-theme 手动安装清单工件路径（自 tests/e2e-web/tests/ 上跳三级到仓库根）。 */
+const EXAMPLE_THEME_MANIFEST = path.resolve(
+  import.meta.dirname,
+  "../../../plugins/example-theme/manifest.json",
+);
 
 async function openApp(page: Page): Promise<string[]> {
   const errors: string[] = [];
@@ -38,6 +46,50 @@ async function closeModal(page: Page): Promise<void> {
     .locator(".ant-modal-container:visible .ant-modal-close")
     .first()
     .click();
+  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+}
+
+/** 打开 Plugin Manager 弹窗，返回弹窗定位器。 */
+async function openPluginManager(page: Page) {
+  await page.getByRole("button", { name: "Plugin Manager" }).click();
+  const modal = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Plugin Manager" });
+  await expect(modal).toBeVisible();
+  return modal;
+}
+
+/** 经 Plugin Manager 手动安装 example-theme（浏览器 pluginInstall==="upload" 路径，
+ * 选 plugins/example-theme/manifest.json）。2026-09-03：该示例不随包，需手动安装。 */
+async function installExampleTheme(page: Page): Promise<void> {
+  const modal = await openPluginManager(page);
+  await modal.getByRole("button", { name: "Install Plugin" }).click();
+  const input = page.locator('input[data-testid="plugin-manifest-file-input"]');
+  await expect(input).toBeAttached();
+  const content = readFileSync(EXAMPLE_THEME_MANIFEST, "utf8");
+  await input.setInputFiles({
+    name: "manifest.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(content, "utf8"),
+  });
+  // §6.10.4 安全确认弹窗 → 确认安装。
+  const confirm = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Install this plugin?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(confirm).toBeHidden();
+  await expect(modal).toContainText("Example Theme");
+  // 关闭 Plugin Manager。
+  await modal
+    .getByRole("button", { name: "Close" })
+    .click()
+    .catch(() => {
+      return page
+        .locator(".ant-modal-container:visible .ant-modal-close")
+        .first()
+        .click();
+    });
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
 }
 
@@ -102,20 +154,33 @@ test("默认仅内置 Ant Design 默认蓝；插件色不自动应用（ADR-047 
 }) => {
   const errors = await openApp(page);
 
-  // 默认主题色 = 运行时 antd 默认令牌；example-panel 允许但不再自动应用靛蓝。
+  // 默认主题色 = 运行时 antd 默认令牌。
   const antdBlue = await antdPrimary(page);
   await expect.poll(() => brandPrimary(page)).toBe(antdBlue);
   await expect.poll(() => primaryButtonColor(page)).toBe(hexToRgb(antdBlue));
 
-  // Settings 选择器：内置默认蓝 + 插件注册色均出现。
+  // 安装前：Settings 选择器仅内置默认蓝（example-theme 未安装）。
   await openSettings(page);
   await themeColorSelect(page).click();
-  const options = page
+  const optionsBefore = page
     .locator(".ant-select-dropdown:visible .ant-select-item-option");
-  await expect(options.filter({ hasText: "Default blue" })).toHaveCount(1);
-  await expect(options.filter({ hasText: "Indigo" })).toHaveCount(1);
+  await expect(optionsBefore.filter({ hasText: "Default blue" })).toHaveCount(1);
+  await expect(optionsBefore.filter({ hasText: "Indigo" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await closeModal(page);
+
+  // 手动安装 example-theme 后：可选主题色出现，但仍不自动应用。
+  await installExampleTheme(page);
+  await openSettings(page);
+  await themeColorSelect(page).click();
+  const optionsAfter = page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option");
+  await expect(optionsAfter.filter({ hasText: "Default blue" })).toHaveCount(1);
+  await expect(optionsAfter.filter({ hasText: "Indigo" })).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await closeModal(page);
+
+  await expect.poll(() => primaryButtonColor(page)).toBe(hexToRgb(antdBlue));
 
   expect(errors).toEqual([]);
 });
@@ -153,6 +218,8 @@ test("选中插件色：antd token 与 CSS 变量同步 + reload 持久化", asy
   page,
 }) => {
   const errors = await openApp(page);
+  // 手动安装 example-theme（不随包）后再选用靛蓝。
+  await installExampleTheme(page);
   await openSettings(page);
   await selectThemeColor(page, "Indigo");
 
@@ -190,24 +257,60 @@ test("选中插件色：antd token 与 CSS 变量同步 + reload 持久化", asy
   expect(errors).toEqual([]);
 });
 
+test("选中插件色后切深色：主色由 antd 算法派生，CSS 变量与 antd 实际渲染一致", async ({
+  page,
+}) => {
+  const errors = await openApp(page);
+  await installExampleTheme(page);
+  await openSettings(page);
+  await selectThemeColor(page, "Indigo");
+  // 切深色（Settings 内 Light/Dark Segmented）。
+  await page
+    .locator(".ant-modal-container:visible .ant-segmented-item-label")
+    .filter({ hasText: "Dark" })
+    .first()
+    .click();
+  // 深色下 antd 派生主色 ≠ 浅色种子（#4f46e5 → 派生如 #463fc6 等）；等令牌更新。
+  let darkAntd = "";
+  await expect
+    .poll(async () => {
+      darkAntd = await antdPrimary(page);
+      return darkAntd;
+    })
+    .not.toBe(INDIGO);
+  // --mamep-brand-primary（.ant-app 映射 var(--ant-color-primary)）与 antd 实际渲染一致。
+  await expect.poll(() => brandPrimary(page)).toBe(darkAntd);
+  // 主按钮背景 = 派生后的暗色主色。
+  await expect.poll(() => primaryButtonColor(page)).toBe(hexToRgb(darkAntd));
+  await closeModal(page);
+  expect(errors).toEqual([]);
+});
+
 test("禁用插件后选项消失、已选色回退默认（ADR-047）", async ({ page }) => {
   const errors = await openApp(page);
+  // 手动安装 example-theme 后选中靛蓝。
+  await installExampleTheme(page);
   await openSettings(page);
   await selectThemeColor(page, "Indigo");
   await closeModal(page);
 
-  // 禁用 example-panel。
-  await page.getByRole("button", { name: "Plugin Manager" }).click();
-  const modal = page
-    .locator(".ant-modal-container")
-    .filter({ hasText: "Plugin Manager" });
-  await expect(modal).toBeVisible();
-  const switchEl = modal.locator(".ant-switch").first();
+  // 禁用 example-theme（按插件行定位，而非第一个 = example-panel）。
+  const modal = await openPluginManager(page);
+  const row = modal
+    .locator(".ant-listy-item")
+    .filter({ hasText: "Example Theme" });
+  const switchEl = row.locator(".ant-switch");
   await switchEl.click();
   await expect(switchEl).not.toHaveClass(/ant-switch-checked/);
-  await modal.getByRole("button", { name: "Close" }).click().catch(() => {
-    return page.locator(".ant-modal-container .ant-modal-close").first().click();
-  });
+  await modal
+    .getByRole("button", { name: "Close" })
+    .click()
+    .catch(() => {
+      return page
+        .locator(".ant-modal-container .ant-modal-close")
+        .first()
+        .click();
+    });
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
 
   // 回退默认蓝（运行时 antd 令牌）；选择器仅剩内置默认蓝选项。

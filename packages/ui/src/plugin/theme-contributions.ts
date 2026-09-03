@@ -5,15 +5,17 @@
  * 装配链解析为 token 覆盖。**不再自动应用**（ADR-042「插件层最高优先」已移除）；
  * 禁用/卸载插件后解析不到 → 回退默认 Ant Design 蓝。
  */
-import type { ThemeConfig } from "antd";
+import { theme as antdTheme, type ThemeConfig } from "antd";
 import type { Contribution } from "@mamep2026/plugin-api";
 
-/** 插件注册的单条可选主题色（与 plugin-api THEME_COLOR_PRESET_SCHEMA 结构一致）。 */
+/** 插件注册的单条可选主题色（与 plugin-api THEME_COLOR_PRESET_SCHEMA 结构一致）。
+ * 2026-09-03 方案 A：新增 `title` 插件自带翻译（en-US 必填 / zh-CN 可选），缺失语言回退英文。
+ * 2026-09-03：仅要求 `colorPrimary`（单一明亮主色），链接色跟随主色、暗色由 antd 算法派生。 */
 export interface ThemeColorPreset {
   id: string;
   titleKey: string;
-  colorPrimary: { light: string; dark: string };
-  colorLink?: { light: string; dark: string };
+  title?: { "en-US": string; "zh-CN"?: string };
+  colorPrimary: string;
 }
 
 export interface ThemeContribution {
@@ -24,8 +26,24 @@ export interface ThemeContribution {
 export interface ThemeColorOption {
   id: string;
   titleKey: string;
-  colorPrimary: { light: string; dark: string };
-  colorLink?: { light: string; dark: string };
+  title?: { "en-US": string; "zh-CN"?: string };
+  colorPrimary: string;
+}
+
+/** 解析主题色显示名（方案 A）：插件自带 title → 英文 → 应用 i18n titleKey → titleKey。 */
+export function themeColorTitle(
+  option: ThemeColorOption,
+  locale: string,
+  t: (key: string) => string,
+): string {
+  const title = option.title;
+  const localized =
+    locale === "zh-CN"
+      ? title?.["zh-CN"]
+      : locale === "en-US"
+        ? title?.["en-US"]
+        : undefined;
+  return localized ?? title?.["en-US"] ?? t(option.titleKey) ?? option.titleKey;
 }
 
 /** 内置默认蓝（Ant Design 默认）哨兵值：仅作 Select 选项值，不持久化（themePrimary=null 对应）。 */
@@ -41,10 +59,8 @@ export function buildThemeColorOptions(
       options.push({
         id: `${contribution.pluginId}:${preset.id}`,
         titleKey: preset.titleKey,
+        ...(preset.title !== undefined ? { title: preset.title } : {}),
         colorPrimary: preset.colorPrimary,
-        ...(preset.colorLink !== undefined
-          ? { colorLink: preset.colorLink }
-          : {}),
       });
     }
   }
@@ -62,18 +78,26 @@ export function findThemeColorOption(
   );
 }
 
-/** 预设 → antd token 覆盖（按当前主题模式取 light/dark 两态；无 colorLink 不覆盖）。 */
+/** 预设 → antd token 覆盖：只喂**单一明亮主色**（种子），链接色默认跟随主色；
+ * 暗色主色/hover/active 由 antd 算法（ConfigProvider 的 algorithm）自动派生，不做二次派生。 */
 export function themeConfigForColorOption(
   option: ThemeColorOption,
-  dark: boolean,
-): ThemeConfig | null {
-  const mode = dark ? "dark" : "light";
-  const colorPrimary = option.colorPrimary[mode];
-  const colorLink = option.colorLink?.[mode];
+): ThemeConfig {
   return {
     token: {
-      colorPrimary,
-      ...(colorLink !== undefined ? { colorLink } : {}),
+      colorPrimary: option.colorPrimary,
+      colorLink: option.colorPrimary,
     },
   };
+}
+
+/** 计算当前主题模式下「派生后」的真实主色：把单一主色作为种子交给 antd 算法只读计算。
+ * 仅用于 CSS 变量（--mamep-brand-primary / --mamep-focus-ring），**不喂回 ConfigProvider**，
+ * 避免 antd 把派生值当种子再次二次派生（ADR-048 同款取舍）。 */
+export function deriveAppliedPrimary(seed: string, dark: boolean): string {
+  const token = antdTheme.getDesignToken({
+    algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+    token: { colorPrimary: seed, colorLink: seed },
+  });
+  return token.colorPrimary;
 }

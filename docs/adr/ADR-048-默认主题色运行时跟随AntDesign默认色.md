@@ -40,9 +40,10 @@
 - 依据：antd cssVar（`cssVar: { key: "ant" }`）的 `--ant-*` 变量只在 antd 组件作用域
   （含 `ant` 类元素及后代）可解析，`:root` 上不可引用（既有 index.css 注释已说明该约束）；
   因此令牌声明于 `.ant-app`，组件消费点（主表/侧栏/追踪窗/工具栏）均在其子树内；
-- `MamepApp.tsx` 既有注入 effect（把 `effectiveThemeConfig.token.colorPrimary` 内联覆盖到
-  `--mamep-brand-primary` / `--mamep-focus-ring`）**保留**：值已改为 antd 运行时令牌，
-  同时覆盖弹窗 portal 等 `.ant-app` 子树之外的元素（继承自 `<html>` 内联变量）。
+- `MamepApp.tsx` 既有注入 effect（把主题主色内联覆盖到 `--mamep-brand-primary` /
+  `--mamep-focus-ring`）**保留**：2026-09-03 起取 `deriveAppliedPrimary(seed, dark)`（getDesignToken 只读
+  计算当前模式**派生后**的真实主色，不喂回 ConfigProvider 避免二次派生），覆盖 `.ant-app` 子树之外
+  的元素（继承自 `<html>` 内联变量），并与 antd 实际渲染保持一致。
 
 ### 3. 行为修正：link hover/active 顺带对齐 antd 派生值（D3）
 

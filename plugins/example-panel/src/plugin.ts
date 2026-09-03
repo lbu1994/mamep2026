@@ -1,7 +1,8 @@
 /**
  * 示例面板插件（2026-09-02，插件外部化：自 apps/web/src/App.tsx 内联移出）。
- * 原 ADR-039 内置示例插件：Manifest v2，演示两个贡献点——panels（底部面板「插件」页签）
- * 与 theme（ADR-047：注册一个可选主题色「靛蓝」供用户选择；不再自动应用，Settings 选择器展示）。
+ * Manifest v2，演示 panels 贡献点（底部面板「插件」页签）。
+ * 2026-09-03：theme 贡献已剥离到独立插件 `plugins/example-theme`（@mamep2026/example-theme），
+ * 本插件仅保留 panels；移除 "theme" 权限。
  * 仅声明式贡献，无代码执行（无 runtime）；随应用分发，首次启动一次性安装（installed 来源）。
  */
 import type { PluginManifest, PluginRegistry } from "@mamep2026/plugin-api";
@@ -14,23 +15,13 @@ export const examplePanelManifest: PluginManifest = {
   version: "1.0.0",
   apiVersion: "1.0",
   description:
-    "A UI-safe example plugin that validates the plugin boundary (panels + theme color presets).",
+    "A UI-safe example plugin that validates the plugin boundary (panels).",
   author: "Mamep2026 Team",
   platform: { web: true, node: false },
   requiredCapabilities: [],
-  permissions: ["ui-contribution", "theme"],
+  permissions: ["ui-contribution"],
   contributes: {
     panels: [{ id: "example-info", titleKey: "plugins.exampleTitle" }],
-    theme: {
-      colors: [
-        {
-          id: "indigo",
-          titleKey: "plugins.exampleThemeColor",
-          colorPrimary: { light: "#4f46e5", dark: "#818cf8" },
-          colorLink: { light: "#4f46e5", dark: "#818cf8" },
-        },
-      ],
-    },
   },
 };
 

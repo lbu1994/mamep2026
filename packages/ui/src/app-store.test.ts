@@ -482,10 +482,10 @@ describe("setSheetAddressTransform（ADR-042）/ setThemePrimary（2026-09-02，
   });
 
   it("setThemePrimary 持久化到 workspace.preferences.themePrimary（预设 ID）；null 重置", () => {
-    useAppStore.getState().setThemePrimary("example-panel:indigo");
-    expect(useAppStore.getState().themePrimary).toBe("example-panel:indigo");
+    useAppStore.getState().setThemePrimary("example-theme:indigo");
+    expect(useAppStore.getState().themePrimary).toBe("example-theme:indigo");
     expect(useAppStore.getState().workspace.preferences.themePrimary).toBe(
-      "example-panel:indigo",
+      "example-theme:indigo",
     );
     useAppStore.getState().setThemePrimary(null);
     expect(useAppStore.getState().themePrimary).toBeNull();
