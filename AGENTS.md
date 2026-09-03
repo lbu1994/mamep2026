@@ -10,6 +10,19 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 
 用户当前任务指令 > 已确认产品决策 / ADR > [docs/AGENTS.md](docs/AGENTS.md) > [TECH_DESIGN.md](docs/TECH_DESIGN.md) > [PRD.md](docs/PRD.md) > Research / 原版界面资料 > 现有代码与测试行为 > AI 推测。冲突不得静默取舍；未确认事项（见 docs/AGENTS.md §35）必须先提问，不得自行拍板。
 
+## AI 开发工作流（固化，2026-09-03）
+
+日常开发默认按以下固定流程执行（**除非用户明确跳过某步**）；完整版固化在 `.agents/skills/dev-workflow/SKILL.md`（技能会自动触发，无需输入提示词），分步快捷指令在 `.github/prompts/`：
+
+1. **需求澄清** → 输出《需求澄清清单》（边界/异常/性能/影响/未确认项），暂停等确认。
+2. **计划（Plan）** → 输出实施计划（影响文件/变更点/测试策略/风险回滚），等「计划通过」再写代码。
+3. **文档记录** → 轻量记录 `docs/features/` 或 `docs/bugs/`（套 `docs/templates/` 模板）；架构/产品级决策另补 `docs/adr/` 并更新本节「开发进度」。
+4. **代码变更** → 最小化、单一职责；先读相关测试与类型定义；遵守下方「关键红线」。
+5. **测试（轻量 TDD，兼顾速度）** → 先列测试策略征求用户；**测试执行时机由用户决定**（见「测试约定」），同意后才跑，不得谎报；核心算法/协议/调度与 Bug 修复遵循「先写失败测试（红）→ 实现（绿）」，UI/胶水实现+测试同轮。
+6. **回归验证** → 受影响包单测 + `pnpm typecheck` + `pnpm lint`；涉及界面/传输提醒冒烟或相关 e2e，先征得同意。
+
+快捷指令：`/plan-feature`、`/fix-bug`、`/write-tests`、`/regression-check`；模板 `docs/templates/feature-request.md`、`docs/templates/bug-report.md`。
+
 ## 当前实际工程结构（重要）
 
 - **已迁移到 pnpm monorepo**（2026-08-13，ADR-013）：网页端在 `apps/web/`（Vite + React）；`packages/` 下为分层共享包（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、test-kit）；`tooling/typescript-config` 共享 TS 配置；`tests/` 下为 acceptance 与 e2e-web。
