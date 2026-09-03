@@ -92,11 +92,12 @@ export class ElectronAppHost implements AppHost {
   readonly browserCompatibility: BrowserCompatibility | null = null;
   readonly pluginRegistry: PluginRegistry;
   readonly appVersion = __APP_VERSION__;
+  readonly platform = "electron" as const;
 
   private readonly bridge: MamepHostApi;
   /** 主进程桥事件退订（dispose 时调用；StrictMode 重复挂载时保证旧 host 不再接收事件）。 */
   private readonly disposeBridgeEvents: () => void;
-  private readonly platform: BrowserPlatformHost;
+  private readonly platformHost: BrowserPlatformHost;
   private readonly inner: BrowserAppHost;
   private readonly serial: Serial | undefined;
 
@@ -142,9 +143,9 @@ export class ElectronAppHost implements AppHost {
     // 串口（enumerated）：Renderer 的 Chromium 即支持 navigator.serial，连接/读写仍复用
     // 浏览器 Web Serial 路径；仅「选择串口」改为下拉框枚举（主进程 select-serial-port
     // 转发端口列表 → serial-ports-available 事件 → 用户选择 → selectSerialPort 回传）。
-    this.platform = new BrowserPlatformHost({ serial: this.serial });
+    this.platformHost = new BrowserPlatformHost({ serial: this.serial });
     this.inner = new BrowserAppHost({
-      platform: this.platform,
+      platform: this.platformHost,
       // 工作区持久化（2026-08-30，ADR-036）：主进程文件仓储薄桥（userData 目录版本化 JSON）。
       repository: options.repository ?? new FileWorkspaceRepository(bridge),
       mockTransport: false,
@@ -377,7 +378,7 @@ export class ElectronAppHost implements AppHost {
 
   supportsWebSerial(): boolean {
     // 以注入/装配的 serial 为准（生产为 navigator.serial），不依赖全局 navigator 探测。
-    return this.platform.supportsWebSerial;
+    return this.platformHost.supportsWebSerial;
   }
 
   async connect(

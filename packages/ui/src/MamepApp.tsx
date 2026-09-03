@@ -842,7 +842,14 @@ export function MamepApp(): React.ReactNode {
                 />
               </div>
               <div className="sheet-sidebar__footer">
-                {t("sidebar.footer", { version: host?.appVersion ?? "" })}
+                {t(
+                  host?.platform === "electron"
+                    ? "sidebar.footerClient"
+                    : host?.platform === "vscode"
+                      ? "sidebar.footerExtension"
+                      : "sidebar.footerBrowser",
+                  { version: host?.appVersion ?? "" },
+                )}
               </div>
             </Layout.Sider>
             <Layout.Content className="mamep-body">

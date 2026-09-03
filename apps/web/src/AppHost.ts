@@ -125,13 +125,14 @@ export interface AppHostOptions {
 export class BrowserAppHost implements AppHost {
   readonly capabilities: PlatformCapabilities;
   readonly appVersion = __APP_VERSION__;
+  readonly platform = "browser" as const;
   readonly pluginRegistry: PluginRegistry;
   /** 贡献点注册表（ADR-039）：注册内置贡献点并注入 PluginRegistry 校验插件 contributes。 */
   private readonly contributionRegistry: ContributionPointRegistry;
   readonly isMockMode: boolean;
   /** 浏览器兼容性检测结果（PRD §8.3 / §15.7 / TECH_DESIGN §40.2）。 */
   readonly browserCompatibility: BrowserCompatibility;
-  private readonly platform: PlatformHost | null;
+  private readonly platformHost: PlatformHost | null;
   private readonly repository: WorkspaceRepositoryPort;
   private readonly clock: Clock;
   private readonly mockTransportInstance: MockTransport | null;
@@ -173,7 +174,7 @@ export class BrowserAppHost implements AppHost {
 
   constructor(options: AppHostOptions) {
     this.capabilities = options.capabilities ?? browserCapabilities;
-    this.platform = options.platform;
+    this.platformHost = options.platform;
     this.repository = options.repository;
     this.isMockMode = options.mockTransport;
     // 浏览器兼容性检测（PRD §8.3 / §15.7）：mock 为 dev 模拟传输，不依赖 Web Serial，
@@ -447,7 +448,7 @@ export class BrowserAppHost implements AppHost {
   ): Promise<Result<SerialDeviceHandle | null>> {
     // 浏览器端忽略 portId 参数：始终弹系统原生选择框（Web Serial 授权 picker）。
     if (this.isMockMode) return { ok: true, value: null };
-    if (this.platform === null) {
+    if (this.platformHost === null) {
       return {
         ok: false,
         error: {
@@ -460,7 +461,7 @@ export class BrowserAppHost implements AppHost {
         },
       };
     }
-    const result = await this.platform.requestSerialPort();
+    const result = await this.platformHost.requestSerialPort();
     if (result.ok && result.value !== null) {
       this.portLabel = result.value.label;
     }
@@ -489,7 +490,7 @@ export class BrowserAppHost implements AppHost {
       await mock.close();
       transport = mock;
     } else {
-      if (this.platform === null) {
+      if (this.platformHost === null) {
         return fail(
           createMamepError({
             code: "WEB_SERIAL_UNSUPPORTED",
@@ -509,7 +510,7 @@ export class BrowserAppHost implements AppHost {
           }),
         );
       }
-      const openResult = await this.platform.openSerialTransport(
+      const openResult = await this.platformHost.openSerialTransport(
         handle,
         profile,
       );

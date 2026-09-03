@@ -115,6 +115,7 @@ export class VscodeAppHost implements AppHost {
   readonly browserCompatibility: BrowserCompatibility | null = null;
   readonly pluginRegistry: PluginRegistry;
   readonly appVersion = __APP_VERSION__;
+  readonly platform = "vscode" as const;
 
   private readonly bridge: VscodeHostApi;
   /** 桥事件退订（dispose 时调用；StrictMode 重复挂载时保证旧 host 不再接收事件）。 */

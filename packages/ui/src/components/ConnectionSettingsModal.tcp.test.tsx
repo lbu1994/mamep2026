@@ -46,6 +46,7 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
     // 贡献，空对象 mock 缺 getVersion 会崩）。
     pluginRegistry: new PluginRegistry(),
     appVersion: "0.0.0-test",
+    platform: "browser",
     // 2026-09-02 插件外部化（ADR-045）：AppHost 接口新增方法。
     startPlugins: vi.fn(async () => undefined),
     restoreBundledPlugin: vi.fn(async () => undefined),

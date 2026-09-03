@@ -17,6 +17,8 @@ import { buildTheme, mergeThemeConfig } from "@mamep2026/ui-theme";
 import { initI18n } from "./i18n";
 import { useAppStore } from "./app-store";
 import { MamepApp } from "./MamepApp";
+import type { AppHost } from "./host";
+import { makeHost } from "./test/make-app-host";
 
 function tabRenameInput(): HTMLInputElement | null {
   return document.querySelector<HTMLInputElement>(
@@ -218,5 +220,35 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     expect(useAppStore.getState().helpModalOpen).toBe(true);
     fireAppKey(",", { ctrl: true });
     expect(useAppStore.getState().settingsModalOpen).toBe(false);
+  });
+});
+
+describe("侧边栏 footer 按平台显示（bug 修复）", () => {
+  function footerText(): string {
+    return (
+      document.querySelector<HTMLElement>(".sheet-sidebar__footer")
+        ?.textContent ?? ""
+    );
+  }
+
+  function renderWithPlatform(platform: AppHost["platform"]): void {
+    const { host } = makeHost({}, { platform });
+    useAppStore.setState({ host, loaded: true });
+    render(<MamepApp />);
+  }
+
+  it("浏览器端显示 Browser", () => {
+    renderWithPlatform("browser");
+    expect(footerText()).toBe("Browser v0.0.0-test");
+  });
+
+  it("Electron 端显示 Client", () => {
+    renderWithPlatform("electron");
+    expect(footerText()).toBe("Client v0.0.0-test");
+  });
+
+  it("VSCode 端显示 Extension", () => {
+    renderWithPlatform("vscode");
+    expect(footerText()).toBe("Extension v0.0.0-test");
   });
 });

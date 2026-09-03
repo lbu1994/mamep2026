@@ -70,6 +70,12 @@ export interface AppHost {
   readonly appVersion: string;
 
   /**
+   * 运行平台标识（侧边栏 footer 等按平台显示文案）：
+   * "browser" 浏览器端 / "electron" Electron 端 / "vscode" VSCode 插件端。
+   */
+  readonly platform: "browser" | "electron" | "vscode";
+
+  /**
    * 启动插件系统（2026-09-02 插件外部化）：装配后显式调用——首次启动一次性安装随包插件
    * （installed + 持久化），重启经 hydrate 恢复并重建同进程 runtime；随后恢复用户安装的
    * 可执行插件（远程运行时）。无存储端口时降级为内存注册。

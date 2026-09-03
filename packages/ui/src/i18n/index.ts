@@ -28,7 +28,9 @@ export const en = {
     // 分组父级菜单（ADR-041 决策②）：按协议分组，组头只读、可折叠。
     groupModbus: "Read/write via 03H/10H",
     groupMemobus: "Read/write via 67H 010DH/010EH",
-    footer: "Browser v{{version}}",
+    footerBrowser: "Browser v{{version}}",
+    footerClient: "Client v{{version}}",
+    footerExtension: "Extension v{{version}}",
   },
   connection: {
     title: "Connection Settings",
@@ -545,7 +547,9 @@ export const zh: TranslationResources = {
     // 分组父级菜单（ADR-041 决策②）。
     groupModbus: "用 03H/10H 读写寄存器",
     groupMemobus: "用 67H 010DH/010EH 读写寄存器",
-    footer: "Browser v{{version}}",
+    footerBrowser: "浏览器 v{{version}}",
+    footerClient: "客户端 v{{version}}",
+    footerExtension: "插件 v{{version}}",
   },
   connection: {
     title: "连接设置",

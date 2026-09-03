@@ -18,6 +18,7 @@ export function makeHost(
   overrides: {
     supportsWebSerial?: () => boolean;
     browserCompatibility?: BrowserCompatibility | null;
+    platform?: AppHost["platform"];
   } = {},
 ): { host: AppHost; connectTcp: ReturnType<typeof vi.fn> } {
   const connectTcp = vi.fn(async (): Promise<Result<void>> => ({
@@ -45,6 +46,7 @@ export function makeHost(
     isMockMode: false,
     pluginRegistry: new PluginRegistry(),
     appVersion: "0.0.0-test",
+    platform: overrides.platform ?? "browser",
     startPlugins: vi.fn(async () => undefined),
     restoreBundledPlugin: vi.fn(async () => undefined),
     restoreAllBundledPlugins: vi.fn(async () => undefined),
