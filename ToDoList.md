@@ -14,6 +14,8 @@
 - [x] [feat] VSCode 端 `readAllRows` cancel 补全（与 TCP 同一远程路径，ADR-025 一并解决）— ADR-021 已知限制
 - [x] [feat] TCP Unit ID 会话内动态修改（每表独立 unitId，工具栏按协议切换 label；新增 `session-set-unit-id` kind）— ADR-026（ADR-022 已知限制已解决）
 - [x] [feat] VSCode 主题完整适配（light/dark 两态 → 完整主题令牌映射，ui-theme）— ADR-027（ADR-019 后续复审条件已解决）
+- [x] [test] scripts 从站创建（如 `scripts/dev-with-slave.mjs`）除在 COM5 创建 Modbus RTU 从站外，一并创建 Modbus TCP 从站（复用 `scripts/modbus-slave/modbus-tcp-slave.mjs`，host/port/unitId 取 `config/connections.json` `tcp-local-slave`）；若某个 Testcase 已自行创建 Modbus TCP 从站，则改用上面创建的共享从站、不再重复创建 — 测试/开发从站基建增强（关联 ADR-023 连接对象配置 / ADR-024 三端真实端口 e2e 从站编排，含 dev / e2e 双场景）
+- [ ] [test] scripts 从站创建（`scripts/modbus-slave/`）除功能码 03H/10H 外，追加支持应用层已落地的其他功能码（FC01 读线圈 / FC02 读离散输入 / FC04 读输入寄存器 / FC0F 写多线圈——ADR-043 基础表；以及自定义功能码如 FC65/FC66）— 让真实端口/从站 e2e 能覆盖这些功能码；涉及 `scripts/modbus-slave/lib/modbus-core.mjs`（默认规则区扩充）与 rtu/tcp slave 的请求分发（与上一条「TCP 从站一并创建」同属从站基建增强）
 
 ## 阶段二：V1.0 正式版（PRD §8.3 P1）
 
@@ -35,8 +37,10 @@
 - [ ] [bug] 侧边栏展开状态下文本过长产生横向滚动条，但滚动条未位于侧边栏最底部，而出现在最后一项文本下方 — 修复侧边栏容器横向滚动条定位（溢出/高度计算错误：滚动条不应跟随最后一个 Menu item，而应贴合侧边栏容器底部；涉及 MamepApp 侧边栏容器 overflow 布局与 Menu/分组头 CSS，关联 ADR-041 侧边栏分组 / 侧边栏可用性项）
 - [ ] [feat] 寄存器表中二进制（Binary）数据表示时每 8 位加一个空格分组（如 16 位 → `0000 0000 1111 1111`；32/64 位范围行按字节分组为 4/8 组）— 寄存器表二进制可读性增强，涉及 data-conversion 二进制格式化（展示/解析需对称处理空格，避免编辑时报非法值）与 register-table/ui 渲染、范围行（关联 ADR-030 二进制类型 / 范围行）
 - [ ] [feat] 单个寄存器 Type 为二进制（Binary）时，可展开以「一行一个 bit」形式显示位明细（如 16 位展开为 16 行，每行显示位号 + 0/1 + 可选注释，便于逐位查看）— 寄存器表位级可读性增强，涉及 register-table/ui 行展开渲染与二进制格式化（与上一条「二进制每 8 位加空格」同为二进制展示增强；参考范围行展开子行模式，关联 ADR-030）
+- [ ] [feat] 寄存器格式（Type）选择之后，立即更新寄存器列的格式显示，但不做进制变换（原始值/基础表示不变，仅列格式与类型指示即时刷新）— 寄存器表格式切换即时反馈，涉及 register-table Type 切换与列显示即时响应（避免切换时把值做进制重新换算；关联 ADR-030 进制+scale 双列）
 - [ ] [feat] 将 Settings 界面由模态框（Modal）改为抽屉（Drawer，侧滑展开）— Settings 容器 UI 调整，涉及 packages/ui Settings 弹窗组件改为 antd Drawer（含打开方式/宽度/遮罩与键盘交互适配；与 Settings 内工作区导入导出入口、`Ctrl+,` 快捷键联动）
 - [ ] [feat] 删除「Plugin Manager」按钮，并将其打开后模态框内的插件管理功能挪入 Settings（在 Settings 内集成插件管理：安装/启用/禁用/卸载/恢复 Bundled 等，取代独立 Plugin Manager 弹窗入口）— 插件管理入口整合，涉及 PluginManagerModal 迁入 Settings、移除 Header/侧边栏既有按钮（建议与「Settings 改抽屉」同批实施；关联 ADR-038 插件安装 / ADR-044 可执行化 / ADR-045 Bundled 恢复）
+- [ ] [refactor] 删除「随包插件（bundled plugin）」机制：所有插件必须手动安装；若确有随包分发之需，则直接做进主程序能力，而非随包配发为插件 — 撤销 ADR-045「首启一次性安装」模式（移除 `seeded` / `restoreBundledPlugin` / `bundledPlugins` / Plugin Manager「Restore bundled」按钮）；需逐项评估现有随包插件（example-panel / address-adjust / yaskawa / custom-function-code / example-theme 等）改为「手动安装」或「并入主程序」；涉及 plugin-api、AppHost 装配层、PluginManager UI、能力矩阵（关联 ADR-044/045）
 - [x] [feat] 写后回读及延迟回读（每表独立配置，默认 ON 立即回读；工具栏 Select；WriteOutcome 扩展 5 种 verify 结果 + WriteVerifyCoordinator；写入期间暂缓同表行轮询；首个工作区迁移 v1→v2 把全局 readVerifySettings 迁移到各表）— PRD §8.3（ADR-029）
 - [x] [feat] 多寄存器连续读写（范围行：Register 列范围输入 + Type 拆「进制 + scale」两列 + 范围行树形展开子行（每寄存器一子行，只读），支持 32/64 位整数与 ASCII 字符串，三端落地）— PRD §8.3（ADR-030：实施完成）
 - [x] [feat] 批量任务结果统计（Read All 完成结果的全局提示：antd message 富内容展示成功/失败/跳过/取消 + 耗时，与底部面板消息并存；范围仅此，统计面板/历史记录等无对应需求，不实现）— PRD §8.3（2026-08-28）

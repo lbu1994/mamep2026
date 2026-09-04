@@ -1,7 +1,7 @@
 {
   "name": "mamep2026",
   "private": true,
-  "version": "0.3.14",
+  "version": "0.3.15",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "main": "dist-electron/main.js",
@@ -19,6 +19,7 @@
     "dist:portable": "node scripts/generate-icons.mjs && pnpm build:electron && node scripts/package-electron.mjs && electron-builder",
     "dist:vscode": "pnpm build:vscode && node scripts/generate-icons.mjs && node scripts/package-vscode.mjs",
     "slave": "node scripts/modbus-slave/modbus-rtu-slave.mjs",
+    "test:slave": "node scripts/dev-with-slave.mjs --self-test",
     "build:vscode": "node scripts/build-vscode.mjs",
     "lint": "eslint .",
     "typecheck": "turbo run typecheck",

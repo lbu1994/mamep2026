@@ -128,10 +128,19 @@ TCP 从站（`modbus-tcp-slave.config.json`）字段：
 
 ## 与 Mamep2026 应用联调
 
+> **一键启动（推荐）**：`scripts/dev-with-slave.mjs` 会同时拉起 Vite dev server、RTU 从站
+> （COM5）与 TCP 从站（`config/connections.json` 的 `tcp-local-slave`），并在启动前探测
+> TCP 目标——端口可监听则自启、已有可应答从站则复用、被非 Modbus 服务占用则告警跳过。
+> 对应根脚本：`pnpm dev:slave`（网页）/ `pnpm dev:electron:slave` / `pnpm dev:vscode:slave`。
+> 该脚本也提供 `--self-test`（`pnpm test:slave`）：拉起 RTU + TCP 从站并断言均就绪（exit 0/1）。
+
+手动逐个启动（可选）：
+
 1. 启动从站（挂 COM5）：
    ```powershell
    node scripts/modbus-slave/modbus-rtu-slave.mjs
    ```
+   （如需 TCP 从站另启：`node scripts/modbus-slave/modbus-tcp-slave.mjs`）
 2. 启动网页端 dev server：`pnpm dev`（http://localhost:5173）。
 3. 在应用连接 COM4：
    - **浏览器 Web Serial**：连接设置弹窗中选 **COM4**（系统选口，注意确认实际选中 COM4）；
