@@ -9,8 +9,9 @@
   unitId 取自 `config/connections.json` 的 `tcp-local-slave`），让桌面端走真实 TCP 闭环。
 
 两者行为与仓库 dev Mock 模拟设备（`packages/platform-web/src/mock-transport.ts` +
-`mock-scenarios.ts`）**完全一致**（8 个默认地址区间），并额外支持扩展行为（分片/延迟，
-见下），供真实端口 e2e 验证半包/粘包与迟到响应路径。
+`mock-scenarios.ts`）**完全一致**（保持寄存器默认地址区间 + 基础表 `coil`/`discrete-input`/
+`input-register`，ADR-043 E-1；含自定义功能码 FC65/FC66，ADR-043 E-4），并额外支持扩展行为
+（分片/延迟，见下），供真实端口 e2e 验证半包/粘包与迟到响应路径。
 
 ## 共享核心
 
@@ -115,12 +116,30 @@ TCP 从站（`modbus-tcp-slave.config.json`）字段：
 | `0x0800–0x080f` | 拆段 2B/5ms | 拆段 2B/5ms | 扩展：半包/粘包 |
 | `0x0900–0x090f` | 成功 | 回执成功但不落盘 | 写忽略区（写入后回读仍为旧值，写后回读 Verify 校验） |
 
-规则按数组顺序匹配，第一条命中生效；规则外地址回退为正常行为。
+基础表（ADR-043 E-1，靠 `tableType` 与保持寄存器区分，地址空间与上表 `0x0000–0x000f`
+重叠）：
+
+| 表类型（`tableType`） | 读 | 写 | 用途 |
+| --- | --- | --- | --- |
+| `coil` | 成功（FC01） | 成功（FC0F） | 线圈表 |
+| `discrete-input` | 成功（FC02） | 异常 0x02 | 离散输入（只读） |
+| `input-register` | 成功（FC04） | 异常 0x02 | 输入寄存器（只读） |
+
+自定义功能码（ADR-043 E-4）：`0x65` 读 / `0x66` 写连续寄存器，走保持寄存器（通用）规则。
+
+规则按数组顺序匹配，第一条命中生效；同表类型专用规则优先于通用规则（无 `tableType`），
+规则外地址回退为正常行为。
 
 ## 协议行为（响应帧均追加 CRC16-Modbus）
 
 - **FC03 读**：`[slave, 0x03, 0x02, valueHi, valueLo] + CRC`（共 7 字节，与 Mock 一致），返回当前寄存器值；
 - **FC0x10 写**：写入后回执 `[slave, 0x10, addrHi, addrLo, 0x00, 0x01] + CRC`（共 8 字节）；
+- **FC01/FC02 读位**：`[slave, fc, byteCount, ...data] + CRC`，位打包（LSB 在前，`byteCount=ceil(q/8)`），
+  读线圈/离散输入；
+- **FC04 读输入寄存器**：与 FC03 同构（`[slave, 0x04, byteCount, ...data] + CRC`）；
+- **FC0F 写多线圈**：写入后回执 `[slave, 0x0F, addrHi, addrLo, qtyHi, qtyLo] + CRC`（共 8 字节），
+  请求位打包（LSB 在前）；
+- **FC65/FC66 自定义功能码**（ADR-043 E-4）：帧结构与 FC03/FC0x10 同构（`0x65` 读 / `0x66` 写连续寄存器）；
 - **异常响应**：`[slave, fc|0x80, exceptionCode] + CRC`（共 5 字节）；
 - **不支持的功能码**：回异常 `0x01`（非法功能）；
 - **健壮性**：CRC 校验失败静默丢弃、从站地址不匹配忽略、帧长度 < 8 字节忽略、
@@ -176,11 +195,18 @@ TCP 从站（`modbus-tcp-slave.config.json`）字段：
 9. 短帧（< 8 字节）忽略无响应；
 10. 坏 CRC 帧静默丢弃无响应；
 11. 从站地址不匹配忽略无响应；
-12. no-response 区读/写均无响应（超时路径）。
+12. no-response 区读/写均无响应（超时路径）；
+13. FC01 读线圈（预置值）返回位值；
+14. FC0F 写多线圈回执 + FC01 重读回 0；
+15. FC02 读离散输入返回位值；
+16. FC04 读输入寄存器返回 16 位值；
+17. FC65 读保持寄存器（自定义功能码）返回当前值；
+18. FC66 写保持寄存器回执 + FC03 重读验证。
 
 **TCP**（`modbus-tcp-slave.mjs --self-test`，同进程开主站临时端口 + 从站）：与上述 1–8、
 12 对应（MBAP 分帧/unitId 匹配），另加：unitId 不匹配忽略无响应、分片区拆段后仍正确组帧、
-延迟区短超时内无响应、规则外地址（0xFFFF）回退正常。
+延迟区短超时内无响应、规则外地址（0xFFFF）回退正常、FC01/FC02/FC04/FC0F/FC65/FC66
+与 RTU 对应的 13–18 项。
 
 全部 PASS 退出码 0，任一失败退出码 1。
 

@@ -39,22 +39,33 @@ import { SerialPort, InterByteTimeoutParser } from "serialport";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  CUSTOM_READ_FUNCTION,
+  CUSTOM_WRITE_FUNCTION,
   DEFAULT_RULES,
   EXCEPTION_ILLEGAL_DATA_ADDRESS,
   EXCEPTION_ILLEGAL_DATA_VALUE,
   EXCEPTION_ILLEGAL_FUNCTION,
   EXCEPTION_NAMES,
+  FUNCTION_READ_COILS,
+  FUNCTION_READ_DISCRETE_INPUTS,
   FUNCTION_READ_HOLDING,
+  FUNCTION_READ_INPUT_REGISTERS,
   FUNCTION_WRITE_MULTIPLE,
+  FUNCTION_WRITE_MULTIPLE_COILS,
   LOG_LEVELS,
+  TABLE_TYPE_COIL,
+  TABLE_TYPE_DISCRETE_INPUT,
+  TABLE_TYPE_INPUT_REGISTER,
   appendCrc,
   createLogger,
   crc16Modbus,
   matchRule,
   normalizeRules,
+  packRawBits,
   parseRegisters,
   sendWithBehavior,
   toHex,
+  unpackRawBits,
 } from "./lib/modbus-core.mjs";
 
 // ---------------------------------------------------------------------------
@@ -75,6 +86,9 @@ const DEFAULT_CONFIG = {
   logLevel: "info",
   logFrames: true,
   registers: {},
+  coils: {},
+  inputs: {},
+  inputRegisters: {},
   rules: DEFAULT_RULES,
 };
 
@@ -94,9 +108,16 @@ function assertConfigNumber(value, fieldName, { min, max }) {
   }
 }
 
-/** 加载并校验配置文件；未提供时返回默认配置。返回的 registers 为 Map。 */
+/** 加载并校验配置文件；未提供时返回默认配置。返回的 registers/coils/inputs/inputRegisters 为 Map。 */
 function loadConfig(configPath) {
-  const config = { ...DEFAULT_CONFIG, registers: {}, rules: DEFAULT_RULES };
+  const config = {
+    ...DEFAULT_CONFIG,
+    registers: {},
+    coils: {},
+    inputs: {},
+    inputRegisters: {},
+    rules: DEFAULT_RULES,
+  };
 
   if (configPath) {
     if (!existsSync(configPath)) {
@@ -131,6 +152,9 @@ function loadConfig(configPath) {
   }
 
   config.registers = parseRegisters(config.registers);
+  config.coils = parseRegisters(config.coils);
+  config.inputs = parseRegisters(config.inputs);
+  config.inputRegisters = parseRegisters(config.inputRegisters);
   config.rules = normalizeRules(config.rules);
   return config;
 }
@@ -138,6 +162,12 @@ function loadConfig(configPath) {
 // ---------------------------------------------------------------------------
 // 从站
 // ---------------------------------------------------------------------------
+const TABLE_MAPS = {
+  [TABLE_TYPE_COIL]: "coils",
+  [TABLE_TYPE_DISCRETE_INPUT]: "inputs",
+  [TABLE_TYPE_INPUT_REGISTER]: "inputRegisters",
+};
+
 class ModbusRtuSlave {
   constructor(config, logger) {
     this.config = config;
@@ -145,6 +175,18 @@ class ModbusRtuSlave {
     this.registers = new Map();
     for (const [address, value] of config.registers) {
       this.registers.set(address & 0xffff, value & 0xffff);
+    }
+    this.coils = new Map();
+    for (const [address, value] of config.coils) {
+      this.coils.set(address & 0xffff, value & 0xffff);
+    }
+    this.inputs = new Map();
+    for (const [address, value] of config.inputs) {
+      this.inputs.set(address & 0xffff, value & 0xffff);
+    }
+    this.inputRegisters = new Map();
+    for (const [address, value] of config.inputRegisters) {
+      this.inputRegisters.set(address & 0xffff, value & 0xffff);
     }
     this.port = null;
     this.parser = null;
@@ -369,6 +411,202 @@ class ModbusRtuSlave {
       return;
     }
 
+    // FC01/FC02 读位（线圈/离散输入，ADR-043 E-1）：按表类型规则读位。
+    if (
+      functionCode === FUNCTION_READ_COILS ||
+      functionCode === FUNCTION_READ_DISCRETE_INPUTS
+    ) {
+      const tableType =
+        functionCode === FUNCTION_READ_COILS
+          ? TABLE_TYPE_COIL
+          : TABLE_TYPE_DISCRETE_INPUT;
+      const readRule = matchRule(this.config.rules, address, tableType);
+      const behavior = readRule?.read ?? { kind: "normal" };
+      if (behavior.kind === "no-response") {
+        this.log.info(`no-response：读 ${addrHex} 不回帧`);
+        return;
+      }
+      if (behavior.kind === "exception") {
+        this.logException(functionCode, behavior.exceptionCode, addrHex);
+        this.respond(
+          this.exceptionFrame(slave, functionCode, behavior.exceptionCode),
+          behavior,
+        );
+        return;
+      }
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      const map =
+        functionCode === FUNCTION_READ_COILS ? this.coils : this.inputs;
+      const data = packRawBits(map, address, quantity);
+      this.log.debug(`读 ${addrHex} × ${quantity} 位 → [${toHex(data)}]`);
+      this.respond(
+        Uint8Array.from([slave, functionCode, data.length, ...data]),
+        behavior,
+      );
+      return;
+    }
+
+    // FC04 读输入寄存器（ADR-043 E-1）：按 input-register 表类型规则读。
+    if (functionCode === FUNCTION_READ_INPUT_REGISTERS) {
+      const readRule = matchRule(
+        this.config.rules,
+        address,
+        TABLE_TYPE_INPUT_REGISTER,
+      );
+      const behavior = readRule?.read ?? { kind: "normal" };
+      if (behavior.kind === "no-response") {
+        this.log.info(`no-response：读 ${addrHex} 不回帧`);
+        return;
+      }
+      if (behavior.kind === "exception") {
+        this.logException(functionCode, behavior.exceptionCode, addrHex);
+        this.respond(
+          this.exceptionFrame(slave, functionCode, behavior.exceptionCode),
+          behavior,
+        );
+        return;
+      }
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      const values = [];
+      for (let i = 0; i < quantity; i++) {
+        values.push(this.inputRegisters.get((address + i) & 0xffff) ?? 0);
+      }
+      this.log.debug(
+        `读 ${addrHex} × ${quantity} → [${values
+          .map((v) => `0x${v.toString(16).toUpperCase().padStart(4, "0")}`)
+          .join(", ")}]`,
+      );
+      this.respond(
+        Uint8Array.from([
+          slave,
+          functionCode,
+          quantity * 2,
+          ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+        ]),
+        behavior,
+      );
+      return;
+    }
+
+    // FC0F 写多线圈（ADR-043 E-1）：按 coil 表类型规则写（位打包）。
+    if (functionCode === FUNCTION_WRITE_MULTIPLE_COILS) {
+      const writeRule = matchRule(this.config.rules, address, TABLE_TYPE_COIL);
+      const behavior = writeRule?.write ?? { kind: "normal" };
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      const byteCount = bytes[6] ?? 0;
+      if (behavior.kind === "no-response") {
+        this.log.info(`no-response：写 ${addrHex} 不回帧`);
+        return;
+      }
+      if (behavior.kind === "exception") {
+        this.logException(functionCode, behavior.exceptionCode, addrHex);
+        this.respond(
+          this.exceptionFrame(slave, functionCode, behavior.exceptionCode),
+          behavior,
+        );
+        return;
+      }
+      const bits = unpackRawBits(bytes, 7, byteCount, quantity);
+      if (behavior.kind === "write-ignore") {
+        this.log.warn(
+          `写 ${addrHex} × ${quantity}（写忽略区：回执成功但不落盘）`,
+        );
+      } else {
+        for (let i = 0; i < quantity; i++) {
+          this.coils.set((address + i) & 0xffff, bits[i] ?? 0);
+        }
+      }
+      this.respond(
+        Uint8Array.from([
+          slave,
+          FUNCTION_WRITE_MULTIPLE_COILS,
+          (address >> 8) & 0xff,
+          address & 0xff,
+          (quantity >> 8) & 0xff,
+          quantity & 0xff,
+        ]),
+        behavior,
+      );
+      return;
+    }
+
+    // 自定义功能码（ADR-043 E-4）：0x65 读 / 0x66 写连续寄存器（走通用 holding 规则）。
+    if (
+      functionCode === CUSTOM_READ_FUNCTION ||
+      functionCode === CUSTOM_WRITE_FUNCTION
+    ) {
+      const behavior =
+        functionCode === CUSTOM_READ_FUNCTION
+          ? (rule?.read ?? { kind: "normal" })
+          : (rule?.write ?? { kind: "normal" });
+      if (behavior.kind === "no-response") {
+        this.log.info(
+          `no-response：${functionCode === CUSTOM_READ_FUNCTION ? "读" : "写"} ${addrHex} 不回帧`,
+        );
+        return;
+      }
+      if (behavior.kind === "exception") {
+        this.logException(functionCode, behavior.exceptionCode, addrHex);
+        this.respond(
+          this.exceptionFrame(slave, functionCode, behavior.exceptionCode),
+          behavior,
+        );
+        return;
+      }
+      const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
+      if (functionCode === CUSTOM_READ_FUNCTION) {
+        const values = [];
+        for (let i = 0; i < quantity; i++) {
+          values.push(this.getRegister(address + i));
+        }
+        this.log.debug(
+          `读 ${addrHex} × ${quantity} → [${values
+            .map((v) => `0x${v.toString(16).toUpperCase().padStart(4, "0")}`)
+            .join(", ")}]`,
+        );
+        this.respond(
+          Uint8Array.from([
+            slave,
+            functionCode,
+            quantity * 2,
+            ...values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]),
+          ]),
+          behavior,
+        );
+      } else {
+        for (let i = 0; i < quantity; i++) {
+          const hi = bytes[7 + i * 2] ?? 0;
+          const lo = bytes[8 + i * 2] ?? 0;
+          this.registers.set(
+            (address + i) & 0xffff,
+            ((hi << 8) | lo) & 0xffff,
+          );
+        }
+        this.log.debug(
+          `写 ${addrHex} × ${quantity} ← [${Array.from(
+            { length: quantity },
+            (_, i) =>
+              `0x${this.getRegister(address + i)
+                .toString(16)
+                .toUpperCase()
+                .padStart(4, "0")}`,
+          ).join(", ")}]`,
+        );
+        this.respond(
+          Uint8Array.from([
+            slave,
+            CUSTOM_WRITE_FUNCTION,
+            (address >> 8) & 0xff,
+            address & 0xff,
+            (quantity >> 8) & 0xff,
+            quantity & 0xff,
+          ]),
+          behavior,
+        );
+      }
+      return;
+    }
+
     // 不支持的功能码：回异常响应（0x01 非法功能）。
     this.log.warn(
       `不支持的功能码 0x${functionCode.toString(16).toUpperCase().padStart(2, "0")}，回异常 0x01`,
@@ -509,6 +747,58 @@ function encodeWriteRequest(slave, address, value) {
   );
 }
 
+/** FC01/FC02/FC04/FC65 读请求（帧结构与 FC03 同构：slave + fc + addr + qty）。 */
+function encodeReadBitsRequest(slave, functionCode, address, quantity = 1) {
+  return appendCrc(
+    Uint8Array.from([
+      slave,
+      functionCode,
+      (address >> 8) & 0xff,
+      address & 0xff,
+      (quantity >> 8) & 0xff,
+      quantity & 0xff,
+    ]),
+  );
+}
+
+/** FC0F 写多线圈请求（位打包，LSB 在前）。 */
+function encodeWriteCoilsRequest(slave, address, values) {
+  const quantity = values.length;
+  const byteCount = Math.ceil(quantity / 8);
+  const body = new Uint8Array(7 + byteCount);
+  body[0] = slave;
+  body[1] = FUNCTION_WRITE_MULTIPLE_COILS;
+  body[2] = (address >> 8) & 0xff;
+  body[3] = address & 0xff;
+  body[4] = (quantity >> 8) & 0xff;
+  body[5] = quantity & 0xff;
+  body[6] = byteCount & 0xff;
+  for (let i = 0; i < quantity; i += 1) {
+    if ((values[i] ?? 0) !== 0) {
+      const index = 7 + (i >> 3);
+      body[index] = (body[index] ?? 0) | (1 << (i & 7));
+    }
+  }
+  return appendCrc(body);
+}
+
+/** FC66 自定义写请求（帧结构与 FC10 同构：slave + fc + addr + qty + byteCount + value）。 */
+function encodeCustomWriteRequest(slave, address, value) {
+  return appendCrc(
+    Uint8Array.from([
+      slave,
+      CUSTOM_WRITE_FUNCTION,
+      (address >> 8) & 0xff,
+      address & 0xff,
+      0x00,
+      0x01,
+      0x02,
+      (value >> 8) & 0xff,
+      value & 0xff,
+    ]),
+  );
+}
+
 function assertFrame(actual, expectedHex) {
   if (actual === null) {
     return { ok: false, detail: "无响应（超时）" };
@@ -531,11 +821,14 @@ function assertFrame(actual, expectedHex) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function runSelfTest(masterPort) {
-  // 自测使用内建默认配置（registers 为空、默认规则），保证断言确定性；
-  // 不读取 --config 指定的文件。
+  // 自测使用内建默认配置（registers/基础表为空、默认规则），保证断言确定性；
+  // 不读取 --config 指定的文件。基础表预置初始值供 FC01/FC02/FC04 断言。
   const config = {
     ...DEFAULT_CONFIG,
     registers: new Map(),
+    coils: new Map([[0x0000, 1]]),
+    inputs: new Map([[0x0001, 1]]),
+    inputRegisters: new Map([[0x0002, 0x1234]]),
     rules: DEFAULT_RULES,
   };
   // 设置 MAMEP_SELFTEST_DEBUG=1 可输出从站 [RX]/[TX] 与丢弃日志，便于诊断。
@@ -682,6 +975,53 @@ async function runSelfTest(masterPort) {
     encodeWriteRequest(slaveAddr, 0x0600, 1),
   );
 
+  // ⑬ FC01 读线圈 0x0000（预置 coil0=1）→ 位打包 0x01
+  await run(
+    "FC01 读线圈 0x0000 → 1",
+    encodeReadBitsRequest(slaveAddr, FUNCTION_READ_COILS, 0x0000),
+    "01 01 01 01",
+  );
+  // ⑭ FC0F 写线圈 0x0000=0 → 回执；FC01 重读回 0
+  await run(
+    "FC0F 写线圈 0x0000=0 → 回执",
+    encodeWriteCoilsRequest(slaveAddr, 0x0000, [0]),
+    "01 0F 00 00 00 01",
+  );
+  await run(
+    "FC01 重读线圈 0x0000 → 0",
+    encodeReadBitsRequest(slaveAddr, FUNCTION_READ_COILS, 0x0000),
+    "01 01 01 00",
+  );
+  // ⑮ FC02 读离散输入 0x0001（预置 input1=1）→ 位打包字节 bit0=1
+  await run(
+    "FC02 读离散输入 0x0001 → 1",
+    encodeReadBitsRequest(slaveAddr, FUNCTION_READ_DISCRETE_INPUTS, 0x0001),
+    "01 02 01 01",
+  );
+  // ⑯ FC04 读输入寄存器 0x0002（预置 inputReg2=0x1234）→ 0x1234
+  await run(
+    "FC04 读输入寄存器 0x0002 → 0x1234",
+    encodeReadBitsRequest(slaveAddr, FUNCTION_READ_INPUT_REGISTERS, 0x0002),
+    "01 04 02 12 34",
+  );
+  // ⑰ FC65 读保持寄存器 0x0001（此前 FC10 写 0x1234）→ 0x1234
+  await run(
+    "FC65 读保持寄存器 0x0001 → 0x1234",
+    encodeReadBitsRequest(slaveAddr, CUSTOM_READ_FUNCTION, 0x0001),
+    "01 65 02 12 34",
+  );
+  // ⑱ FC66 写保持寄存器 0x0003=0xABCD → 回执；FC03 重读回 0xABCD
+  await run(
+    "FC66 写保持寄存器 0x0003=0xABCD → 回执",
+    encodeCustomWriteRequest(slaveAddr, 0x0003, 0xabcd),
+    "01 66 00 03 00 01",
+  );
+  await run(
+    "FC03 重读 0x0003 → 0xABCD",
+    encodeReadRequest(slaveAddr, 0x0003),
+    "01 03 02 AB CD",
+  );
+
   await master.close();
   await slave.close();
 
@@ -712,6 +1052,10 @@ function printHelp() {
   0x0400–0x040f  非法值（写须 ≤ 0x7FFF，超限异常 0x03）
   0x0500–0x050f  不支持功能（读/写异常 0x01）  0x0600–0x060f  无响应（不回帧）
   0x0900–0x090f  写忽略区（读/写均回执成功，但写入不落盘——回读仍为旧值）
+  基础表（ADR-043 E-1，靠 tableType 区分，地址空间与 0x0000–0x000f 重叠）:
+    coil（FC01 读/FC0F 写正常）、discrete-input（FC02 只读，写异常 0x02）、
+    input-register（FC04 只读，写异常 0x02）
+  自定义功能码（ADR-043 E-4）: 0x65 读 / 0x66 写连续寄存器（走保持寄存器通用规则）
   规则外地址回退为正常行为。
 
 扩展行为（配置文件规则可选，真实从站验证用，与 dev Mock 无关）:

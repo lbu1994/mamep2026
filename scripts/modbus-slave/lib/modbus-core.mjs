@@ -19,8 +19,37 @@
 // ---------------------------------------------------------------------------
 // 常量（与 packages/protocol-modbus/src/rtu-frame.ts 一致，唯一权威）
 // ---------------------------------------------------------------------------
+export const FUNCTION_READ_COILS = 0x01;
+export const FUNCTION_READ_DISCRETE_INPUTS = 0x02;
 export const FUNCTION_READ_HOLDING = 0x03;
+export const FUNCTION_READ_INPUT_REGISTERS = 0x04;
+export const FUNCTION_WRITE_MULTIPLE_COILS = 0x0f;
 export const FUNCTION_WRITE_MULTIPLE = 0x10;
+/** 自定义功能码（ADR-043 E-4 示例插件）：0x65 读 / 0x66 写连续寄存器。 */
+export const CUSTOM_READ_FUNCTION = 0x65;
+export const CUSTOM_WRITE_FUNCTION = 0x66;
+
+/** FC01/FC02 单次请求最大读取位（Modbus 规范 2000）。 */
+export const MAX_READ_BITS_QUANTITY = 2000;
+/** FC0F 单次请求最大写入线圈数（Modbus 规范 1968）。 */
+export const MAX_WRITE_COILS_QUANTITY = 1968;
+/** FC04/FC03 单次请求最大读取寄存器数（ADR-030）。 */
+export const MAX_READ_QUANTITY = 125;
+
+// ---------------------------------------------------------------------------
+// 表类型（ADR-043 E-1：基础表与保持寄存器地址空间可重叠）
+// ---------------------------------------------------------------------------
+export const TABLE_TYPE_HOLDING = "holding";
+export const TABLE_TYPE_COIL = "coil";
+export const TABLE_TYPE_DISCRETE_INPUT = "discrete-input";
+export const TABLE_TYPE_INPUT_REGISTER = "input-register";
+/** 合法表类型集合（normalizeRules 校验用）。 */
+export const TABLE_TYPES = new Set([
+  TABLE_TYPE_HOLDING,
+  TABLE_TYPE_COIL,
+  TABLE_TYPE_DISCRETE_INPUT,
+  TABLE_TYPE_INPUT_REGISTER,
+]);
 
 export const EXCEPTION_ILLEGAL_FUNCTION = 0x01;
 export const EXCEPTION_ILLEGAL_DATA_ADDRESS = 0x02;
@@ -102,6 +131,10 @@ export function createLogger(level = "info", logFrames = true) {
  * - 0x0800–0x080f 多寄存器区（must-multi）：单读/单写回异常 0x02，多读/多写正常
  *   （模拟真实设备「某些寄存器必须连续读写」，ADR-030）
  * - 0x0900–0x090f 写忽略区：读/写均成功回执，但写入不实际落盘（读回仍为旧值）
+ * - 基础表（ADR-043 E-1，含 tableType，地址空间与保持寄存器 0x0000–0x000f 重叠）：
+ *   coil（FC01 读 / FC0F 写正常）、discrete-input（FC02 只读，写回异常 0x02）、
+ *   input-register（FC04 只读，写回异常 0x02）。
+ *   与 DEFAULT_MOCK_BASIC_TABLE_SCENARIOS 一一对应。
  */
 export const DEFAULT_RULES = [
   {
@@ -159,6 +192,28 @@ export const DEFAULT_RULES = [
     end: 0x090f,
     read: { kind: "normal" },
     write: { kind: "write-ignore" },
+  },
+  // 基础表（ADR-043 E-1）：地址空间与保持寄存器 0x0000–0x000f 重叠，靠 tableType 区分。
+  {
+    tableType: TABLE_TYPE_COIL,
+    start: 0x0000,
+    end: 0x000f,
+    read: { kind: "normal" },
+    write: { kind: "normal" },
+  },
+  {
+    tableType: TABLE_TYPE_DISCRETE_INPUT,
+    start: 0x0000,
+    end: 0x000f,
+    read: { kind: "normal" },
+    write: { kind: "exception", exceptionCode: EXCEPTION_ILLEGAL_DATA_ADDRESS },
+  },
+  {
+    tableType: TABLE_TYPE_INPUT_REGISTER,
+    start: 0x0000,
+    end: 0x000f,
+    read: { kind: "normal" },
+    write: { kind: "exception", exceptionCode: EXCEPTION_ILLEGAL_DATA_ADDRESS },
   },
 ];
 
@@ -227,6 +282,11 @@ export function normalizeRules(rules) {
     ) {
       throw new Error(`rules[${index}] 缺少 start/end 数值字段`);
     }
+    if (rule.tableType !== undefined && !TABLE_TYPES.has(rule.tableType)) {
+      throw new Error(
+        `rules[${index}].tableType 无效（应为 ${[...TABLE_TYPES].join("/")}）`,
+      );
+    }
     return {
       start: rule.start & 0xffff,
       end: rule.end & 0xffff,
@@ -237,14 +297,36 @@ export function normalizeRules(rules) {
       ),
       // ADR-030：must-multi 区（单读/单写异常，多读/多写正常）。
       ...(rule.mustMulti === true ? { mustMulti: true } : {}),
+      // ADR-043 E-1：表类型专用规则（基础表与保持寄存器地址空间可重叠）。
+      ...(rule.tableType !== undefined ? { tableType: rule.tableType } : {}),
     };
   });
 }
 
-/** 命中地址所在规则（顺序匹配，第一条命中生效）；未命中返回 null（回退正常行为）。 */
-export function matchRule(rules, address) {
+/**
+ * 命中地址所在规则（顺序匹配，第一条命中生效）；未命中返回 null（回退正常行为）。
+ * 表类型专用规则优先于通用规则（ADR-043 E-1：基础表与保持寄存器地址空间可重叠）。
+ */
+export function matchRule(rules, address, tableType = TABLE_TYPE_HOLDING) {
+  // 先匹配该表类型专用规则。
   for (const rule of rules) {
-    if (address >= rule.start && address <= rule.end) return rule;
+    if (
+      rule.tableType === tableType &&
+      address >= rule.start &&
+      address <= rule.end
+    ) {
+      return rule;
+    }
+  }
+  // 再回退通用规则（未声明 tableType）。
+  for (const rule of rules) {
+    if (
+      rule.tableType === undefined &&
+      address >= rule.start &&
+      address <= rule.end
+    ) {
+      return rule;
+    }
   }
   return null;
 }
@@ -262,6 +344,45 @@ export function parseRegisters(registers) {
     }
   }
   return map;
+}
+
+/**
+ * 位打包读辅助（FC01/FC02，ADR-043 E-1）：逐位取 map 值（非 0 视为 1），LSB 在前。
+ * @param {Map<number, number>} map 位值存储（coil/离散输入）
+ * @param {number} address 起始地址
+ * @param {number} quantity 读取位数
+ * @returns {Uint8Array} 位打包数据（byteCount = ceil(quantity/8)）
+ */
+export function packRawBits(map, address, quantity) {
+  const byteCount = Math.ceil(quantity / 8);
+  const data = new Uint8Array(byteCount);
+  for (let i = 0; i < quantity; i += 1) {
+    const value = map.get((address + i) & 0xffff) ?? 0;
+    if (value !== 0) {
+      const index = i >> 3;
+      data[index] = (data[index] ?? 0) | (1 << (i & 7));
+    }
+  }
+  return data;
+}
+
+/**
+ * 位打包写辅助（FC0F，ADR-043 E-1）：values 为 0/1，byteCount=ceil(n/8)，字节内 LSB 在前。
+ * @param {Uint8Array} data 请求中的位打包数据（由调用方定位）
+ * @param {number} startOffset data 中位数据偏移（RTU=7 / TCP=8）
+ * @param {number} byteCount 请求携带的 byteCount
+ * @param {number} quantity 写入位数
+ * @returns {number[]} 每位的 0/1 数组
+ */
+export function unpackRawBits(data, startOffset, byteCount, quantity) {
+  const values = [];
+  for (let i = 0; i < quantity; i += 1) {
+    const byteIndex = i >> 3;
+    const bitIndex = i & 7;
+    const byte = byteIndex < byteCount ? (data[startOffset + byteIndex] ?? 0) : 0;
+    values.push((byte >> bitIndex) & 1);
+  }
+  return values;
 }
 
 /**

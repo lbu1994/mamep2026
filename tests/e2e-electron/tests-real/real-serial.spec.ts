@@ -54,24 +54,32 @@ const consoleErrors: string[] = [];
 
 /** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。 */
 async function setRadixHex(p: Page): Promise<void> {
-  await p
-    .locator(".table-toolbar__radix .ant-segmented-item")
+  // 限定到活动表选项卡的工具栏（多 Sheet 时每个表各有工具栏，不得命中隐藏表）。
+  const toolbar = p.locator(
+    ".register-table-tabs .ant-tabs-content-active .table-toolbar__radix",
+  );
+  await toolbar
+    .locator(".ant-segmented-item")
     .filter({ hasText: "HEX" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(p.locator(".table-toolbar__radix")).toContainText("HEX", {
-    timeout: 5000,
-  });
+  await expect(toolbar).toContainText("HEX", { timeout: 5000 });
 }
+/**
+ * 活动表内容面板（多 Sheet 时限定到当前活动表，避免命中隐藏表单元格/工具栏）。
+ * antd v6 活动面板 DOM 类名为 `.ant-tabs-content-active`（AGENTS.md「antd v6 关键差异」）。
+ */
+const activeTable = (p: Page) =>
+  p.locator(".register-table-tabs .ant-tabs-content-active");
 
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(p: Page, addressHex: string): Promise<void> {
-  const cell = p.getByLabel("Register", { exact: true }).first();
+  const cell = activeTable(p).getByLabel("Register", { exact: true }).first();
   await cell.click();
   // 等待进入编辑态：click 触发 React 重渲染渲染出 input（生产构建高负载下可能延迟，
   // 且前序读/写操作的行重渲染尚未 settle 时点击可能命中旧节点）。toBeEditable 自动
   // 重试直到 input 出现，比裸 waitForTimeout 可靠（2026-08-26 real e2e 竞态）。
-  const input = p.getByLabel("Register", { exact: true }).first();
+  const input = activeTable(p).getByLabel("Register", { exact: true }).first();
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
   // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
@@ -85,7 +93,7 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
 
 /** 首行点击 Read。 */
 async function readRow(p: Page): Promise<void> {
-  await p
+  await activeTable(p)
     .getByRole("button", { name: "Read", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
@@ -93,20 +101,65 @@ async function readRow(p: Page): Promise<void> {
 
 /** 首行填 Data（HEX）并点击 Write。 */
 async function writeRow(p: Page, valueHex: string): Promise<void> {
-  const cell = p.getByLabel("Data").first();
+  const cell = activeTable(p).getByLabel("Data").first();
   await cell.click();
   // 同 setRowAddress：等待编辑态 + pressSequentially 逐字符输入（fill 偶发不触发
   // React onChange 致提交短路）+ toHaveValue 确认受控值同步后再 Enter。
-  const data = p.getByLabel("Data").first();
+  const data = activeTable(p).getByLabel("Data").first();
   await expect(data).toBeEditable({ timeout: 5000 });
   await data.fill("");
   await data.pressSequentially(valueHex, { delay: 10 });
   await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
-  await p
+  await activeTable(p)
     .getByRole("button", { name: "Write", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
+}
+
+/** 通过侧边栏分组「+」按钮新建基础表/自定义表（aria-label = 组标题）。 */
+async function addBasicSheet(p: Page, groupTitle: string): Promise<void> {
+  await p
+    .getByRole("button", { name: groupTitle, exact: true })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
+}
+
+/**
+ * 以当前活动表协议重新连接（真实串口，自动枚举并选中 config/connections.json 的
+ * rtu-com4-master.port，无系统 picker）。用于切换到基础表/自定义表 codec 后重连。
+ */
+async function reconnectAsActiveSheet(p: Page): Promise<void> {
+  // 1) 断开（已连接时弹窗按钮是 Disconnect）。
+  await p
+    .getByRole("button", { name: /Disconnect/i })
+    .evaluate((el) => (el as HTMLElement).click());
+  await expect(p.locator(".ant-layout-header")).not.toContainText("Disconnect", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  // 2) 打开 Connection Settings → 端口下拉枚举 → 选择 COM4 → Connect。
+  await p
+    .getByRole("button", { name: "Connection" })
+    .evaluate((el) => (el as HTMLElement).click());
+  await p.waitForSelector(".ant-modal-container:visible", { timeout: 8000 });
+  const modal = p.locator(".ant-modal-container:visible");
+  const rtu = rtuConfig();
+  await modal
+    .locator(".ant-form-item")
+    .filter({ hasText: "Port" })
+    .locator(".ant-select")
+    .first()
+    .click();
+  const option = p
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: rtu.port });
+  await option.waitFor({ state: "visible", timeout: 15_000 });
+  await option.click();
+  await modal.locator(".ant-btn").filter({ hasText: "Connect" }).click();
+  await expect(p.locator(".ant-layout-header")).toContainText("Disconnect", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  await expect(p.locator(".ant-modal-container:visible")).toHaveCount(0);
 }
 
 test.beforeAll(async () => {
@@ -367,6 +420,92 @@ test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成�
   await expect(page.getByLabel("Data").first()).toHaveText("0000", {
     timeout: CONNECTED_TIMEOUT,
   });
+});
+
+test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + FC65/FC66", async () => {
+  // 所有行断言限定到活动表（多 Sheet 时不得命中隐藏表）。
+  const dataCell = () => activeTable(page).getByLabel("Data").first();
+  const okDot = () =>
+    activeTable(page).locator(".register-table__status-dot--success").first();
+
+  // 线圈表：FC01 读 coil0（配置预置 1）→ 位值 "1"；FC0F 写 0 → 读回 "0"。
+  await addBasicSheet(page, "Coils (01H/0FH)");
+  await setRadixHex(page);
+  await reconnectAsActiveSheet(page);
+  await setRowAddress(page, "0000");
+  await readRow(page);
+  await expect(dataCell()).toHaveText("1", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  await writeRow(page, "0");
+  await expect(okDot()).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+  await readRow(page);
+  await expect(dataCell()).toHaveText("0", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+
+  // 离散输入表（只读）：FC02 读 input1（配置预置 1）→ "0001"。
+  await addBasicSheet(page, "Discrete Inputs (02H)");
+  await setRadixHex(page);
+  await reconnectAsActiveSheet(page);
+  await setRowAddress(page, "0001");
+  await readRow(page);
+  await expect(dataCell()).toHaveText("0001", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+
+  // 输入寄存器表（只读）：FC04 读 inputReg2（配置预置 0x1234）→ "1234"。
+  await addBasicSheet(page, "Input Registers (04H)");
+  await setRadixHex(page);
+  await reconnectAsActiveSheet(page);
+  await setRowAddress(page, "0002");
+  await readRow(page);
+  await expect(dataCell()).toHaveText("1234", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+
+  // 自定义功能码表（ADR-043 E-4）：FC65 读保持寄存器 1（此前 FC10 写 0x12AB）→ "12AB"；
+  // FC66 写 3=0xABCD → 回执；并用通信日志断言帧字节（FC65/FC66 与 FC03/FC10 同构，须靠帧区分）。
+  await addBasicSheet(page, "Custom FC 65H/66H (example plugin)");
+  await setRadixHex(page);
+  await reconnectAsActiveSheet(page);
+  await setRowAddress(page, "0001");
+  await readRow(page);
+  await expect(dataCell()).toHaveText("12AB", {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  await setRowAddress(page, "0003");
+  await writeRow(page, "ABCD");
+  await expect(okDot()).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+
+  // 通信日志：清空后重建目标帧（FC65 读 + FC66 写），断言函数码字节。
+  // Listy 虚拟列表只渲染视口内行：最早帧（FC65 读请求）可能被挤出，先滚到顶部断言
+  // 最早帧，再滚回底部断言最新帧（与既有「通信日志」用例一致，2026-08-26 real e2e 修复）。
+  await page.getByRole("tab", { name: "Comm Log" }).click();
+  await page.getByRole("button", { name: /Clear/i }).click();
+  await setRowAddress(page, "0001");
+  await readRow(page);
+  await setRowAddress(page, "0003");
+  await writeRow(page, "ABCD");
+  await page.waitForTimeout(300);
+  const list = page.locator(".comm-log .ant-listy-holder");
+  await list.evaluate((el) => {
+    (el as HTMLElement).scrollTop = 0;
+  });
+  await page.waitForTimeout(300);
+  await expect(list).toContainText("01 65 00 01 00 01", { timeout: 5000 });
+  await list.evaluate((el) => {
+    (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
+  });
+  await page.waitForTimeout(300);
+  await expect(list).toContainText("01 66 00 03 00 01", { timeout: 5000 });
+
+  // 恢复保持寄存器表（Sheet 1）连接，避免后续「断开连接/重连」用例以自定义功能码协议重连。
+  await page
+    .getByRole("tab", { name: "Sheet 1" })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
+  await reconnectAsActiveSheet(page);
 });
 
 test("断开连接 → Offline，可重连 → Online（稳定性）", async () => {
