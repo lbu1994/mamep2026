@@ -133,6 +133,10 @@ const api: MamepHostApi = {
   workspaceClear(): Promise<Result<null>> {
     return invoke<null>("workspace-clear", {});
   },
+  /** 创建主进程文件仓储备份（workspace-create-backup，2026-09-04，ADR-049）。 */
+  workspaceCreateBackup(): Promise<Result<null>> {
+    return invoke<null>("workspace-create-backup", {});
+  },
   /** 加载插件存储（plugin-store-load，2026-08-30，ADR-038）。 */
   pluginStoreLoad(): Promise<Result<PluginStoreDataResponse>> {
     return invoke<PluginStoreDataResponse>("plugin-store-load", {});

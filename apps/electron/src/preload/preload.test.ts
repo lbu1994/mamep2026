@@ -79,6 +79,7 @@ describe("preload 白名单桥", () => {
       "sessionUpdatePollingTargets",
       "sessionWriteRow",
       "workspaceClear",
+      "workspaceCreateBackup",
       "workspaceLoad",
       "workspaceSave",
     ]);
@@ -289,6 +290,26 @@ describe("preload 白名单桥", () => {
       MAMEP_IPC_INVOKE_CHANNEL,
       expect.objectContaining({
         kind: "workspace-clear",
+        payload: {},
+      }),
+    );
+    expect(result).toEqual({ ok: true, value: null });
+  });
+
+  it("workspaceCreateBackup 透传空 payload 并映射 ok（ADR-049）", async () => {
+    invoke.mockResolvedValue({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: "m",
+      kind: "workspace-create-backup",
+      ok: true,
+      payload: null,
+    });
+    const result = await bridge.workspaceCreateBackup();
+    expect(invoke).toHaveBeenCalledWith(
+      MAMEP_IPC_INVOKE_CHANNEL,
+      expect.objectContaining({
+        kind: "workspace-create-backup",
         payload: {},
       }),
     );

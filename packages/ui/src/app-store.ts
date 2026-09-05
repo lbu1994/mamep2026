@@ -14,6 +14,7 @@ import type {
   SheetId,
   SheetType,
   Workspace,
+  WorkspaceRecoveryInfo,
 } from "@mamep2026/domain";
 import {
   createDefaultRtuProfile,
@@ -140,6 +141,8 @@ export interface AppStoreState {
   /** 数据类型解析器（ADR-043 E-3）：内置 + 插件类型；App.tsx 装配后注入。 */
   dataTypeResolver: DataTypeResolver;
   saveStatus: SaveStatus;
+  /** 工作区加载恢复元数据（ADR-049 恢复提示）：加载后由 App.tsx 写入；null=无恢复。 */
+  workspaceRecovery: WorkspaceRecoveryInfo | null;
   /** 撤销/重做历史栈（TECH_DESIGN §24.4；纯内存会话状态，不随工作区持久化）。 */
   undoStack: UndoEntry[];
   redoStack: UndoEntry[];
@@ -191,6 +194,8 @@ export interface AppStoreState {
   /** 更新活动连接配置的持久化设置（除串口/端口选择外的全部参数），随自动保存持久化。 */
   setConnectionSettings: (settings: PersistedConnectionSettings) => void;
   setSaveStatus: (status: SaveStatus) => void;
+  /** 设置工作区加载恢复元数据（ADR-049 恢复提示）；null 清除。 */
+  setWorkspaceRecovery: (recovery: WorkspaceRecoveryInfo | null) => void;
   setActiveSheetId: (sheetId: SheetId) => void;
   /** 更新工作区面板布局（侧栏/底部面板折叠、高度、活动 tab），随自动保存持久化。 */
   setPanelLayout: (partial: Partial<PanelLayout>) => void;
@@ -453,6 +458,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   // 缺省仅内置（ADR-043 E-3）；App.tsx 装配插件 dataType 运行时后 setDataTypeResolver 替换。
   dataTypeResolver: createDataTypeResolver(),
   saveStatus: "idle",
+  workspaceRecovery: null,
   undoStack: [],
   redoStack: [],
   messages: [],
@@ -637,6 +643,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     }),
   setSaveStatus: (saveStatus) => set({ saveStatus }),
+  setWorkspaceRecovery: (workspaceRecovery) => set({ workspaceRecovery }),
   setActiveSheetId: (activeSheetId) =>
     set((state) => ({
       activeSheetId,

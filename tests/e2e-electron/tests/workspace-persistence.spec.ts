@@ -235,6 +235,10 @@ test("损坏主文件 + 合法备份 → 启动从备份恢复（自愈写回）
       "RecoveredSheet",
       { timeout: 5000 },
     );
+    // 恢复提示（ADR-049）：从备份恢复时展示 RecoveryBanner（纯信息、无按钮）。
+    const banner = page.getByTestId("recovery-banner");
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText("recovered from backup");
     // 自愈：主文件被备份内容写回。
     await waitForWorkspaceFile(userDataDir, '"RecoveredSheet"');
     const mainContent = await readFile(mainPath, "utf8");

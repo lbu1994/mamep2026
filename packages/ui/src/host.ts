@@ -12,6 +12,7 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
   Workspace,
+  WorkspaceRecoveryInfo,
 } from "@mamep2026/domain";
 import type {
   BatchReadHandle,
@@ -90,6 +91,10 @@ export interface AppHost {
   /** 清除全部持久化数据并返回全新默认工作区（§16.5.5 用户重置损坏工作区）。 */
   resetWorkspace(): Promise<Result<Workspace>>;
   scheduleSave(workspace: Workspace): void;
+  /** 立即保存当前待写快照（应用关闭/页面隐藏前调用，ADR-049 崩溃后状态恢复）。 */
+  flush(): Promise<Result<void>>;
+  /** 最近一次加载的恢复元数据（ADR-049 恢复提示；null=无恢复相关信息）。 */
+  getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null;
   getSaveStatus(): SaveStatus;
   subscribeSaveStatus(listener: (status: SaveStatus) => void): () => void;
 

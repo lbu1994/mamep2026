@@ -169,10 +169,12 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       "sessionPollingStop",
       "sessionTraceStart",
       "sessionTraceStop",
-      // 工作区文件仓储桥（2026-08-30，ADR-036）：主进程应用数据目录版本化 JSON。
+      // 工作区文件仓储桥（2026-08-30，ADR-036；2026-09-04 ADR-049 增 create-backup）：
+      // 主进程应用数据目录版本化 JSON。
       "workspaceLoad",
       "workspaceSave",
       "workspaceClear",
+      "workspaceCreateBackup",
     ].sort(),
   );
   // 不暴露通用 ipcRenderer / 任意方法调用。

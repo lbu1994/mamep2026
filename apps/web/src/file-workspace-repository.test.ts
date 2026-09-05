@@ -13,20 +13,26 @@ interface BridgeWorkspaceLike {
   workspaceLoad(): Promise<Result<WorkspaceLoadResponse>>;
   workspaceSave(content: string): Promise<Result<null>>;
   workspaceClear(): Promise<Result<null>>;
+  workspaceCreateBackup(): Promise<Result<null>>;
 }
 
 function makeBridge(overrides: Partial<BridgeWorkspaceLike> = {}): {
   bridge: BridgeWorkspaceLike;
   saveCalls: string[];
   clearCalls: number;
+  createBackupCalls: number;
 } {
   const saveCalls: string[] = [];
   let clearCalls = 0;
+  let createBackupCalls = 0;
   const bridge: BridgeWorkspaceLike = {
     workspaceLoad: vi.fn(
       async (): Promise<Result<WorkspaceLoadResponse>> => ({
         ok: true,
-        value: { content: serializeWorkspace(createEmptyWorkspace()) },
+        value: {
+          content: serializeWorkspace(createEmptyWorkspace()),
+          recoveryInfo: null,
+        },
       }),
     ),
     workspaceSave: vi.fn(async (content: string): Promise<Result<null>> => {
@@ -37,9 +43,13 @@ function makeBridge(overrides: Partial<BridgeWorkspaceLike> = {}): {
       clearCalls += 1;
       return { ok: true, value: null };
     }),
+    workspaceCreateBackup: vi.fn(async (): Promise<Result<null>> => {
+      createBackupCalls += 1;
+      return { ok: true, value: null };
+    }),
     ...overrides,
   };
-  return { bridge, saveCalls, clearCalls };
+  return { bridge, saveCalls, clearCalls, createBackupCalls };
 }
 
 describe("FileWorkspaceRepository", () => {
@@ -96,5 +106,80 @@ describe("FileWorkspaceRepository", () => {
     const cleared = await repo.clear();
     expect(cleared.ok).toBe(true);
     expect(bridge.workspaceClear).toHaveBeenCalledTimes(1);
+  });
+
+  it("reset 等同 clear（调用桥 workspaceClear）", async () => {
+    const { bridge } = makeBridge();
+    const repo = new FileWorkspaceRepository(bridge);
+    const reset = await repo.reset();
+    expect(reset.ok).toBe(true);
+    expect(bridge.workspaceClear).toHaveBeenCalledTimes(1);
+  });
+
+  it("export 返回桥 workspaceLoad 的 content（§19.1）", async () => {
+    const { bridge } = makeBridge({
+      workspaceLoad: vi.fn(async () => ({
+        ok: true as const,
+        value: { content: "fixed-content", recoveryInfo: null },
+      })),
+    });
+    const repo = new FileWorkspaceRepository(bridge);
+    const exported = await repo.export();
+    expect(exported.ok).toBe(true);
+    if (exported.ok) {
+      expect(exported.value).toBe("fixed-content");
+    }
+  });
+
+  it("import 校验后经桥 workspaceSave 落盘（§19.1）", async () => {
+    const { bridge, saveCalls } = makeBridge();
+    const repo = new FileWorkspaceRepository(bridge);
+    const serialized = serializeWorkspace({ ...createEmptyWorkspace(), name: "Imported" });
+    const imported = await repo.import(serialized);
+    expect(imported.ok).toBe(true);
+    expect(saveCalls).toEqual([serialized]);
+  });
+
+  it("import 非法数据被 parseWorkspace 拒绝，不落盘（§19.1）", async () => {
+    const { bridge, saveCalls } = makeBridge();
+    const repo = new FileWorkspaceRepository(bridge);
+    const imported = await repo.import('{"schemaVersion":999}');
+    expect(imported.ok).toBe(false);
+    expect(saveCalls).toHaveLength(0);
+  });
+
+  it("createBackup 调用桥 workspaceCreateBackup（§19.1）", async () => {
+    const { bridge } = makeBridge();
+    const repo = new FileWorkspaceRepository(bridge);
+    const backup = await repo.createBackup();
+    expect(backup.ok).toBe(true);
+    expect(bridge.workspaceCreateBackup).toHaveBeenCalledTimes(1);
+  });
+
+  it("load 记录桥返回的 recoveryInfo 并可由 getRecoveryInfo 读取（ADR-049）", async () => {
+    const { bridge } = makeBridge({
+      workspaceLoad: vi.fn(async () => ({
+        ok: true as const,
+        value: {
+          content: serializeWorkspace(createEmptyWorkspace()),
+          recoveryInfo: {
+            recovered: true,
+            source: "backup" as const,
+            recoveredAt: 123,
+            backupTimestamp: 100,
+            errorCode: null,
+          },
+        },
+      })),
+    });
+    const repo = new FileWorkspaceRepository(bridge);
+    await repo.load();
+    expect(repo.getRecoveryInfo()).toEqual({
+      recovered: true,
+      source: "backup",
+      recoveredAt: 123,
+      backupTimestamp: 100,
+      errorCode: null,
+    });
   });
 });

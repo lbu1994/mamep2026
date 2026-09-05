@@ -431,6 +431,12 @@ export const en = {
     saved: "Saved",
     failed: "Save failed",
   },
+  // ---- 崩溃后状态恢复（2026-09-04，PRD §8.3 / ADR-049）----
+  recovery: {
+    recoveredBackup:
+      "Workspace recovered from backup ({{time}}). Some recent changes may be lost.",
+    recoveredFresh: "Workspace restore failed; started with an empty workspace.",
+  },
   messages: {
     appStarted: "Application started (offline).",
     connected: "Connected via {{port}}.",
@@ -930,6 +936,11 @@ export const zh: TranslationResources = {
     saving: "保存中…",
     saved: "已保存",
     failed: "保存失败",
+  },
+  // ---- 崩溃后状态恢复（2026-09-04，PRD §8.3 / ADR-049）----
+  recovery: {
+    recoveredBackup: "工作区已从备份恢复（{{time}}），最近的更改可能丢失。",
+    recoveredFresh: "工作区恢复失败，已重置为空工作区。",
   },
   messages: {
     appStarted: "应用已启动（离线）。",

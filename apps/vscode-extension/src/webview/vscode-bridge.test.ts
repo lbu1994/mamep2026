@@ -238,6 +238,27 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
     expect(result).toEqual({ ok: true, value: null });
   });
 
+  it("workspaceCreateBackup 携带空 payload 并映射 ok（ADR-049）", async () => {
+    const { posted, bridge, dispatch } = createHarness();
+    const promise = bridge.workspaceCreateBackup();
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({
+      kind: "workspace-create-backup",
+      payload: {},
+    });
+    const envelope = posted[0] as { messageId: string };
+    dispatch({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: envelope.messageId,
+      kind: "workspace-create-backup",
+      ok: true,
+      payload: null,
+    });
+    const result = await promise;
+    expect(result).toEqual({ ok: true, value: null });
+  });
+
   it("pluginStoreLoad 携带空 payload 并透传插件存储响应（2026-08-30）", async () => {
     const { posted, bridge, dispatch } = createHarness();
     const promise = bridge.pluginStoreLoad();
@@ -386,6 +407,7 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
         "workspaceClear",
         "workspaceLoad",
         "workspaceSave",
+        "workspaceCreateBackup",
       ].sort(),
     );
     expect(

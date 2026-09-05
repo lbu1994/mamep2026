@@ -88,6 +88,8 @@ export const HOST_REQUEST_KINDS = [
   "workspace-load",
   "workspace-save",
   "workspace-clear",
+  // 崩溃后状态恢复（2026-09-04，ADR-049）：主进程将当前工作区文件轮转为备份。
+  "workspace-create-backup",
   // 插件存储（2026-08-30，ADR-038）：已安装插件清单 + 启用状态经主进程/扩展宿主持久化。
   "plugin-store-load",
   "plugin-store-save",
@@ -260,11 +262,28 @@ export const openTextFileResponseSchema = z.object({
 export type OpenTextFileResponse = z.infer<typeof openTextFileResponseSchema>;
 
 /**
+ * 工作区恢复元数据（2026-09-04，ADR-049）：经 workspace-load 响应旁路返回，
+ * 供 UI 恢复提示；`source:"none"`=正常（不提示）/`"backup"`=从备份恢复/`"fresh"`=重建为空。
+ */
+export const workspaceRecoveryInfoSchema = z.object({
+  recovered: z.boolean(),
+  source: z.enum(["none", "backup", "fresh"]),
+  recoveredAt: z.number(),
+  backupTimestamp: z.number().nullable(),
+  errorCode: z.string().nullable(),
+});
+export type WorkspaceRecoveryInfoPayload = z.infer<
+  typeof workspaceRecoveryInfoSchema
+>;
+
+/**
  * workspace-load 响应载荷（2026-08-30，ADR-036 Electron 文件持久化）。
- * content 恒为 serializeWorkspace 序列化 JSON 字符串（无文件时主进程返回空工作区的序列化结果）。
+ * content 恒为 serializeWorkspace 序列化 JSON 字符串（无文件时主进程返回空工作区的序列化结果）；
+ * recoveryInfo 为最近一次加载的恢复元数据（ADR-049）。
  */
 export const workspaceLoadResponseSchema = z.object({
   content: z.string(),
+  recoveryInfo: workspaceRecoveryInfoSchema.nullable(),
 });
 export type WorkspaceLoadResponse = z.infer<typeof workspaceLoadResponseSchema>;
 
@@ -464,6 +483,12 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
     ...requestBase,
     kind: z.literal("workspace-clear"),
     // Electron 文件持久化（2026-08-30，ADR-036）：清除主文件与备份（用户重置损坏工作区用）。
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("workspace-create-backup"),
+    // 崩溃后状态恢复（2026-09-04，ADR-049）：主进程将当前工作区文件轮转为备份。
     payload: z.object({}),
   }),
   z.object({
@@ -687,6 +712,11 @@ export interface MamepHostApi {
   workspaceSave(content: string): Promise<Result<null>>;
   /** 清除主进程文件仓储（workspace-clear，2026-08-30，ADR-036）：删除主文件与备份。 */
   workspaceClear(): Promise<Result<null>>;
+  /**
+   * 创建主进程文件仓储备份（workspace-create-backup，2026-09-04，ADR-049）：
+   * 当前工作区文件轮转为 .bak（§19.1 createBackup）。
+   */
+  workspaceCreateBackup(): Promise<Result<null>>;
 
   /**
    * 加载插件存储（plugin-store-load，2026-08-30，ADR-038）：返回已安装插件清单 + 启用状态。

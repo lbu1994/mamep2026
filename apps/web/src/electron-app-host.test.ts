@@ -185,11 +185,11 @@ function createFakeBridge(): {
       ok: true,
       value: { content: '{"schemaVersion":4}' },
     })),
-    // ---- 工作区文件仓储桥（2026-08-30，ADR-036：主进程文件持久化）----
+    // ---- 工作区文件仓储桥（2026-08-30，ADR-036：主进程文件持久化；ADR-049 增 recoveryInfo）----
     workspaceLoad: vi.fn(
       async (): Promise<Result<WorkspaceLoadResponse>> => ({
         ok: true,
-        value: { content: '{"schemaVersion":4}' },
+        value: { content: '{"schemaVersion":4}', recoveryInfo: null },
       }),
     ),
     workspaceSave: vi.fn(async (): Promise<Result<null>> => ({
@@ -197,6 +197,10 @@ function createFakeBridge(): {
       value: null,
     })),
     workspaceClear: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
+    workspaceCreateBackup: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
     })),

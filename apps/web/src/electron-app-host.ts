@@ -29,6 +29,7 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
   Workspace,
+  WorkspaceRecoveryInfo,
   AddressTransform,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
@@ -364,6 +365,14 @@ export class ElectronAppHost implements AppHost {
 
   scheduleSave(workspace: Workspace): void {
     this.inner.scheduleSave(workspace);
+  }
+
+  flush(): Promise<Result<void>> {
+    return this.inner.flush();
+  }
+
+  getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null {
+    return this.inner.getWorkspaceRecoveryInfo();
   }
 
   getSaveStatus(): SaveStatus {

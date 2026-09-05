@@ -63,6 +63,7 @@ import { useAppStore } from "./app-store";
 import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { BrowserCompatibilityBanner } from "./components/BrowserCompatibilityBanner";
+import { RecoveryBanner } from "./components/RecoveryBanner";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
 import { KeyboardShortcutsTable } from "./components/KeyboardShortcutsTable";
 import { DocumentationPanel } from "./components/DocumentationPanel";
@@ -102,6 +103,8 @@ function themeColorOptionLabel(title: string, color: string): ReactNode {
 export function MamepApp(): React.ReactNode {
   const { t, i18n } = useTranslation();
   const host = useAppStore((s) => s.host);
+  // 工作区加载恢复元数据（ADR-049 恢复提示）：加载后写入，用于主体顶部横幅。
+  const workspaceRecovery = useAppStore((s) => s.workspaceRecovery);
   // 仅订阅表元数据（id/name）与从站地址：行数据变化不触发本组件重渲染，
   // 避免单行更新（编辑/WP 轮询）级联重渲染整个应用树（性能优化）。
   // 注意：useShallow 只对“原语值/原语数组”逐项浅比较，因此投影为两个原语数组，
@@ -858,6 +861,8 @@ export function MamepApp(): React.ReactNode {
                 compatibility={host?.browserCompatibility ?? null}
                 isMock={host?.isMockMode ?? false}
               />
+              {/* 工作区恢复提示（ADR-049）：从备份恢复 / 恢复失败重建为空时展示 */}
+              <RecoveryBanner recovery={workspaceRecovery} />
               <Splitter
                 orientation="vertical"
                 style={{ flex: 1, minHeight: 0 }}

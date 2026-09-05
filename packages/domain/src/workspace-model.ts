@@ -380,6 +380,27 @@ export interface Workspace {
 /** 当前工作区 Schema 版本（2026-08-27 v4：范围行子行元数据 registers 落盘；2026-08-31 v5：sheet.type 表类型，ADR-041；2026-09-01 v6：sheet.addressTransform + preferences.themePrimary，ADR-042；2026-09-01 v7：dataType 开放，ADR-043；2026-09-02 v8：themePrimary 改预设 ID，ADR-047）。 */
 export const workspaceSchemaVersion = 8;
 
+/**
+ * 工作区加载/恢复元数据（ADR-049，2026-09-04）：
+ * 供 UI 在 `load()` 后经 `getRecoveryInfo()` 旁路读取，用于「恢复提示」；
+ * 不改变 `load()` 的 `Result<Workspace>` 成功契约。
+ * - `source:"none"`：主数据完好（正常恢复，不提示）；
+ * - `source:"backup"`：主数据损坏，从备份恢复（提示来源=备份、恢复时间）；
+ * - `source:"fresh"`：主+备份均不可用，应用以空工作区保持可操作（提示恢复失败已重置）。
+ */
+export interface WorkspaceRecoveryInfo {
+  /** 是否发生了恢复（备份恢复 / 重建为空工作区）。 */
+  recovered: boolean;
+  /** 恢复来源。 */
+  source: "none" | "backup" | "fresh";
+  /** 发生恢复的时间戳（ms）。 */
+  recoveredAt: number;
+  /** 若从备份恢复，备份的写入时间戳（可空，IndexedDB 无法可靠记录时置 null）。 */
+  backupTimestamp: number | null;
+  /** 恢复失败时的错误码/类别（`source:"fresh"` 时携带）。 */
+  errorCode: string | null;
+}
+
 let idCounter = 0;
 
 function nextId(prefix: string): string {

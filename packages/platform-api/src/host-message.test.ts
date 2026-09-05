@@ -708,15 +708,49 @@ describe("host-message workspace kinds（2026-08-30，ADR-036 Electron 文件持
     expect(result.ok).toBe(true);
   });
 
+  it("accepts a workspace-create-backup request with empty payload（ADR-049）", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "req-ws-backup-1",
+      kind: "workspace-create-backup",
+      payload: {},
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it("validates a content response via workspaceLoadResponseSchema", () => {
     const parsed = workspaceLoadResponseSchema.safeParse({
       content: '{"schemaVersion":4}',
+      recoveryInfo: null,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("validates a recovery-info response via workspaceLoadResponseSchema（ADR-049）", () => {
+    const parsed = workspaceLoadResponseSchema.safeParse({
+      content: '{"schemaVersion":4}',
+      recoveryInfo: {
+        recovered: true,
+        source: "backup",
+        recoveredAt: 1000,
+        backupTimestamp: 900,
+        errorCode: null,
+      },
     });
     expect(parsed.success).toBe(true);
   });
 
   it("rejects a workspaceLoad response without content", () => {
     const parsed = workspaceLoadResponseSchema.safeParse({});
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a workspaceLoad response with invalid recoveryInfo（ADR-049）", () => {
+    const parsed = workspaceLoadResponseSchema.safeParse({
+      content: '{"schemaVersion":4}',
+      recoveryInfo: { recovered: "yes" },
+    });
     expect(parsed.success).toBe(false);
   });
 });

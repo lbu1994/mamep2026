@@ -335,10 +335,14 @@ export async function handleRequest(
       );
     case "workspace-load":
       // Electron 文件持久化（2026-08-30，ADR-036）：主进程文件仓储 load → 序列化 JSON 字符串。
+      // recoveryInfo（2026-09-04，ADR-049）：旁路返回最近一次加载的恢复元数据（备份恢复等）。
       return sessionResult(message, async () => {
         const result = await deps.workspace.load();
         if (!result.ok) return result;
-        return ok({ content: serializeWorkspace(result.value) } satisfies WorkspaceLoadResponse);
+        return ok({
+          content: serializeWorkspace(result.value),
+          recoveryInfo: deps.workspace.getRecoveryInfo(),
+        } satisfies WorkspaceLoadResponse);
       });
     case "workspace-save":
       // Electron 文件持久化（2026-08-30，ADR-036）：content 为序列化 JSON 字符串，
@@ -366,6 +370,9 @@ export async function handleRequest(
     case "workspace-clear":
       // Electron 文件持久化（2026-08-30，ADR-036）：清除主文件与备份。
       return sessionResult(message, () => deps.workspace.clear());
+    case "workspace-create-backup":
+      // 崩溃后状态恢复（2026-09-04，ADR-049）：当前工作区文件轮转为 .bak（§19.1 createBackup）。
+      return sessionResult(message, () => deps.workspace.createBackup());
     case "plugin-store-load":
       // 插件存储（2026-08-30，ADR-038）：返回已安装插件清单 + 启用状态（无文件 = 空数组）。
       return sessionResult(message, () => deps.pluginStore.load());

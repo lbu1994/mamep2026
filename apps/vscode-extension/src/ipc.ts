@@ -396,9 +396,10 @@ export async function handleVscodeRequest(
     case "workspace-load":
     case "workspace-save":
     case "workspace-clear":
-      // Electron 文件持久化（2026-08-30，ADR-036）：VSCode filesystem 维持 unsupported 如实
-      // 声明（工作区持久化走 Webview 内 IndexedDB，VscodeAppHost inner BrowserAppHost），
-      // 本 kind 不适用——返回能力错误并满足穷尽守卫。
+    case "workspace-create-backup":
+      // Electron 文件持久化（2026-08-30，ADR-036；2026-09-04，ADR-049 新增 create-backup）：
+      // VSCode filesystem 维持 unsupported 如实声明（工作区持久化走 Webview 内 IndexedDB，
+      // VscodeAppHost inner BrowserAppHost），本 kind 不适用——返回能力错误并满足穷尽守卫。
       return errorEnvelope(
         message.messageId,
         "WORKSPACE_FILESYSTEM_UNSUPPORTED",

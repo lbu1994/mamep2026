@@ -214,10 +214,15 @@ async function connectViaUi(autoReconnect: boolean): Promise<void> {
   const portInput = modal.locator(".ant-input-number-input").first();
   await portInput.click();
   await portInput.fill(String(device.port));
-  if (autoReconnect) {
-    // 打开 autoReconnect 开关（2026-08-30 启用）。
-    const switchEl = modal.locator(".ant-switch");
-    await expect(switchEl).toBeVisible({ timeout: 5000 });
+  // 显式确保 autoReconnect 开关处于期望状态（2026-09-04 加固）：刷新前「清工作区→reload」
+  // 的隔离假设已被 ADR-049 的关闭时 flush 覆盖（保留最后状态），故不再依赖默认关闭，
+  // 而是按期望值显式开/关，避免前序用例残留 autoReconnect=true 污染本用例。
+  const switchEl = modal.locator(".ant-switch");
+  await expect(switchEl).toBeVisible({ timeout: 5000 });
+  const isOn = (await switchEl.getAttribute("aria-checked")) === "true";
+  if (autoReconnect && !isOn) {
+    await switchEl.click();
+  } else if (!autoReconnect && isOn) {
     await switchEl.click();
   }
   await modal.locator(".ant-btn").filter({ hasText: "Connect" }).click();

@@ -19,7 +19,7 @@
 
 ## 阶段二：V1.0 正式版（PRD §8.3 P1）
 
-- [ ] [feat] 崩溃后的状态恢复 — PRD §8.3（依赖已落地的工作区持久化：浏览器 IndexedDB / Electron `filesystem:"full"`（ADR-036）；§21.2「状态恢复依赖工作区持久化」）
+- [x] [feat] 崩溃后的状态恢复 — PRD §8.3（依赖已落地的工作区持久化：浏览器 IndexedDB / Electron `filesystem:"full"`（ADR-036）；§21.2「状态恢复依赖工作区持久化」）— 2026-09-04，ADR-049：关闭/崩溃时 flush（**visibilitychange→hidden**，pagehide 会中断异步写入且破坏「清工作区→reload」测试隔离）+ 恢复提示（RecoveryBanner 无按钮）+ §19.1 仓储接口补齐（reset/export/import/createBackup/getRecoveryInfo）；跨端 HostMessage 契约（workspace-load 响应 recoveryInfo + 新 kind workspace-create-backup）。**回归全绿**：typecheck 27/27、lint 0、受影响包单测、浏览器新 e2e 2/2、**Electron e2e 30/30**。**已知限制**：浏览器 unload 中断异步 IndexedDB 写入，flush 为 best-effort（autosave 500ms 兜底）；「模拟崩溃」e2e 未做（进程杀伐基建成本高）
 - [ ] [docs] 完整用户帮助 — PRD §8.3（可复用已落地的 documentation / 寄存器手册贡献点（ADR-043 E-5））
 - [ ] [feat] 浏览器端连接设置不显示「协议」分组（浏览器仅支持 Modbus RTU，协议 Segmented 单选项冗余；Electron/VSCode 保留 RTU/TCP 切换）— 连接设置 UI 打磨，与能力矩阵门控联动（关联 ADR-022 协议门控 / ADR-046 浏览器兼容性检测）
 - [ ] [feat] Modbus RTU 通信选项「超时(毫秒)」默认值由 1000ms 改为 50ms（目前 `packages/domain/src/config.ts` `defaultConfig.rtu.requestTimeoutMs = 1000`），输入控件由 Input 改为 Select——固定选项 5/10/…/100ms（步进 5ms，共 20 项），无自定义数值输入；与旧软件保持一致 — 连接设置 UI 打磨（关联 ADR-022 连接设置字段 / RTU profile）

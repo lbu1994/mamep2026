@@ -60,6 +60,8 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
       value: createEmptyWorkspace(),
     })),
     scheduleSave: vi.fn(),
+    flush: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    getWorkspaceRecoveryInfo: vi.fn(() => null),
     getSaveStatus: vi.fn(() => "saved" as const),
     subscribeSaveStatus: vi.fn(() => () => undefined),
     supportsWebSerial: vi.fn(() => false),

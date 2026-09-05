@@ -10,6 +10,7 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
   Workspace,
+  WorkspaceRecoveryInfo,
   AddressTransform,
 } from "@mamep2026/domain";
 import {
@@ -414,6 +415,16 @@ export class BrowserAppHost implements AppHost {
 
   scheduleSave(workspace: Workspace): void {
     this.autoSave.scheduleSave(workspace);
+  }
+
+  /** 立即保存当前待写快照（应用关闭/页面隐藏前调用，ADR-049）。 */
+  async flush(): Promise<Result<void>> {
+    return this.autoSave.flush();
+  }
+
+  /** 最近一次加载的恢复元数据（ADR-049 恢复提示）。 */
+  getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null {
+    return this.repository.getRecoveryInfo();
   }
 
   getSaveStatus(): SaveStatus {

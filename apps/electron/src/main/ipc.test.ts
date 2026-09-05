@@ -90,6 +90,11 @@ function makeWorkspaceRepo(
     load: vi.fn(async () => ok(createEmptyWorkspace())),
     save: vi.fn(async () => ok(undefined)),
     clear: vi.fn(async () => ok(undefined)),
+    reset: vi.fn(async () => ok(undefined)),
+    export: vi.fn(async () => ok(serializeWorkspace(createEmptyWorkspace()))),
+    import: vi.fn(async () => ok(undefined)),
+    createBackup: vi.fn(async () => ok(undefined)),
+    getRecoveryInfo: vi.fn(() => null),
     ...overrides,
   };
 }
@@ -619,6 +624,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     if (result.type === "response") {
       expect(result.payload).toEqual({
         content: serializeWorkspace(fixed),
+        recoveryInfo: null,
       });
     }
   });
@@ -683,6 +689,16 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     );
     expect(result.type).toBe("response");
     expect(workspace.clear).toHaveBeenCalled();
+  });
+
+  it("workspace-create-backup 转发主进程文件仓储备份（ADR-049）", async () => {
+    const workspace = makeWorkspaceRepo();
+    const result = await handleRequest(
+      request("workspace-create-backup", {}),
+      makeDeps({ workspace }),
+    );
+    expect(result.type).toBe("response");
+    expect(workspace.createBackup).toHaveBeenCalled();
   });
 });
 

@@ -79,19 +79,21 @@ function createFakeBridge(): {
         value: null,
       }),
     ),
-    // ---- 工作区文件仓储（2026-08-30，ADR-036）：VSCode filesystem unsupported，
-    // fake 返回能力错误（VscodeAppHost 不走这些桥）。----
-    workspaceLoad: vi.fn(async (): Promise<Result<{ content: string }>> => ({
-      ok: false,
-      error: {
-        code: "WORKSPACE_FILESYSTEM_UNSUPPORTED",
-        category: "capability",
-        severity: "error",
-        retryable: false,
-        userMessageKey: "errors.capabilityUnsupported",
-        technicalMessage: "unsupported",
-      },
-    })),
+    // ---- 工作区文件仓储（2026-08-30，ADR-036；ADR-049 增 recoveryInfo/create-backup）：
+    // VSCode filesystem unsupported，fake 返回能力错误（VscodeAppHost 不走这些桥）。----
+    workspaceLoad: vi.fn(
+      async (): Promise<Result<{ content: string; recoveryInfo: null }>> => ({
+        ok: false,
+        error: {
+          code: "WORKSPACE_FILESYSTEM_UNSUPPORTED",
+          category: "capability",
+          severity: "error",
+          retryable: false,
+          userMessageKey: "errors.capabilityUnsupported",
+          technicalMessage: "unsupported",
+        },
+      }),
+    ),
     workspaceSave: vi.fn(async (): Promise<Result<null>> => ({
       ok: false,
       error: {
@@ -104,6 +106,17 @@ function createFakeBridge(): {
       },
     })),
     workspaceClear: vi.fn(async (): Promise<Result<null>> => ({
+      ok: false,
+      error: {
+        code: "WORKSPACE_FILESYSTEM_UNSUPPORTED",
+        category: "capability",
+        severity: "error",
+        retryable: false,
+        userMessageKey: "errors.capabilityUnsupported",
+        technicalMessage: "unsupported",
+      },
+    })),
+    workspaceCreateBackup: vi.fn(async (): Promise<Result<null>> => ({
       ok: false,
       error: {
         code: "WORKSPACE_FILESYSTEM_UNSUPPORTED",

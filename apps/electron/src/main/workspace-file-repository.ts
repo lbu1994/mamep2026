@@ -8,11 +8,15 @@
  * workspace-load / workspace-save / workspace-clear（content 传序列化 JSON 字符串）。
  */
 import { createEmptyWorkspace, createMamepError } from "@mamep2026/domain";
-import type { Result, Workspace } from "@mamep2026/domain";
+import type {
+  Result,
+  Workspace,
+  WorkspaceRecoveryInfo,
+} from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { parseWorkspace, serializeWorkspace } from "@mamep2026/workspace";
-import { access, open, readFile, rename, rm } from "node:fs/promises";
+import { access, open, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 const MAIN_FILE = "workspace.json";
@@ -44,8 +48,20 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+/** 读取文件修改时间戳（ms）；文件不存在/不可读时返回 null（ADR-049 恢复备份时间）。 */
+async function fileMtime(filePath: string): Promise<number | null> {
+  try {
+    const s = await stat(filePath);
+    return s.mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 export class WorkspaceFileRepository implements WorkspaceRepositoryPort {
   private readonly dir: string;
+  /** 最近一次 `load()` 的恢复元数据（ADR-049）。 */
+  private recoveryInfo: WorkspaceRecoveryInfo | null = null;
 
   constructor(dir: string) {
     this.dir = dir;
@@ -61,12 +77,28 @@ export class WorkspaceFileRepository implements WorkspaceRepositoryPort {
       } catch (cause) {
         // 无主文件 = 首次启动：返回空工作区（与浏览器 IndexedDB 一致）。
         if (isNodeError(cause) && cause.code === "ENOENT") {
+          this.recoveryInfo = {
+            recovered: false,
+            source: "none",
+            recoveredAt: Date.now(),
+            backupTimestamp: null,
+            errorCode: null,
+          };
           return ok(createEmptyWorkspace());
         }
         throw cause;
       }
       const parsed = this.parseStored(raw);
-      if (parsed.ok) return parsed;
+      if (parsed.ok) {
+        this.recoveryInfo = {
+          recovered: false,
+          source: "none",
+          recoveredAt: Date.now(),
+          backupTimestamp: null,
+          errorCode: null,
+        };
+        return parsed;
+      }
 
       // 损坏恢复：尝试读取备份（docs/AGENTS.md §19.6）。
       let backupRaw: string | undefined;
@@ -80,12 +112,33 @@ export class WorkspaceFileRepository implements WorkspaceRepositoryPort {
         if (backupParsed.ok) {
           // 自愈：把备份内容写回主文件（尽力而为，失败不影响本次返回）。
           await this.writeAtomic(backupRaw).catch(() => undefined);
+          this.recoveryInfo = {
+            recovered: true,
+            source: "backup",
+            recoveredAt: Date.now(),
+            backupTimestamp: await fileMtime(backupPath),
+            errorCode: null,
+          };
           return backupParsed;
         }
       }
       // 主文件与备份皆不可用：返回主文件解析错误，UI 走既有加载失败路径。
+      this.recoveryInfo = {
+        recovered: true,
+        source: "fresh",
+        recoveredAt: Date.now(),
+        backupTimestamp: null,
+        errorCode: parsed.error.code ?? null,
+      };
       return parsed;
     } catch (cause) {
+      this.recoveryInfo = {
+        recovered: true,
+        source: "fresh",
+        recoveredAt: Date.now(),
+        backupTimestamp: null,
+        errorCode: "PERSISTENCE_LOAD_FAILED",
+      };
       return fail(
         persistenceError(
           "PERSISTENCE_LOAD_FAILED",
@@ -149,6 +202,78 @@ export class WorkspaceFileRepository implements WorkspaceRepositoryPort {
         ),
       );
     }
+  }
+
+  /** 重置为全新：删除主文件与备份（§19.1）。 */
+  async reset(): Promise<Result<void>> {
+    return this.clear();
+  }
+
+  /** 导出当前持久化工作区（主文件当前内容；无文件 = 空工作区序列化，§19.1）。 */
+  async export(): Promise<Result<string>> {
+    try {
+      const mainPath = path.join(this.dir, MAIN_FILE);
+      try {
+        return ok(await readFile(mainPath, "utf8"));
+      } catch (cause) {
+        if (isNodeError(cause) && cause.code === "ENOENT") {
+          return ok(serializeWorkspace(createEmptyWorkspace()));
+        }
+        throw cause;
+      }
+    } catch (cause) {
+      return fail(
+        persistenceError(
+          "PERSISTENCE_EXPORT_FAILED",
+          cause instanceof Error ? cause.message : String(cause),
+          cause,
+        ),
+      );
+    }
+  }
+
+  /** 导入工作区数据（parse + 校验后原子落盘，§19.1）。 */
+  async import(serialized: string): Promise<Result<void>> {
+    try {
+      const parsed = this.parseStored(serialized);
+      if (!parsed.ok) return parsed;
+      await this.writeAtomic(serialized);
+      return ok(undefined);
+    } catch (cause) {
+      return fail(
+        persistenceError(
+          "PERSISTENCE_IMPORT_FAILED",
+          cause instanceof Error ? cause.message : String(cause),
+          cause,
+        ),
+      );
+    }
+  }
+
+  /** 创建当前工作区文件备份（主文件→.bak 轮转；无主文件时 no-op 成功，§19.1）。 */
+  async createBackup(): Promise<Result<void>> {
+    try {
+      const mainPath = path.join(this.dir, MAIN_FILE);
+      const backupPath = path.join(this.dir, BACKUP_FILE);
+      if (await fileExists(mainPath)) {
+        await rm(backupPath, { force: true });
+        await rename(mainPath, backupPath);
+      }
+      return ok(undefined);
+    } catch (cause) {
+      return fail(
+        persistenceError(
+          "PERSISTENCE_WRITE_FAILED",
+          cause instanceof Error ? cause.message : String(cause),
+          cause,
+        ),
+      );
+    }
+  }
+
+  /** 最近一次 `load()` 的恢复元数据（§19.1）。 */
+  getRecoveryInfo(): WorkspaceRecoveryInfo | null {
+    return this.recoveryInfo;
   }
 
   /**

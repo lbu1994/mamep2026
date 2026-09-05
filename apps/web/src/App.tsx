@@ -97,6 +97,7 @@ export default function App(): React.ReactNode {
   const appendMessage = useAppStore((s) => s.appendMessage);
   const appendCommLog = useAppStore((s) => s.appendCommLog);
   const setSaveStatus = useAppStore((s) => s.setSaveStatus);
+  const setWorkspaceRecovery = useAppStore((s) => s.setWorkspaceRecovery);
   const updateRow = useAppStore((s) => s.updateRow);
   const setConnectionState = useAppStore((s) => s.setConnectionState);
 
@@ -240,6 +241,8 @@ export default function App(): React.ReactNode {
             setWorkspace(host.createFreshWorkspace());
           }
         }
+        // 恢复提示（ADR-049）：加载后把恢复元数据写入 store，供主体顶部横幅展示。
+        setWorkspaceRecovery(host.getWorkspaceRecoveryInfo());
         setLoaded();
         appendMessage({
           timestamp: Date.now(),
@@ -277,7 +280,21 @@ export default function App(): React.ReactNode {
         }
       });
 
+    // 关闭/页面隐藏前 flush（ADR-049 崩溃后状态恢复）：把待写快照落盘，减少 debounce
+    // 窗口内编辑在关闭/崩溃时的丢失。**仅**用 visibilitychange→hidden：
+    // - 关闭窗口/切后台时页面会先进入 hidden（仍存活），IndexedDB/IPC 写入能可靠完成；
+    // - 而 pagehide（页面卸载）会中断异步 IndexedDB 写入（e2e 验证），且 reload 也触发
+    //   pagehide，会破坏「清工作区→reload」的测试隔离（把已清空的工作区又写回）。
+    // pending 被清空故幂等；崩溃无 graceful 时机，由 autosave（500ms）兜底。
+    const onVisibilityChange = (): void => {
+      if (document.visibilityState === "hidden") {
+        void host.flush();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       // 释放 host（断开会话 + 退订桥事件 + 清空订阅），避免 StrictMode 双挂载下旧 host
       // 残留订阅导致事件重复投递（comm-log 一条变两条，2026-08-23）。
       void host.dispose();

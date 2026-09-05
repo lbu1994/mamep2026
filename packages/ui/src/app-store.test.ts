@@ -1425,6 +1425,21 @@ describe("撤销/重做", () => {
     expect(canUndo()).toBe(false);
     expect(canRedo()).toBe(false);
   });
+
+  it("setWorkspaceRecovery 写入/清除恢复元数据（ADR-049）", () => {
+    const store = useAppStore.getState();
+    store.setWorkspaceRecovery(null);
+    expect(useAppStore.getState().workspaceRecovery).toBeNull();
+    const info = {
+      recovered: true,
+      source: "backup" as const,
+      recoveredAt: 1000,
+      backupTimestamp: 900,
+      errorCode: null,
+    };
+    store.setWorkspaceRecovery(info);
+    expect(useAppStore.getState().workspaceRecovery).toEqual(info);
+  });
 });
 
   it("非法提交后再次合法提交：清除校验错误并置编辑完成态", () => {

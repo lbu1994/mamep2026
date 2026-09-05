@@ -326,8 +326,13 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     }
   });
 
-  it("workspace-load/save/clear 返回能力错误（VSCode filesystem unsupported，2026-08-30）", async () => {
-    for (const kind of ["workspace-load", "workspace-save", "workspace-clear"] as const) {
+  it("workspace-load/save/clear/create-backup 返回能力错误（VSCode filesystem unsupported，2026-08-30；ADR-049 增 create-backup）", async () => {
+    for (const kind of [
+      "workspace-load",
+      "workspace-save",
+      "workspace-clear",
+      "workspace-create-backup",
+    ] as const) {
       const result = await handleVscodeInvoke(
         request(kind, kind === "workspace-save" ? { content: "{}" } : {}),
         makeDeps(),

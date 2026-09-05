@@ -24,6 +24,7 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
   Workspace,
+  WorkspaceRecoveryInfo,
   AddressTransform,
 } from "@mamep2026/domain";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
@@ -282,6 +283,14 @@ export class VscodeAppHost implements AppHost {
 
   scheduleSave(workspace: Workspace): void {
     this.inner.scheduleSave(workspace);
+  }
+
+  flush(): Promise<Result<void>> {
+    return this.inner.flush();
+  }
+
+  getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null {
+    return this.inner.getWorkspaceRecoveryInfo();
   }
 
   getSaveStatus(): SaveStatus {
