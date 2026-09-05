@@ -113,6 +113,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const protocol = useWatch({ control, name: "protocol" }) ?? "rtu";
   const supportsTcp = host?.capabilities.modbusTcp ?? false;
   const supportsRtu = host?.capabilities.modbusRtu ?? true;
+  // 浏览器仅支持 RTU：协议 Segmented 单选项冗余 → 隐藏「协议」分组；桌面端两类都有则保留切换（2026-09-06）。
+  const showProtocolSwitcher = (supportsRtu ? 1 : 0) + (supportsTcp ? 1 : 0) > 1;
 
   const supportsSerial = host?.supportsWebSerial() ?? false;
   const isMock = host?.isMockMode ?? false;
@@ -293,36 +295,41 @@ export function ConnectionSettingsModal(): React.ReactNode {
         <Controller
           name="protocol"
           control={control}
-          render={({ field }) => (
-            <Form.Item
-              label={t("connection.protocol")}
-              style={{ marginBottom: 12 }}
-            >
-              <Segmented
-                block
-                value={field.value}
-                onChange={(v) => field.onChange(v)}
-                options={[
-                  ...(supportsRtu
-                    ? [
-                        {
-                          label: t("connection.protocolRtu"),
-                          value: "rtu" as const,
-                        },
-                      ]
-                    : []),
-                  ...(supportsTcp
-                    ? [
-                        {
-                          label: t("connection.protocolTcp"),
-                          value: "tcp" as const,
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </Form.Item>
-          )}
+          render={({ field }) =>
+            showProtocolSwitcher ? (
+              <Form.Item
+                label={t("connection.protocol")}
+                style={{ marginBottom: 12 }}
+              >
+                <Segmented
+                  block
+                  value={field.value}
+                  onChange={(v) => field.onChange(v)}
+                  options={[
+                    ...(supportsRtu
+                      ? [
+                          {
+                            label: t("connection.protocolRtu"),
+                            value: "rtu" as const,
+                          },
+                        ]
+                      : []),
+                    ...(supportsTcp
+                      ? [
+                          {
+                            label: t("connection.protocolTcp"),
+                            value: "tcp" as const,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </Form.Item>
+            ) : (
+              // 浏览器仅支持 RTU：隐藏「协议」分组，但保留隐藏 input 注册字段（保持 protocol 值稳定）。
+              <input type="hidden" {...field} />
+            )
+          }
         />
         {protocol === "rtu" ? (
           <>

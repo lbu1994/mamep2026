@@ -166,11 +166,15 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     expect(switchEl.getAttribute("aria-checked")).toBe("false");
   });
 
-  it("TCP 能力关闭（浏览器）：不显示 TCP 入口，避免必然失败的入口", () => {
+  it("TCP 能力关闭（浏览器）：隐藏整个「协议」分组（避免单选项冗余），RTU 表单仍显示", () => {
     const { host } = makeHost({ modbusTcp: false });
     renderModal(host);
+    // 协议分组（label + Segmented）完全隐藏：无 Protocol 标签 / 无 Modbus RTU / 无 Modbus TCP。
+    expect(screen.queryByText("Protocol")).toBeNull();
+    expect(screen.queryByText("Modbus RTU")).toBeNull();
     expect(screen.queryByText("Modbus TCP")).toBeNull();
-    expect(screen.getByText("Modbus RTU")).toBeTruthy();
+    // RTU 通信表单仍展示（分组标题出现）。
+    expect(screen.getByText("Communication")).toBeTruthy();
   });
 
   it("TCP CONNECT 走 host.connectTcp 并携带 TCP profile", async () => {
