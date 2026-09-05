@@ -185,10 +185,12 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     });
   }
 
-  it("Ctrl+/ 打开帮助弹窗并渲染快捷键总览（app/table 两组）", () => {
+  it("Ctrl+/ 打开帮助抽屉并渲染快捷键总览（app/table 两组）", () => {
     render(<MamepApp />);
     fireAppKey("/", { ctrl: true });
     expect(screen.getByText("Keyboard Shortcuts")).toBeTruthy();
+    // 抽屉默认「快速上手」页签，需切换到「键盘快捷键」页签后才挂载表格。
+    fireEvent.click(screen.getByText("Keyboard Shortcuts"));
     expect(
       document.querySelectorAll(".keyboard-shortcuts__table").length,
     ).toBe(2);

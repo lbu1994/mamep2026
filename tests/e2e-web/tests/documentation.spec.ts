@@ -33,27 +33,44 @@ async function openHelp(page: Page): Promise<void> {
   } else {
     await help.first().evaluate((el) => (el as HTMLElement).click());
   }
-  await page.waitForSelector(".ant-modal-container:visible", { timeout: 5000 });
+  await page.waitForSelector(".ant-drawer-section:visible", { timeout: 5000 });
 }
 
-test("Help 弹窗渲染安川 MEMOBUS 寄存器手册（documentation 贡献点）", async ({
+async function openTab(page: Page, name: string): Promise<void> {
+  await page
+    .locator(".ant-drawer-section:visible")
+    .getByRole("tab", { name })
+    .click();
+}
+
+test("Help 抽屉「插件文档」页签渲染安川 MEMOBUS 寄存器手册（documentation 贡献点）", async ({
   page,
 }) => {
   await openApp(page);
   await openHelp(page);
 
-  const modal = page.locator(".ant-modal-container:visible");
-  await expect(modal).toContainText("Yaskawa MEMOBUS Register Manual");
+  const drawer = page.locator(".ant-drawer-section:visible");
+  // 抽屉默认「快速上手」页签。
+  await expect(drawer).toContainText("Getting Started");
+  // 切到「插件文档」页签。
+  await openTab(page, "Plugin Documentation");
+
+  await expect(drawer).toContainText("Yaskawa MEMOBUS Register Manual");
   // 手册内容（markdown 渲染）：功能码、帧结构、异常。
-  await expect(modal).toContainText("67H 010DH");
-  await expect(modal).toContainText("67H 010EH");
-  await expect(modal).toContainText("非连续读（数量 1~120）");
-  await expect(modal).toContainText("从站 + 67H + 01H + 0DH");
+  await expect(drawer).toContainText("67H 010DH");
+  await expect(drawer).toContainText("67H 010EH");
+  await expect(drawer).toContainText("非连续读（数量 1~120）");
+  await expect(drawer).toContainText("从站 + 67H + 01H + 0DH");
   // 关闭后重开仍渲染（无 console 错误由全局断言覆盖）。
-  await modal.getByRole("button", { name: "Close" }).evaluate((el) => (el as HTMLElement).click());
-  await page.waitForSelector(".ant-modal-container:visible", { state: "hidden" }).catch(() => undefined);
+  await drawer
+    .locator(".ant-drawer-close")
+    .evaluate((el) => (el as HTMLElement).click());
+  await page
+    .waitForSelector(".ant-drawer-section:visible", { state: "hidden" })
+    .catch(() => undefined);
   await openHelp(page);
-  await expect(page.locator(".ant-modal-container:visible")).toContainText(
+  await openTab(page, "Plugin Documentation");
+  await expect(page.locator(".ant-drawer-section:visible")).toContainText(
     "Yaskawa MEMOBUS Register Manual",
   );
 });

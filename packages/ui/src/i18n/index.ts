@@ -358,6 +358,16 @@ export const en = {
   },
   help: {
     title: "Help / About",
+    tabGettingStarted: "Getting Started",
+    tabConnection: "Connection",
+    tabRegisterTable: "Register Table",
+    tabReadWrite: "Read / Write / Polling",
+    tabWorkspace: "Workspace",
+    tabSettings: "Settings & Theme",
+    tabPlugins: "Plugins",
+    tabShortcuts: "Keyboard Shortcuts",
+    tabPluginDocs: "Plugin Documentation",
+    tabAbout: "About",
   },
   // ---- 键盘快捷键（2026-08-30，PRD §8.3 P1，ADR-037）----
   keyboard: {
@@ -865,6 +875,16 @@ export const zh: TranslationResources = {
   },
   help: {
     title: "帮助 / 关于",
+    tabGettingStarted: "快速上手",
+    tabConnection: "连接",
+    tabRegisterTable: "寄存器表",
+    tabReadWrite: "读写与轮询",
+    tabWorkspace: "工作区",
+    tabSettings: "设置与主题",
+    tabPlugins: "插件",
+    tabShortcuts: "键盘快捷键",
+    tabPluginDocs: "插件文档",
+    tabAbout: "关于",
   },
   // ---- 键盘快捷键（2026-08-30，PRD §8.3 P1，ADR-037）----
   keyboard: {

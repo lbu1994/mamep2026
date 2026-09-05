@@ -29,20 +29,30 @@ function rowCheckbox(page: Page, index: number) {
   );
 }
 
-test("Ctrl+/ 打开帮助弹窗并展示快捷键总览（app/table 两组）", async ({
+test("Ctrl+/ 打开帮助抽屉并展示快捷键总览（app/table 两组）", async ({
   page,
 }) => {
   await openApp(page);
   await page.keyboard.press("Control+/");
-  // 注：不用 getByRole("heading")——antd Modal 内的 role/可访问性树匹配不稳定，
-  // 改用类名定位（文本断言语义等价，稳定性优先）。
+  await page.waitForSelector(".ant-drawer.ant-drawer-open", { timeout: 5000 });
+  // 抽屉默认「快速上手」页签，切到「键盘快捷键」后表格才挂载。
+  await page
+    .locator(".ant-drawer-section:visible")
+    .getByRole("tab", { name: "Keyboard Shortcuts" })
+    .click();
   const title = page.locator(".keyboard-shortcuts__title");
   await expect(title).toHaveText("Keyboard Shortcuts");
   await expect(page.locator(".keyboard-shortcuts__table")).toHaveCount(2);
-  // 关闭后 ?（Shift+/）也可打开（别名）。
+  // 关闭后重开（? 别名由 useGlobalShortcuts 单测覆盖：Playwright 无法模拟 "?" 键位，
+  // 其 press("Shift+/") 产生 key:"/"+shift，press("?") 产生 key:"?" 无 shift，均不匹配）。
   await page.keyboard.press("Escape");
   await expect(title).toBeHidden();
-  await page.keyboard.press("Shift+/");
+  await page.keyboard.press("Control+/");
+  await page.waitForSelector(".ant-drawer.ant-drawer-open", { timeout: 5000 });
+  await page
+    .locator(".ant-drawer-section:visible")
+    .getByRole("tab", { name: "Keyboard Shortcuts" })
+    .click();
   await expect(title).toHaveText("Keyboard Shortcuts");
 });
 
@@ -122,6 +132,11 @@ test("键盘操作全程无 console 错误", async ({ page }) => {
 
   await openApp(page);
   await page.keyboard.press("Control+/");
+  await page.waitForSelector(".ant-drawer-section:visible", { timeout: 5000 });
+  await page
+    .locator(".ant-drawer-section:visible")
+    .getByRole("tab", { name: "Keyboard Shortcuts" })
+    .click();
   await expect(page.locator(".keyboard-shortcuts__title")).toHaveText(
     "Keyboard Shortcuts",
   );

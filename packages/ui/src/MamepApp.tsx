@@ -65,8 +65,7 @@ import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { BrowserCompatibilityBanner } from "./components/BrowserCompatibilityBanner";
 import { RecoveryBanner } from "./components/RecoveryBanner";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
-import { KeyboardShortcutsTable } from "./components/KeyboardShortcutsTable";
-import { DocumentationPanel } from "./components/DocumentationPanel";
+import { HelpDrawer } from "./components/HelpDrawer";
 import type { DocumentationContribution } from "./components/documentation-markdown";
 import { PluginManagerModal } from "./components/PluginManagerModal";
 import { RegisterTable } from "./components/RegisterTable";
@@ -1115,29 +1114,11 @@ export function MamepApp(): React.ReactNode {
           </Typography.Text>
         </Modal>
 
-        <Modal
-          title={t("help.title")}
+        <HelpDrawer
           open={helpOpen}
-          onCancel={() => setHelpOpen(false)}
-          footer={null}
-          width={640}
-        >
-          <Typography.Paragraph>{t("settings.aboutText")}</Typography.Paragraph>
-          <Divider />
-          <KeyboardShortcutsTable />
-          {/* 插件文档（ADR-043 E-5）：documentation 贡献点轻量渲染。 */}
-          {documentationContributions.length > 0 ? (
-            <>
-              <Divider />
-              <DocumentationPanel
-                contributions={documentationContributions}
-                titleResolver={(key, fallback) =>
-                  i18n.exists(key) ? t(key) : fallback
-                }
-              />
-            </>
-          ) : null}
-        </Modal>
+          onClose={() => setHelpOpen(false)}
+          documentationContributions={documentationContributions}
+        />
         <AppShortcutLayer onOpenHelp={() => setHelpOpen(true)} />
       </AntApp>
     </ConfigProvider>

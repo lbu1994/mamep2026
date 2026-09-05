@@ -1707,6 +1707,20 @@ textarea:focus-visible {
   font-size: 12px;
 }
 
+/* ---------------- 7. 帮助抽屉（PRD §8.3 完整用户帮助，2026-09-05） ---------------- */
+
+.help-drawer .ant-drawer-body {
+  padding-block: 12px;
+}
+
+.help-drawer__tabs .ant-tabs-content-holder {
+  padding-top: 4px;
+}
+
+.help-drawer__tabs .ant-typography {
+  margin-bottom: 8px;
+}
+
 /* <kbd> 按键：等宽 + 圆角小盒 + 柔和内阴影（类系统快捷键提示），浅/深主题自动适配。 */
 .shortcut-key {
   display: inline-flex;

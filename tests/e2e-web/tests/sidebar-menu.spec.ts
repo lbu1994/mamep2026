@@ -51,10 +51,10 @@ test("top bar shows status chip, MOCK badge and Help", async ({ page }) => {
   await page
     .getByRole("button", { name: "Help" })
     .evaluate((el) => (el as HTMLElement).click());
-  const modal = page.locator(".ant-modal-container:visible");
-  await expect(modal).toContainText("Help / About");
-  await modal
-    .locator(".ant-modal-close")
+  const drawer = page.locator(".ant-drawer-section:visible");
+  await expect(drawer).toContainText("Help / About");
+  await drawer
+    .locator(".ant-drawer-close")
     .evaluate((el) => (el as HTMLElement).click());
 });
 
