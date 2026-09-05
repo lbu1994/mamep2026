@@ -51,7 +51,7 @@ description: 在 VS Code 内置浏览器中对 Web 工程执行自动化交互�
   const reg = await page.evaluate(() => window.__mamepMock.getRegister(0x0001));
   ```
 - **Mock 模式启动不弹** Connection Settings：直接用默认 RTU 配置自动连接模拟设备。就绪信号 = header 出现 `DISCONNECT` 且无可见 `.ant-modal-container`。
-- **非 Mock 模式**：启动自动弹 Connection Settings Modal，需断言 `.ant-modal-container` 存在与默认参数（Slave Address=1、Rx Delay=50ms、Address Adjust=OFF）。
+- **非 Mock 模式**：启动自动弹 Connection Settings Modal，需断言 `.ant-modal-container` 存在与默认参数（Slave Address=1、Timeout=50ms、Address Adjust=OFF；Rx Delay 已移除 2026-09-06）。
 - **连接按钮是单按钮**：离线 `CONNECT` / 在线 `DISCONNECT`，用 `getByRole('button', { name: /CONNECT|DISCONNECT/ })` 断言切换。
 - **通信日志断言**：日志行仅含 时间/方向/字节 三要素，只检查大写十六进制字节串（如 `01 03 00 00 00 01 84 0A`），不检查功能码解析字段。
 

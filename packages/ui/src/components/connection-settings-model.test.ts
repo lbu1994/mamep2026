@@ -22,7 +22,6 @@ describe("connection-settings-model persistence mapping", () => {
       stopBits: 2,
       parity: "even",
       flowControl: "rts-cts",
-      rxDelay: 120,
       rtuTimeout: 80,
       retry: 3,
       tcpTimeout: 1500,
@@ -37,7 +36,6 @@ describe("connection-settings-model persistence mapping", () => {
       flowControl: "rts-cts",
       requestTimeoutMs: 80,
       retryCount: 3,
-      interRequestDelayMs: 120,
     });
   });
 
@@ -50,7 +48,6 @@ describe("connection-settings-model persistence mapping", () => {
     profile.flowControl = "rts-cts";
     profile.requestTimeoutMs = 80;
     profile.retryCount = 2;
-    profile.interRequestDelayMs = 150;
 
     expect(profileToValues(profile)).toEqual({
       protocol: "rtu",
@@ -59,7 +56,6 @@ describe("connection-settings-model persistence mapping", () => {
       stopBits: 2,
       parity: "even",
       flowControl: "rts-cts",
-      rxDelay: 150,
       rtuTimeout: 80,
       retry: 2,
       host: "",
@@ -85,7 +81,6 @@ describe("connection-settings-model persistence mapping", () => {
       stopBits: 1,
       parity: "none",
       flowControl: "off",
-      rxDelay: 50,
       rtuTimeout: 50,
       retry: 2,
       host: "192.168.1.10",
@@ -109,7 +104,6 @@ describe("settingsSchema（表单校验：host 非空仅 TCP 生效，2026-08-23
     stopBits: 1,
     parity: "none",
     flowControl: "off",
-    rxDelay: 50,
     rtuTimeout: 50,
     retry: 1,
     tcpTimeout: 1500,

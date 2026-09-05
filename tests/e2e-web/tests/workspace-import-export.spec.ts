@@ -240,7 +240,6 @@ test("导入含 connectionProfiles 的工作区：Connection Settings 恢复连�
       flowControl: "off",
       requestTimeoutMs: 1000,
       retryCount: 1,
-      interRequestDelayMs: 50,
       recentPortHint: null,
     },
   ];

@@ -501,7 +501,6 @@ export class ElectronAppHost implements AppHost {
         flowControl: "off",
         timeoutMs: profile?.requestTimeoutMs ?? defaultConfig.tcp.requestTimeoutMs,
         retryCount: profile?.retryCount ?? 1,
-        rxDelayMs: profile?.interRequestDelayMs ?? 50,
         connectionState: this.tcpConnectionState,
       };
     }

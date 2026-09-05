@@ -990,7 +990,6 @@ describe("setConnectionSettings", () => {
       flowControl: "rts-cts",
       requestTimeoutMs: 80,
       retryCount: 4,
-      interRequestDelayMs: 90,
     });
 
     const stored = useAppStore.getState().workspace.connectionProfiles[0];
@@ -1004,7 +1003,6 @@ describe("setConnectionSettings", () => {
     // 非端口参数被更新。
     expect(profile?.requestTimeoutMs).toBe(80);
     expect(profile?.retryCount).toBe(4);
-    expect(profile?.interRequestDelayMs).toBe(90);
     // id 保持不变。
     expect(profile?.id).toBe(before.id);
   });
@@ -1019,7 +1017,6 @@ describe("setConnectionSettings", () => {
       flowControl: "rts-cts",
       requestTimeoutMs: 999999,
       retryCount: 4,
-      interRequestDelayMs: 90,
     });
     // 越界 requestTimeoutMs（>100，收窄后）使持久化 schema 校验失败，整个写入被拒绝。
     const stored = useAppStore.getState().workspace.connectionProfiles[0];

@@ -355,7 +355,6 @@ describe("RegisterTable 全表读取取消（ADR-025）", () => {
         flowControl: "off",
         timeoutMs: 1000,
         retryCount: 1,
-        rxDelayMs: 50,
         connectionState: "connected",
       })),
     } as unknown as AppHost;
@@ -434,7 +433,6 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
         flowControl: "off",
         timeoutMs: 1000,
         retryCount: 1,
-        rxDelayMs: 50,
         connectionState: "connected",
       })),
     } as unknown as AppHost;
@@ -607,7 +605,6 @@ describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）
         flowControl: "off",
         timeoutMs: 1000,
         retryCount: 1,
-        rxDelayMs: 50,
         connectionState: "connected",
       }),
     } as unknown as AppHost;
@@ -897,7 +894,6 @@ describe("RegisterTable Read All 全局 message（2026-08-28）", () => {
         flowControl: "off",
         timeoutMs: 1000,
         retryCount: 1,
-        rxDelayMs: 50,
         connectionState: "connected",
       })),
     } as unknown as AppHost;
@@ -1022,7 +1018,6 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
         flowControl: "off",
         timeoutMs: 1000,
         retryCount: 1,
-        rxDelayMs: 50,
         connectionState: "connected",
       })),
       ...overrides,

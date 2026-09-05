@@ -200,7 +200,7 @@ describe("acceptance: browser RTU core loop", () => {
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
       // 恢复后连接配置仍在（除串口号外的配置恢复）。
-      expect(loaded.value.connectionProfiles[0]?.interRequestDelayMs).toBe(50);
+      expect(loaded.value.connectionProfiles[0]?.requestTimeoutMs).toBe(50);
     }
   });
 });

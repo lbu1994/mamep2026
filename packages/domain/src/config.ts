@@ -11,8 +11,6 @@ export const defaultConfig = {
     flowControl: "off",
     requestTimeoutMs: 50,
     retryCount: 1,
-    /** Rx Delay：请求间隔，兼作 WP 轮询间隔（ADR-013） */
-    interRequestDelayMs: 50,
   },
   tcp: {
     /** MBAP 单元标识默认 0（2026-08-23 确认：与 RTU Slave Address 默认 1 不同） */
@@ -28,8 +26,6 @@ export const defaultConfig = {
     reconnectBaseIntervalMs: 1000,
     /** 自动重连：退避封顶（ms，内部默认值，2026-08-30） */
     reconnectMaxIntervalMs: 15000,
-    /** 请求间隔，兼作 WP 轮询间隔（内部字段，不入表单） */
-    interRequestDelayMs: 50,
   },
   registerTable: {
     /** Register 地址列进制：默认 DEC（按表独立，ADR-014） */

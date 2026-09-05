@@ -77,7 +77,6 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "- **Slave address / Unit ID**: the device address.",
       "- **Baud rate**: serial speed (fixed options).",
       "- **Timeout (ms)**: request timeout.",
-      "- **Rx Delay (ms)**: minimum interval between requests.",
       "",
       "## Modbus TCP (Electron / VS Code)",
       "",

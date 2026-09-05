@@ -192,7 +192,6 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
     flowControl: "off",
     requestTimeoutMs: 1000,
     retryCount: 1,
-    interRequestDelayMs: 50,
     recentPortHint: null,
   };
 
@@ -444,7 +443,6 @@ describe("host-message TCP session kinds（2026-08-23 两端 TCP 接线）", () 
     requestTimeoutMs: 1000,
     retryCount: 1,
     autoReconnect: false,
-    interRequestDelayMs: 50,
   };
 
   it("accepts a valid session-tcp-connect request", () => {

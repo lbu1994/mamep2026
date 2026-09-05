@@ -3,7 +3,7 @@
  * - 单连接单队列：所有请求经 RequestScheduler 串行执行；
  * - 超时从完整请求发送后开始；重试按 retryCount 语义（额外尝试次数）；
  * - RTU 响应按期望长度分帧；迟到响应被丢弃并记录；
- * - interRequestDelayMs（Rx Delay）作为相邻请求最小间隔，兼作轮询间隔。
+ * - 请求紧接执行（不附加请求间隔，2026-09-06 删除 Rx Delay）。
  */
 import {
   createMamepError,
@@ -375,7 +375,6 @@ export class CommunicationSession {
     this.slaveAddress = options.slaveAddress ?? 1;
     this.scheduler = new RequestScheduler(options.clock, {
       fairnessThresholdMs: options.fairnessThresholdMs ?? 2000,
-      getInterRequestDelayMs: () => this.options.config.interRequestDelayMs,
     });
     this.stateMachine.subscribe((state) => this.options.onStateChange?.(state));
     options.transport.onData((chunk) => {

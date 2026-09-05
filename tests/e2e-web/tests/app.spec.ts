@@ -69,11 +69,13 @@ test("non-mock startup opens Connection Settings modal with RTU defaults", async
 
   const modal = page.locator(".ant-modal-container:visible");
   await expect(modal).toContainText("Connection Settings");
-  // Defaults: Rx Delay=50, Timeout=50, Retry=1.
+  // Defaults: Timeout=50, Retry=1.（Rx Delay 已移除，2026-09-06）
   // 从站地址已迁移为每表独立设置（2026-08-19），不再属于连接设置。
   await expect(modal).not.toContainText("Slave Address");
   // 全局 Address Adjust 已移出核心（ADR-042）：Connection Settings 不再有该选项。
   await expect(modal).not.toContainText("Address Adjust");
+  // Rx Delay 已移除（2026-09-06）：Connection Settings 不再有该选项。
+  await expect(modal).not.toContainText("Rx Delay");
   // No Modbus TCP entry in the browser.
   await expect(modal).not.toContainText("Modbus TCP");
   await closeModal(page);

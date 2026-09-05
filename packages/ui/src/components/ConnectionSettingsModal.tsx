@@ -507,21 +507,6 @@ export function ConnectionSettingsModal(): React.ReactNode {
             <Row gutter={16}>
               <Col span={12}>
                 <Controller
-                  name="rxDelay"
-                  control={control}
-                  render={({ field }) => (
-                    <Form.Item label={t("connection.rxDelay")}>
-                      <InputNumber
-                        style={{ width: "100%" }}
-                        min={0}
-                        max={5000}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v ?? 50)}
-                      />
-                    </Form.Item>
-                  )}
-                />
-                <Controller
                   name="rtuTimeout"
                   control={control}
                   render={({ field }) => (

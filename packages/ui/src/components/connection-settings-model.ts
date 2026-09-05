@@ -23,7 +23,6 @@ export const settingsSchema = z
     stopBits: z.union([z.literal(1), z.literal(2)]),
     parity: z.enum(["none", "even", "odd"]),
     flowControl: z.enum(["off", "rts-cts"]),
-    rxDelay: z.number().int().min(0).max(5000),
     rtuTimeout: z.number().int().min(5).max(100),
     retry: z.number().int().min(0).max(10),
     // ---- TCP（保持必填类型；非空校验仅 TCP 协议下经 superRefine 生效；超时字段独立）----
@@ -55,7 +54,6 @@ export const rtuPersistedSettingsSchema = z.object({
   flowControl: z.enum(["off", "rts-cts"]),
   requestTimeoutMs: z.number().int().min(5).max(100),
   retryCount: z.number().int().min(0).max(10),
-  interRequestDelayMs: z.number().int().min(0).max(5000),
 });
 
 /** TCP 随工作区持久化的连接设置子集（2026-08-23 两端 TCP 接线：host/port/unitId/超时/重试；2026-08-30 增 autoReconnect）。 */
@@ -66,7 +64,6 @@ export const tcpPersistedSettingsSchema = z.object({
   unitId: z.number().int().min(0).max(255),
   requestTimeoutMs: z.number().int().min(50).max(60000),
   retryCount: z.number().int().min(0).max(10),
-  interRequestDelayMs: z.number().int().min(0).max(5000),
   autoReconnect: z.boolean(),
 });
 
@@ -92,12 +89,11 @@ export function toProfile(
       unitId: values.unitId,
       requestTimeoutMs: values.tcpTimeout,
       retryCount: values.retry,
-      interRequestDelayMs: values.rxDelay,
       autoReconnect: values.autoReconnect,
     };
   }
   // RTU：显式映射表单字段到 profile（spread 无法把 rtuTimeout→requestTimeoutMs、
-  // retry→retryCount、rxDelay→interRequestDelayMs 等映射，需逐字段落地）。
+  // retry→retryCount 等映射，需逐字段落地）。
   return {
     ...(base as RtuConnectionProfile),
     baudRate: values.baudRate,
@@ -107,7 +103,6 @@ export function toProfile(
     flowControl: values.flowControl,
     requestTimeoutMs: values.rtuTimeout,
     retryCount: values.retry,
-    interRequestDelayMs: values.rxDelay,
     protocol: "rtu",
   };
 }
@@ -124,7 +119,6 @@ export function profileToValues(
       stopBits: 1,
       parity: "none",
       flowControl: "off",
-      rxDelay: profile.interRequestDelayMs,
       rtuTimeout: defaultConfig.rtu.requestTimeoutMs,
       retry: profile.retryCount,
       host: profile.host,
@@ -142,7 +136,6 @@ export function profileToValues(
     parity: profile.parity,
     flowControl:
       profile.flowControl === "xon-xoff" ? "off" : profile.flowControl,
-    rxDelay: profile.interRequestDelayMs,
     rtuTimeout: profile.requestTimeoutMs,
     retry: profile.retryCount,
     host: "",
@@ -167,7 +160,6 @@ export function extractPersistedSettings(
       unitId: values.unitId,
       requestTimeoutMs: values.tcpTimeout,
       retryCount: values.retry,
-      interRequestDelayMs: values.rxDelay,
       autoReconnect: values.autoReconnect,
     };
   }
@@ -180,6 +172,5 @@ export function extractPersistedSettings(
     flowControl: values.flowControl,
     requestTimeoutMs: values.rtuTimeout,
     retryCount: values.retry,
-    interRequestDelayMs: values.rxDelay,
   };
 }

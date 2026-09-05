@@ -76,7 +76,6 @@ describe("TcpConnectionProfile payload 往返（2026-08-23 TCP 接线）", () =>
     expect(restored.requestTimeoutMs).toBe(2000);
     expect(restored.retryCount).toBe(3);
     expect(restored.autoReconnect).toBe(false);
-    expect(restored.interRequestDelayMs).toBe(50);
   });
 });
 

@@ -36,7 +36,6 @@ describe("connection profile persistence", () => {
       // 非端口连接参数（持久化）
       profile.requestTimeoutMs = 2000;
       profile.retryCount = 3;
-      profile.interRequestDelayMs = 120;
       // 从站地址为表级字段（持久化）
       const sheet = w.sheets[0];
       if (sheet !== undefined) sheet.slaveAddress = 5;
@@ -61,7 +60,6 @@ describe("connection profile persistence", () => {
     // 非端口参数恢复。
     expect(profile.requestTimeoutMs).toBe(2000);
     expect(profile.retryCount).toBe(3);
-    expect(profile.interRequestDelayMs).toBe(120);
     // 每表独立从站地址恢复。
     expect(parsed.value.sheets[0]?.slaveAddress).toBe(5);
   });
@@ -115,7 +113,6 @@ describe("connection profile persistence", () => {
       slaveAddress: 9,
       requestTimeoutMs: 3000,
       retryCount: 4,
-      interRequestDelayMs: 200,
       addressAdjust: "on",
     };
     const parsed = parseWorkspace(legacy);
@@ -126,7 +123,6 @@ describe("connection profile persistence", () => {
     expect(profile.baudRate).toBe(57600);
     expect(profile.parity).toBe("odd");
     expect(profile.recentPortHint).toBe("COM10");
-    expect(profile.interRequestDelayMs).toBe(200);
     expect(profile.requestTimeoutMs).toBe(3000);
     // 旧 profile 中的 slaveAddress 被剥离，不再进入领域对象。
     expect("slaveAddress" in profile).toBe(false);
@@ -188,8 +184,6 @@ describe("workspace schema round-trip", () => {
     expect(value.schemaVersion).toBe(workspace.schemaVersion);
     expect(value.sheets).toHaveLength(1);
     expect(value.connectionProfiles).toHaveLength(1);
-    const rtu = firstRtuProfile(value.connectionProfiles);
-    expect(rtu.interRequestDelayMs).toBe(50);
     // 表级地址变换默认 null（ADR-042）：不调整。
     expect(value.sheets[0]?.addressTransform).toBeNull();
     // 从站地址为表级字段：默认 1。
@@ -452,7 +446,6 @@ describe("tcp connection profile persistence", () => {
           requestTimeoutMs: 2000,
           retryCount: 3,
           autoReconnect: false,
-          interRequestDelayMs: 80,
         },
       ];
     });
@@ -470,7 +463,6 @@ describe("tcp connection profile persistence", () => {
       requestTimeoutMs: 2000,
       retryCount: 3,
       autoReconnect: false,
-      interRequestDelayMs: 80,
     });
   });
 
@@ -488,7 +480,6 @@ describe("tcp connection profile persistence", () => {
           requestTimeoutMs: 1000,
           retryCount: 1,
           autoReconnect: false,
-          interRequestDelayMs: 50,
         },
       ];
     });
@@ -573,7 +564,6 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
           requestTimeoutMs: 2000,
           retryCount: 3,
           autoReconnect: false,
-          interRequestDelayMs: 80,
         },
       ];
     });

@@ -167,7 +167,7 @@ describe("WriteVerifyCoordinator 写后回读（§15.3 / §18.2）", () => {
     clock.advance(60);
     await Promise.resolve();
     expect(transport.sentFrames).toHaveLength(1);
-    // 期满后（含 Rx Delay）发出读帧。
+    // 期满后发出读帧。
     await advanceUntil(clock, () => transport.sentFrames.length === 2);
     transport.simulateData(readResponse(1, 0x1234));
     const result = await promise;

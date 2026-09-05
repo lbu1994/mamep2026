@@ -56,8 +56,6 @@ export const rtuConnectionProfilePayloadSchema = z.object({
   flowControl: z.enum(["off", "rts-cts", "xon-xoff"]),
   requestTimeoutMs: z.number(),
   retryCount: z.number(),
-  /** Rx Delay：请求间隔，兼作 WP 轮询间隔。 */
-  interRequestDelayMs: z.number(),
   recentPortHint: z.string().nullable(),
 });
 export type RtuConnectionProfilePayload = z.infer<
@@ -89,7 +87,6 @@ export const tcpConnectionProfilePayloadSchema = z.object({
   requestTimeoutMs: z.number(),
   retryCount: z.number(),
   autoReconnect: z.boolean(),
-  interRequestDelayMs: z.number(),
 });
 export type TcpConnectionProfilePayload = z.infer<
   typeof tcpConnectionProfilePayloadSchema

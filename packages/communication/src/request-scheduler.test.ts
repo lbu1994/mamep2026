@@ -62,7 +62,6 @@ describe("RequestScheduler", () => {
     const clock = new ManualClock();
     const scheduler = new RequestScheduler(clock, {
       fairnessThresholdMs: 1000,
-      getInterRequestDelayMs: () => 0,
     });
 
     let active = 0;
@@ -91,7 +90,6 @@ describe("RequestScheduler", () => {
     const clock = new ManualClock();
     const scheduler = new RequestScheduler(clock, {
       fairnessThresholdMs: 10_000,
-      getInterRequestDelayMs: () => 0,
     });
     const order: string[] = [];
 
@@ -119,7 +117,6 @@ describe("RequestScheduler", () => {
     // 公平阈值 20ms：低优先级任务等待超过阈值后按 FIFO 执行。
     const scheduler = new RequestScheduler(clock, {
       fairnessThresholdMs: 20,
-      getInterRequestDelayMs: () => 0,
     });
     const order: string[] = [];
 
@@ -143,7 +140,6 @@ describe("RequestScheduler", () => {
     const clock = new ManualClock();
     const scheduler = new RequestScheduler(clock, {
       fairnessThresholdMs: 1000,
-      getInterRequestDelayMs: () => 0,
     });
 
     const token = createCancellationToken();
@@ -163,11 +159,10 @@ describe("RequestScheduler", () => {
     if (!b.ok) expect(b.error.code).toBe("CANCELLED");
   });
 
-  it("applies the inter-request delay between tasks", async () => {
+  it("runs tasks back-to-back with no inter-request delay (Rx Delay removed)", async () => {
     const clock = new ManualClock();
     const scheduler = new RequestScheduler(clock, {
       fairnessThresholdMs: 1000,
-      getInterRequestDelayMs: () => 50,
     });
     const timestamps: number[] = [];
 
@@ -186,17 +181,16 @@ describe("RequestScheduler", () => {
       { priority: "manual-read" },
     );
 
-    await advanceUntil(clock, () => timestamps.length === 2);
+    // 不推进时钟：相邻任务在上一任务完成后立即执行（同一 0 时刻）。
     await Promise.all([p1, p2]);
     expect(timestamps).toHaveLength(2);
-    expect(timestamps[1]! - timestamps[0]!).toBeGreaterThanOrEqual(50);
+    expect(timestamps[1]! - timestamps[0]!).toBe(0);
   });
 
   it("cleans cancelled queued tasks from the pending count", async () => {
     const clock = new ManualClock();
     const scheduler = new RequestScheduler(clock, {
       fairnessThresholdMs: 1000,
-      getInterRequestDelayMs: () => 0,
     });
     const token = createCancellationToken();
     scheduler.enqueue(makeDelayedTask(clock, 50, 0), {

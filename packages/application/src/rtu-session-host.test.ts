@@ -292,7 +292,7 @@ describe("RtuSessionHost 全表读取", () => {
 });
 
 describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
-  it("updatePollingTargets + startPolling 按 Rx Delay 周期产生轮询结果", async () => {
+  it("updatePollingTargets + startPolling 连续产生轮询结果（间隔 0）", async () => {
     const h = createHarness();
     await connect(h);
     h.device.setRegister(0x2000, 0xabcd);

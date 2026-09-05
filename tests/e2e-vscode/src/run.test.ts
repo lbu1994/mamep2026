@@ -78,7 +78,6 @@ function rtuProfile(): Record<string, unknown> {
     flowControl: "off",
     requestTimeoutMs: 1000,
     retryCount: 1,
-    interRequestDelayMs: 50,
     recentPortHint: null,
   };
 }
@@ -291,7 +290,6 @@ function tcpProfile(): Record<string, unknown> {
     requestTimeoutMs: 1000,
     retryCount: 1,
     autoReconnect: false,
-    interRequestDelayMs: 50,
   };
 }
 
@@ -415,7 +413,7 @@ async function runUnitIdLoop(): Promise<void> {
  * 远程批任务取消（ADR-025，2026-08-25）：经真实 HostMessage RPC 路径验证
  * session-batch-read（携带 batchId）→ 中途 session-batch-cancel → 汇总 cancelledCount > 0。
  * 扩展宿主消息处理为并发（onDidReceiveMessage void 分发），取消消息在批任务进行中到达；
- * 批任务按 Rx Delay(50ms) 逐行发送，20 行 ≈ 1s，提供可取消窗口。
+ * 批任务逐行发送（无 Rx Delay 间隔），靠假设备响应延迟提供可取消窗口。
  */
 async function runBatchCancelLoop(): Promise<void> {
   // 1. 连接 TCP（假设备 127.0.0.1:1502）。

@@ -107,8 +107,6 @@ export interface RtuConnectionProfile {
   flowControl: FlowControl;
   requestTimeoutMs: number;
   retryCount: number;
-  /** Rx Delay：请求间隔，兼作 WP 轮询间隔，默认 50 ms */
-  interRequestDelayMs: number;
   /** 仅作提示，不用于自动连接（§19.3） */
   recentPortHint: string | null;
 }
@@ -440,7 +438,6 @@ export function createDefaultRtuProfile(name = "RTU"): RtuConnectionProfile {
     flowControl: c.flowControl,
     requestTimeoutMs: c.requestTimeoutMs,
     retryCount: c.retryCount,
-    interRequestDelayMs: c.interRequestDelayMs,
     recentPortHint: null,
   };
 }
@@ -459,7 +456,6 @@ export function createDefaultTcpProfile(name = "TCP"): TcpConnectionProfile {
     requestTimeoutMs: c.requestTimeoutMs,
     retryCount: c.retryCount,
     autoReconnect: c.autoReconnect,
-    interRequestDelayMs: c.interRequestDelayMs,
   };
 }
 

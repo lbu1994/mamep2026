@@ -3,7 +3,7 @@
  * - 同一连接任意时刻只执行一个设备请求；
  * - 优先级只影响尚未开始的任务，不中断已发送请求；
  * - 公平性：等待超过阈值的任务按 FIFO 执行，避免低优先级饥饿；
- * - 相邻任务之间应用 interRequestDelayMs（Rx Delay，可取消）。
+ * - 任务紧接执行（不附加请求间隔，2026-09-06 删除 Rx Delay）。
  */
 import { createMamepError, type Result } from "@mamep2026/domain";
 import { fail } from "@mamep2026/domain";
@@ -47,16 +47,12 @@ export interface EnqueueOptions {
 
 export interface RequestSchedulerOptions {
   fairnessThresholdMs: number;
-  /** Rx Delay：读取自当前连接配置快照。 */
-  getInterRequestDelayMs: () => number;
 }
 
 export class RequestScheduler {
   private queue: Task[] = [];
   private running = false;
-  private lastTaskCompletedAt = 0;
   private nextId = 1;
-  private pendingSleepResolve: (() => void) | null = null;
   private readonly clock: Clock;
   private readonly options: RequestSchedulerOptions;
 
@@ -104,8 +100,7 @@ export class RequestScheduler {
         task.cancelToken?.cancel();
       }
     }
-    // 结束间隔等待，让 drain 立即收尾。
-    this.pendingSleepResolve?.();
+    void this.drain();
   }
 
   private async drain(): Promise<void> {
@@ -115,15 +110,6 @@ export class RequestScheduler {
       while (true) {
         const task = this.pickNext();
         if (task === null) break;
-
-        // 相邻请求最小间隔（Rx Delay，§13.3）。
-        const delayMs =
-          this.lastTaskCompletedAt === 0
-            ? 0
-            : this.options.getInterRequestDelayMs();
-        if (delayMs > 0 && !task.cancelToken?.cancelled) {
-          await this.sleep(delayMs);
-        }
 
         if (task.cancelToken?.cancelled) {
           task.resolve(
@@ -143,7 +129,6 @@ export class RequestScheduler {
 
         try {
           const result = await task.run();
-          this.lastTaskCompletedAt = this.clock.now();
           task.resolve(result);
         } catch (cause) {
           task.resolve(
@@ -227,14 +212,4 @@ export class RequestScheduler {
     return best;
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      const finish = (): void => {
-        this.pendingSleepResolve = null;
-        resolve();
-      };
-      this.pendingSleepResolve = finish;
-      this.clock.schedule(finish, ms);
-    });
-  }
 }

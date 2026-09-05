@@ -14,10 +14,6 @@ describe("defaultConfig (docs/AGENTS.md §42 集中默认值)", () => {
     expect(defaultConfig.registerTable.slaveAddress).toBe(1);
   });
 
-  it("uses Rx Delay default 50 ms which also drives WP polling interval", () => {
-    expect(defaultConfig.rtu.interRequestDelayMs).toBe(50);
-  });
-
   it("defaults Register address radix to DEC", () => {
     expect(defaultConfig.registerTable.addressRadix).toBe("dec");
   });

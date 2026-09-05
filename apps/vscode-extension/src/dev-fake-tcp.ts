@@ -43,8 +43,11 @@ function buildTcpFrame(tid: number, unitId: number, pdu: Uint8Array): Uint8Array
 export class DevFakeTcpServer {
   private readonly server: net.Server;
   private readonly sockets = new Set<net.Socket>();
+  /** 每条响应附加的延迟（ms，2026-09-06 移除 Rx Delay 后为批任务取消提供窗口）。 */
+  private readonly responseDelayMs: number;
 
-  constructor() {
+  constructor(responseDelayMs = 0) {
+    this.responseDelayMs = responseDelayMs;
     this.server = net.createServer((socket) => this.handle(socket));
   }
 
@@ -89,7 +92,13 @@ export class DevFakeTcpServer {
         if (buffer.length < frameLength) return;
         const frame = Uint8Array.from(buffer.splice(0, frameLength));
         const response = this.respond(frame);
-        if (response !== null) socket.write(response);
+        if (response !== null) {
+          if (this.responseDelayMs > 0) {
+            setTimeout(() => socket.write(response), this.responseDelayMs);
+          } else {
+            socket.write(response);
+          }
+        }
       }
     });
     socket.on("error", () => {
@@ -188,5 +197,11 @@ export class DevFakeTcpServer {
 }
 
 export function createDevFakeTcpServer(): DevFakeTcpServer {
-  return new DevFakeTcpServer();
+  const delay = Number.parseInt(
+    process.env.MAMEP_FAKE_TCP_DELAY_MS ?? "0",
+    10,
+  );
+  return new DevFakeTcpServer(
+    Number.isFinite(delay) && delay > 0 ? delay : 0,
+  );
 }

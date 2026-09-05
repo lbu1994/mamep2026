@@ -53,7 +53,7 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
-/** 分步推进虚拟时钟（每步间 flush microtask），让链式定时器（延迟→Rx Delay）逐个触发。 */
+/** 分步推进虚拟时钟（每步间 flush microtask），让链式定时器（延迟→校验回读）逐个触发。 */
 async function advanceVirtual(
   clock: VirtualClock,
   totalMs: number,

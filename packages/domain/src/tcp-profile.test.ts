@@ -19,7 +19,6 @@ describe("createTcpConnectionProfile", () => {
         requestTimeoutMs: 50,
         retryCount: 1,
         autoReconnect: false,
-        interRequestDelayMs: 50,
       });
       expect(result.value.id).toBe("");
       expect(result.value.name).toBe("TCP");
@@ -37,7 +36,6 @@ describe("createTcpConnectionProfile", () => {
       requestTimeoutMs: 2000,
       retryCount: 3,
       autoReconnect: true,
-      interRequestDelayMs: 100,
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -52,7 +50,6 @@ describe("createTcpConnectionProfile", () => {
         requestTimeoutMs: 2000,
         retryCount: 3,
         autoReconnect: true,
-        interRequestDelayMs: 100,
       });
     }
   });

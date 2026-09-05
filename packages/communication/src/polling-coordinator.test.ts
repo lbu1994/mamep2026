@@ -6,11 +6,10 @@ import { PollingCoordinator } from "./polling-coordinator";
 import { FakeTransport } from "./testing/fake-transport";
 import { ManualClock, advanceUntil } from "./testing/manual-clock";
 
-function setup(intervalMs = 50) {
+function setup() {
   const clock = new ManualClock();
   const transport = new FakeTransport();
   const profile = createDefaultRtuProfile();
-  profile.interRequestDelayMs = intervalMs;
   // 默认超时已改为 50ms（2026-09-06）：调度断言依赖请求在观察窗口内保持 in-flight，
   // 显式放宽超时防止 in-flight 请求提前超时触发新一轮轮询。
   profile.requestTimeoutMs = 1000;
@@ -33,8 +32,8 @@ function readResponse(slave: number, value: number): Uint8Array {
 }
 
 describe("PollingCoordinator", () => {
-  it("polls each target at the Rx Delay interval through the session", async () => {
-    const { clock, transport, session } = setup(50);
+  it("polls each target through the session", async () => {
+    const { clock, transport, session } = setup();
     await connect(session);
     const coordinator = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
@@ -73,7 +72,7 @@ describe("PollingCoordinator", () => {
   });
 
   it("does not pile up requests while a previous poll is still in flight", async () => {
-    const { clock, transport, session } = setup(50);
+    const { clock, transport, session } = setup();
     await connect(session);
     const coordinator = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
@@ -101,7 +100,7 @@ describe("PollingCoordinator", () => {
   });
 
   it("stops scheduling after stop()", async () => {
-    const { clock, transport, session } = setup(50);
+    const { clock, transport, session } = setup();
     await connect(session);
     const coordinator = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
@@ -117,7 +116,7 @@ describe("PollingCoordinator", () => {
   });
 
   it("stops polling for removed targets", async () => {
-    const { clock, transport, session } = setup(50);
+    const { clock, transport, session } = setup();
     await connect(session);
     const coordinator = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
@@ -144,7 +143,7 @@ describe("PollingCoordinator", () => {
   });
 
   it("defer 暂缓指定 key 的轮询、resume 恢复（§18.3 写入+回读期间）", async () => {
-    const { clock, transport, session } = setup(50);
+    const { clock, transport, session } = setup();
     await connect(session);
     const coordinator = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,

@@ -454,7 +454,6 @@ export class VscodeAppHost implements AppHost {
         flowControl: "off",
         timeoutMs: profile.requestTimeoutMs,
         retryCount: profile.retryCount,
-        rxDelayMs: profile.interRequestDelayMs,
         connectionState: this.connectionState,
       };
     }
@@ -470,7 +469,6 @@ export class VscodeAppHost implements AppHost {
       flowControl: rtu?.flowControl ?? "off",
       timeoutMs: rtu?.requestTimeoutMs ?? defaultConfig.rtu.requestTimeoutMs,
       retryCount: rtu?.retryCount ?? 1,
-      rxDelayMs: rtu?.interRequestDelayMs ?? 50,
       connectionState: this.connectionState,
     };
   }

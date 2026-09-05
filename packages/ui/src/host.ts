@@ -59,7 +59,6 @@ export interface CommProperties {
   flowControl: FlowControl;
   timeoutMs: number;
   retryCount: number;
-  rxDelayMs: number;
   connectionState: ConnectionState;
 }
 

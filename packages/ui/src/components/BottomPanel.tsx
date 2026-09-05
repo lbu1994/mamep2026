@@ -421,9 +421,6 @@ export function BottomPanel(): React.ReactNode {
               <Descriptions.Item label={t("connection.retry")}>
                 {properties.retryCount}
               </Descriptions.Item>
-              <Descriptions.Item label={t("connection.rxDelay")}>
-                {properties.rxDelayMs}
-              </Descriptions.Item>
             </>
           )}
           <Descriptions.Item label={t("panel.status")}>

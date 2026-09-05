@@ -67,7 +67,7 @@ export class TcpSessionHost {
     this.core = new SessionHostCore({
       clock: options.clock,
       events: options.events,
-      getPollingIntervalMs: () => this.currentProfile?.interRequestDelayMs ?? 50,
+      getPollingIntervalMs: () => 0,
       ...(options.resolveAddressTransform !== undefined
         ? { resolveAddressTransform: options.resolveAddressTransform }
         : {}),

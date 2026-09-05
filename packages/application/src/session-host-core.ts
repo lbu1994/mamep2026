@@ -57,7 +57,7 @@ export interface SessionHostEvents {
 export interface SessionHostCoreOptions {
   clock: Clock;
   events: SessionHostEvents;
-  /** WP 轮询间隔源（RTU/TCP 均为 profile.interRequestDelayMs）。 */
+  /** WP 轮询间隔源（2026-09-06 删除 Rx Delay 后恒为 0：读完一个立即读下一个）。 */
   getPollingIntervalMs: () => number;
   /**
    * 地址变换解析（ADR-042 插件 Phase D；2026-09-02 插件外部化）：按 transformId 返回运行时

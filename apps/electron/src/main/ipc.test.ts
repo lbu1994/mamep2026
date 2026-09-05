@@ -359,7 +359,6 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     requestTimeoutMs: 1000,
     retryCount: 1,
     autoReconnect: false,
-    interRequestDelayMs: 50,
   };
 
   it("session-tcp-connect 重建 TCP profile 并调用主进程会话 connectTcp", async () => {

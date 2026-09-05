@@ -1333,18 +1333,14 @@ UI 在写入请求未完成时默认禁用该行的再次写入按钮，除非�
 
 ## 12.3 接收延迟
 
-接收延迟定义为请求发送前的附加调度延迟或相邻请求间隔，需要在实现前固定为单一语义。
+接收延迟（Rx Delay / interRequestDelayMs）已于 2026-09-06 移除（见 docs/features/2026-09-06-删除RxDelay.md）。
 
-本设计采用：
+当前行为：
 
-- Rx Delay 作为相邻请求之间的最小附加间隔；
-- 计时从上一请求结束后开始；
+- 相邻请求之间无附加延迟（上一请求结束后立即开始下一请求）；
 - 不用于判断帧结束；
 - 不替代请求超时；
-- 不影响已收到响应的解析；
-- 日志记录实际应用的延迟。
-
-命名在 UI 中建议调整为“请求间隔”或提供明确说明，内部字段使用 interRequestDelayMs，避免延续含糊的 Rx Delay 语义。
+- 不影响已收到响应的解析。
 
 ---
 
@@ -1355,7 +1351,7 @@ UI 在写入请求未完成时默认禁用该行的再次写入按钮，除非�
 MVP 使用：
 
 - 每行独立启用状态（WP 开关）；
-- 轮询间隔使用 Connection Settings 中的 Rx Delay（interRequestDelayMs，默认 50 ms）；
+- 轮询间隔为 0（读完一个立即读下一个，2026-09-06 移除 Rx Delay）；
 - 不设独立的全局轮询间隔配置，不提供全部行持续轮询（ALL Polling）；
 - 单连接；
 - 每行单独功能码 03 请求；
@@ -1396,15 +1392,15 @@ PollingCoordinator 管理需要轮询的行，但不直接访问 UI 表格。
 
 ## 13.3 轮询间隔语义
 
-技术层将轮询间隔定义为“Connection Settings 中 Rx Delay（interRequestDelayMs，默认 50 ms）”，即相邻请求之间的最小附加间隔，同时作为每个启用行计划重新加入轮询的目标间隔。
+技术层将轮询间隔固定为 0（2026-09-06 移除 Rx Delay）：每个启用行在上一轮完成后立即重新加入轮询（读完一个立即读下一个）。
 
-由于所有请求串行执行，实际刷新周期可能大于配置值。
+由于所有请求串行执行，实际刷新周期由请求往返时间决定。
 
 调度器不保证严格实时性。
 
 每行记录：
 
-- configuredIntervalMs（= 当前连接配置快照的 interRequestDelayMs）；
+- configuredIntervalMs（= 0，2026-09-06 移除 Rx Delay 后恒定）；
 - lastScheduledAt；
 - lastStartedAt；
 - lastCompletedAt；

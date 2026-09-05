@@ -21,7 +21,6 @@ function tcpProfile(
     requestTimeoutMs: 1000,
     retryCount: 1,
     autoReconnect: false,
-    interRequestDelayMs: 50,
   };
 }
 

@@ -749,7 +749,6 @@ export class BrowserAppHost implements AppHost {
       flowControl: profile?.flowControl ?? "off",
       timeoutMs: profile?.requestTimeoutMs ?? defaultConfig.rtu.requestTimeoutMs,
       retryCount: profile?.retryCount ?? 1,
-      rxDelayMs: profile?.interRequestDelayMs ?? 50,
       connectionState: this.getConnectionState(),
     };
   }

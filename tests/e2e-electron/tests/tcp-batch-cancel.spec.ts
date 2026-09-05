@@ -118,7 +118,7 @@ let fakePort = 0;
 const consoleErrors: string[] = [];
 
 test.beforeAll(async () => {
-  // FC03 延迟 400ms：批任务逐行 50ms Rx Delay + 400ms 响应，8 行 ≈ 3.6s，
+  // FC03 延迟 400ms：批任务逐行 400ms 响应（无 Rx Delay 间隔），8 行 ≈ 3.2s，
   // 足以在点击取消前保持「批任务进行中」。
   const fake = await createFakeTcpServer(400);
   fakePort = fake.port;

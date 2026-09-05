@@ -52,7 +52,7 @@ test("WP polling shows a non-color polling indicator while online", async ({
   await openApp(page);
 
   // 开启 WP 前：无轮询指示。
-  await expect(page.getByLabel("Polling at Rx Delay interval")).toHaveCount(0);
+  await expect(page.getByLabel("Polling continuously")).toHaveCount(0);
 
   // 设置地址并开启 WP。
   const addressInput = page.getByLabel("Register", { exact: true }).first();
@@ -62,12 +62,12 @@ test("WP polling shows a non-color polling indicator while online", async ({
   await page.getByLabel("WP").first().click();
 
   // 已连接 + 合法地址 + WP 开启 → 轮询指示出现（非颜色表达，配 aria-label/Tooltip）。
-  const indicator = page.getByLabel("Polling at Rx Delay interval");
+  const indicator = page.getByLabel("Polling continuously");
   await expect(indicator).toBeVisible();
 
   // 关闭 WP 后指示消失。
   await page.getByLabel("WP").first().click();
-  await expect(page.getByLabel("Polling at Rx Delay interval")).toHaveCount(0);
+  await expect(page.getByLabel("Polling continuously")).toHaveCount(0);
 });
 
 test("narrow viewport moves secondary header actions into a More menu", async ({

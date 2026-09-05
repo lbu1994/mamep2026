@@ -1,6 +1,6 @@
 /**
  * 周期轮询协调器（docs/TECH_DESIGN.md §13）。
- * - 间隔使用 Connection Settings 的 Rx Delay（interRequestDelayMs），不设独立全局轮询间隔；
+ * - 轮询间隔由调用方传入（2026-09-06 起应用层固定为 0，即读完一个立即读下一个）；
  * - 每个轮询行最多一个正在执行的任务，任务未完成时跳过本轮（不积压）并记录 skipped tick；
  * - 不提供全部行持续轮询（ALL Polling）：只有传入的 targets 会被轮询。
  */
