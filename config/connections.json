@@ -13,7 +13,7 @@
       "parity": "none",
       "flowControl": "off",
       "slaveAddress": 1,
-      "requestTimeoutMs": 1000,
+      "requestTimeoutMs": 50,
       "retryCount": 1,
       "interRequestDelayMs": 50
     },
@@ -25,7 +25,7 @@
       "port": 1502,
       "unitId": 1,
       "connectTimeoutMs": 5000,
-      "requestTimeoutMs": 1000,
+      "requestTimeoutMs": 50,
       "retryCount": 1,
       "autoReconnect": false,
       "interRequestDelayMs": 50

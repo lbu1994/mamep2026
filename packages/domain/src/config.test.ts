@@ -22,9 +22,10 @@ describe("defaultConfig (docs/AGENTS.md §42 集中默认值)", () => {
     expect(defaultConfig.registerTable.addressRadix).toBe("dec");
   });
 
-  it("uses request timeout 1000 ms and retry count 1", () => {
-    expect(defaultConfig.rtu.requestTimeoutMs).toBe(1000);
+  it("uses request timeout 50 ms and retry count 1", () => {
+    expect(defaultConfig.rtu.requestTimeoutMs).toBe(50);
     expect(defaultConfig.rtu.retryCount).toBe(1);
+    expect(defaultConfig.tcp.requestTimeoutMs).toBe(50);
   });
 
   it("caps communication log at 10000 and application messages at 2000", () => {

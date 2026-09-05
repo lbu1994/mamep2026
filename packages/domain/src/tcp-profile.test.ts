@@ -16,7 +16,7 @@ describe("createTcpConnectionProfile", () => {
         port: 502,
         unitId: 1,
         connectTimeoutMs: 5000,
-        requestTimeoutMs: 1000,
+        requestTimeoutMs: 50,
         retryCount: 1,
         autoReconnect: false,
         interRequestDelayMs: 50,

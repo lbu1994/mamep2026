@@ -47,6 +47,7 @@ import {
 import {
   extractPersistedSettings,
   profileToValues,
+  RTU_TIMEOUT_OPTIONS,
   settingsSchema,
   toProfile,
   type ConnectionSettingsValues,
@@ -521,16 +522,20 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   )}
                 />
                 <Controller
-                  name="timeout"
+                  name="rtuTimeout"
                   control={control}
                   render={({ field }) => (
                     <Form.Item label={t("connection.timeout")}>
-                      <InputNumber
+                      <Select
                         style={{ width: "100%" }}
-                        min={50}
-                        max={60000}
+                        showSearch
                         value={field.value}
-                        onChange={(v) => field.onChange(v ?? 1000)}
+                        onChange={(v) => field.onChange(v)}
+                        optionFilterProp="label"
+                        options={RTU_TIMEOUT_OPTIONS.map((v) => ({
+                          value: v,
+                          label: `${v} ms`,
+                        }))}
                       />
                     </Form.Item>
                   )}
@@ -620,7 +625,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
               </Col>
               <Col span={12}>
                 <Controller
-                  name="timeout"
+                  name="tcpTimeout"
                   control={control}
                   render={({ field }) => (
                     <Form.Item label={t("connection.timeout")}>
@@ -629,7 +634,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                         min={50}
                         max={60000}
                         value={field.value}
-                        onChange={(v) => field.onChange(v ?? 1000)}
+                        onChange={(v) => field.onChange(v ?? 50)}
                       />
                     </Form.Item>
                   )}

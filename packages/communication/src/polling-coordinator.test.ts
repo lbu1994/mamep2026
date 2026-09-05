@@ -11,6 +11,9 @@ function setup(intervalMs = 50) {
   const transport = new FakeTransport();
   const profile = createDefaultRtuProfile();
   profile.interRequestDelayMs = intervalMs;
+  // 默认超时已改为 50ms（2026-09-06）：调度断言依赖请求在观察窗口内保持 in-flight，
+  // 显式放宽超时防止 in-flight 请求提前超时触发新一轮轮询。
+  profile.requestTimeoutMs = 1000;
   const session = new CommunicationSession({
     transport,
     clock,

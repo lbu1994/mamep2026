@@ -27,7 +27,12 @@ import type {
   WorkspaceRecoveryInfo,
   AddressTransform,
 } from "@mamep2026/domain";
-import { createMamepError, fail, ok } from "@mamep2026/domain";
+import {
+  createMamepError,
+  defaultConfig,
+  fail,
+  ok,
+} from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
 import {
   commLogEventFromPayload,
@@ -463,7 +468,7 @@ export class VscodeAppHost implements AppHost {
       stopBits: rtu?.stopBits ?? 1,
       parity: rtu?.parity ?? "none",
       flowControl: rtu?.flowControl ?? "off",
-      timeoutMs: rtu?.requestTimeoutMs ?? 1000,
+      timeoutMs: rtu?.requestTimeoutMs ?? defaultConfig.rtu.requestTimeoutMs,
       retryCount: rtu?.retryCount ?? 1,
       rxDelayMs: rtu?.interRequestDelayMs ?? 50,
       connectionState: this.connectionState,

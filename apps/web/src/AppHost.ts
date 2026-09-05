@@ -747,7 +747,7 @@ export class BrowserAppHost implements AppHost {
       stopBits: profile?.stopBits ?? 1,
       parity: profile?.parity ?? "none",
       flowControl: profile?.flowControl ?? "off",
-      timeoutMs: profile?.requestTimeoutMs ?? 1000,
+      timeoutMs: profile?.requestTimeoutMs ?? defaultConfig.rtu.requestTimeoutMs,
       retryCount: profile?.retryCount ?? 1,
       rxDelayMs: profile?.interRequestDelayMs ?? 50,
       connectionState: this.getConnectionState(),

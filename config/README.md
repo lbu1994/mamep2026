@@ -25,7 +25,7 @@
       "parity": "none",                // none|even|odd，默认 none
       "flowControl": "off",            // off|rts-cts|xon-xoff，默认 off
       "slaveAddress": 1,               // 该连接对象的默认从站地址 0~255，默认 1
-      "requestTimeoutMs": 1000,        // 单次请求响应超时，默认 1000
+      "requestTimeoutMs": 50,         // 单次请求响应超时，默认 50
       "retryCount": 1,                 // 重试次数 0~10，默认 1
       "interRequestDelayMs": 50,       // Rx Delay（请求间隔，兼作 WP 轮询间隔），默认 50
     },
@@ -38,7 +38,7 @@
       "port": 1502,                    // TCP 端口 1~65535
       "unitId": 1,                     // MBAP 单元标识 0~255，默认 0
       "connectTimeoutMs": 5000,        // 连接超时，默认 5000
-      "requestTimeoutMs": 1000,        // 单次请求响应超时，默认 1000
+      "requestTimeoutMs": 50,          // 单次请求响应超时，默认 50
       "retryCount": 1,                 // 重试次数 0~10，默认 1
       "autoReconnect": false,          // 自动重连（P1，UI 灰显），默认 false
       "interRequestDelayMs": 50        // 请求间隔，默认 50

@@ -359,7 +359,7 @@ describe("CommunicationSession codec path (ADR-040)", () => {
       source: "manual-read",
     });
     await advanceUntil(clock, () => transport.sentFrames.length === 1);
-    // 默认 profile：requestTimeoutMs=1000、retryCount=1 → 2 次尝试各超时。
+    // 默认 profile：requestTimeoutMs=50、retryCount=1 → 2 次尝试各超时。
     // advanceUntil 步进 + flush microtask，让重试链路能注册下一次超时定时器。
     let settled = false;
     void promise.then(() => {

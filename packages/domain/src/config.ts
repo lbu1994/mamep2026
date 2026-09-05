@@ -9,7 +9,7 @@ export const defaultConfig = {
     stopBits: 1,
     parity: "none",
     flowControl: "off",
-    requestTimeoutMs: 1000,
+    requestTimeoutMs: 50,
     retryCount: 1,
     /** Rx Delay：请求间隔，兼作 WP 轮询间隔（ADR-013） */
     interRequestDelayMs: 50,
@@ -18,7 +18,7 @@ export const defaultConfig = {
     /** MBAP 单元标识默认 0（2026-08-23 确认：与 RTU Slave Address 默认 1 不同） */
     unitId: 0,
     connectTimeoutMs: 5000,
-    requestTimeoutMs: 1000,
+    requestTimeoutMs: 50,
     retryCount: 1,
     /** 自动重连：P1 能力（2026-08-30 落地），默认 false */
     autoReconnect: false,

@@ -309,7 +309,7 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await expect(
       frame.locator(".register-table__status-dot--error").first(),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
-    // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 1000ms ×
+    // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 50ms ×
     // retryCount+1 共 2 次）之后才到达；若此时立即发起新读，RTU 无 Transaction ID 会把
     // 迟到的 0x0700 响应当作新读的响应（真实串口时序竞态，曾致读 0x0000 返回 0x0700 的
     // 值 0000）。等待迟到响应在无活动请求时（pendingExchange 为空）到达并被丢弃，再读回

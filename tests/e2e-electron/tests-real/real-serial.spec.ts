@@ -18,6 +18,7 @@ import {
   expect,
   test,
   type ElectronApplication,
+  type Locator,
   type Page,
 } from "@playwright/test";
 import { createRequire } from "node:module";
@@ -64,6 +65,30 @@ async function setRadixHex(p: Page): Promise<void> {
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(toolbar).toContainText("HEX", { timeout: 5000 });
+}
+/**
+ * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时已改为 50ms
+ * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式手动输入 Select 上限 100ms。
+ * 通过 showSearch 的手动输入（键入数值 + Enter）选中，避免点击下拉选项的脆弱性。
+ * 应用默认维持 50ms 不变，仅测试连接放宽。
+ */
+async function setRtuTimeoutSelect(
+  p: Page,
+  modal: Locator,
+  timeoutMs: number,
+): Promise<void> {
+  const select = modal
+    .locator(".ant-form-item")
+    .filter({ hasText: "Timeout" })
+    .locator(".ant-select")
+    .first();
+  await select.click();
+  // 清空搜索框内容（若已预填充）后键入目标值并按 Enter 选中。
+  await p.keyboard.press("Control+a");
+  await p.keyboard.type(String(timeoutMs));
+  await p.keyboard.press("Enter");
+  // 确认 Select 回显选中值。
+  await expect(modal).toContainText(`${timeoutMs} ms`, { timeout: 5000 });
 }
 /**
  * 活动表内容面板（多 Sheet 时限定到当前活动表，避免命中隐藏表单元格/工具栏）。
@@ -220,6 +245,8 @@ test("RTU 自动选择 COM4（来自 config/connections.json）+ 连接 Online",
 
   // 端口标签出现在弹窗（已选中）。
   await expect(modal).toContainText(rtu.port, { timeout: 8000 });
+  // 真实端口稳定连接：RTU 超时手动输入设 Select 上限 100ms。
+  await setRtuTimeoutSelect(page, modal, 100);
 
   // Connect → Online，弹窗关闭。
   await modal.locator(".ant-btn").filter({ hasText: "Connect" }).click();
@@ -355,14 +382,13 @@ test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", 
   await expect(
     page.locator(".register-table__status-dot--error").first(),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
-  // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 1000ms ×
-  // retryCount+1 共 2 次）之后才到达；若此时立即发起新读，RTU 无 Transaction ID 会把
-  // 迟到的 0x0700 响应当作新读的响应（真实串口时序竞态，曾致读 0x0000 返回 0x0700 的
-  // 值 0000）。注意重试会触发**两帧**迟到响应（attempt1 ~超时后 450ms、attempt2
-  // ~超时后 1500ms 到达，后者被 0x0000 新读消费曾致本测试复现失败）。等两帧迟到响应
-  // 都在无活动请求时（pendingExchange 为空）到达并被丢弃，再读回正常区（2026-08-26
-  // 修复：等待 800→2000ms 覆盖 attempt2 迟到响应）。
-  await page.waitForTimeout(2000);
+  // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 50ms ×
+  // retryCount+1 共 2 次 ≈ 100ms）之后才到达；若此时立即发起新读，RTU 无 Transaction ID
+  // 会把迟到的 0x0700 响应当作新读的响应（真实串口时序竞态，曾致读 0x0000 返回 0x0700
+  // 的值 0000）。两次重试（attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
+  // 后 ~2500ms 到达（~2500 / ~2550ms）。等两帧迟到响应都在无活动请求时（pendingExchange
+  // 为空）到达并被丢弃，再读回正常区（2026-09-06：默认超时改 50ms，等待 3000ms 覆盖）。
+  await page.waitForTimeout(3000);
   await setRowAddress(page, "0000");
   await readRow(page);
   await expect(page.getByLabel("Data").first()).toHaveText("04D2", {

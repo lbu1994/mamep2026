@@ -171,10 +171,14 @@ describe("TraceCoordinator", () => {
   it("stops sampling after stop()", async () => {
     const clock = new ManualClock();
     const transport = new FakeTransport();
+    const profile = createDefaultRtuProfile();
+    // 默认超时已改为 50ms（2026-09-06）：stop() 后推进 500ms，需 in-flight 请求不提前超时
+    // 干扰「停止调度」断言，显式放宽超时。
+    profile.requestTimeoutMs = 1000;
     const session = new CommunicationSession({
       transport,
       clock,
-      config: createDefaultRtuProfile(),
+      config: profile,
     });
     await session.connect();
     const coordinator = new TraceCoordinator(session, clock);

@@ -1,8 +1,15 @@
 import {
+  defaultConfig,
   type RtuConnectionProfile,
   type TcpConnectionProfile,
 } from "@mamep2026/domain";
 import { z } from "zod";
+
+/** RTU 超时固定档位（步进 5ms，5..100 共 20 项；2026-09-06 与旧软件一致，无自定义输入）。 */
+export const RTU_TIMEOUT_OPTIONS = Array.from(
+  { length: 20 },
+  (_, i) => 5 * (i + 1),
+);
 
 /** 连接设置表单（RTU 与 TCP 字段共存；UI 按 protocol 互斥展示）。
  * host 为默认空串、经 superRefine 仅 TCP 协议下要求非空——避免 RTU 提交被空的
@@ -17,12 +24,13 @@ export const settingsSchema = z
     parity: z.enum(["none", "even", "odd"]),
     flowControl: z.enum(["off", "rts-cts"]),
     rxDelay: z.number().int().min(0).max(5000),
-    timeout: z.number().int().min(50).max(60000),
+    rtuTimeout: z.number().int().min(5).max(100),
     retry: z.number().int().min(0).max(10),
-    // ---- TCP（保持必填类型；非空校验仅 TCP 协议下经 superRefine 生效）----
+    // ---- TCP（保持必填类型；非空校验仅 TCP 协议下经 superRefine 生效；超时字段独立）----
     host: z.string(),
     port: z.number().int().min(1).max(65535),
     unitId: z.number().int().min(0).max(255),
+    tcpTimeout: z.number().int().min(50).max(60000),
     autoReconnect: z.boolean(),
   })
   .superRefine((values, ctx) => {
@@ -45,7 +53,7 @@ export const rtuPersistedSettingsSchema = z.object({
   stopBits: z.union([z.literal(1), z.literal(2)]),
   parity: z.enum(["none", "even", "odd"]),
   flowControl: z.enum(["off", "rts-cts"]),
-  requestTimeoutMs: z.number().int().min(50).max(60000),
+  requestTimeoutMs: z.number().int().min(5).max(100),
   retryCount: z.number().int().min(0).max(10),
   interRequestDelayMs: z.number().int().min(0).max(5000),
 });
@@ -82,13 +90,26 @@ export function toProfile(
       host: values.host,
       port: values.port,
       unitId: values.unitId,
-      requestTimeoutMs: values.timeout,
+      requestTimeoutMs: values.tcpTimeout,
       retryCount: values.retry,
       interRequestDelayMs: values.rxDelay,
       autoReconnect: values.autoReconnect,
     };
   }
-  return { ...(base as RtuConnectionProfile), ...values, protocol: "rtu" };
+  // RTU：显式映射表单字段到 profile（spread 无法把 rtuTimeout→requestTimeoutMs、
+  // retry→retryCount、rxDelay→interRequestDelayMs 等映射，需逐字段落地）。
+  return {
+    ...(base as RtuConnectionProfile),
+    baudRate: values.baudRate,
+    dataBits: values.dataBits,
+    stopBits: values.stopBits,
+    parity: values.parity,
+    flowControl: values.flowControl,
+    requestTimeoutMs: values.rtuTimeout,
+    retryCount: values.retry,
+    interRequestDelayMs: values.rxDelay,
+    protocol: "rtu",
+  };
 }
 
 /** profile → 表单值（未选中的协议字段使用默认值占位）。 */
@@ -104,11 +125,12 @@ export function profileToValues(
       parity: "none",
       flowControl: "off",
       rxDelay: profile.interRequestDelayMs,
-      timeout: profile.requestTimeoutMs,
+      rtuTimeout: defaultConfig.rtu.requestTimeoutMs,
       retry: profile.retryCount,
       host: profile.host,
       port: profile.port,
       unitId: profile.unitId,
+      tcpTimeout: profile.requestTimeoutMs,
       autoReconnect: profile.autoReconnect,
     };
   }
@@ -121,12 +143,14 @@ export function profileToValues(
     flowControl:
       profile.flowControl === "xon-xoff" ? "off" : profile.flowControl,
     rxDelay: profile.interRequestDelayMs,
-    timeout: profile.requestTimeoutMs,
+    rtuTimeout: profile.requestTimeoutMs,
     retry: profile.retryCount,
     host: "",
     port: 502,
     unitId: 0,
     // autoReconnect 为 TCP 专属（RTU 无此字段），RTU 表单值恒 false。
+    // tcpTimeout 为 TCP 字段的占位默认（切协议不串值）。
+    tcpTimeout: defaultConfig.tcp.requestTimeoutMs,
     autoReconnect: false,
   };
 }
@@ -141,7 +165,7 @@ export function extractPersistedSettings(
       host: values.host,
       port: values.port,
       unitId: values.unitId,
-      requestTimeoutMs: values.timeout,
+      requestTimeoutMs: values.tcpTimeout,
       retryCount: values.retry,
       interRequestDelayMs: values.rxDelay,
       autoReconnect: values.autoReconnect,
@@ -154,7 +178,7 @@ export function extractPersistedSettings(
     stopBits: values.stopBits,
     parity: values.parity,
     flowControl: values.flowControl,
-    requestTimeoutMs: values.timeout,
+    requestTimeoutMs: values.rtuTimeout,
     retryCount: values.retry,
     interRequestDelayMs: values.rxDelay,
   };

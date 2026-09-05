@@ -988,7 +988,7 @@ describe("setConnectionSettings", () => {
       stopBits: 2,
       parity: "even",
       flowControl: "rts-cts",
-      requestTimeoutMs: 1800,
+      requestTimeoutMs: 80,
       retryCount: 4,
       interRequestDelayMs: 90,
     });
@@ -1002,7 +1002,7 @@ describe("setConnectionSettings", () => {
     expect(profile?.parity).toBe("even");
     expect(profile?.flowControl).toBe("rts-cts");
     // 非端口参数被更新。
-    expect(profile?.requestTimeoutMs).toBe(1800);
+    expect(profile?.requestTimeoutMs).toBe(80);
     expect(profile?.retryCount).toBe(4);
     expect(profile?.interRequestDelayMs).toBe(90);
     // id 保持不变。
@@ -1021,13 +1021,13 @@ describe("setConnectionSettings", () => {
       retryCount: 4,
       interRequestDelayMs: 90,
     });
-    // 越界 requestTimeoutMs（>60000）使持久化 schema 校验失败，整个写入被拒绝。
+    // 越界 requestTimeoutMs（>100，收窄后）使持久化 schema 校验失败，整个写入被拒绝。
     const stored = useAppStore.getState().workspace.connectionProfiles[0];
     expect(
       stored !== undefined && stored.protocol === "rtu"
         ? stored.requestTimeoutMs
         : undefined,
-    ).toBe(1000);
+    ).toBe(50);
   });
 });
 
