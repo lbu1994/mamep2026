@@ -34,11 +34,9 @@ import {
   type TcpConnectionProfile,
 } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
-import type {
-  SerialDeviceHandle,
-  SerialPortOption,
-} from "@mamep2026/platform-api";
+import type { SerialPortOption } from "@mamep2026/platform-api";
 import { useAppStore } from "../app-store";
+import { runConnect } from "../connection-actions";
 import { usePluginContributions } from "../plugin/use-contributions";
 import {
   protocolForSheetType,
@@ -81,16 +79,18 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const host = useAppStore((s) => s.host);
   const workspace = useAppStore((s) => s.workspace);
   const connectionState = useAppStore((s) => s.connectionState);
+  // 会话内已选串口 / 端口 ID / 连接错误（2026-09-06 Header Connect 直连：提升到 store 供 Header 判定/回退展示）。
+  const selectedHandle = useAppStore((s) => s.selectedSerialHandle);
+  const selectedPortId = useAppStore((s) => s.selectedSerialPortId);
+  const connectError = useAppStore((s) => s.connectError);
+  const setSerialSelection = useAppStore((s) => s.setSerialSelection);
+  const setConnectError = useAppStore((s) => s.setConnectError);
   // 已连接判定语义与顶栏 connection-cluster 一致（仅 connected 视为已连接）。
   const connected = connectionState === "connected";
-  const [selectedHandle, setSelectedHandle] =
-    useState<SerialDeviceHandle | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [connectError, setConnectError] = useState<string | null>(null);
   // enumerated 模式（Electron）：端口下拉框状态。
   const [portOptions, setPortOptions] = useState<SerialPortOption[]>([]);
-  const [selectedPortId, setSelectedPortId] = useState<string | null>(null);
   const [enumerating, setEnumerating] = useState(false);
 
   // 持久化的首个 profile（RTU 或 TCP）：作为对应协议表单的基础值。
@@ -162,13 +162,11 @@ export function ConnectionSettingsModal(): React.ReactNode {
     if (host === null || host === undefined) return;
     const result = await host.selectSerialPort(portId ?? null);
     if (result.ok && result.value !== null) {
-      setSelectedHandle(result.value);
-      setSelectedPortId(portId ?? null);
+      setSerialSelection(result.value, portId ?? null);
       setConnectError(null);
     } else if (result.ok) {
       // 用户取消/未选择：清空当前选择。
-      setSelectedHandle(null);
-      setSelectedPortId(null);
+      setSerialSelection(null, null);
     } else {
       setConnectError(
         `${t(result.error.userMessageKey)} (${result.error.technicalMessage})`,
@@ -191,16 +189,16 @@ export function ConnectionSettingsModal(): React.ReactNode {
     setConnectError(null);
     setConnecting(true);
     try {
-      const result =
-        values.protocol === "tcp"
-          ? await host.connectTcp(
-              toProfile(values, tcpBase) as TcpConnectionProfile,
-            )
-          : await host.connect(
-              toProfile(values, profile) as RtuConnectionProfile,
-              isMock ? null : selectedHandle,
-              { protocol: sheetProtocol },
-            );
+      const result = await runConnect(host, {
+        protocol: values.protocol,
+        profile:
+          values.protocol === "tcp"
+            ? (toProfile(values, tcpBase) as TcpConnectionProfile)
+            : (toProfile(values, profile) as RtuConnectionProfile),
+        sheetProtocol,
+        handle: selectedHandle,
+        isMock,
+      });
       if (result.ok) {
         setOpen(false);
       } else {
@@ -240,12 +238,14 @@ export function ConnectionSettingsModal(): React.ReactNode {
           // 每次打开：恢复上次持久化的连接设置（含端口参数/协议）；串口/端口选择保持待选。
           // 注意：不在弹窗打开时自动枚举——navigator.serial.requestPort() 必须在用户
           // 手势（点击下拉框/刷新按钮）中调用，否则抛 SecurityError（刷不出串口）。
+          // 注意：此处不清 connectError——Header 直连失败会先写 error 再打开弹窗，
+          // 清空会丢失回退展示；错误在关闭时清（下次正常打开时已是干净态）。
           reset(profileToValues(defaultProfile));
-          setConnectError(null);
         } else {
           // 关闭（手动取消 / Connect 成功后自动关闭）时持久化连接设置（串口选择除外）。
           const values = getValues();
           setConnectionSettings(extractPersistedSettings(values));
+          setConnectError(null);
           // enumerated：未完成选择就关闭 → 取消挂起的选择会话（避免 requestPort 悬挂）。
           if (isEnumerated && selectedPortId === null) {
             void host?.selectSerialPort(null).catch(() => undefined);

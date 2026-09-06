@@ -25,6 +25,7 @@ import {
   newRowId,
 } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
+import type { SerialDeviceHandle } from "@mamep2026/platform-api";
 import type {
   CommunicationLogEntry,
   ApplicationMessage,
@@ -123,6 +124,12 @@ export interface AppStoreState {
   connectionState: ConnectionState;
   activeSheetId: SheetId | null;
   connectionModalOpen: boolean;
+  /** 会话内已选串口（2026-09-06 Header Connect 直连）：仅会话内存，不持久化（§19.3）。 */
+  selectedSerialHandle: SerialDeviceHandle | null;
+  /** 会话内已选串口端口 ID（enumerated 下拉框 value）；与 selectedSerialHandle 成对。 */
+  selectedSerialPortId: string | null;
+  /** 连接设置/直连的错误展示（决策 5）：Header 直连失败回退弹窗时经此显示；会话内，不持久化。 */
+  connectError: string | null;
   pluginModalOpen: boolean;
   settingsModalOpen: boolean;
   /** 帮助/关于弹窗（2026-08-30 键盘操作：Ctrl+/ 或 ? 打开，入 store 供快捷键弹窗抑制）。 */
@@ -170,6 +177,11 @@ export interface AppStoreState {
   setLoaded: () => void;
   setConnectionState: (state: ConnectionState) => void;
   setConnectionModalOpen: (open: boolean) => void;
+  setSerialSelection: (
+    handle: SerialDeviceHandle | null,
+    portId: string | null,
+  ) => void;
+  setConnectError: (error: string | null) => void;
   setPluginModalOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
   setHelpModalOpen: (open: boolean) => void;
@@ -447,6 +459,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   connectionState: "disconnected",
   activeSheetId: null,
   connectionModalOpen: false,
+  selectedSerialHandle: null,
+  selectedSerialPortId: null,
+  connectError: null,
   pluginModalOpen: false,
   settingsModalOpen: false,
   helpModalOpen: false,
@@ -500,6 +515,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setLoaded: () => set({ loaded: true }),
   setConnectionState: (connectionState) => set({ connectionState }),
   setConnectionModalOpen: (connectionModalOpen) => set({ connectionModalOpen }),
+  setSerialSelection: (selectedSerialHandle, selectedSerialPortId) =>
+    set({ selectedSerialHandle, selectedSerialPortId }),
+  setConnectError: (connectError) => set({ connectError }),
   setPluginModalOpen: (pluginModalOpen) => set({ pluginModalOpen }),
   setSettingsModalOpen: (settingsModalOpen) => set({ settingsModalOpen }),
   setHelpModalOpen: (helpModalOpen) => set({ helpModalOpen }),

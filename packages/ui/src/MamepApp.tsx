@@ -34,9 +34,10 @@ import {
   themeConfigForColorOption,
   type ThemeContribution,
 } from "./plugin/theme-contributions";
-import type {
-  SettingsContribution,
-  TableTypeContribution,
+import {
+  protocolForSheetType,
+  type SettingsContribution,
+  type TableTypeContribution,
 } from "./plugin/plugin-registries";
 import {
   ApiOutlined,
@@ -49,10 +50,17 @@ import {
   RightOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import type { RowId, SheetId, SheetType } from "@mamep2026/domain";
+import type {
+  RowId,
+  RtuConnectionProfile,
+  SheetId,
+  SheetType,
+  TcpConnectionProfile,
+} from "@mamep2026/domain";
 import {
   basicTablesProtocolId,
   CORE_TABLE_TYPES,
+  createDefaultRtuProfile,
   defaultConfig,
 } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
@@ -60,6 +68,7 @@ import { mergeThemeConfig } from "@mamep2026/ui-theme";
 import { STATE_DOT_COLOR } from "./connection-state";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
+import { canDirectConnect, runConnect } from "./connection-actions";
 import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { BrowserCompatibilityBanner } from "./components/BrowserCompatibilityBanner";
@@ -146,6 +155,10 @@ export function MamepApp(): React.ReactNode {
   );
   const setActiveSheetId = useAppStore((s) => s.setActiveSheetId);
   const setConnectionModalOpen = useAppStore((s) => s.setConnectionModalOpen);
+  // Header Connect 直连（2026-09-06）：读存储 profile / 会话内已选串口 / 连接错误（回退弹窗展示）。
+  const connectionProfile = useAppStore((s) => s.workspace.connectionProfiles[0]);
+  const selectedSerialHandle = useAppStore((s) => s.selectedSerialHandle);
+  const setConnectError = useAppStore((s) => s.setConnectError);
   const setPluginModalOpen = useAppStore((s) => s.setPluginModalOpen);
   const setWorkspace = useAppStore((s) => s.setWorkspace);
   const appendMessage = useAppStore((s) => s.appendMessage);
@@ -390,9 +403,65 @@ export function MamepApp(): React.ReactNode {
 
   const connected = connectionState === "connected";
 
+  // Header 直连 codec 协议（ADR-041）：与连接设置弹窗同源（活动表类型 → 协议）。
+  const directSheetProtocol = protocolForSheetType(
+    currentSheet?.type ?? "holding-register",
+    tableTypeContributions,
+    host?.capabilities.protocolExtensions ?? [],
+  );
+  // Header 直连防重复触发（发起即置位，落定清位；与连接忙态守卫配合）。
+  const directConnectingRef = useRef(false);
+
+  /** Header 直连：与弹窗 onSubmit 同路径执行；失败回退弹窗展示错误（决策 4/5）。 */
+  const directConnect = async (
+    profile: RtuConnectionProfile | TcpConnectionProfile,
+  ): Promise<void> => {
+    if (
+      host === null ||
+      host === undefined ||
+      directConnectingRef.current
+    ) {
+      return;
+    }
+    directConnectingRef.current = true;
+    try {
+      const result = await runConnect(host, {
+        protocol: profile.protocol,
+        profile,
+        sheetProtocol: directSheetProtocol,
+        handle: selectedSerialHandle,
+        isMock: host.isMockMode,
+      });
+      if (!result.ok) {
+        setConnectError(
+          `${t(result.error.userMessageKey)} (${result.error.technicalMessage})`,
+        );
+        setConnectionModalOpen(true);
+      }
+    } finally {
+      directConnectingRef.current = false;
+    }
+  };
+
   const handleConnectToggle = (): void => {
     if (connected) {
       void host?.disconnect();
+      return;
+    }
+    if (host === null || host === undefined) return;
+    // 忙态（连接中/断开中/重连等）不重复发起。
+    if (
+      connectionState === "connecting" ||
+      connectionState === "disconnecting" ||
+      connectionState === "reconnecting" ||
+      connectionState === "reconnect-waiting"
+    ) {
+      return;
+    }
+    const profile = connectionProfile ?? createDefaultRtuProfile();
+    // 关键字段已就绪（RTU 已选 Port / TCP 已填 IP）→ 直连；否则回退弹窗引导填写。
+    if (canDirectConnect(host, profile, selectedSerialHandle)) {
+      void directConnect(profile);
     } else {
       setConnectionModalOpen(true);
     }

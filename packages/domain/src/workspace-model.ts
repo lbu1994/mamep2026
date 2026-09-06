@@ -449,7 +449,9 @@ export function createDefaultTcpProfile(name = "TCP"): TcpConnectionProfile {
     id: newConnectionProfileId(),
     name,
     protocol: "tcp",
-    host: "127.0.0.1",
+    // 默认 host 置空（2026-09-06 Header Connect 直连）：删除默认占位 "127.0.0.1"，
+    // 使「TCP 已填入 IP」以 host 非空为准——首次需用户在连接设置里显式填写。
+    host: "",
     port: 502,
     unitId: c.unitId,
     connectTimeoutMs: c.connectTimeoutMs,
