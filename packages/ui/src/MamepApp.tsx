@@ -722,11 +722,11 @@ export function MamepApp(): React.ReactNode {
               <Typography.Text className="mamep-header__brand-title">
                 {t("app.title")}
               </Typography.Text>
-              <span className="mamep-header__protocol">
-                {host !== null && host !== undefined && host.isMockMode
-                  ? t("topbar.mock")
-                  : t("app.protocol")}
-              </span>
+              {host !== null && host !== undefined && host.isMockMode && (
+                <span className="mamep-header__protocol">
+                  {t("topbar.mock")}
+                </span>
+              )}
             </div>
             <Divider
               vertical

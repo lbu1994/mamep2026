@@ -4,7 +4,6 @@ import { initReactI18next } from "react-i18next";
 export const en = {
   app: {
     title: "Mamep2026",
-    protocol: "Modbus RTU",
   },
   topbar: {
     newSheet: "New Sheet",
@@ -541,7 +540,7 @@ export const en = {
 export type TranslationResources = typeof en;
 
 export const zh: TranslationResources = {
-  app: { title: "Mamep2026", protocol: "Modbus RTU" },
+  app: { title: "Mamep2026" },
   topbar: {
     newSheet: "新建标签页",
     newTable: "新建寄存器表",
