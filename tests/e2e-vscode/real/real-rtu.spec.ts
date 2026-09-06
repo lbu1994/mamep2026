@@ -198,9 +198,10 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
 
     // Connect → Online，弹窗关闭。
     await modal.locator(".ant-btn").filter({ hasText: "Connect" }).click();
-    await expect(frame.locator(".ant-layout-header")).toContainText("Online", {
-      timeout: CONNECTED_TIMEOUT,
-    });
+    // VSCode webview 为窄窗口，Header 连接按钮文字隐藏（data-conn-state 判定，宽/窄均适用）。
+    await expect(
+      frame.locator(".connection-cluster__button[data-conn-state='connected']"),
+    ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
     await expect(frame.locator(".ant-modal-container:visible")).toHaveCount(0);
 
     // 地址进制切到 HEX，便于按从站规则地址操作。
@@ -398,9 +399,10 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
 
   await test.step("断开连接 → Offline，重连 → Online（稳定性）", async () => {
     await frame.getByRole("button", { name: /Disconnect/i }).click();
-    await expect(frame.locator(".ant-layout-header")).toContainText("Offline", {
-      timeout: CONNECTED_TIMEOUT,
-    });
+    // Header 连接按钮已整合（2026-09-06），断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定。
+    await expect(
+      frame.locator(".connection-cluster__button[data-conn-state='disconnected']"),
+    ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 
     // 重连：Connection Settings → 串口下拉复用 → 选 COM4 → Connect。
     await frame
@@ -424,9 +426,9 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     // 真实端口稳定连接：RTU 超时手动输入设 Select 上限 100ms。
     await setRtuTimeoutSelect(frame, modal, 100);
     await modal.locator(".ant-btn").filter({ hasText: "Connect" }).click();
-    await expect(frame.locator(".ant-layout-header")).toContainText("Online", {
-      timeout: CONNECTED_TIMEOUT,
-    });
+    await expect(
+      frame.locator(".connection-cluster__button[data-conn-state='connected']"),
+    ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   });
 
   await test.step("无 console 错误（含 CSP 违规、antd 弃用）", async () => {

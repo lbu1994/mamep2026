@@ -1,7 +1,7 @@
 {
   "name": "mamep2026",
   "private": true,
-  "version": "0.3.23",
+  "version": "0.3.24",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "main": "dist-electron/main.js",
@@ -23,7 +23,7 @@
     "build:vscode": "node scripts/build-vscode.mjs",
     "lint": "eslint .",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "test": "turbo run test --filter=!@mamep2026/e2e-web --filter=!@mamep2026/e2e-electron --filter=!@mamep2026/e2e-vscode",
     "test:all": "pnpm test:e2e:web:real && pnpm test:e2e:electron:real && pnpm test:e2e:vscode:real && pnpm test && pnpm test:acceptance && pnpm test:e2e:web && pnpm test:e2e:electron && pnpm test:e2e:vscode && pnpm test:serial:virtual && pnpm lint && pnpm typecheck",
     "test:acceptance": "pnpm --filter @mamep2026/acceptance test",
     "test:e2e:web": "pnpm --filter @mamep2026/e2e-web test",

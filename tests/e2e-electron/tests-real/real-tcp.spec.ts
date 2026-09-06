@@ -366,9 +366,10 @@ test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成�
 
 test("断开连接 → Offline，重连 → Online（稳定性）", async () => {
   await page.getByRole("button", { name: /Disconnect/i }).click();
-  await expect(page.locator(".ant-layout-header")).toContainText("Offline", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  // Header 连接按钮已整合（2026-09-06），断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定。
+  await expect(
+    page.locator(".connection-cluster__button[data-conn-state='disconnected']"),
+  ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 
   // 重连：重新打开 Connection Settings，切 TCP 并重填（值仍来自 config）。
   await page

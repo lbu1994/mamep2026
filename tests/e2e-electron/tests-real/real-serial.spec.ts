@@ -535,11 +535,11 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
 });
 
 test("断开连接 → Offline，可重连 → Online（稳定性）", async () => {
-  // 断开。
+  // 断开（Header 连接按钮已整合 2026-09-06，断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定）。
   await page.getByRole("button", { name: /Disconnect/i }).click();
-  await expect(page.locator(".ant-layout-header")).toContainText("Offline", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(
+    page.locator(".connection-cluster__button[data-conn-state='disconnected']"),
+  ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 
   // 重连：打开 Connection Settings → 串口下拉已可复用授权快照（enumerated 自动匹配 COM4）。
   await page

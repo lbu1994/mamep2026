@@ -989,6 +989,7 @@ export function MamepApp(): React.ReactNode {
                                   <SheetNameEditor
                                     className="sheet-tab__input"
                                     name={sheet.name}
+                                    autoFocus
                                     onCommit={(name) => {
                                       renameSheet(sheet.sheetId, name);
                                       setTabRenamingSheetId(null);

@@ -435,13 +435,15 @@ test("写后回读 Verify=OFF：写忽略区 0x0900 写入后 Data 保持写入�
   await setWriteVerify(page, "ON");
 });
 
-test("断开连接 → Offline", async () => {
+test("断开连接 → 状态复位为断开（连接按钮恢复 Connect 态）", async () => {
   await page
     .getByRole("button", { name: /Disconnect/i })
     .click();
-  await expect(page.locator(".ant-layout-header")).toContainText("Offline", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  // Header 连接 UI 已于 2026-09-06 整合为单一多功能按钮（状态点 + Connect/Disconnect 合一），
+  // 不再单独渲染 "Offline" 文本；改用按钮 data-conn-state 判定断开态（宽/窄窗口均适用）。
+  await expect(
+    page.locator(".connection-cluster__button[data-conn-state='disconnected']"),
+  ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 });
 
 test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {

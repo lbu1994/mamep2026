@@ -34,6 +34,11 @@ export function SheetNameEditor({
       defaultValue={name}
       autoFocus={autoFocus}
       onClick={(event) => event.stopPropagation()}
+      // onFocus 阻止 focus 事件冒泡：页签头输入框是 .ant-tabs-tab-btn 的后代，
+      // 聚焦时若 focus 冒泡到 tab button 的 onFocus，rc-tabs 会 setFocusKey 并经
+      // TabNode effect 调 btnRef.focus() 抢回焦点，导致输入框立即 blur 退出编辑态。
+      // stopPropagation 切断该回流链路（侧边栏 Menu 项无此处理器，不受影响）。
+      onFocus={(event) => event.stopPropagation()}
       onBlur={(event) => onCommit(event.target.value)}
       onKeyDown={(event) => {
         event.stopPropagation();

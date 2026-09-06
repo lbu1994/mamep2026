@@ -12,6 +12,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createEmptyWorkspace } from "@mamep2026/domain";
 import { buildTheme, mergeThemeConfig } from "@mamep2026/ui-theme";
 import { initI18n } from "./i18n";
@@ -73,6 +74,21 @@ describe("Sheet 名重命名编辑态隔离", () => {
     expect(sidebarRenameInput()).toBeNull();
     // 侧边栏仍显示普通名称。
     expect(sidebarItemName("Sheet 1")).toBeTruthy();
+  });
+
+  // 复现测试（Bug：页签重命名输入框焦点未落位，2026-09-06）。
+  // userEvent.dblClick 触发完整的鼠标序列（mousedown 会聚焦 .ant-tabs-tab-btn），
+  // 从而复现「输入框挂载但焦点停留在 tab button」的缺陷；修复后焦点应落在输入框内。
+  it("页签头双击进入编辑态后，焦点落在重命名输入框内", async () => {
+    const user = userEvent.setup();
+    render(<MamepApp />);
+
+    await user.dblClick(tabLabel()!);
+
+    const input = tabRenameInput();
+    expect(input).toBeTruthy();
+    // 编辑态下焦点应在输入框内（当前 bug：focus 停留并回流到 .ant-tabs-tab-btn）。
+    expect(document.activeElement).toBe(input);
   });
 
   it("页签头 Enter 提交后，名称在页签头与侧边栏同步更新", () => {
