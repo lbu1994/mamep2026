@@ -65,7 +65,7 @@ import {
 } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { mergeThemeConfig } from "@mamep2026/ui-theme";
-import { STATE_DOT_COLOR } from "./connection-state";
+import { connectionButtonSpec } from "./connection-button";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
 import { canDirectConnect, runConnect } from "./connection-actions";
@@ -402,6 +402,8 @@ export function MamepApp(): React.ReactNode {
   );
 
   const connected = connectionState === "connected";
+  // 连接多功能按钮规格（2026-09-06 连接 UI 整合）：状态点 + 文字/图标随连接态切换；窄窗口收起文字。
+  const connSpec = connectionButtonSpec(connectionState, narrow);
 
   // Header 直连 codec 协议（ADR-041）：与连接设置弹窗同源（活动表类型 → 协议）。
   const directSheetProtocol = protocolForSheetType(
@@ -449,8 +451,9 @@ export function MamepApp(): React.ReactNode {
       return;
     }
     if (host === null || host === undefined) return;
-    // 忙态（连接中/断开中/重连等）不重复发起。
+    // 忙态（连接中/断开中/选择设备/重连等）不重复发起；failed/interrupted 不守 → 作为重连入口。
     if (
+      connectionState === "selecting-device" ||
       connectionState === "connecting" ||
       connectionState === "disconnecting" ||
       connectionState === "reconnecting" ||
@@ -729,35 +732,37 @@ export function MamepApp(): React.ReactNode {
               vertical
               style={{ height: 20, marginInline: 2, flex: "none" }}
             />
-            {/* 连接区：左侧「只读状态摘要」+ 右侧 Connect/Disconnect 操作；
-                Connection 入口已移至右侧操作组（Plugin Manager 左侧），窄窗口也不收进 More */}
+            {/* 连接区：单一多功能按钮（状态显示 + Connect/Disconnect/重连 合一）——
+                状态点并入按钮、按钮文字随连接状态切换；窄窗口收起文字仅留状态点+图标（不隐藏连接状态）。
+                data-conn-state：纯展示钩子，供 CSS 按连接态着色状态点（不改任何行为/契约）。 */}
             <div className="connection-cluster">
-              <div className="connection-cluster__primary">
-                {/* data-conn-state：纯展示钩子，供 CSS 按连接态着色状态胶囊（不改任何行为/契约） */}
-                <span
-                  className="status-badge"
-                  data-conn-state={connectionState}
-                >
-                  <span
-                    className="status-badge__dot"
-                    style={{
-                      backgroundColor: STATE_DOT_COLOR[connectionState],
-                    }}
-                  />
-                  <span>{t(`state.${connectionState}`)}</span>
-                </span>
-              </div>
-              <span className="connection-cluster__sep" aria-hidden="true" />
               <Button
                 size="small"
-                className="connection-cluster__action"
-                type={connected ? "default" : "primary"}
-                danger={connected}
-                icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
+                className="connection-cluster__button"
+                type={connSpec.type}
+                {...(connSpec.color ? { color: connSpec.color } : {})}
+                {...(connSpec.variant ? { variant: connSpec.variant } : {})}
+                danger={connSpec.danger}
                 onClick={handleConnectToggle}
-                style={{ fontWeight: 600 }}
+                aria-label={t(connSpec.ariaLabelKey)}
+                title={t(connSpec.titleKey)}
+                data-conn-state={connectionState}
               >
-                {connected ? t("topbar.disconnect") : t("topbar.connect")}
+                <span className="connection-cluster__content">
+                  <span
+                    className={`conn-btn__dot${connSpec.pulsing ? " conn-btn__dot--pulse" : ""}`}
+                    style={{ backgroundColor: connSpec.dotColor }}
+                  />
+                  {connSpec.hideLabel
+                    ? connSpec.icon === "disconnect" ? (
+                        <DisconnectOutlined />
+                      ) : (
+                        <ApiOutlined />
+                      )
+                    : (
+                      <span>{t(connSpec.labelKey)}</span>
+                    )}
+                </span>
               </Button>
             </div>
             <span className="mamep-header__spacer" />

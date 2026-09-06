@@ -185,9 +185,8 @@ body {
   flex: 1;
 }
 
-/* 连接控制区：左侧「Connection 入口 + 只读状态摘要」+ 弱分隔 + 右侧 Connect/Disconnect 操作，
-   作为完整逻辑单元；操作与状态明确分组，避免 Disconnect 与状态摘要语义混淆。
-   无外框无底色（融入页面背景），状态区分交由内部 status-badge 柔和 chip 表达。 */
+/* 连接控制区：单一多功能按钮（状态显示 + Connect/Disconnect/重连 合一）。
+   状态点并入按钮并携带语义色；按钮文字随连接状态切换；无外框无底色（融入页面背景）。 */
 .connection-cluster {
   display: flex;
   align-items: center;
@@ -195,43 +194,30 @@ body {
   padding: 2px 4px;
 }
 
-.connection-cluster__primary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.connection-cluster__sep {
-  flex: none;
-  width: 1px;
-  height: 20px;
-  background: var(--mamep-border-subtle);
-}
-
-.connection-cluster__action {
+.connection-cluster__button {
   flex: none;
   white-space: nowrap;
+  font-weight: 600;
 }
 
-/* 连接状态摘要：只读 chip（柔和底色、无按钮语义），与 Disconnect 操作分离 */
-.status-badge {
+/* 按钮内容：状态点 + 文字（窄窗口下文字收起为操作图标） */
+.connection-cluster__content {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 1px 8px;
-  font-size: 12px;
-  line-height: 18px;
-  border-radius: 999px;
-  background: var(--ant-color-fill-secondary);
-  white-space: nowrap;
+  gap: 6px;
 }
 
-.status-badge__dot {
+/* 连接状态点：并入按钮内的彩色圆点（颜色由 connectionButtonSpec.dotColor 内联注入） */
+.conn-btn__dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex: none;
+}
+
+/* 过渡态（连接中/断开中/重连中/选择设备）呼吸提示（尊重 reduced-motion） */
+.conn-btn__dot--pulse {
+  animation: mamep-pulse 1.6s ease-in-out infinite;
 }
 
 /* ---------------- Sheet 侧边栏 ---------------- */
@@ -1321,7 +1307,7 @@ body {
 /* =========================================================
    2026-08-19 视觉精修（ui-ux-pro-max：Data-Dense 工程工具方向）
    纯界面打磨：不改变任何行为/契约，取色全部走既有令牌。
-   新增展示钩子：status-badge[data-conn-state]（仅 CSS 消费）。
+   新增展示钩子：连接按钮 data-conn-state（仅 CSS 消费；状态点颜色内联注入）。
    ========================================================= */
 
 /* ---------------- 0. 全局：滚动条 / 选区 / 焦点过渡 ---------------- */
@@ -1384,21 +1370,13 @@ textarea:focus-visible {
   background: var(--ant-color-bg-container);
 }
 
-/* 连接状态摘要胶囊：加边框与状态着色（连接中/成功/告警/失败 各自柔和浅底） */
-.status-badge {
-  border: 1px solid var(--ant-color-split);
-}
-
-.status-badge[data-conn-state="connected"],
+/* Comm Properties 状态读数：data-conn-state 按连接态着色（连接中/成功/告警/失败 各自柔和浅底）。
+   头部连接按钮状态点颜色由 conn-btn__dot 内联注入（connectionButtonSpec.dotColor），此处仅面板读数着色。 */
 .comm-props__status[data-conn-state="connected"] {
   background: var(--ant-color-success-bg);
   border-color: var(--ant-color-success-border);
 }
 
-.status-badge[data-conn-state="connecting"],
-.status-badge[data-conn-state="selecting-device"],
-.status-badge[data-conn-state="disconnecting"],
-.status-badge[data-conn-state="reconnecting"],
 .comm-props__status[data-conn-state="connecting"],
 .comm-props__status[data-conn-state="selecting-device"],
 .comm-props__status[data-conn-state="disconnecting"],
@@ -1407,25 +1385,18 @@ textarea:focus-visible {
   border-color: var(--ant-color-primary-border);
 }
 
-.status-badge[data-conn-state="reconnect-waiting"],
-.status-badge[data-conn-state="interrupted"],
 .comm-props__status[data-conn-state="reconnect-waiting"],
 .comm-props__status[data-conn-state="interrupted"] {
   background: var(--ant-color-warning-bg);
   border-color: var(--ant-color-warning-border);
 }
 
-.status-badge[data-conn-state="failed"],
 .comm-props__status[data-conn-state="failed"] {
   background: var(--ant-color-error-bg);
   border-color: var(--ant-color-error-border);
 }
 
 /* 活跃过渡态（连接中/选择设备/断开中/重连）：状态点呼吸提示（尊重 reduced-motion） */
-.status-badge[data-conn-state="connecting"] .status-badge__dot,
-.status-badge[data-conn-state="selecting-device"] .status-badge__dot,
-.status-badge[data-conn-state="disconnecting"] .status-badge__dot,
-.status-badge[data-conn-state="reconnecting"] .status-badge__dot,
 .comm-props__status[data-conn-state="connecting"] .comm-props__status-dot,
 .comm-props__status[data-conn-state="selecting-device"] .comm-props__status-dot,
 .comm-props__status[data-conn-state="disconnecting"] .comm-props__status-dot,
@@ -1647,8 +1618,8 @@ textarea:focus-visible {
   padding-inline-end: 20px;
 }
 
-/* Status 读数：与顶栏状态胶囊同语义（柔和浅底 + 圆点 + 边框），
-   data-conn-state 按连接态着色（与 .status-badge 共用同一组状态色规则） */
+/* Status 读数：与顶栏连接按钮同语义（柔和浅底 + 圆点 + 边框），
+   data-conn-state 按连接态着色 */
 .comm-props__status {
   display: inline-flex;
   align-items: center;
@@ -1672,7 +1643,7 @@ textarea:focus-visible {
 /* ---------------- 5. 动效与无障碍 ---------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  .status-badge[data-conn-state] .status-badge__dot,
+  .conn-btn__dot--pulse,
   .comm-props__status[data-conn-state] .comm-props__status-dot {
     animation: none !important;
   }

@@ -4,10 +4,11 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
-    timeout: 15000,
-  });
+  // Mock 模式自动连接后连接按钮就绪；窄窗口下按钮收起文字（仅状态点+图标），
+  // 故不能依赖 header 含 "Disconnect" 文字，改用 data-conn-state 判定（宽/窄均适用）。
+  await expect(
+    page.locator(".connection-cluster__button[data-conn-state='connected']"),
+  ).toBeVisible({ timeout: 15000 });
 }
 
 test("empty-address rows disable Read/Write/WP with an explanatory tooltip", async ({
@@ -90,6 +91,8 @@ test("narrow viewport moves secondary header actions into a More menu", async ({
   await expect(menu.getByText("Help", { exact: true })).toBeVisible();
   await expect(menu.getByText("Theme", { exact: true })).toHaveCount(0);
 
-  // 连接状态始终可见。
-  await expect(page.locator(".status-badge")).toContainText("Online");
+  // 连接状态始终可见（并入单按钮；窄窗口收起文字，但保留状态点 + 状态属性，不隐藏连接状态）。
+  const connBtn = page.locator(".connection-cluster__button");
+  await expect(connBtn).toHaveAttribute("data-conn-state", "connected");
+  await expect(connBtn.locator(".conn-btn__dot")).toBeVisible();
 });
