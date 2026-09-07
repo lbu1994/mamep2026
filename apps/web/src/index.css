@@ -361,6 +361,12 @@ body {
   border: 1px solid var(--ant-color-primary);
   border-radius: 4px;
   font: inherit;
+  /* 跟随主题：输入框不继承父元素 color/background，需显式用 antd 主题令牌，
+     否则暗色下回退到浏览器 UA 默认「白底黑字」（2026-09-07 修复）。
+     对齐 .sheet-tab__input 的取色方式。 */
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+  outline: none;
 }
 
 .sheet-sidebar__section {
