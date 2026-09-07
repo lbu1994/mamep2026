@@ -19,6 +19,7 @@ dist-electron
 coverage
 playwright-report
 test-results
+test-reports
 apps/web/dist
 apps/web/dist-vscode
 

@@ -1410,6 +1410,7 @@ UI 必须：
 **全量回归测试约定（2026-09-02）**：
 
 - 全量测试统一使用根目录 **`pnpm test:all`**（一条命令按固定顺序跑完全量：三端真实端口 e2e → `pnpm test`（单测）→ `test:acceptance` → 三端 mock e2e → `test:serial:virtual` → `pnpm lint` → `pnpm typecheck`；real 环节缺环境 SKIP 不失败，fail-fast）。
+- 各步骤与各单独测试脚本（`test` / `test:acceptance` / `test:e2e:*` / `test:*:real` / `test:serial:virtual` / `lint` / `typecheck`）的终端输出会 tee 到 `test-reports/run-<时间戳>/` 下**每种测试一个独立 `.log`**，并写步骤级 `summary.json`；`test:all` 额外写 `result.json`（总体 status + 各步骤 + 失败步骤）。`test-reports/` 已 gitignore，为生成产物；可用 `MAMEP_TEST_ALL_STEPS` 只跑 `test:all` 部分步骤。详见 [docs/features/2026-09-07-测试结果日志收集.md](docs/features/2026-09-07-测试结果日志收集.md)。
 - **运行 `pnpm test:all` 之前，不得先运行任何其他指令**——例如禁止先启动 dev server、禁止先启动从站/模拟设备、禁止先跑单个测试/单测等。测试前置环境（从站启停、`MAMEP_REAL` 设置、端口预检等）由 `scripts/e2e-real.mjs` 统一编排，测试通常自行拉起所需进程。
 - 若环境中已存在此前手动启动的进程（如 dev server、从站、模拟设备或其他占用端口/状态的服务），必须先清理再运行 `pnpm test:all`，避免端口占用或状态污染导致结果误判。
 

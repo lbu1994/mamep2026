@@ -44,7 +44,7 @@
 | `pnpm lint`                                                   | ESLint（全仓）                                                                           |
 | `pnpm typecheck`                                              | turbo 全包类型检查                                                                       |
 | `pnpm test`                                                   | turbo 全包 vitest                                                                        |
-| `pnpm test:all`                                               | **全量回归测试**：一条命令跑完全量（三端真实端口 e2e → 单测 → acceptance → 三端 mock e2e → 虚拟串口 → lint → typecheck；real 缺环境 SKIP 不失败，fail-fast）。**运行本命令前不要先运行任何其他指令**（例如启动 dev server、启动从站等），前置环境由 `e2e-real.mjs` 统一编排；已有手动启动的进程须先清理 |
+| `pnpm test:all`                                               | **全量回归测试**：一条命令跑完全量（三端真实端口 e2e → 单测 → acceptance → 三端 mock e2e → 虚拟串口 → lint → typecheck；real 缺环境 SKIP 不失败，fail-fast）。**运行本命令前不要先运行任何其他指令**（例如启动 dev server、启动从站等），前置环境由 `e2e-real.mjs` 统一编排；已有手动启动的进程须先清理。各步骤输出逐步骤写入 `test-reports/run-<时间戳>/` 下的独立日志与 `result.json` |
 | `pnpm test:acceptance`                                        | 验收测试（ATDD 核心闭环）                                                                |
 | `pnpm test:e2e:web` / `test:e2e:electron` / `test:e2e:vscode` | 三端 E2E（浏览器系统 Edge / Electron / 真实 VSCode，后两者自动先构建）                   |
 | `pnpm test:e2e:real`                                          | 三端「真实端口」e2e 统一编排（com0com + 真实 RTU/TCP 从站，ADR-024；缺环境 SKIP 不失败） |
@@ -53,6 +53,8 @@
 | `pnpm dev:slave` / `dev:electron:slave` / `dev:vscode:slave`  | 附带启动 Modbus 从站的开发模式                                                           |
 | `pnpm slave`                                                  | 启动 Modbus RTU 从站（`scripts/modbus-slave/modbus-rtu-slave.mjs`）                      |
 | `pnpm format` / `pnpm format:check`                           | Prettier                                                                                 |
+
+> **测试报告/日志**：`test:all` 及单测/acceptance/三端 e2e/虚拟串口/lint/typecheck 等各测试脚本，都会把终端输出 tee 到 `test-reports/run-<时间戳>/` 下**每种测试一个独立 `.log`**，并写入步骤级 `summary.json`；`test:all` 额外写 `result.json`（总体 status + 各步骤、失败步骤）。`test-reports/` 为生成产物，已加入 `.gitignore`。可用 `MAMEP_TEST_ALL_STEPS=<步骤名逗号分隔>` 只跑 `test:all` 的部分步骤（如 `lint,typecheck`）。详见 [docs/features/2026-09-07-测试结果日志收集.md](docs/features/2026-09-07-测试结果日志收集.md)。
 
 ## 快速开始
 

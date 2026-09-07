@@ -309,7 +309,7 @@ test("TM opens a Memory Trace window and collects samples", async ({
 
   try {
     await openTrace();
-  } catch (err) {
+  } catch (_err) {
     // 偶发掉线：reload 后重连 Mock 并重试一次（仅防御性重试，非掩盖真实回归）。
     await page.reload();
     await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
