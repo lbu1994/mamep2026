@@ -1,0 +1,23 @@
+{
+  "id": "technopro-blue-theme",
+  "name": "Technopro Blue Theme",
+  "version": "1.0.0",
+  "apiVersion": "1.0",
+  "description": "Contributes the Technopro brand blue (#007F9F) as an optional theme color preset.",
+  "author": "Mamep2026 Team",
+  "platform": { "web": true, "node": false },
+  "requiredCapabilities": [],
+  "permissions": ["theme"],
+  "contributes": {
+    "theme": {
+      "colors": [
+        {
+          "id": "blue",
+          "titleKey": "plugins.technoproBlueThemeColor",
+          "title": { "en-US": "Technopro Blue", "zh-CN": "善诚蓝" },
+          "colorPrimary": "#007F9F"
+        }
+      ]
+    }
+  }
+}

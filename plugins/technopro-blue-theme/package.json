@@ -1,0 +1,23 @@
+{
+  "name": "@mamep2026/technopro-blue-theme",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mamep2026/plugin-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@mamep2026/test-kit": "workspace:*",
+    "@mamep2026/typescript-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
