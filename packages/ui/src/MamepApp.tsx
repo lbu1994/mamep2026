@@ -313,7 +313,10 @@ export function MamepApp(): React.ReactNode {
     sidebarListRef.current
       ?.querySelectorAll<HTMLLIElement>("li[data-sheet-id]")
       .forEach((el) => {
-        el.draggable = true;
+        // 正在重命名的表项不可拖拽：编辑输入框渲染在该 li 内，若 li 保持 draggable，
+        // 用户在输入框上按住+拖动会被当作拖拽表项而非文本选择（2026-09-08 修复）。
+        // 其余表项保持可拖拽排序；本 effect 每次渲染后执行，随 sidebarRenamingSheetId 更新。
+        el.draggable = el.dataset.sheetId !== sidebarRenamingSheetId;
       });
   });
 
