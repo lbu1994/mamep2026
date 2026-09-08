@@ -471,15 +471,7 @@ body {
   font-weight: 600;
 }
 
-/* 折叠窄条：分组 Menu 收缩为图标入口（悬停弹出子项）；「新建表」按钮保留 */
-.sheet-sidebar__collapsed-add {
-  display: none;
-}
-
-.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__collapsed-add {
-  display: block;
-  margin: 8px auto 0;
-}
+/* 折叠窄条：分组 Menu 收缩为图标入口（悬停弹出子项） */
 
 /* 折叠窄条：隐藏分组头「＋」按钮（折叠态新建由窄条顶部按钮承担，
    避免其 Tooltip/热区干扰折叠图标入口的悬停弹出）。 */

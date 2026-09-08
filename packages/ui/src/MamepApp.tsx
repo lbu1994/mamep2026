@@ -113,19 +113,21 @@ function themeColorOptionLabel(title: string, color: string): ReactNode {
 
 /** 侧边栏分组折叠态图标（ADR-041 分组）：按表类型区分，插件/未知组回退通用图标。 */
 function sidebarGroupIcon(sheetType: SheetType): ReactNode {
-  // 分组图标为装饰性（组标题已表达分组语义）：aria-hidden 避免其自带 aria-label
-  // （如 database）被 getByLabel("Data") 等子串匹配误命中（2026-09-08 回归修复）。
+  // 分组图标为装饰性（组标题已表达分组语义）：aria-hidden 净化 a11y 名；
+  // 同时把 aria-label 置空，避免其自带图标名（如 database）被
+  // getByLabel("Data") 等子串匹配误命中（Playwright getByLabel 按原始 aria-label
+  // 匹配、不理会 aria-hidden，2026-09-08 修复）。
   switch (sheetType) {
     case "holding-register":
-      return <DatabaseOutlined aria-hidden />;
+      return <DatabaseOutlined aria-label="" aria-hidden />;
     case "coil":
-      return <ThunderboltOutlined aria-hidden />;
+      return <ThunderboltOutlined aria-label="" aria-hidden />;
     case "discrete-input":
-      return <ReadOutlined aria-hidden />;
+      return <ReadOutlined aria-label="" aria-hidden />;
     case "input-register":
-      return <FundOutlined aria-hidden />;
+      return <FundOutlined aria-label="" aria-hidden />;
     default:
-      return <AppstoreOutlined aria-hidden />;
+      return <AppstoreOutlined aria-label="" aria-hidden />;
   }
 }
 
@@ -881,17 +883,6 @@ export function MamepApp(): React.ReactNode {
                   />
                 </Tooltip>
               </div>
-              {/* 折叠窄条下的新建表按钮（原「＋」在分组头内，折叠时仅保留此按钮） */}
-              <Tooltip title={t("sidebar.newTable")}>
-                <Button
-                  type="text"
-                  size="small"
-                  className="sheet-sidebar__collapsed-add"
-                  aria-label={t("sidebar.newTable")}
-                  icon={<PlusOutlined />}
-                  onClick={() => addSheet()}
-                />
-              </Tooltip>
               {/* 分区标题保留（新建入口已移入各分组头右侧 +，ADR-041 决策②） */}
               <div className="sheet-sidebar__section">
                 <span className="sheet-sidebar__section-title">
@@ -906,7 +897,7 @@ export function MamepApp(): React.ReactNode {
                   selectedKeys={
                     currentSheet !== undefined ? [currentSheet.sheetId] : []
                   }
-                  openKeys={sheetGroupOpenKeys}
+                  {...(sidebarCollapsed ? {} : { openKeys: sheetGroupOpenKeys })}
                   onOpenChange={handleGroupOpenChange}
                   onClick={({ key, domEvent }) => {
                     // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
