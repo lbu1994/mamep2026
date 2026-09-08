@@ -1,0 +1,23 @@
+{
+  "id": "schneider-green-theme",
+  "name": "Schneider Green Theme",
+  "version": "1.0.0",
+  "apiVersion": "1.0",
+  "description": "Contributes the Schneider brand green (#009E4D) as an optional theme color preset.",
+  "author": "Mamep2026 Team",
+  "platform": { "web": true, "node": false },
+  "requiredCapabilities": [],
+  "permissions": ["theme"],
+  "contributes": {
+    "theme": {
+      "colors": [
+        {
+          "id": "green",
+          "titleKey": "plugins.schneiderGreenThemeColor",
+          "title": { "en-US": "Schneider Green", "zh-CN": "施耐德绿" },
+          "colorPrimary": "#009E4D"
+        }
+      ]
+    }
+  }
+}
