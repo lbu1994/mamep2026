@@ -160,7 +160,7 @@ test("radix is per-sheet and survives a reload", async ({ page }) => {
 
   // 切回 Sheet 1：保持 HEX。
   await page
-    .locator(".ant-layout-sider li")
+    .locator(".ant-layout-sider li.sheet-item")
     .filter({ hasText: "Sheet 1" })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(tableHeader(page)).toContainText("Register[HEX]");
@@ -175,7 +175,7 @@ test("radix is per-sheet and survives a reload", async ({ page }) => {
   await expect(tableHeader(page)).toContainText("Register[HEX]");
   // Sheet 2 仍为 DEC。
   await page
-    .locator(".ant-layout-sider li")
+    .locator(".ant-layout-sider li.sheet-item")
     .filter({ hasText: "Sheet 2" })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(tableHeader(page)).toContainText("Register[DEC]");

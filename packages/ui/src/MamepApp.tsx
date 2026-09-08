@@ -6,7 +6,6 @@ import {
   App as AntApp,
   Avatar,
   Button,
-  Collapse,
   ConfigProvider,
   Divider,
   Dropdown,
@@ -42,13 +41,17 @@ import {
 import {
   ApiOutlined,
   AppstoreOutlined,
+  DatabaseOutlined,
   DisconnectOutlined,
+  FundOutlined,
   LeftOutlined,
   MoreOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
+  ReadOutlined,
   RightOutlined,
   SettingOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import type {
   RowId,
@@ -106,6 +109,24 @@ function themeColorOptionLabel(title: string, color: string): ReactNode {
       {title}
     </Space>
   );
+}
+
+/** 侧边栏分组折叠态图标（ADR-041 分组）：按表类型区分，插件/未知组回退通用图标。 */
+function sidebarGroupIcon(sheetType: SheetType): ReactNode {
+  // 分组图标为装饰性（组标题已表达分组语义）：aria-hidden 避免其自带 aria-label
+  // （如 database）被 getByLabel("Data") 等子串匹配误命中（2026-09-08 回归修复）。
+  switch (sheetType) {
+    case "holding-register":
+      return <DatabaseOutlined aria-hidden />;
+    case "coil":
+      return <ThunderboltOutlined aria-hidden />;
+    case "discrete-input":
+      return <ReadOutlined aria-hidden />;
+    case "input-register":
+      return <FundOutlined aria-hidden />;
+    default:
+      return <AppstoreOutlined aria-hidden />;
+  }
 }
 
 export function MamepApp(): React.ReactNode {
@@ -243,15 +264,28 @@ export function MamepApp(): React.ReactNode {
     }
     return groups;
   }, [host, tableTypeContributions]);
-  // 分组折叠状态（ADR-041 决策②）：受控展开 + 记忆用户手动折叠的组。
-  // 不用 defaultActiveKey——插件贡献晚于 Collapse 挂载加载时，新组会默认折叠、
+  // 分组折叠状态（ADR-041 决策②）：受控 openKeys + 记忆用户手动折叠的组。
+  // 不用 defaultOpenKeys——插件贡献晚于 Menu 挂载加载时，新组会默认折叠、
   // 用户看不到「67H 组」入口；这里对未手动折叠的组恒展开（新组加入即展开）。
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const sheetGroupActiveKeys = sheetGroups
+  const sheetGroupOpenKeys = sheetGroups
     .filter((group) => !collapsedGroups.has(group.key))
     .map((group) => group.key);
+  const handleGroupOpenChange = (keys: string[]): void => {
+    // 折叠态下 antd 会因 Sider 折叠把内联 openKeys 重置为空并触发 onOpenChange([])，
+    // 该变化非用户意图，不得据此把「分组折叠记忆」写成全部折叠；仅展开态的真实开合才回写。
+    if (sidebarCollapsed) return;
+    const openSet = new Set(keys);
+    setCollapsedGroups(
+      new Set(
+        sheetGroups
+          .filter((group) => !openSet.has(group.key))
+          .map((group) => group.key),
+      ),
+    );
+  };
   const setLanguage = useAppStore((s) => s.setLanguage);
   const addSheet = useAppStore((s) => s.addSheet);
   const renameSheet = useAppStore((s) => s.renameSheet);
@@ -305,6 +339,7 @@ export function MamepApp(): React.ReactNode {
   // Splitter 受控 size 拖拽过程缓冲：onResize 更新本地，onResizeEnd 才持久化到 panelLayout（避免高频写 store）。
   const [dragPanelHeight, setDragPanelHeight] = useState<number | null>(null);
   const dragIndex = useRef<number | null>(null);
+  const dragGroup = useRef<string | null>(null);
   // 侧边栏分组（ADR-041）容器：antd Menu 无法通过 items 配置直接给 <li> 设 draggable，
   // 提交后在真实 DOM 上补齐（多个分组 Menu 统一经容器查找），保证表项可真实拖拽排序。
   const sidebarListRef = useRef<HTMLDivElement>(null);
@@ -596,14 +631,16 @@ export function MamepApp(): React.ReactNode {
   ];
 
   // ---- 侧边栏分组（ADR-041 决策②）----
-  // 单个表项的 Menu item（含拖拽属性、右键/更多菜单、重命名）。
+  // 单个表项的 Menu item（含拖拽属性；折叠态简化为仅切换的纯文本项，展开态保留右键/更多/重命名）。
   const sheetMenuItem = (
     sheet: { sheetId: SheetId; name: string; open: boolean },
     index: number,
+    groupKey: string,
   ): NonNullable<MenuProps["items"]>[number] => ({
     key: sheet.sheetId,
     "data-sheet-id": sheet.sheetId,
     "data-sheet-index": index,
+    "data-sheet-group": groupKey,
     // rc-menu 会给 inline 顶层 item 内联 padding-left: inlineIndent(24px)，
     // 内联样式优先于 CSS，需在 item style 里覆盖回 6px 以保持原视觉。
     style: { paddingInline: 6 },
@@ -613,7 +650,10 @@ export function MamepApp(): React.ReactNode {
         : sheet.open
           ? "sheet-item"
           : "sheet-item sheet-item--closed",
-    label: (
+    // 折叠态（窄条弹层）：仅切换表；不渲染更名输入框 / 右键 / More 菜单。
+    label: sidebarCollapsed ? (
+      <span className="sheet-item__name">{sheet.name}</span>
+    ) : (
       <Dropdown
         trigger={["contextMenu"]}
         menu={{
@@ -655,58 +695,52 @@ export function MamepApp(): React.ReactNode {
     ),
   });
 
-  // 单个分组的 Menu（组内表项拖拽排序；组与组之间因分属不同 Menu 不可跨组拖拽，
-  // 与「不同类型表之间不可随意复制粘贴」（决策⑥）一致）。
-  const renderGroupMenu = (
-    groupSheets: Array<{
-      sheetId: SheetId;
-      name: string;
-      open: boolean;
-      index: number;
-    }>,
-  ) => (
-    <Menu
-      className="sheet-sidebar__list sheet-sidebar__menu"
-      mode="inline"
-      inlineCollapsed={false}
-      selectable
-      selectedKeys={currentSheet !== undefined ? [currentSheet.sheetId] : []}
-      onClick={({ key, domEvent }) => {
-        // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
-        // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
-        // 而非“切换表”意图，忽略以免把 active 切回源表。
-        const target = domEvent.target as HTMLElement;
-        if (target.closest(".ant-dropdown") !== null) return;
-        // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
-        openSheet(key as SheetId);
-      }}
-      onDragStart={(event) => {
-        const li = (event.target as HTMLElement).closest<HTMLLIElement>(
-          "li[data-sheet-index]",
-        );
-        if (li?.dataset.sheetIndex !== undefined) {
-          dragIndex.current = Number(li.dataset.sheetIndex);
-        }
-      }}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault();
-        const li = (event.target as HTMLElement).closest<HTMLLIElement>(
-          "li[data-sheet-index]",
-        );
-        const fromIndex = dragIndex.current;
-        dragIndex.current = null;
-        if (li?.dataset.sheetIndex === undefined) return;
-        if (fromIndex === null) return;
-        const toIndex = Number(li.dataset.sheetIndex);
-        if (fromIndex === toIndex) return;
-        const source = sheetMeta[fromIndex];
-        if (source !== undefined) {
-          moveSheetTo(source.sheetId, toIndex);
-        }
-      }}
-      items={groupSheets.map((sheet) => sheetMenuItem(sheet, sheet.index))}
-    />
+  // 侧边栏分组菜单 items（ADR-041 决策②）：单 Menu + 每分组一个 SubMenu。
+  // 折叠态凭 SiderContext 自动收缩为图标并悬停弹出子项；展开态内联展示，组头可折叠、
+  // 「＋」新建、组内拖拽（跨组禁拖，决策⑥——经 data-sheet-group 同组守卫）。
+  const sidebarMenuItems: NonNullable<MenuProps["items"]> = sheetGroups.map(
+    (group) => {
+      const groupSheets = sheetMeta
+        .map((sheet, index) => ({ ...sheet, index }))
+        .filter((sheet) => sheet.type === group.sheetType);
+      return {
+        key: group.key,
+        icon: sidebarGroupIcon(group.sheetType),
+        popupClassName: "sheet-sidebar__popup",
+        label: (
+          <span
+            className="sheet-sidebar__group-head"
+            data-sheet-group={group.key}
+          >
+            <span className="sheet-sidebar__group-title">
+              {t(group.titleKey)}
+            </span>
+            <Tooltip title={t("sidebar.newTable")}>
+              <Button
+                type="text"
+                size="small"
+                className="sheet-sidebar__group-action"
+                // 核心组保持「New Register Table」（既有 e2e 定位依赖）；
+                // 插件组用组标题作 aria-label（语义 = 在该组新建对应类型表）。
+                aria-label={
+                  group.sheetType === "holding-register"
+                    ? t("sidebar.newTable")
+                    : t(group.titleKey)
+                }
+                icon={<PlusOutlined />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  addSheet(group.sheetType);
+                }}
+              />
+            </Tooltip>
+          </span>
+        ),
+        children: groupSheets.map((sheet) =>
+          sheetMenuItem(sheet, sheet.index, group.key),
+        ),
+      };
+    },
   );
 
   return (
@@ -865,59 +899,55 @@ export function MamepApp(): React.ReactNode {
                 </span>
               </div>
               <div ref={sidebarListRef} className="sheet-sidebar__groups">
-                <Collapse
-                  ghost
-                  className="sheet-sidebar__groups-collapse"
-                  activeKey={sheetGroupActiveKeys}
-                  onChange={(keys) => {
-                    const expanded = new Set(
-                      Array.isArray(keys) ? keys : [keys],
-                    );
-                    setCollapsedGroups(
-                      new Set(
-                        sheetGroups
-                          .filter((group) => !expanded.has(group.key))
-                          .map((group) => group.key),
-                      ),
-                    );
+                <Menu
+                  className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
+                  mode="inline"
+                  selectable
+                  selectedKeys={
+                    currentSheet !== undefined ? [currentSheet.sheetId] : []
+                  }
+                  openKeys={sheetGroupOpenKeys}
+                  onOpenChange={handleGroupOpenChange}
+                  onClick={({ key, domEvent }) => {
+                    // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
+                    // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
+                    // 而非“切换表”意图，忽略以免把 active 切回源表。
+                    const target = domEvent.target as HTMLElement;
+                    if (target.closest(".ant-dropdown") !== null) return;
+                    // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
+                    openSheet(key as SheetId);
                   }}
-                  items={sheetGroups.map((group) => ({
-                    key: group.key,
-                    label: (
-                      <span
-                        className="sheet-sidebar__group-head"
-                        data-sheet-group={group.key}
-                      >
-                        <span className="sheet-sidebar__group-title">
-                          {t(group.titleKey)}
-                        </span>
-                        <Tooltip title={t("sidebar.newTable")}>
-                          <Button
-                            type="text"
-                            size="small"
-                            className="sheet-sidebar__group-action"
-                            // 核心组保持「New Register Table」（既有 e2e 定位依赖）；
-                            // 插件组用组标题作 aria-label（语义 = 在该组新建对应类型表）。
-                            aria-label={
-                              group.sheetType === "holding-register"
-                                ? t("sidebar.newTable")
-                                : t(group.titleKey)
-                            }
-                            icon={<PlusOutlined />}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              addSheet(group.sheetType);
-                            }}
-                          />
-                        </Tooltip>
-                      </span>
-                    ),
-                    children: renderGroupMenu(
-                      sheetMeta
-                        .map((sheet, index) => ({ ...sheet, index }))
-                        .filter((sheet) => sheet.type === group.sheetType),
-                    ),
-                  }))}
+                  onDragStart={(event) => {
+                    const li = (event.target as HTMLElement).closest<
+                      HTMLLIElement
+                    >("li[data-sheet-index]");
+                    if (li?.dataset.sheetIndex !== undefined) {
+                      dragIndex.current = Number(li.dataset.sheetIndex);
+                      dragGroup.current = li.dataset.sheetGroup ?? null;
+                    }
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const li = (event.target as HTMLElement).closest<
+                      HTMLLIElement
+                    >("li[data-sheet-index]");
+                    const fromIndex = dragIndex.current;
+                    const fromGroup = dragGroup.current;
+                    dragIndex.current = null;
+                    dragGroup.current = null;
+                    if (li?.dataset.sheetIndex === undefined) return;
+                    if (fromIndex === null) return;
+                    // 跨组禁拖（ADR-041 决策⑥）：源/目标分组不同则忽略。
+                    if (li.dataset.sheetGroup !== fromGroup) return;
+                    const toIndex = Number(li.dataset.sheetIndex);
+                    if (fromIndex === toIndex) return;
+                    const source = sheetMeta[fromIndex];
+                    if (source !== undefined) {
+                      moveSheetTo(source.sheetId, toIndex);
+                    }
+                  }}
+                  items={sidebarMenuItems}
                 />
               </div>
               <div className="sheet-sidebar__footer">

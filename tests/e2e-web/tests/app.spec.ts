@@ -157,7 +157,7 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
     .getByRole("button", { name: "Read", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  const dataInput = page.getByLabel("Data").first();
+  const dataInput = page.getByLabel("Data", { exact: true }).first();
   await expect(dataInput).toHaveText("00AB");
 
   // Write: entering 12AB updates the mock device register.
@@ -222,7 +222,7 @@ test("read all updates eligible rows and reports a summary message", async ({
   await page
     .getByRole("button", { name: "Read All" })
     .evaluate((el) => (el as HTMLElement).click());
-  const dataInputs = page.getByLabel("Data");
+  const dataInputs = page.getByLabel("Data", { exact: true });
   await expect(dataInputs.nth(0)).toHaveText("0102", { timeout: 8000 });
   await expect(dataInputs.nth(1)).toHaveText("0304", { timeout: 8000 });
 });
@@ -252,7 +252,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 
-  const dataInput = page.getByLabel("Data").first();
+  const dataInput = page.getByLabel("Data", { exact: true }).first();
   await expect(dataInput).toHaveText("0007", { timeout: 8000 });
 
   // Changing the device value is picked up by polling (forced overwrite).
@@ -393,7 +393,7 @@ test("sheets can be added and the workspace survives a reload", async ({
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
   // The active sheet may be Sheet 2 after reload; switch back to Sheet 1 to assert rows.
   await page
-    .locator(".ant-layout-sider li")
+    .locator(".ant-layout-sider li.sheet-item")
     .filter({ hasText: "Sheet 1" })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByLabel("Register", { exact: true }).first()).toHaveText(

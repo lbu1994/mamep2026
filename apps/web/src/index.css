@@ -271,6 +271,12 @@ body {
   border-radius: 4px;
 }
 
+/* 展开态：分组头（SubMenu 标题）与表项左对齐——antd 默认给 submenu 标题 24px 内联缩进，
+   会让父级比子项缩进更深（视觉颠倒），覆盖回与表项一致的 6px。 */
+.sheet-sidebar__menu.ant-menu-inline .ant-menu-submenu-title {
+  padding-inline: 6px !important;
+}
+
 .sheet-sidebar__menu .ant-menu-title-content {
   display: flex;
   align-items: center;
@@ -431,18 +437,54 @@ body {
   color: var(--ant-color-text-tertiary);
 }
 
-/* 折叠窄条：隐藏分组与折叠按钮，仅保留「新建表」按钮居中 */
-.sheet-sidebar__collapsed-add {
-  display: none;
+/* 折叠窄条分组 Menu（36px）：收缩为图标入口，悬停弹出该组表项 */
+.sheet-sidebar__menu.ant-menu-root.ant-menu-inline-collapsed {
+  width: 36px;
+  border-inline-end: 0;
+  background: transparent;
 }
 
-.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__groups {
+.sheet-sidebar__menu.ant-menu-inline-collapsed .ant-menu-submenu-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  line-height: 36px;
+  padding-inline: 0;
+}
+
+.sheet-sidebar__menu.ant-menu-inline-collapsed .ant-menu-submenu-title .anticon {
+  font-size: 15px;
+}
+
+/* 折叠态弹出子菜单：紧凑表项，对齐侧边栏 26px 视觉 */
+.sheet-sidebar__popup .ant-menu-item {
+  height: 26px;
+  line-height: 26px;
+  padding-inline: 8px;
+  border-radius: 4px;
+}
+
+.sheet-sidebar__popup .ant-menu-item-selected {
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary-text);
+  font-weight: 600;
+}
+
+/* 折叠窄条：分组 Menu 收缩为图标入口（悬停弹出子项）；「新建表」按钮保留 */
+.sheet-sidebar__collapsed-add {
   display: none;
 }
 
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__collapsed-add {
   display: block;
   margin: 8px auto 0;
+}
+
+/* 折叠窄条：隐藏分组头「＋」按钮（折叠态新建由窄条顶部按钮承担，
+   避免其 Tooltip/热区干扰折叠图标入口的悬停弹出）。 */
+.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__group-action {
+  display: none;
 }
 
 /* footer 贴底：让 sider 内容区成为 flex 列，footer 的 margin-top:auto 才生效 */
@@ -470,7 +512,6 @@ body {
 
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__title,
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__section-title,
-.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__menu,
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__footer {
   display: none;
 }
