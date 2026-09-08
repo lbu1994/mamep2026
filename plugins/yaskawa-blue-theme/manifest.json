@@ -1,0 +1,23 @@
+{
+  "id": "yaskawa-blue-theme",
+  "name": "Yaskawa Blue Theme",
+  "version": "1.0.0",
+  "apiVersion": "1.0",
+  "description": "Contributes the Yaskawa brand blue (#005BB6) as an optional theme color preset.",
+  "author": "Mamep2026 Team",
+  "platform": { "web": true, "node": false },
+  "requiredCapabilities": [],
+  "permissions": ["theme"],
+  "contributes": {
+    "theme": {
+      "colors": [
+        {
+          "id": "blue",
+          "titleKey": "plugins.yaskawaBlueThemeColor",
+          "title": { "en-US": "Yaskawa Blue", "zh-CN": "安川蓝" },
+          "colorPrimary": "#005BB6"
+        }
+      ]
+    }
+  }
+}
