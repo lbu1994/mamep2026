@@ -26,6 +26,7 @@ export const en = {
     workspace: "Workspace",
     registerTables: "Register Tables",
     newTable: "New Register Table",
+    toggleGroup: "Click to expand/collapse",
     // 分组父级菜单（ADR-041 决策②）：按协议分组，组头只读、可折叠。
     groupModbus: "Read/write via 03H/10H",
     groupMemobus: "Read/write via 67H 010DH/010EH",
@@ -562,6 +563,7 @@ export const zh: TranslationResources = {
     workspace: "工作区",
     registerTables: "寄存器表",
     newTable: "新建寄存器表",
+    toggleGroup: "点击展开/折叠",
     // 分组父级菜单（ADR-041 决策②）。
     groupModbus: "用 03H/10H 读写寄存器",
     groupMemobus: "用 67H 010DH/010EH 读写寄存器",

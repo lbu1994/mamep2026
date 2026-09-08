@@ -715,9 +715,12 @@ export function MamepApp(): React.ReactNode {
             className="sheet-sidebar__group-head"
             data-sheet-group={group.key}
           >
-            <span className="sheet-sidebar__group-title">
-              {t(group.titleKey)}
-            </span>
+            {/* 点击分组名折叠/展开（悬浮提示）；「+」为唯一右侧操作（stopPropagation 不触发折叠）。 */}
+            <Tooltip title={t("sidebar.toggleGroup")}>
+              <span className="sheet-sidebar__group-title">
+                {t(group.titleKey)}
+              </span>
+            </Tooltip>
             <Tooltip title={t("sidebar.newTable")}>
               <Button
                 type="text"

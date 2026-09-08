@@ -271,6 +271,9 @@ body {
 .sheet-sidebar__menu.ant-menu-root.ant-menu-inline {
   border-inline-end: 0;
   background: transparent;
+  /* 覆盖 antd `.ant-menu-inline { width:100% }`：配合 .sheet-sidebar__list 的 4px 水平 margin，
+     避免根菜单溢出容器产生水平滚动条（2026-09-08）。 */
+  width: auto;
 }
 
 .sheet-sidebar__menu .ant-menu-item {
@@ -293,6 +296,12 @@ body {
   align-items: center;
   flex: 1;
   min-width: 0;
+}
+
+/* 方案 A（2026-09-08）：隐藏 antd 折叠箭头，整行分组头可点击折叠；「+」为唯一右侧操作。
+   避免 `^` 箭头与「+」按钮重叠（原 `.ant-menu-submenu-arrow` 与 `.sheet-sidebar__group-action` 撞位）。 */
+.sheet-sidebar__menu.ant-menu-inline .ant-menu-submenu-title .ant-menu-submenu-arrow {
+  display: none;
 }
 
 .sheet-sidebar__menu .ant-menu-item-selected {
@@ -407,6 +416,8 @@ body {
 
 /* ---- 侧边栏协议分组（ADR-041 决策②）---- */
 .sheet-sidebar__groups {
+  /* flex:1 填满剩余高度：使任何水平滚动条贴合侧边栏底部，而非跟随最后一项（2026-09-08）。 */
+  flex: 1;
   min-height: 0;
   overflow: auto;
 }
@@ -425,10 +436,14 @@ body {
   padding: 0 !important;
 }
 
-.sheet-sidebar__group-head {
+/* 覆盖 antd `.ant-menu-inline.ant-menu-root .ant-menu-submenu-title > * { flex: none }`
+   （特异性 0,3,0 + 注入顺序更晚），使分组头可收缩以适配容器宽度、长标题省略号截断。
+   沿用本文件对 antd Menu 的 `!important` 覆盖做法（见 submenu-title padding-inline）。 */
+.sheet-sidebar__menu.sheet-sidebar__sidebar-menu .sheet-sidebar__group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: 1 1 auto !important;
   min-width: 0;
   gap: 4px;
 }
@@ -439,6 +454,9 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ant-color-text-tertiary);
+  /* flex:1 + min-width:0：长标题收缩并省略号显示，避免横向溢出（2026-09-08）。 */
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -511,6 +529,7 @@ body {
 
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__title,
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__section-title,
+.sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__group-title,
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__footer {
   display: none;
 }
