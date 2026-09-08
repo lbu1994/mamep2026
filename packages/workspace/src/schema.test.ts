@@ -664,3 +664,31 @@ describe("基础表类型与 bool dataType（ADR-043 E-2）", () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe("panelLayout persistence", () => {
+  it("round-trips a custom sidebarWidth", () => {
+    const workspace = mutate(createEmptyWorkspace(), (w) => {
+      w.panelLayout.sidebarWidth = 300;
+    });
+
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.panelLayout.sidebarWidth).toBe(300);
+  });
+
+  it("backfills the default sidebarWidth for legacy data without the field", () => {
+    const workspace = createEmptyWorkspace();
+    const legacy = JSON.parse(serializeWorkspace(workspace)) as Record<
+      string,
+      unknown
+    >;
+    const panelLayout = legacy.panelLayout as Record<string, unknown>;
+    delete panelLayout.sidebarWidth;
+
+    const parsed = parseWorkspace(legacy);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.panelLayout.sidebarWidth).toBe(160);
+  });
+});

@@ -121,9 +121,11 @@ body {
 /* ---------------- 布局骨架 ---------------- */
 
 .mamep-main {
-  display: flex;
+  /* 主区域现为水平 Splitter（2026-09-08 侧边栏可拖宽）：作为外层 Layout 列的方向弹性项，
+     Splitter 自身负责 display:flex；flex:1 填满 Header 以下剩余高度。 */
+  flex: 1;
   min-width: 0;
-  height: 100vh;
+  min-height: 0;
 }
 
 .mamep-body {
@@ -131,6 +133,8 @@ body {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  /* Splitter 面板并非 flex 容器，height:100% 确保内容被面板高度约束（同 .register-table-wrap 先例） */
+  height: 100%;
   overflow: hidden;
 }
 
@@ -229,6 +233,13 @@ body {
   min-width: 0;
   background: var(--ant-color-bg-container);
   border-right: 1px solid var(--mamep-border-subtle);
+}
+
+/* 侧边栏现为 Splitter 面板并保留 .ant-layout-sider 类（供 e2e 选择器兼容）；
+   覆盖 antd Sider 注入的 siderBg 背景与 transition:all（避免拖拽 flex-basis 抖动）。 */
+.sheet-sidebar.ant-layout-sider {
+  background: var(--ant-color-bg-container);
+  transition: none;
 }
 
 .sheet-sidebar__head {
@@ -453,7 +464,9 @@ body {
   padding-inline: 0;
 }
 
-.sheet-sidebar__menu.ant-menu-inline-collapsed .ant-menu-submenu-title .anticon {
+.sheet-sidebar__menu.ant-menu-inline-collapsed
+  .ant-menu-submenu-title
+  .anticon {
   font-size: 15px;
 }
 
@@ -479,14 +492,8 @@ body {
   display: none;
 }
 
-/* footer 贴底：让 sider 内容区成为 flex 列，footer 的 margin-top:auto 才生效 */
-.sheet-sidebar .ant-layout-sider-children {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-
+/* footer 贴底：侧边栏面板本身已是 flex 列（.sheet-sidebar display:flex;flex-direction:column），
+   footer 的 margin-top:auto 生效；Splitter 面板无 .ant-layout-sider-children 包裹层（2026-09-08）。 */
 .sheet-sidebar__footer {
   margin-top: auto;
   flex: none;
@@ -571,10 +578,6 @@ body {
   justify-content: center;
   height: 100%;
   min-height: 160px;
-}
-
-.sheet-sidebar.ant-layout-sider-light {
-  background: var(--ant-color-bg-container);
 }
 
 /* 寄存器表标签页：每个 Sheet 一个页签（antd Tabs editable-card） */
@@ -981,6 +984,16 @@ body {
 }
 
 .bottom-panel__resize:hover {
+  background: var(--ant-color-primary-bg);
+}
+
+/* 侧边栏水平分割条（2026-09-08 侧边栏可拖宽）：col-resize + hover 高亮，与底部面板视觉一致 */
+.sidebar-panel__resize {
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-panel__resize:hover {
   background: var(--ant-color-primary-bg);
 }
 

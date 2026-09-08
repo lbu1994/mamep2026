@@ -4,6 +4,7 @@
  */
 import {
   createMamepError,
+  DEFAULT_SIDEBAR_WIDTH,
   defaultConfig,
   RegisterAddress,
   RawRegisterValue,
@@ -60,13 +61,20 @@ const sheetSchema = z.object({
   sheetId: z.string(),
   name: z.string(),
   /** 表类型（ADR-041）：核心 "holding-register" 或 "<pluginId>:<tableTypeId>"；老数据由 v4→v5 迁移补齐。ADR-043 E-2：核心再增 coil/discrete-input/input-register。 */
-  type: z.union([
-    z.literal("holding-register"),
-    z.literal("coil"),
-    z.literal("discrete-input"),
-    z.literal("input-register"),
-    z.string().regex(/^[^:]+:[^:]+$/, "sheet type must be a core type or <pluginId>:<tableTypeId>"),
-  ]).default("holding-register"),
+  type: z
+    .union([
+      z.literal("holding-register"),
+      z.literal("coil"),
+      z.literal("discrete-input"),
+      z.literal("input-register"),
+      z
+        .string()
+        .regex(
+          /^[^:]+:[^:]+$/,
+          "sheet type must be a core type or <pluginId>:<tableTypeId>",
+        ),
+    ])
+    .default("holding-register"),
   order: z.number().int(),
   /** 打开/关闭状态（2026-08-21）：关闭的表仍在工作区中（侧边栏保留），仅从页签栏隐藏；老数据缺省补 true，无需迁移 */
   open: z.boolean().default(true),
@@ -80,7 +88,14 @@ const sheetSchema = z.object({
   /** 各列拖拽后的排列顺序（随表持久化，2026-08-18）；老数据缺省补 null（默认顺序），无需迁移 */
   columnOrder: z.array(z.string()).nullable().default(null),
   /** Slave Address（每表独立，随表持久化，2026-08-19）；老数据缺省补默认 1，无需迁移 */
-  slaveAddress: z.number().int().min(0).max(255).default(1),  /** 写后回读配置（每表独立，随工作区持久化，2026-08-26）；老数据由 v1→v2 迁移补齐，缺省再补默认立即回读 */
+  slaveAddress: z
+    .number()
+    .int()
+    .min(0)
+    .max(255)
+    .default(
+      1,
+    ) /** 写后回读配置（每表独立，随工作区持久化，2026-08-26）；老数据由 v1→v2 迁移补齐，缺省再补默认立即回读 */,
   writeVerify: z
     .object({
       mode: z.enum(["off", "immediate", "delayed"]),
@@ -139,12 +154,7 @@ const tcpProfileSchema = z.object({
   protocol: z.literal("tcp"),
   host: z.string().min(1),
   port: z.number().int().min(1).max(65535),
-  unitId: z
-    .number()
-    .int()
-    .min(0)
-    .max(255)
-    .default(defaultConfig.tcp.unitId),
+  unitId: z.number().int().min(0).max(255).default(defaultConfig.tcp.unitId),
   connectTimeoutMs: z.number().int().min(0),
   requestTimeoutMs: z.number().int().min(0),
   retryCount: z.number().int().min(0).max(10),
@@ -177,6 +187,8 @@ export const workspaceSchema = z.object({
   }),
   panelLayout: z.object({
     sidebarCollapsed: z.boolean(),
+    /** 侧边栏展开态宽度（px，2026-09-08 可拖宽；老数据缺省补默认，无需迁移）。 */
+    sidebarWidth: z.number().default(DEFAULT_SIDEBAR_WIDTH),
     bottomPanelCollapsed: z.boolean(),
     bottomPanelHeight: z.number(),
     activeBottomTab: z.string(),
@@ -221,8 +233,7 @@ export function serializeWorkspace(workspace: Workspace): string {
       rows: sheet.rows.map((row) => ({
         ...row,
         addressValue: row.addressValue?.value ?? null,
-        registerValues:
-          row.registerValues?.map((value) => value.value) ?? null,
+        registerValues: row.registerValues?.map((value) => value.value) ?? null,
       })),
     })),
   };
@@ -236,10 +247,7 @@ export function parseWorkspace(input: unknown): Result<Workspace> {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return fail(schemaInvalidError("workspace data must be an object"));
   }
-  const migrated = migrateData(
-    input as Record<string, unknown>,
-    migrations,
-  );
+  const migrated = migrateData(input as Record<string, unknown>, migrations);
   if (!migrated.ok) return migrated;
   const validated = workspaceSchema.safeParse(migrated.value);
   if (!validated.success) {

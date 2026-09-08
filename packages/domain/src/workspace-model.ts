@@ -130,7 +130,9 @@ export function createRegisterSubRowMetas(
   count: number,
   dataType: DataType,
 ): RegisterSubRowMeta[] {
-  return Array.from({ length: count }, () => createRegisterSubRowMeta(dataType));
+  return Array.from({ length: count }, () =>
+    createRegisterSubRowMeta(dataType),
+  );
 }
 
 /** 寄存器行。addressDraft / addressValue / 校验状态分离（§17.2）。 */
@@ -173,16 +175,10 @@ export type SheetType =
 
 /** 核心表类型 ID（ADR-043 E-2）：holding-register + 三个基础表。 */
 export type CoreSheetType =
-  | "holding-register"
-  | "coil"
-  | "discrete-input"
-  | "input-register";
+  "holding-register" | "coil" | "discrete-input" | "input-register";
 
 /** 基础表类型（ADR-043 E-2）：coil / discrete-input / input-register（不含 holding-register）。 */
-export type BasicSheetType =
-  | "coil"
-  | "discrete-input"
-  | "input-register";
+export type BasicSheetType = "coil" | "discrete-input" | "input-register";
 
 export const CORE_SHEET_TYPE_IDS: readonly CoreSheetType[] = [
   "holding-register",
@@ -205,9 +201,7 @@ export const BASIC_SHEET_TYPE_IDS: readonly BasicSheetType[] = [
  */
 export const BASIC_TABLES_PROTOCOL_PREFIX = "modbus-basic-tables";
 
-export function basicTablesProtocolId(
-  tableType: BasicSheetType,
-): string {
+export function basicTablesProtocolId(tableType: BasicSheetType): string {
   return `${BASIC_TABLES_PROTOCOL_PREFIX}:${tableType}`;
 }
 
@@ -268,9 +262,7 @@ export function isBasicSheetType(type: string): type is BasicSheetType {
   return (BASIC_SHEET_TYPE_IDS as readonly string[]).includes(type);
 }
 
-export function coreTableTypeMeta(
-  type: string,
-): CoreTableTypeMeta | null {
+export function coreTableTypeMeta(type: string): CoreTableTypeMeta | null {
   for (const meta of CORE_TABLE_TYPES) {
     if (meta.id === type) return meta;
   }
@@ -326,10 +318,15 @@ export interface ReadVerifySettings {
 
 export interface PanelLayout {
   sidebarCollapsed: boolean;
+  /** 侧边栏展开态宽度（px，2026-09-08 侧边栏可拖宽）。 */
+  sidebarWidth: number;
   bottomPanelCollapsed: boolean;
   bottomPanelHeight: number;
   activeBottomTab: string;
 }
+
+/** 侧边栏展开态默认宽度（px）。 */
+export const DEFAULT_SIDEBAR_WIDTH = 160;
 
 export interface Preferences {
   theme: "light" | "dark";
@@ -501,7 +498,9 @@ export function createRegisterSheet(
   const now = Date.now();
   const meta = coreTableTypeMeta(type);
   const defaultDataType = meta?.defaultDataType ?? "hex";
-  const rows = createDefaultSheetRows(defaultConfig.registerTable.defaultRowCount);
+  const rows = createDefaultSheetRows(
+    defaultConfig.registerTable.defaultRowCount,
+  );
   // 基础表（ADR-043 E-2）：按表类型默认 dataType（coil → bool）。
   for (const row of rows) {
     row.dataType = defaultDataType;
@@ -547,6 +546,7 @@ export function createEmptyWorkspace(): Workspace {
     },
     panelLayout: {
       sidebarCollapsed: false,
+      sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
       bottomPanelCollapsed: false,
       bottomPanelHeight: 200,
       activeBottomTab: "messages",

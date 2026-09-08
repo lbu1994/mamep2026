@@ -8,6 +8,7 @@ import {
   createRegisterSheet,
   createRegisterSubRowMeta,
   createRegisterSubRowMetas,
+  DEFAULT_SIDEBAR_WIDTH,
   isCoreSheetType,
   sheetTypeWritable,
   type RegisterRow,
@@ -25,9 +26,7 @@ describe("createRegisterSheet 默认行（新建表默认填充 defaultRowCount 
       0,
       "yaskawa-memobus-67h-010dh-010eh:holding-register",
     );
-    expect(sheet.type).toBe(
-      "yaskawa-memobus-67h-010dh-010eh:holding-register",
-    );
+    expect(sheet.type).toBe("yaskawa-memobus-67h-010dh-010eh:holding-register");
   });
 
   it("新建表默认生成 defaultRowCount 个空行", () => {
@@ -110,6 +109,11 @@ describe("createEmptyWorkspace 初始表", () => {
       expect(row.name).toBe("");
     }
   });
+
+  it("默认展开态侧边栏宽度为 DEFAULT_SIDEBAR_WIDTH（2026-09-08）", () => {
+    const workspace = createEmptyWorkspace();
+    expect(workspace.panelLayout.sidebarWidth).toBe(DEFAULT_SIDEBAR_WIDTH);
+  });
 });
 
 describe("范围行子行元数据（2026-08-27）", () => {
@@ -130,7 +134,10 @@ describe("范围行子行元数据（2026-08-27）", () => {
     expect(metas.every((m) => m.name === "" && m.comment === "")).toBe(true);
     expect(metas.every((m) => m.dataType === "hex")).toBe(true);
     // 独立引用：修改一项不影响其他项。
-    metas[1] = { ...metas[1] ?? { name: "", comment: "", dataType: "hex" }, name: "x" };
+    metas[1] = {
+      ...(metas[1] ?? { name: "", comment: "", dataType: "hex" }),
+      name: "x",
+    };
     expect(metas[0]?.name).toBe("");
     expect(metas[1]?.name).toBe("x");
   });

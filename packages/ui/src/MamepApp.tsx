@@ -179,7 +179,9 @@ export function MamepApp(): React.ReactNode {
   const setActiveSheetId = useAppStore((s) => s.setActiveSheetId);
   const setConnectionModalOpen = useAppStore((s) => s.setConnectionModalOpen);
   // Header Connect 直连（2026-09-06）：读存储 profile / 会话内已选串口 / 连接错误（回退弹窗展示）。
-  const connectionProfile = useAppStore((s) => s.workspace.connectionProfiles[0]);
+  const connectionProfile = useAppStore(
+    (s) => s.workspace.connectionProfiles[0],
+  );
   const selectedSerialHandle = useAppStore((s) => s.selectedSerialHandle);
   const setConnectError = useAppStore((s) => s.setConnectError);
   const setPluginModalOpen = useAppStore((s) => s.setPluginModalOpen);
@@ -301,6 +303,7 @@ export function MamepApp(): React.ReactNode {
   const sidebarCollapsed = useAppStore(
     (s) => s.workspace.panelLayout.sidebarCollapsed,
   );
+  const sidebarWidth = useAppStore((s) => s.workspace.panelLayout.sidebarWidth);
   const bottomPanelCollapsed = useAppStore(
     (s) => s.workspace.panelLayout.bottomPanelCollapsed,
   );
@@ -340,6 +343,8 @@ export function MamepApp(): React.ReactNode {
   }, []);
   // Splitter 受控 size 拖拽过程缓冲：onResize 更新本地，onResizeEnd 才持久化到 panelLayout（避免高频写 store）。
   const [dragPanelHeight, setDragPanelHeight] = useState<number | null>(null);
+  // 侧边栏宽度拖拽缓冲：与底部面板同模式，onResize 更新本地、onResizeEnd 才写 store。
+  const [dragSidebarWidth, setDragSidebarWidth] = useState<number | null>(null);
   const dragIndex = useRef<number | null>(null);
   const dragGroup = useRef<string | null>(null);
   // 侧边栏分组（ADR-041）容器：antd Menu 无法通过 items 配置直接给 <li> 设 draggable，
@@ -458,11 +463,7 @@ export function MamepApp(): React.ReactNode {
   const directConnect = async (
     profile: RtuConnectionProfile | TcpConnectionProfile,
   ): Promise<void> => {
-    if (
-      host === null ||
-      host === undefined ||
-      directConnectingRef.current
-    ) {
+    if (host === null || host === undefined || directConnectingRef.current) {
       return;
     }
     directConnectingRef.current = true;
@@ -792,15 +793,15 @@ export function MamepApp(): React.ReactNode {
                     className={`conn-btn__dot${connSpec.pulsing ? " conn-btn__dot--pulse" : ""}`}
                     style={{ backgroundColor: connSpec.dotColor }}
                   />
-                  {connSpec.hideLabel
-                    ? connSpec.icon === "disconnect" ? (
-                        <DisconnectOutlined />
-                      ) : (
-                        <ApiOutlined />
-                      )
-                    : (
-                      <span>{t(connSpec.labelKey)}</span>
-                    )}
+                  {connSpec.hideLabel ? (
+                    connSpec.icon === "disconnect" ? (
+                      <DisconnectOutlined />
+                    ) : (
+                      <ApiOutlined />
+                    )
+                  ) : (
+                    <span>{t(connSpec.labelKey)}</span>
+                  )}
                 </span>
               </Button>
             </div>
@@ -854,15 +855,28 @@ export function MamepApp(): React.ReactNode {
               )}
             </div>
           </Layout.Header>
-          <Layout className="mamep-main">
-            <Layout.Sider
-              className="sheet-sidebar"
-              width={160}
-              collapsedWidth={36}
-              trigger={null}
-              collapsible
-              collapsed={sidebarCollapsed}
-              theme="light"
+          <Splitter
+            orientation="horizontal"
+            className="mamep-main"
+            style={{ flex: 1, minHeight: 0, minWidth: 0 }}
+            classNames={{ dragger: "sidebar-panel__resize" }}
+            onResize={(sizes) => {
+              const w = sizes[0];
+              if (w !== undefined) setDragSidebarWidth(Math.round(w));
+            }}
+            onResizeEnd={(sizes) => {
+              const w = sizes[0];
+              if (w !== undefined) {
+                setPanelLayout({ sidebarWidth: Math.round(w) });
+                setDragSidebarWidth(null);
+              }
+            }}
+          >
+            <Splitter.Panel
+              className={`sheet-sidebar ant-layout-sider${sidebarCollapsed ? " ant-layout-sider-collapsed" : ""}`}
+              size={sidebarCollapsed ? 36 : (dragSidebarWidth ?? sidebarWidth)}
+              resizable={!sidebarCollapsed}
+              {...(sidebarCollapsed ? {} : { min: 120, max: "40%" })}
             >
               <div className="sheet-sidebar__head">
                 <span className="sheet-sidebar__title">
@@ -893,11 +907,14 @@ export function MamepApp(): React.ReactNode {
                 <Menu
                   className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
                   mode="inline"
+                  inlineCollapsed={sidebarCollapsed}
                   selectable
                   selectedKeys={
                     currentSheet !== undefined ? [currentSheet.sheetId] : []
                   }
-                  {...(sidebarCollapsed ? {} : { openKeys: sheetGroupOpenKeys })}
+                  {...(sidebarCollapsed
+                    ? {}
+                    : { openKeys: sheetGroupOpenKeys })}
                   onOpenChange={handleGroupOpenChange}
                   onClick={({ key, domEvent }) => {
                     // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
@@ -909,9 +926,9 @@ export function MamepApp(): React.ReactNode {
                     openSheet(key as SheetId);
                   }}
                   onDragStart={(event) => {
-                    const li = (event.target as HTMLElement).closest<
-                      HTMLLIElement
-                    >("li[data-sheet-index]");
+                    const li = (
+                      event.target as HTMLElement
+                    ).closest<HTMLLIElement>("li[data-sheet-index]");
                     if (li?.dataset.sheetIndex !== undefined) {
                       dragIndex.current = Number(li.dataset.sheetIndex);
                       dragGroup.current = li.dataset.sheetGroup ?? null;
@@ -920,9 +937,9 @@ export function MamepApp(): React.ReactNode {
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => {
                     event.preventDefault();
-                    const li = (event.target as HTMLElement).closest<
-                      HTMLLIElement
-                    >("li[data-sheet-index]");
+                    const li = (
+                      event.target as HTMLElement
+                    ).closest<HTMLLIElement>("li[data-sheet-index]");
                     const fromIndex = dragIndex.current;
                     const fromGroup = dragGroup.current;
                     dragIndex.current = null;
@@ -951,118 +968,128 @@ export function MamepApp(): React.ReactNode {
                   { version: host?.appVersion ?? "" },
                 )}
               </div>
-            </Layout.Sider>
-            <Layout.Content className="mamep-body">
-              {/* 浏览器兼容性提示（PRD §8.3 / §15.7）：不支持 Web Serial / 非安全上下文时展示 */}
-              <BrowserCompatibilityBanner
-                compatibility={host?.browserCompatibility ?? null}
-                isMock={host?.isMockMode ?? false}
-              />
-              {/* 工作区恢复提示（ADR-049）：从备份恢复 / 恢复失败重建为空时展示 */}
-              <RecoveryBanner recovery={workspaceRecovery} />
-              <Splitter
-                orientation="vertical"
-                style={{ flex: 1, minHeight: 0 }}
-                classNames={{ dragger: "bottom-panel__resize" }}
-                onResize={(sizes) => {
-                  const panelSize = sizes[1];
-                  if (panelSize !== undefined) {
-                    setDragPanelHeight(Math.round(panelSize));
-                  }
-                }}
-                onResizeEnd={(sizes) => {
-                  const panelSize = sizes[1];
-                  if (panelSize !== undefined) {
-                    setPanelLayout({
-                      bottomPanelHeight: Math.round(panelSize),
-                    });
-                    setDragPanelHeight(null);
-                  }
-                }}
-              >
-                <Splitter.Panel>
-                  <div className="register-table-wrap">
-                    {currentSheet !== undefined ? (
-                      <Tabs
-                        type="editable-card"
-                        size="small"
-                        className="register-table-tabs"
-                        hideAdd
-                        activeKey={currentSheet.sheetId}
-                        onChange={(key) => setActiveSheetId(key as SheetId)}
-                        onEdit={(targetKey) => {
-                          // 页签「×」= 非破坏性关闭（表仍保留在侧边栏，可从侧边栏重新打开）。
-                          // hideAdd 后不存在 add 动作，此处仅处理 remove。
-                          if (typeof targetKey === "string") {
-                            closeSheet(targetKey as SheetId);
-                          }
-                        }}
-                        items={sheetMeta
-                          .map((sheet, index) => ({ sheet, index }))
-                          .filter(({ sheet }) => sheet.open)
-                          .map(({ sheet, index }) => ({
-                            key: sheet.sheetId,
-                            label: (
-                              <Dropdown
-                                trigger={["contextMenu"]}
-                                menu={{
-                                  items: sheetMenu(sheet.sheetId, index, "tab"),
-                                }}
-                              >
-                                {tabRenamingSheetId === sheet.sheetId ? (
-                                  <SheetNameEditor
-                                    className="sheet-tab__input"
-                                    name={sheet.name}
-                                    autoFocus
-                                    onCommit={(name) => {
-                                      renameSheet(sheet.sheetId, name);
-                                      setTabRenamingSheetId(null);
-                                    }}
-                                    onCancel={() => setTabRenamingSheetId(null)}
-                                  />
-                                ) : (
-                                  <span
-                                    className="sheet-tab__label"
-                                    onDoubleClick={() =>
-                                      startTabRename(sheet.sheetId)
-                                    }
-                                  >
-                                    {sheet.name}
-                                  </span>
-                                )}
-                              </Dropdown>
-                            ),
-                            children: <RegisterTable sheetId={sheet.sheetId} />,
-                          }))}
-                      />
-                    ) : (
-                      <div className="register-table-empty">
-                        <Empty
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          description={t("table.noOpenSheets")}
-                        >
-                          <Typography.Text type="secondary">
-                            {t("table.noOpenSheetsHint")}
-                          </Typography.Text>
-                        </Empty>
-                      </div>
-                    )}
-                  </div>
-                </Splitter.Panel>
-                <Splitter.Panel
-                  size={
-                    bottomPanelCollapsed
-                      ? COLLAPSED_BOTTOM_PANEL_HEIGHT
-                      : (dragPanelHeight ?? bottomPanelHeight)
-                  }
-                  resizable={!bottomPanelCollapsed}
-                  {...(bottomPanelCollapsed ? {} : { min: 120, max: "60%" })}
+            </Splitter.Panel>
+            <Splitter.Panel>
+              <div className="mamep-body">
+                {/* 浏览器兼容性提示（PRD §8.3 / §15.7）：不支持 Web Serial / 非安全上下文时展示 */}
+                <BrowserCompatibilityBanner
+                  compatibility={host?.browserCompatibility ?? null}
+                  isMock={host?.isMockMode ?? false}
+                />
+                {/* 工作区恢复提示（ADR-049）：从备份恢复 / 恢复失败重建为空时展示 */}
+                <RecoveryBanner recovery={workspaceRecovery} />
+                <Splitter
+                  orientation="vertical"
+                  style={{ flex: 1, minHeight: 0 }}
+                  classNames={{ dragger: "bottom-panel__resize" }}
+                  onResize={(sizes) => {
+                    const panelSize = sizes[1];
+                    if (panelSize !== undefined) {
+                      setDragPanelHeight(Math.round(panelSize));
+                    }
+                  }}
+                  onResizeEnd={(sizes) => {
+                    const panelSize = sizes[1];
+                    if (panelSize !== undefined) {
+                      setPanelLayout({
+                        bottomPanelHeight: Math.round(panelSize),
+                      });
+                      setDragPanelHeight(null);
+                    }
+                  }}
                 >
-                  <BottomPanel />
-                </Splitter.Panel>
-              </Splitter>
-            </Layout.Content>
-          </Layout>
+                  <Splitter.Panel>
+                    <div className="register-table-wrap">
+                      {currentSheet !== undefined ? (
+                        <Tabs
+                          type="editable-card"
+                          size="small"
+                          className="register-table-tabs"
+                          hideAdd
+                          activeKey={currentSheet.sheetId}
+                          onChange={(key) => setActiveSheetId(key as SheetId)}
+                          onEdit={(targetKey) => {
+                            // 页签「×」= 非破坏性关闭（表仍保留在侧边栏，可从侧边栏重新打开）。
+                            // hideAdd 后不存在 add 动作，此处仅处理 remove。
+                            if (typeof targetKey === "string") {
+                              closeSheet(targetKey as SheetId);
+                            }
+                          }}
+                          items={sheetMeta
+                            .map((sheet, index) => ({ sheet, index }))
+                            .filter(({ sheet }) => sheet.open)
+                            .map(({ sheet, index }) => ({
+                              key: sheet.sheetId,
+                              label: (
+                                <Dropdown
+                                  trigger={["contextMenu"]}
+                                  menu={{
+                                    items: sheetMenu(
+                                      sheet.sheetId,
+                                      index,
+                                      "tab",
+                                    ),
+                                  }}
+                                >
+                                  {tabRenamingSheetId === sheet.sheetId ? (
+                                    <SheetNameEditor
+                                      className="sheet-tab__input"
+                                      name={sheet.name}
+                                      autoFocus
+                                      onCommit={(name) => {
+                                        renameSheet(sheet.sheetId, name);
+                                        setTabRenamingSheetId(null);
+                                      }}
+                                      onCancel={() =>
+                                        setTabRenamingSheetId(null)
+                                      }
+                                    />
+                                  ) : (
+                                    <span
+                                      className="sheet-tab__label"
+                                      onDoubleClick={() =>
+                                        startTabRename(sheet.sheetId)
+                                      }
+                                    >
+                                      {sheet.name}
+                                    </span>
+                                  )}
+                                </Dropdown>
+                              ),
+                              children: (
+                                <RegisterTable sheetId={sheet.sheetId} />
+                              ),
+                            }))}
+                        />
+                      ) : (
+                        <div className="register-table-empty">
+                          <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={t("table.noOpenSheets")}
+                          >
+                            <Typography.Text type="secondary">
+                              {t("table.noOpenSheetsHint")}
+                            </Typography.Text>
+                          </Empty>
+                        </div>
+                      )}
+                    </div>
+                  </Splitter.Panel>
+                  <Splitter.Panel
+                    size={
+                      bottomPanelCollapsed
+                        ? COLLAPSED_BOTTOM_PANEL_HEIGHT
+                        : (dragPanelHeight ?? bottomPanelHeight)
+                    }
+                    resizable={!bottomPanelCollapsed}
+                    {...(bottomPanelCollapsed ? {} : { min: 120, max: "60%" })}
+                  >
+                    <BottomPanel />
+                  </Splitter.Panel>
+                </Splitter>
+              </div>
+            </Splitter.Panel>
+          </Splitter>
         </Layout>
 
         <ConnectionSettingsModal />
