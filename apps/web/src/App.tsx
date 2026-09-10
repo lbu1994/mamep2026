@@ -39,7 +39,10 @@ import {
   IndexedDBWorkspaceRepository,
 } from "@mamep2026/platform-web";
 import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
+import { isAndroidPlatform } from "@mamep2026/platform-android";
+import { createCapacitorTransportBridge } from "@mamep2026/platform-android/capacitor";
 import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
+import { AndroidAppHost } from "./android-app-host";
 import { ElectronAppHost } from "./electron-app-host";
 import { VscodeAppHost } from "./vscode-app-host";
 import { IndexedDBPluginStore } from "./indexeddb-plugin-store";
@@ -110,9 +113,12 @@ export default function App(): React.ReactNode {
 
   // 启动装配（一次）。宿主 renderer 由 preload / vscode-bridge 暴露 window.mamepHost
   // （白名单桥），按 platform 判别窄化分支装配：VSCode Webview → VscodeAppHost、
-  // Electron → ElectronAppHost；否则按浏览器 Host 装配（Web Serial + IndexedDB）。
+  // Electron → ElectronAppHost；Capacitor（Android，ADR-050）→ AndroidAppHost；
+  // 否则按浏览器 Host 装配（Web Serial + IndexedDB）。
   useEffect(() => {
     const bridge = window.mamepHost;
+    // Android（Capacitor）平台探测：读 globalThis.Capacitor.getPlatform()（不调用任何插件）。
+    const android = bridge === undefined && isAndroidPlatform(globalThis);
     // codec 注册表（ADR-041 决策 A）：随包插件 activate 填充，connect 按活动表协议路由。
     const codecRegistry = createCodecRegistry();
     // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，三端共享装配。
@@ -162,7 +168,23 @@ export default function App(): React.ReactNode {
               bundledPlugins,
               resolveAddressTransform,
             })
-        : (() => {
+        : android
+          ? (() => {
+              // Android（Capacitor，ADR-050）：本地混合宿主——通用能力委托 BrowserAppHost，
+              // TCP 走本地 TcpSessionHost + CapacitorTcpTransport（原生 socket 经桥）。
+              // 工作区与插件存储复用浏览器 IndexedDB 路径（WebView 原生支持）。
+              const kv = createIdbKeyValueStore();
+              return new AndroidAppHost({
+                bridge: createCapacitorTransportBridge(),
+                repository: new IndexedDBWorkspaceRepository(kv),
+                pluginStore: new IndexedDBPluginStore(kv),
+                codecRegistry,
+                bundledPlugins,
+                resolveAddressTransform,
+                mockTransport,
+              });
+            })()
+          : (() => {
             const serial = navigator.serial;
             const compatMiss = isCompatMissMode();
             const platformHost =

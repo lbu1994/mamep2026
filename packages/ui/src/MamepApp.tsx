@@ -967,7 +967,9 @@ export function MamepApp(): React.ReactNode {
                     ? "sidebar.footerClient"
                     : host?.platform === "vscode"
                       ? "sidebar.footerExtension"
-                      : "sidebar.footerBrowser",
+                      : host?.platform === "android"
+                        ? "sidebar.footerAndroid"
+                        : "sidebar.footerBrowser",
                   { version: host?.appVersion ?? "" },
                 )}
               </div>

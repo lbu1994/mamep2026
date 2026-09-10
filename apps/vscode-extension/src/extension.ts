@@ -43,6 +43,7 @@ import {
 } from "./ipc";
 import { VscodeSessionHost } from "./session-host";
 import { getDevHtml } from "./webview/html";
+import { buildWebviewCsp } from "./webview/prod-csp";
 
 /** 当前主面板（单实例：重复命令 reveal）。 */
 let panel: vscode.WebviewPanel | undefined;
@@ -415,16 +416,8 @@ function getProdHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string 
     webview.asWebviewUri(vscode.Uri.joinPath(mediaUri, mediaPath)).toString();
 
   // Webview 专用 CSP：资源源用 webview.cspSource（VSCode 版本无关），'self' 保留兜底。
-  const cspSource = webview.cspSource;
-  const csp = [
-    `default-src ${cspSource} 'self'`,
-    `script-src ${cspSource} 'self'`,
-    // antd CSS-in-JS 依赖内联 <style>，必须放行 unsafe-inline。
-    `style-src ${cspSource} 'self' 'unsafe-inline'`,
-    `img-src ${cspSource} 'self' data:`,
-    `font-src ${cspSource} 'self' data:`,
-    `connect-src ${cspSource} 'self'`,
-  ].join("; ");
+  // 策略内容见 ./webview/prod-csp.ts（含插件 Blob Worker 所需 worker-src）。
+  const csp = buildWebviewCsp(webview.cspSource);
 
   return indexHtml
     // <base> 指向 media 的 asWebviewUri 根：兜底运行时构造的相对 URL（标准 Webview 模式）。

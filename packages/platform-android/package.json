@@ -1,0 +1,28 @@
+{
+  "name": "@mamep2026/platform-android",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./capacitor": "./src/capacitor-bridge.ts",
+    "./testing": "./src/testing/fake-transport-bridge.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.1",
+    "@mamep2026/communication": "workspace:*",
+    "@mamep2026/domain": "workspace:*",
+    "@mamep2026/platform-api": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@mamep2026/typescript-config": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

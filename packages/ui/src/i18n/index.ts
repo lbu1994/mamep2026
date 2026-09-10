@@ -33,6 +33,7 @@ export const en = {
     footerBrowser: "Browser v{{version}}",
     footerClient: "Client v{{version}}",
     footerExtension: "Extension v{{version}}",
+    footerAndroid: "Android v{{version}}",
   },
   connection: {
     title: "Connection Settings",
@@ -504,6 +505,8 @@ export const en = {
     serialNotFound: "Serial port not found.",
     serialParameterUnsupported:
       "One or more serial parameters are not supported.",
+    serialDriverUnsupported:
+      "This USB serial adapter is not supported (unsupported chip or driver).",
     serialOpenFailed: "Failed to open the serial port.",
     serialRequestFailed: "Failed to request a serial port.",
     serialEnumerationUnsupported:
@@ -514,6 +517,8 @@ export const en = {
     tcpPortInUse: "TCP port is already in use.",
     tcpOpenFailed: "Failed to open the TCP connection.",
     tcpUnsupported: "Modbus TCP is not supported in this environment.",
+    bridgePayloadInvalid:
+      "The platform bridge returned an invalid response.",
     tcpHostInvalid: "Invalid TCP host.",
     tcpPortOutOfRange: "TCP port is out of range (1..65535).",
     tcpUnitIdOutOfRange: "TCP unit ID is out of range (0..255).",
@@ -570,6 +575,7 @@ export const zh: TranslationResources = {
     footerBrowser: "浏览器 v{{version}}",
     footerClient: "客户端 v{{version}}",
     footerExtension: "插件 v{{version}}",
+    footerAndroid: "Android v{{version}}",
   },
   connection: {
     title: "连接设置",
@@ -1018,6 +1024,7 @@ export const zh: TranslationResources = {
     serialError: "串口错误。",
     serialNotFound: "串口不存在。",
     serialParameterUnsupported: "部分串口参数不受支持。",
+    serialDriverUnsupported: "不支持该 USB 串口适配器（芯片或驱动不受支持）。",
     serialOpenFailed: "打开串口失败。",
     serialRequestFailed: "请求串口失败。",
     serialEnumerationUnsupported: "当前环境不支持枚举串口。",
@@ -1027,6 +1034,7 @@ export const zh: TranslationResources = {
     tcpPortInUse: "TCP 端口已被占用。",
     tcpOpenFailed: "打开 TCP 连接失败。",
     tcpUnsupported: "当前环境不支持 Modbus TCP。",
+    bridgePayloadInvalid: "平台桥返回了非法数据。",
     tcpHostInvalid: "TCP 主机无效。",
     tcpPortOutOfRange: "TCP 端口超出范围（1..65535）。",
     tcpUnitIdOutOfRange: "TCP 单元标识超出范围（0..255）。",

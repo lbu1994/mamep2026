@@ -22,6 +22,7 @@ test-results
 test-reports
 apps/web/dist
 apps/web/dist-vscode
+apps/web/dist-android
 
 # Electron 免安装打包输出（release/win-unpacked、staging-app 等）
 release

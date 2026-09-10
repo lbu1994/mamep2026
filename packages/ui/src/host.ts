@@ -71,9 +71,9 @@ export interface AppHost {
 
   /**
    * 运行平台标识（侧边栏 footer 等按平台显示文案）：
-   * "browser" 浏览器端 / "electron" Electron 端 / "vscode" VSCode 插件端。
+   * "browser" 浏览器端 / "electron" Electron 端 / "vscode" VSCode 插件端 / "android" Android（Capacitor）。
    */
-  readonly platform: "browser" | "electron" | "vscode";
+  readonly platform: "browser" | "electron" | "vscode" | "android";
 
   /**
    * 启动插件系统（2026-09-02 插件外部化）：装配后显式调用——首次启动一次性安装随包插件

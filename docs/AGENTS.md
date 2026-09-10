@@ -142,7 +142,8 @@ MVP 交付形态为三端运行骨架加核心调试闭环：
 
 - 浏览器、Electron 和 VSCode 三端均能启动并加载同一套共享 UI 页面，页面显示一致；
 - 三端功能完整度按 PRD 优先级逐步补齐，骨架阶段不要求串口、TCP 等能力生效；
-- 三端骨架必须符合各自安全边界：Electron 为 Main、Preload、Renderer 隔离，VSCode 为 Extension Host 与 Webview 隔离。
+- 三端骨架必须符合各自安全边界：Electron 为 Main、Preload、Renderer 隔离，VSCode 为 Extension Host 与 Webview 隔离；
+- Android 客户端（2026-09-10 纳入的第四平台，ADR-050）**不属于 MVP P0 交付范围**，按 ADR-050 分期推进（Phase 1 骨架 + TCP → Phase 2 USB-RS485 → Phase 3 UI 适配）；**Phase 1/2 均已落地**，Phase 3 起按 ADR-050 继续。
 
 > 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 端骨架已落地（2026-08-23：`apps/vscode-extension/` 命令打开 Webview 加载共享 UI——生产 `asWebviewUri` 打包资源 / dev `MAMEP_DEV_URL` iframe，Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC，能力矩阵如实声明，`tests/e2e-vscode` 真实 VSCode 集成测试）；Node 串口原型已通过（2026-08-23，ADR-020：`packages/platform-node` 落地 Node Serial Adapter，serialport@13 选型，Layer 1 Fake 57 用例 + Layer 2 com0com COM4/COM5 虚拟串口 7 用例全绿，Electron/VSCode 独立探针就绪，能力矩阵未翻转，见 docs/node-serial-prototype-验证记录.md）。
 
@@ -252,6 +253,7 @@ Address Adjust 已实现为随应用分发的插件（`plugins/address-adjust`�
       web/
       electron/
       vscode-extension/
+      android/
 
     packages/
       domain/
@@ -265,6 +267,8 @@ Address Adjust 已实现为随应用分发的插件（`plugins/address-adjust`�
       platform-api/
       platform-web/
       platform-node/
+      platform-android/   # 已落地（Phase 1，ADR-050）
+      # capacitor-modbus-transport/ 已否决（Phase 1 决策），不创建
       platform-electron/
       platform-vscode/
       ui/
@@ -291,7 +295,11 @@ Address Adjust 已实现为随应用分发的插件（`plugins/address-adjust`�
 
 实际目录尚未创建或与上述结构存在合理差异时，应以当前已确认的工程结构和 ADR 为准，不得为了匹配示意结构进行无关的大规模移动。
 
-当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、ui-theme（2026-08-25，ADR-027：平台主题适配层，base 主题 + VSCode 完整令牌映射）、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 [ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）。注：对应目标结构中的 `apps/vscode-extension` 已就位；`plugins/` 目录尚未创建（仅 pnpm-workspace glob 预留）。
+当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、ui-theme（2026-08-25，ADR-027：平台主题适配层，base 主题 + VSCode 完整令牌映射）、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 [ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）。`plugins/` 目录已就位（2026-09-02，ADR-045：随包插件外部化，`example-panel` / `example-theme` / `address-adjust` / `yaskawa-memobus-67h-010dh-010eh` / `custom-function-code`）。
+
+Android 端（2026-09-10，ADR-050）：第四平台，**Phase 0（文档 + 验证）与 Phase 1（TCP 闭环）已落地**——已创建 `apps/android/`（Capacitor 8.5.1 工程 + app 内 Kotlin 插件 `MamepTransportPlugin.kt` + `README.md`，含 JDK ≤24 / 真机 e2e 前置）、`packages/platform-android/`（`androidCapabilities` + `bridge-contract.ts` + `CapacitorTcpTransport` + `AndroidPlatformHost` + `applyAndroidTcpDefaults`，桥实现经子路径 `@mamep2026/platform-android/capacitor` 隔离）、`tests/e2e-android/`（真机 CDP e2e）、`scripts/build-android.mjs`，`apps/web` 新增 `--mode android` 产物与 `AndroidAppHost`。
+**`packages/capacitor-modbus-transport/` 已由 Phase 1 决策否决（不创建）**——原生插件放 `apps/android` 内（app-local plugin），避免 pnpm 符号链接 + Capacitor 插件自动发现的摩擦；将来需要跨 app 复用/发布时再抽独立包。
+Phase 2（USB-RS485，**已落地 2026-09-10**）与 Phase 3~5 按 ADR-050 推进；禁止为支持 Android 而翻转浏览器能力位或重组/搬迁现有共享包。
 
 ### 7.1 模块责任
 
@@ -304,7 +312,7 @@ Address Adjust 已实现为随应用分发的插件（`plugins/address-adjust`�
 - logging：消息日志、通信日志、保留和导出模型（仅导出，CSV 格式）
 - plugin-api：插件清单、权限、生命周期和贡献点
 - platform-api：平台统一接口和能力矩阵
-- platform-*：具体平台适配器
+- platform-*：具体平台适配器（`platform-web` / `platform-node` / `platform-android`）
 - ui：三端共享 React 界面和 ViewModel
 - test-kit：Fake Transport、Virtual Clock、模拟设备和测试工厂
 - apps/*：平台 Host 装配和应用入口
@@ -392,6 +400,13 @@ UI 应通过应用服务、Host API、ViewModel 和 Store 获取状态及执行�
 - 为界面一致性显示底层明确不支持的参数
 - 对不支持的能力进行静默降级
 - 用散落的环境判断形成多套业务行为
+
+Android 端（2026-09-10，ADR-050）：
+
+- Android 为**第四平台**，使用独立产物（`--mode android`）与独立 `androidCapabilities`；
+- **不得因 Android 存在而翻转浏览器端能力**（`browserCapabilities.modbusTcp` 维持 `false`）；
+- Capacitor 原生插件调用只允许出现在 `packages/platform-android` 与 `apps/android`，禁止出现在 `packages/ui` 或其它共享包；
+- 能力矩阵必须如实声明（未实现的传输/文件/插件能力不得报为支持）。
 
 ---
 
@@ -1410,6 +1425,7 @@ UI 必须：
 **全量回归测试约定（2026-09-02）**：
 
 - 全量测试统一使用根目录 **`pnpm test:all`**（一条命令按固定顺序跑完全量：三端真实端口 e2e → `pnpm test`（单测）→ `test:acceptance` → 三端 mock e2e → `test:serial:virtual` → `pnpm lint` → `pnpm typecheck`；real 环节缺环境 SKIP 不失败，fail-fast）。
+- **Android 真机 e2e 为独立命令 `pnpm test:e2e:android`，不进 `pnpm test:all`**（需真机 + USB 调试 + 解锁屏幕，无设备即失败不静默跳过）；其前置环境与踩坑见 `apps/android/README.md` 与根 `AGENTS.md`「环境要点与坑」。
 - 各步骤与各单独测试脚本（`test` / `test:acceptance` / `test:e2e:*` / `test:*:real` / `test:serial:virtual` / `lint` / `typecheck`）的终端输出会 tee 到 `test-reports/run-<时间戳>/` 下**每种测试一个独立 `.log`**，并写步骤级 `summary.json`；`test:all` 额外写 `result.json`（总体 status + 各步骤 + 失败步骤）。`test-reports/` 已 gitignore，为生成产物；可用 `MAMEP_TEST_ALL_STEPS` 只跑 `test:all` 部分步骤。详见 [docs/features/2026-09-07-测试结果日志收集.md](docs/features/2026-09-07-测试结果日志收集.md)。
 - **运行 `pnpm test:all` 之前，不得先运行任何其他指令**——例如禁止先启动 dev server、禁止先启动从站/模拟设备、禁止先跑单个测试/单测等。测试前置环境（从站启停、`MAMEP_REAL` 设置、端口预检等）由 `scripts/e2e-real.mjs` 统一编排，测试通常自行拉起所需进程。
 - 若环境中已存在此前手动启动的进程（如 dev server、从站、模拟设备或其他占用端口/状态的服务），必须先清理再运行 `pnpm test:all`，避免端口占用或状态污染导致结果误判。
@@ -1720,6 +1736,10 @@ AI 代理不得：
 34. 新增内置插件（除非用户明确强调「内置插件」）：所有插件一律放在 `plugins/` 目录
     作为随应用分发/外部插件（2026-09-02，ADR-045），核心代码与装配点不得再以内联
     或者 `source:"builtin"` 方式加入新插件
+35. 在 Android 端直接调用 Capacitor 原生插件（必须经 `packages/platform-android` 封装）；
+    也不得为支持 Android 而把会话/调度/协议逻辑下沉到原生实现（ADR-050）
+36. 为平台适配而重命名或搬迁现有共享包/模块（如把 `application` 改为 `core`、把平台传输拆为 `adapters`）；
+    平台适配一律以新增包 + 新增 Host 实现完成（ADR-050）
 
 ---
 

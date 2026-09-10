@@ -452,7 +452,8 @@ Host 是每个平台真正的运行入口：
 - Electron Main Host；
 - Electron Renderer Host；
 - VSCode Extension Host；
-- VSCode Webview Host。
+- VSCode Webview Host；
+- Android WebView Host（Capacitor 容器 + 原生通信插件，ADR-050）。
 
 Host 负责装配具体适配器，不实现领域规则。
 
@@ -467,13 +468,15 @@ Host 负责装配具体适配器，不实现领域规则。
 7. Electron Renderer 不直接导入 Node.js 串口或 net（MVP 经 Web Serial API，非 Node 串口库，ADR-017）；
 8. VSCode Webview 不直接调用 VSCode Extension API；
 9. 浏览器端不得包含 Electron 或 VSCode 条件分支；
-10. 平台能力由 Capability Matrix 明确声明。
+10. 平台能力由 Capability Matrix 明确声明；
+11. Android WebView 不得直接调用 Capacitor 原生插件（只允许经 `packages/platform-android` 封装，ADR-050）；
+12. 浏览器端不得包含 Android 条件分支（四端共用 UI，平台差异经能力矩阵与 Host 装配隔离）。
 
 ---
 
 # 6. 项目结构
 
-> 本节为规划目标结构。当前实际（2026-08）：`apps/` 有 `web/` 与 `electron/`（2026-08-21 迁移，ADR-016；`apps/electron/src/main/main.ts` + `apps/electron/src/preload/preload.ts`）；VSCode 插件已在 `apps/vscode-extension/`（2026-08-23 迁入）；`packages/` 现有 domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、ui-theme（2026-08-25，ADR-027）、test-kit（尚未创建 platform-node、platform-electron、platform-vscode、schemas、shared-utils）；`tooling/` 仅 typescript-config；`tests/` 含 acceptance、e2e-web、e2e-electron（2026-08-21）、e2e-vscode（2026-08-23）；尚无 `plugins/` 目录。详细现状见 docs/AGENTS.md §7。
+> 本节为规划目标结构。当前实际（2026-08）：`apps/` 有 `web/` 与 `electron/`（2026-08-21 迁移，ADR-016；`apps/electron/src/main/main.ts` + `apps/electron/src/preload/preload.ts`）；VSCode 插件已在 `apps/vscode-extension/`（2026-08-23 迁入）；`packages/` 现有 domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、ui-theme（2026-08-25，ADR-027）、test-kit（尚未创建 platform-node、platform-electron、platform-vscode、schemas、shared-utils）；`tooling/` 仅 typescript-config；`tests/` 含 acceptance、e2e-web、e2e-electron（2026-08-21）、e2e-vscode（2026-08-23）；尚无 `plugins/` 目录。详细现状见 docs/AGENTS.md §7。**Android（2026-09-10，ADR-050）**：`apps/android/`（Capacitor 工程）、`packages/platform-android/`、`tests/e2e-android/` 与 `apps/web` 的 `--mode android` 产物 **已按 Phase 1 落地**（真机 TCP e2e 全绿）。
 
 建议项目结构如下：
 
@@ -801,21 +804,21 @@ Host 负责装配具体适配器，不实现领域规则。
 
 建议定义以下能力：
 
-| 能力         |                      Browser | Electron |         VSCode |
-| ------------ | ---------------------------: | -------: | -------------: |
-| Modbus RTU   |                         支持 |     支持 |           支持 |
-| Modbus TCP   |                       不支持 |     支持 |           支持 |
-| 串口枚举     | 授权 picker 承担，无全量枚举 | 授权 picker（MVP，同浏览器） |     支持 |
-| COM10 及以上 |     由浏览器设备选择机制处理 |     支持 |           支持 |
-| 本地文件系统 |                         受限 |     支持 |           支持 |
-| 工作区文件   |           可通过导入导出实现 |     支持 |           支持 |
-| IndexedDB    |                         支持 |   非默认 |         非默认 |
-| Node.js 插件 |                       不支持 | 受控支持 |       受控支持 |
-| Web 插件     |                 支持受限插件 |   可支持 |         可支持 |
-| VSCode 命令  |                       不支持 |   不支持 |           支持 |
-| 系统通知     |                   浏览器能力 |     支持 |    VSCode 通知 |
-| 连接对象配置文件（ADR-023） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） |
-| 自动更新     |                       不适用 | 后续支持 | 由 VSCode 管理 |
+| 能力         |                      Browser | Electron |         VSCode | Android（ADR-050，分期） |
+| ------------ | ---------------------------: | -------: | -------------: | -----------------------: |
+| Modbus RTU   |                         支持 |     支持 |           支持 | 支持（USB Host + usb-serial-for-android，Phase 2 已落地） |
+| Modbus TCP   |                       不支持 |     支持 |           支持 | 支持（原生 socket，Phase 1） |
+| 串口枚举     | 授权 picker 承担，无全量枚举 | 授权 picker（MVP，同浏览器） |     支持 | 支持（USB Host 枚举；无 Web Serial 手势约束） |
+| COM10 及以上 |     由浏览器设备选择机制处理 |     支持 |           支持 | 支持（USB 设备制，无 Windows 路径问题） |
+| 本地文件系统 |                         受限 |     支持 |           支持 | 受限（IndexedDB；文件通道 Phase 4） |
+| 工作区文件   |           可通过导入导出实现 |     支持 |           支持 | 可通过导入导出实现（Capacitor Filesystem，Phase 4） |
+| IndexedDB    |                         支持 |   非默认 |         非默认 | 支持（WebView 原生支持） |
+| Node.js 插件 |                       不支持 | 受控支持 |       受控支持 | 不支持 |
+| Web 插件     |                 支持受限插件 |   可支持 |         可支持 | 支持受限插件（随包插件可用；第三方脚本插件 Phase 5） |
+| VSCode 命令  |                       不支持 |   不支持 |           支持 | 不适用 |
+| 系统通知     |                   浏览器能力 |     支持 |    VSCode 通知 | Phase 4+ |
+| 连接对象配置文件（ADR-023） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034） |
+| 自动更新     |                       不适用 | 后续支持 | 由 VSCode 管理 | Phase 5（APK/AAB 分发） |
 
 > 实现状态（2026-08-21；2026-08-23 更新）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**VSCode 列 RTU 已接线（2026-08-23，ADR-021）**（Extension Host `NodePlatformHost` + 共享 `RtuSessionHost`，Renderer 远程代理，能力翻转）。**两端 Modbus TCP 已接线（2026-08-23，ADR-022）**：会话层 `CommunicationSession` 支持 `protocol:"tcp"`（`TcpFrameParser` MBAP 分帧 + Transaction ID 管理）；Electron TCP 会话承载主进程（`ElectronSessionHost`，Renderer `ElectronAppHost` 混合远程代理）、VSCode TCP 会话承载 Extension Host（`VscodeSessionHost.connectTcp`），能力矩阵 `electronCapabilities`/`vscodeCapabilities` → `modbusTcp:true`；UI Connection Settings 增加 TCP 分组（协议 Segmented 能力门控，浏览器不显示 TCP 入口）；`tests/e2e-vscode` 走通 TCP 闭环、`tests/e2e-electron` 走通 TCP 配置连接 → FC03 读 → FC10 写闭环。**连接对象配置文件（2026-08-24，ADR-023；应用侧功能 2026-08-29 由 ADR-034 移除）**：`config/connections.json`（JSON，schemaVersion 1）定义真实设备连接对象（RTU 含串口名/从站地址，TCP 含 host/port/unitId 等），**保留供测试/验证脚本消费**（消除 COM4/COM5/127.0.0.1:1502 硬编码）；应用侧「Load from Config File」UI、`packages/connection-config` 包、`connection-config-load` kind、能力矩阵 `connectionConfig` 字段、浏览器 `?connectionConfig=` URL 已删除，连接对象导入由 Settings → 工作区导入（ADR-033）承担。VSCode 文件持久化仍为规划目标。
 
@@ -830,6 +833,15 @@ Host 负责装配具体适配器，不实现领域规则。
 > ADR-019 复审条件待办）。
 
 能力矩阵通过 PlatformCapabilities 对象注入 UI。
+
+> **Android 列（2026-09-10，ADR-050）**：Android 为第四平台（Capacitor 容器 + 原生通信插件）。
+> **Phase 1（TCP）已落地**；**Phase 2（USB-RS485）已落地**，故 `modbusRtu:true` / `serialPorts:"enumerated"` 已翻转，
+> 其余如实声明：`modbusTcp:true` / `filesystem:"limited"` / `nodePlugins:false` / `webPlugins:true` /
+> `executablePlugins:false` / `hostPlugins:false` / `pluginInstall:"unsupported"`；
+> `logExport` / `workspaceImport` / `workspaceExport` 在文件通道落地（Phase 4）后按实翻转。
+> 真机 USB 闭环验证状态见 [docs/adr-050-验证记录.md](adr-050-验证记录.md) §6（代码侧已完整实现，硬件到位后由用户实机跑通）。
+> **边界不变**：`browserCapabilities.modbusTcp` 维持 `false`（Android 与浏览器使用独立产物与独立能力矩阵）；
+> Android 的 `AppHost.browserCompatibility` 返回 `null`（不使用 Web Serial 兼容性提示）。
 
 UI 根据能力执行：
 
@@ -1040,6 +1052,12 @@ TransportPort 只处理字节和连接事件，不理解寄存器行、Data Type
 
 RTU 和 TCP 可以使用不同的 Transport 配置，但应向 CommunicationSession 提供统一的字节传输能力。
 
+实现标识（`TransportPort.kind`）：`"web-serial"`（浏览器/Electron MVP）、`"node-serial"`（Node Serial Adapter）、
+`"node-tcp"`（Node TCP Adapter）、**`"capacitor-serial"` / `"capacitor-tcp"`（Android，ADR-050）**、`"mock"`（dev）、`"fake"`（测试）。
+
+> Android 端接缝切在 **TransportPort（字节流）**，不在功能码层：原生插件只提供「打开 / 写字节 / 来字节 / 关闭」，
+> 帧编码、CRC、TCP 分帧、超时重试与会话编排全部留在共享 JS 层（ADR-050）。
+
 ## 9.2 Web Serial Adapter
 
 职责：
@@ -1124,6 +1142,25 @@ Electron 和 VSCode 共用 Node TCP Adapter。
 10. 映射结构化错误。
 
 是否自动重连不由 Adapter 决定，而由 Application 层的连接策略决定。
+
+## 9.5 Capacitor 传输适配（Android，ADR-050）
+
+Android 端不使用 Node 串口/TCP 库，而是经 Capacitor 原生插件提供字节流。
+
+职责：
+
+1. 打开/关闭 USB 串口（USB Host + `USB_PERMISSION` 授权）与 TCP socket；
+2. 字节写入（base64 经桥传递）；
+3. 原生侧**整帧聚合**后单次投递入站字节（避免分片事件风暴）；
+4. 设备拔出 / socket 断开 / 权限拒绝的结构化错误映射；
+5. 枚举可用的 USB 串口设备（`serialPorts: "enumerated"`）；
+6. 不实现 Modbus 帧语义、不实现超时重试与调度。
+
+桥契约采用与 HostMessage v1 相同的安全姿态：版本化信封 + Zod 校验 + 方法白名单（`packages/platform-android/src/bridge-contract.ts`）。
+
+> 风险与退路：默认 `requestTimeoutMs: 50`（超时从 `transport.write()` resolve 后开始）对桥接型传输偏紧，
+> Phase 0 spike 实测桥往返延迟；若不足，先在该平台 composition root 覆盖超时/重试（不改全局 `defaultConfig`），
+> 退路为将**帧解析**下沉原生（`exchange(bytes) → bytes`，JS 侧合成 TransportPort 事件），因接缝在 TransportPort，上层零改动。
 
 ---
 

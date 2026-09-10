@@ -177,6 +177,56 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     expect(screen.getByText("Communication")).toBeTruthy();
   });
 
+  it("仅 TCP 能力（Android Phase 1）：隐藏协议分组但表单直接落在 TCP，且不误报缺串口", async () => {
+    // Android Phase 1：modbusRtu=false / serialPorts=unsupported（能力矩阵如实声明）。
+    const { host } = makeHost({
+      modbusRtu: false,
+      modbusTcp: true,
+      serialPorts: "unsupported",
+    });
+    renderModal(host);
+
+    // 单一可用协议 → 协议分组隐藏。
+    expect(screen.queryByText("Protocol")).toBeNull();
+    expect(screen.queryByText("Modbus TCP")).toBeNull();
+    // 默认协议必须是 TCP（否则隐藏字段会把连接推到未实现的串口）。
+    await waitFor(() => {
+      expect(screen.getByText("Host / IP")).toBeTruthy();
+      expect(screen.getByText("TCP Port")).toBeTruthy();
+    });
+    expect(screen.queryByText("Communication")).toBeNull();
+    // 串口缺失只影响 RTU：不得因缺串口提示 Web Serial 或禁用 CONNECT（ADR-050）。
+    expect(screen.queryByText(/Web Serial/i)).toBeNull();
+    const connectButton = screen.getByText("CONNECT").closest("button");
+    expect(connectButton?.disabled).toBe(false);
+  });
+
+  it("仅 TCP 能力：CONNECT 直接走 host.connectTcp（不要求先选串口）", async () => {
+    const { host, connectTcp } = makeHost({
+      modbusRtu: false,
+      modbusTcp: true,
+      serialPorts: "unsupported",
+    });
+    renderModal(host);
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("192.168.1.10")).toBeTruthy(),
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("192.168.1.10"), {
+      target: { value: "192.168.1.50" },
+    });
+    fireEvent.click(screen.getByText("CONNECT"));
+
+    await waitFor(() => expect(connectTcp).toHaveBeenCalled());
+    const profile = connectTcp.mock.calls[0]?.[0] as {
+      protocol: string;
+      host: string;
+    };
+    expect(profile.protocol).toBe("tcp");
+    expect(profile.host).toBe("192.168.1.50");
+    expect(host.connect).not.toHaveBeenCalled();
+  });
+
   it("TCP CONNECT 走 host.connectTcp 并携带 TCP profile", async () => {
     const { host, connectTcp } = makeHost({});
     renderModal(host);

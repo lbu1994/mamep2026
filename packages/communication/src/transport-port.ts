@@ -20,8 +20,17 @@ export interface TransportPort extends TransportEvents {
    * - "web-serial"：浏览器/Electron MVP 的 Web Serial（packages/platform-web）
    * - "node-serial"：Node Serial Adapter（packages/platform-node，Electron 替换 Web Serial / VSCode 使用）
    * - "node-tcp"：Node TCP Adapter（packages/platform-node，Node 端 Modbus TCP）
+   * - "capacitor-tcp"：Android TCP（packages/platform-android，Capacitor 原生 socket，ADR-050）
+   * - "capacitor-usb"：Android USB-RS485（预留，ADR-050 Phase 2）
    * - "mock"：开发 mock 传输（packages/platform-web）
    * - "fake"：测试 Fake（packages/test-kit）
    */
-  readonly kind: "web-serial" | "node-serial" | "node-tcp" | "mock" | "fake";
+  readonly kind:
+    | "web-serial"
+    | "node-serial"
+    | "node-tcp"
+    | "capacitor-tcp"
+    | "capacitor-usb"
+    | "mock"
+    | "fake";
 }

@@ -1,0 +1,12 @@
+{
+  "appId": "com.mamep2026.app",
+  "appName": "Mamep2026",
+  "webDir": "../web/dist-android",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "loggingBehavior": "debug"
+  }
+}

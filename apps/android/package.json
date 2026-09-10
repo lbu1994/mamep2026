@@ -1,0 +1,18 @@
+{
+  "name": "@mamep2026/android",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Mamep2026 Android 客户端（Capacitor 容器 + app 内原生通信插件，ADR-050）",
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android",
+    "assemble": "cap sync android && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.1"
+  }
+}

@@ -10,11 +10,18 @@ export default defineConfig([
     "dist",
     "dist-electron",
     "dist-vscode",
+    "dist-android",
     "**/.vscode-test/**",
     "coverage",
     "playwright-report",
     "test-results",
     "node_modules",
+    // Android（Capacitor）工程：Gradle 构建产物、Capacitor 拷贝的 web 资源与 Cordova 插件 shim
+    // 均为生成物（由 apps/android/android/.gitignore 忽略），ESLint 不读 .gitignore，故在此显式忽略。
+    "apps/android/android/**/build/**",
+    "apps/android/android/.gradle/**",
+    "apps/android/android/app/src/main/assets/public/**",
+    "apps/android/android/capacitor-cordova-android-plugins/**",
   ]),
   {
     files: ["**/*.{ts,tsx}"],

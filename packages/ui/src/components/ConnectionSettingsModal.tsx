@@ -103,18 +103,32 @@ export function ConnectionSettingsModal(): React.ReactNode {
     storedProfile !== undefined && storedProfile.protocol === "tcp"
       ? storedProfile
       : createDefaultTcpProfile();
+  const supportsTcp = host?.capabilities.modbusTcp ?? false;
+  const supportsRtu = host?.capabilities.modbusRtu ?? true;
   // 默认表单值跟随存储 profile 的协议（重开弹窗恢复上次选择的协议与参数）。
-  const defaultProfile = storedProfile ?? createDefaultRtuProfile();
+  // 但平台只支持一种协议时（Android Phase 1 仅 TCP / 浏览器仅 RTU），默认值必须落在该协议上：
+  // 否则隐藏的协议字段会把连接推到不可用的传输（ADR-050，2026-09-10）。
+  const onlySupportedProtocol: "rtu" | "tcp" | null =
+    supportsTcp === supportsRtu ? null : supportsTcp ? "tcp" : "rtu";
+  const defaultProfile =
+    onlySupportedProtocol === "tcp"
+      ? storedProfile?.protocol === "tcp"
+        ? storedProfile
+        : tcpBase
+      : onlySupportedProtocol === "rtu"
+        ? storedProfile?.protocol === "rtu"
+          ? storedProfile
+          : createDefaultRtuProfile()
+        : (storedProfile ?? createDefaultRtuProfile());
   const { control, handleSubmit, reset, getValues } =
     useForm<ConnectionSettingsValues>({
       resolver: zodResolver(settingsSchema),
       defaultValues: profileToValues(defaultProfile),
     });
-  // 当前协议（Segmented 选择）：RTU/TCP 表单互斥展示；浏览器能力门控隐藏 TCP 入口。
-  const protocol = useWatch({ control, name: "protocol" }) ?? "rtu";
-  const supportsTcp = host?.capabilities.modbusTcp ?? false;
-  const supportsRtu = host?.capabilities.modbusRtu ?? true;
-  // 浏览器仅支持 RTU：协议 Segmented 单选项冗余 → 隐藏「协议」分组；桌面端两类都有则保留切换（2026-09-06）。
+  // 当前协议（Segmented 选择）：RTU/TCP 表单互斥展示；能力门控隐藏不可用协议的入口。
+  const protocol =
+    useWatch({ control, name: "protocol" }) ?? onlySupportedProtocol ?? "rtu";
+  // 浏览器仅支持 RTU：协议 Segmented 单选项冗余 → 隐藏「协议」分组；两类都有则保留切换（2026-09-06）。
   const showProtocolSwitcher = (supportsRtu ? 1 : 0) + (supportsTcp ? 1 : 0) > 1;
 
   const supportsSerial = host?.supportsWebSerial() ?? false;
@@ -124,7 +138,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
   // 浏览器兼容性（PRD §8.3 / §15.7）：检测失败时明确提示替代方案并禁用 CONNECT，
   // 禁止执行不可用的串口操作，但工作区仍可查看。
   const compat = host?.browserCompatibility ?? null;
-  const serialBlocked = !isMock && !supportsSerial && !isEnumerated;
+  // 串口缺失只影响 RTU：平台仅支持 TCP 时（Android Phase 1）不得因此禁用 CONNECT（ADR-050）。
+  const serialBlocked = !isMock && !supportsSerial && !isEnumerated && protocol === "rtu";
 
   // 连接协议由活动表类型决定（ADR-041 决策 A）：核心表 → rtu；安川表 → codec 协议。
   // tableType 贡献（插件声明）提供 表类型 → protocolId 映射；协议不在平台能力矩阵内回退 rtu。

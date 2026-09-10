@@ -1,0 +1,590 @@
+/**
+ * Android WebView Host（ADR-050 §3、§4）。
+ *
+ * **本地混合宿主**（与 `ElectronAppHost` 同构，但全部在同进程内）：
+ * - 通用能力（工作区/插件/剪贴板/消息/日志存储/`MockTransport`）委托 `BrowserAppHost`（inner）；
+ * - 会话按协议路由：RTU 走 inner（Phase 1 无串口，能力矩阵如实声明不支持），TCP 走本地
+ *   `TcpSessionHost` + `CapacitorTcpTransport`（原生 socket 经 Capacitor 桥）。
+ *
+ * 为什么不像 VSCode 那样把会话下沉原生：Webview 的 `navigator.serial` 被权限策略拒绝才必须下沉，
+ * Android 无此约束；会话留在 JS 才能 100% 复用 `packages/application` 的调度与协调器（ADR-050 §4）。
+ *
+ * 边界：**本类不直接调用 Capacitor 插件**——传输桥由 composition root 注入（`platform-android`）。
+ */
+import type {
+  AddressTransform,
+  PlatformCapabilities,
+  ReadVerifySettings,
+  RegisterRow,
+  Result,
+  RtuConnectionProfile,
+  TcpConnectionProfile,
+  Workspace,
+  WorkspaceRecoveryInfo,
+} from "@mamep2026/domain";
+import { createMamepError, defaultConfig, fail, ok } from "@mamep2026/domain";
+import type {
+  BatchReadHandle,
+  BatchReadRow,
+  Clock,
+  CodecRegistry,
+  CommunicationLogEvent,
+  CommunicationSession,
+  ConnectionState,
+  WriteOutcome,
+} from "@mamep2026/communication";
+import { TcpSessionHost } from "@mamep2026/application";
+import type { ApplicationMessage } from "@mamep2026/logging";
+import type {
+  OpenTextFileResponse,
+  PlatformHost,
+  PluginContributionQueryResponse,
+  PluginRpcPayload,
+  PluginRuntimeLoadPayload,
+  PluginRuntimeUnloadPayload,
+  SaveTextFileResponse,
+  SerialDeviceHandle,
+  SerialPortOption,
+} from "@mamep2026/platform-api";
+import type {
+  PluginManifest,
+  PluginRegistry,
+  PluginRuntime,
+  PluginStorePort,
+} from "@mamep2026/plugin-api";
+import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
+import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
+import {
+  AndroidPlatformHost,
+  androidCapabilities,
+  applyAndroidTcpDefaults,
+  serialUnsupportedError,
+  type MamepTransportBridge,
+} from "@mamep2026/platform-android";
+import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
+
+export interface AndroidAppHostOptions {
+  /** 传输桥（生产 = `createCapacitorTransportBridge()`，由 composition root 注入；测试注入 fake）。 */
+  bridge: MamepTransportBridge;
+  repository: WorkspaceRepositoryPort;
+  pluginStore?: PluginStorePort | undefined;
+  codecRegistry?: CodecRegistry | undefined;
+  bundledPlugins?: BundledPluginEntry[] | undefined;
+  resolveAddressTransform?:
+    ((transformId: string) => AddressTransform | null) | undefined;
+  /** 平台宿主（默认用注入的 bridge 构造 `AndroidPlatformHost`；测试可注入）。 */
+  platformHost?: PlatformHost | undefined;
+  /** 时钟（默认取平台宿主时钟）。 */
+  clock?: Clock | undefined;
+  /** dev mock 传输（`?mockTransport=1`）；Android 正常情况下为 false。 */
+  mockTransport?: boolean | undefined;
+}
+
+export class AndroidAppHost implements AppHost {
+  readonly capabilities: PlatformCapabilities;
+  readonly isMockMode: boolean;
+  /** Android 不走浏览器 Web Serial 兼容性提示（串口能力由能力矩阵如实声明）。 */
+  readonly browserCompatibility = null;
+  readonly pluginRegistry: PluginRegistry;
+  readonly appVersion = __APP_VERSION__;
+  readonly platform = "android" as const;
+
+  private readonly platformHost: PlatformHost;
+  private readonly inner: BrowserAppHost;
+  private readonly tcp: TcpSessionHost;
+  /** 平台宿主的串口面（enumerated 平台专用）；注入的自定义宿主不提供则为 null。 */
+  private readonly serialHost: AndroidSerialHostPort | null;
+
+  /** 当前活动协议（Phase 1 仅 tcp 可达；rtu 保留以便 Phase 2 直接复用）。 */
+  private activeProtocol: "rtu" | "tcp" | null = null;
+  /** TCP 连接配置本地镜像（通信属性摘要用）。 */
+  private tcpProfile: TcpConnectionProfile | null = null;
+  private tcpConnectionState: ConnectionState = "disconnected";
+  /** 已选串口标签（enumerated 路径由本 Host 记录，供通信属性与 bottom panel 展示）。 */
+  private portLabel: string | null = null;
+
+  private readonly connectionListeners = new Set<(state: ConnectionState) => void>();
+  private readonly commLogListeners = new Set<(event: CommunicationLogEvent) => void>();
+  private readonly messageListeners = new Set<(message: ApplicationMessage) => void>();
+  private readonly pollResultListeners = new Set<
+    (key: string, address: number, result: Result<number | number[]>) => void
+  >();
+  private readonly traceListeners = new Set<(sample: TraceSampleEvent) => void>();
+
+  constructor(options: AndroidAppHostOptions) {
+    const platformHost =
+      options.platformHost ??
+      new AndroidPlatformHost({ bridge: options.bridge });
+    this.platformHost = platformHost;
+    this.serialHost = hasSerialApi(platformHost) ? platformHost : null;
+    this.capabilities = androidCapabilities;
+    this.isMockMode = options.mockTransport === true;
+
+    this.inner = new BrowserAppHost({
+      // 能力矩阵如实传递给 inner（UI 依据 `host.capabilities` 门控 RTU/TCP 入口）。
+      capabilities: androidCapabilities,
+      // Android 无 Web Serial：inner 的兼容性检测结果不使用（本类 browserCompatibility 恒 null）。
+      compatibilityEnv: { serial: undefined, isSecureContext: true },
+      platform: this.platformHost,
+      repository: options.repository,
+      mockTransport: false,
+      ...(options.pluginStore !== undefined ? { pluginStore: options.pluginStore } : {}),
+      ...(options.codecRegistry !== undefined ? { codecRegistry: options.codecRegistry } : {}),
+      ...(options.bundledPlugins !== undefined
+        ? { bundledPlugins: options.bundledPlugins }
+        : {}),
+      ...(options.resolveAddressTransform !== undefined
+        ? { resolveAddressTransform: options.resolveAddressTransform }
+        : {}),
+    });
+    this.pluginRegistry = this.inner.pluginRegistry;
+
+    // TCP 会话（本地）：传输经平台宿主打开；自动重连复用同一工厂（ADR-035）。
+    this.tcp = new TcpSessionHost({
+      clock: options.clock ?? this.platformHost.clock,
+      events: {
+        onLog: (event) => {
+          // TCP 活动时 inner 不产生会话事件；直接转发。
+          for (const listener of this.commLogListeners) listener(event);
+        },
+        onStateChange: (state) => {
+          this.tcpConnectionState = state;
+          for (const listener of this.connectionListeners) listener(state);
+        },
+        onPollResult: (key, address, result) => {
+          for (const listener of this.pollResultListeners)
+            listener(key, address, result);
+        },
+        onTraceSample: (sample) => {
+          for (const listener of this.traceListeners) listener(sample);
+        },
+        onMessage: (message) => {
+          for (const listener of this.messageListeners) listener(message);
+        },
+      },
+      openTransport: (profile) => this.platformHost.openTcpTransport(profile),
+    });
+
+    // inner（RTU 侧）事件转发到本 Host 的合并订阅集合；TCP 活动时不重复上报。
+    this.inner.subscribeConnectionState((state) => {
+      if (this.activeProtocol === "tcp") return;
+      for (const listener of this.connectionListeners) listener(state);
+    });
+    this.inner.subscribeCommLog((event) => {
+      if (this.activeProtocol === "tcp") return;
+      for (const listener of this.commLogListeners) listener(event);
+    });
+    this.inner.subscribeMessage((message) => {
+      for (const listener of this.messageListeners) listener(message);
+    });
+    this.inner.subscribePollResult((key, address, result) => {
+      if (this.activeProtocol === "tcp") return;
+      for (const listener of this.pollResultListeners)
+        listener(key, address, result);
+    });
+    this.inner.subscribeTraceSample((sample) => {
+      if (this.activeProtocol === "tcp") return;
+      for (const listener of this.traceListeners) listener(sample);
+    });
+  }
+
+  // ---- 插件系统（委托 inner：随包插件一次性安装 / 恢复，ADR-045）----
+  startPlugins(): Promise<void> {
+    return this.inner.startPlugins();
+  }
+
+  restoreBundledPlugin(pluginId: string): Promise<void> {
+    return this.inner.restoreBundledPlugin(pluginId);
+  }
+
+  restoreAllBundledPlugins(): Promise<void> {
+    return this.inner.restoreAllBundledPlugins();
+  }
+
+  // ---- 工作区（委托 inner：IndexedDB 仓储 + 自动保存，与浏览器端同路径）----
+  loadWorkspace(): Promise<Result<Workspace>> {
+    return this.inner.loadWorkspace();
+  }
+
+  resetWorkspace(): Promise<Result<Workspace>> {
+    return this.inner.resetWorkspace();
+  }
+
+  scheduleSave(workspace: Workspace): void {
+    this.inner.scheduleSave(workspace);
+  }
+
+  flush(): Promise<Result<void>> {
+    return this.inner.flush();
+  }
+
+  getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null {
+    return this.inner.getWorkspaceRecoveryInfo();
+  }
+
+  getSaveStatus(): SaveStatus {
+    return this.inner.getSaveStatus();
+  }
+
+  subscribeSaveStatus(listener: (status: SaveStatus) => void): () => void {
+    return this.inner.subscribeSaveStatus(listener);
+  }
+
+  // ---- 串口（Phase 2：USB-RS485，USB Host + enumerated 下拉）----
+  /** Android 无 Web Serial（能力矩阵 `serialPorts:"enumerated"`，UI 走下拉分支）。 */
+  supportsWebSerial(): boolean {
+    return false;
+  }
+
+  /** 枚举 USB 串口（委托平台宿主：Capacitor 桥 listSerialPorts + Zod 校验）。 */
+  async enumerateSerialPorts(): Promise<Result<SerialPortOption[]>> {
+    if (this.serialHost === null) {
+      return fail(
+        serialUnsupportedError(
+          "android serial enumeration requires AndroidPlatformHost",
+        ),
+      );
+    }
+    return this.serialHost.listSerialPorts();
+  }
+
+  /** 按 portId 选择端口；成功时记录 portLabel（会话标签用）。 */
+  async selectSerialPort(
+    portId?: string | null,
+  ): Promise<Result<SerialDeviceHandle | null>> {
+    if (this.serialHost === null) {
+      return fail(
+        serialUnsupportedError(
+          "android serial selection requires AndroidPlatformHost",
+        ),
+      );
+    }
+    const selected = await this.serialHost.selectSerialPort(portId ?? null);
+    if (selected.ok && selected.value !== null) {
+      this.portLabel = selected.value.label;
+    } else if (selected.ok) {
+      this.portLabel = null;
+    }
+    return selected;
+  }
+
+  async connect(
+    profile: RtuConnectionProfile,
+    handle: SerialDeviceHandle | null,
+    options?: { protocol?: string },
+  ): Promise<Result<void>> {
+    // RTU 本地路径：传输由 inner（BrowserAppHost）经平台宿主 openSerialTransport 打开，
+    // 会话/调度复用共享 RtuSessionHost（与三端同源）。
+    const result = await this.inner.connect(profile, handle, options);
+    if (result.ok) this.activeProtocol = "rtu";
+    return result;
+  }
+
+  async connectTcp(profile: TcpConnectionProfile): Promise<Result<void>> {
+    // Android 默认连接参数（ADR-050）：仅覆盖「仍为库默认值」的项，用户改过的值保留。
+    const effective = applyAndroidTcpDefaults(profile);
+    const openResult = await this.platformHost.openTcpTransport(effective);
+    if (!openResult.ok) return fail(openResult.error);
+
+    const result = await this.tcp.connect({
+      profile: effective,
+      transport: openResult.value,
+      portLabel: `${effective.host}:${effective.port}`,
+    });
+    if (!result.ok) return result;
+
+    this.tcpProfile = effective;
+    this.activeProtocol = "tcp";
+    return ok(undefined);
+  }
+
+  async disconnect(): Promise<Result<void>> {
+    if (this.activeProtocol === "tcp") {
+      const result = await this.tcp.disconnect();
+      this.activeProtocol = null;
+      this.tcpConnectionState = "disconnected";
+      return result;
+    }
+    return this.inner.disconnect();
+  }
+
+  getConnectionState(): ConnectionState {
+    return this.activeProtocol === "tcp"
+      ? this.tcpConnectionState
+      : this.inner.getConnectionState();
+  }
+
+  getCommProperties(): CommProperties {
+    if (this.activeProtocol === "tcp") {
+      const profile = this.tcpProfile;
+      return {
+        protocol: "tcp",
+        portLabel: profile === null ? null : `${profile.host}:${profile.port}`,
+        unitId: profile?.unitId ?? 0,
+        baudRate: 0,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: profile?.requestTimeoutMs ?? defaultConfig.tcp.requestTimeoutMs,
+        retryCount: profile?.retryCount ?? 1,
+        connectionState: this.tcpConnectionState,
+      };
+    }
+    const props = this.inner.getCommProperties();
+    // 枚举路径的已选端口标签由本 Host 记录（inner 仅在浏览器路径自行记录）；与 ElectronAppHost 同因。
+    return { ...props, protocol: "rtu", portLabel: this.portLabel ?? props.portLabel };
+  }
+
+  setSlaveAddress(slave: number): void {
+    // TCP 的「从站地址」即 Unit ID（每表独立，ADR-026）。
+    if (this.activeProtocol === "tcp") {
+      this.tcp.setUnitId(slave);
+    } else {
+      this.inner.setSlaveAddress(slave);
+    }
+  }
+
+  setAddressTransform(
+    config: { transformId: string; enabled: boolean } | null,
+  ): void {
+    // TCP 无地址变换（与 TcpSessionHost 语义一致）。
+    if (this.activeProtocol !== "tcp") {
+      this.inner.setAddressTransform(config);
+    }
+  }
+
+  subscribeConnectionState(
+    listener: (state: ConnectionState) => void,
+  ): () => void {
+    this.connectionListeners.add(listener);
+    return () => {
+      this.connectionListeners.delete(listener);
+    };
+  }
+
+  getSession(): CommunicationSession | null {
+    // 与 Electron TCP 路径一致：插件通信面在 TCP 活动时不可用（Phase 1 不新增远程会话面）。
+    return this.activeProtocol === "tcp" ? null : this.inner.getSession();
+  }
+
+  createPluginRemoteRuntime(entrySource: string) {
+    return this.inner.createPluginRemoteRuntime(entrySource);
+  }
+
+  // ---- 读写（按协议路由）----
+  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
+    return this.activeProtocol === "tcp"
+      ? this.tcp.readRow(row)
+      : this.inner.readRow(row);
+  }
+
+  writeRow(
+    row: RegisterRow,
+    options?: { writeVerify?: ReadVerifySettings },
+  ): Promise<Result<WriteOutcome>> {
+    return this.activeProtocol === "tcp"
+      ? this.tcp.writeRow(row, options)
+      : this.inner.writeRow(row, options);
+  }
+
+  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
+    return this.activeProtocol === "tcp"
+      ? this.tcp.readAllRows(rows)
+      : this.inner.readAllRows(rows);
+  }
+
+  // ---- 轮询 ----
+  updatePollingTargets(
+    rows: Array<{ key: string; address: number; quantity?: number }>,
+  ): void {
+    if (this.activeProtocol === "tcp") {
+      this.tcp.updatePollingTargets(rows);
+      return;
+    }
+    this.inner.updatePollingTargets(rows);
+  }
+
+  startPolling(): void {
+    if (this.activeProtocol === "tcp") {
+      this.tcp.startPolling();
+      return;
+    }
+    this.inner.startPolling();
+  }
+
+  stopPolling(): void {
+    if (this.activeProtocol === "tcp") {
+      this.tcp.stopPolling();
+      return;
+    }
+    this.inner.stopPolling();
+  }
+
+  subscribePollResult(
+    listener: (key: string, address: number, result: Result<number | number[]>) => void,
+  ): () => void {
+    this.pollResultListeners.add(listener);
+    return () => {
+      this.pollResultListeners.delete(listener);
+    };
+  }
+
+  // ---- TM 追踪 ----
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity?: number,
+  ): void {
+    if (this.activeProtocol === "tcp") {
+      this.tcp.traceStart(key, address, speedMs, quantity);
+      return;
+    }
+    this.inner.traceStart(key, address, speedMs, quantity);
+  }
+
+  traceStop(key: string): void {
+    if (this.activeProtocol === "tcp") {
+      this.tcp.traceStop(key);
+      return;
+    }
+    this.inner.traceStop(key);
+  }
+
+  subscribeTraceSample(
+    listener: (sample: TraceSampleEvent) => void,
+  ): () => void {
+    this.traceListeners.add(listener);
+    return () => {
+      this.traceListeners.delete(listener);
+    };
+  }
+
+  // ---- 日志与消息 ----
+  subscribeCommLog(
+    listener: (event: CommunicationLogEvent) => void,
+  ): () => void {
+    this.commLogListeners.add(listener);
+    return () => {
+      this.commLogListeners.delete(listener);
+    };
+  }
+
+  subscribeMessage(listener: (message: ApplicationMessage) => void): () => void {
+    this.messageListeners.add(listener);
+    return () => {
+      this.messageListeners.delete(listener);
+    };
+  }
+
+  pushMessage(
+    level: "info" | "warning" | "error",
+    messageKey: string,
+    detail?: string,
+  ): void {
+    this.inner.pushMessage(level, messageKey, detail);
+  }
+
+  // ---- 剪贴板（WebView 处于安全上下文，复用浏览器路径）----
+  copyTextToClipboard(text: string): Promise<Result<void>> {
+    return this.inner.copyTextToClipboard(text);
+  }
+
+  readTextFromClipboard(): Promise<Result<string | null>> {
+    return this.inner.readTextFromClipboard();
+  }
+
+  // ---- 文件（Phase 4 接 Capacitor Filesystem + SAF/分享；Phase 1 能力错误）----
+  async saveTextFile(_options: {
+    suggestedName: string;
+    content: string;
+    mimeType?: string;
+  }): Promise<Result<SaveTextFileResponse>> {
+    return fail(
+      createMamepError({
+        code: "LOG_EXPORT_UNSUPPORTED",
+        category: "capability",
+        retryable: false,
+        userMessageKey: "errors.workspaceExportUnsupported",
+        technicalMessage: "android file export is not implemented in Phase 1",
+      }),
+    );
+  }
+
+  async openTextFile(_options?: {
+    suggestedName?: string;
+  }): Promise<Result<OpenTextFileResponse>> {
+    return fail(
+      createMamepError({
+        code: "WORKSPACE_IMPORT_UNSUPPORTED",
+        category: "capability",
+        retryable: false,
+        userMessageKey: "errors.workspaceImportUnsupported",
+        technicalMessage: "android file import is not implemented in Phase 1",
+      }),
+    );
+  }
+
+  // ---- 插件运行时桥（Android 无宿主侧插件执行面 → 沿用浏览器能力错误语义）----
+  pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>> {
+    return this.inner.pluginRuntimeLoad(payload);
+  }
+
+  pluginRuntimeUnload(
+    payload: PluginRuntimeUnloadPayload,
+  ): Promise<Result<null>> {
+    return this.inner.pluginRuntimeUnload(payload);
+  }
+
+  pluginRpc(payload: PluginRpcPayload): Promise<Result<unknown>> {
+    return this.inner.pluginRpc(payload);
+  }
+
+  pluginContributionQuery(payload?: {
+    pointId?: string;
+  }): Promise<Result<PluginContributionQueryResponse>> {
+    return this.inner.pluginContributionQuery(payload);
+  }
+
+  async dispose(): Promise<void> {
+    this.connectionListeners.clear();
+    this.commLogListeners.clear();
+    this.messageListeners.clear();
+    this.pollResultListeners.clear();
+    this.traceListeners.clear();
+    await this.tcp.dispose();
+    await this.inner.dispose();
+    this.activeProtocol = null;
+    this.tcpProfile = null;
+    this.tcpConnectionState = "disconnected";
+    this.portLabel = null;
+  }
+}
+
+/**
+ * 平台宿主的串口面（enumerated 平台专用）。
+ * 不在 `PlatformHost` 里是因为浏览器宿主没有枚举语义；用结构化判定而非 `instanceof`，
+ * 使测试可以注入自定义宿主。
+ */
+interface AndroidSerialHostPort {
+  listSerialPorts(): Promise<Result<SerialPortOption[]>>;
+  selectSerialPort(
+    portId: string | null,
+  ): Promise<Result<SerialDeviceHandle | null>>;
+}
+
+function hasSerialApi(host: unknown): host is AndroidSerialHostPort {
+  const record = host as Partial<AndroidSerialHostPort> | null;
+  return (
+    typeof record?.listSerialPorts === "function" &&
+    typeof record?.selectSerialPort === "function"
+  );
+}
+
+/** 随应用分发插件条目（与 BrowserAppHost 同类型，供 composition root 复用）。 */
+export type AndroidBundledPluginEntry = {
+  pluginId: string;
+  manifest: PluginManifest;
+  createRuntime: () => PluginRuntime | undefined;
+};

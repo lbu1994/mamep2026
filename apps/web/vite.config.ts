@@ -3,6 +3,7 @@ import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
+import { buildWebCsp } from "./src/csp";
 
 // https://vite.dev/config/
 // 默认模式（pnpm dev / pnpm build）只构建网页端；
@@ -13,22 +14,17 @@ const DIST_ELECTRON = path.join(ROOT, "dist-electron");
 const RENDERER_DIST = path.resolve(ROOT, "apps/web/dist-electron");
 /** VSCode Webview 渲染器独立产物目录（VSCode 端骨架，2026-08-23）：与浏览器/Electron 构建分开。 */
 const RENDERER_DIST_VSCODE = path.resolve(ROOT, "apps/web/dist-vscode");
+/** Android（Capacitor）渲染器独立产物目录（ADR-050）：Capacitor 的 webDir 指向它。 */
+const RENDERER_DIST_ANDROID = path.resolve(ROOT, "apps/web/dist-android");
 
 /**
  * 生产构建向 index.html 注入 CSP meta（docs/TECH_DESIGN.md §22.1、§22.4）。
  * Electron 生产模式用 loadFile(file://) 加载页面，file:// 请求不经过 webRequest headers，
  * 因此 CSP 必须在 HTML 内声明；dev（vite）不注入以保 HMR。
+ * 策略内容见 `src/csp.ts`（回归保护：`src/csp.test.ts`；含插件 Blob Worker 所需 worker-src）。
  */
 function injectCspMeta(): Plugin {
-  const csp = [
-    "default-src 'self'",
-    "script-src 'self'",
-    // antd CSS-in-JS 依赖内联 <style>，必须放行 unsafe-inline。
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
-    "font-src 'self' data:",
-    "connect-src 'self'",
-  ].join("; ");
+  const csp = buildWebCsp();
   return {
     name: "mamep-inject-csp-meta",
     apply: "build",
@@ -45,7 +41,9 @@ export default defineConfig(({ mode }) => {
   const isElectron = mode === "electron";
   // VSCode Webview 模式：产物独立目录（apps/web/dist-vscode），base "./" 供 asWebviewUri 相对解析。
   const isVscode = mode === "vscode";
-  const isPlatformBuild = isElectron || isVscode;
+  // Android（Capacitor）模式（ADR-050）：产物独立目录（apps/web/dist-android），base "./" 供 WebViewAssetLoader 加载。
+  const isAndroid = mode === "android";
+  const isPlatformBuild = isElectron || isVscode || isAndroid;
   // 应用版本号取自根 package.json（三端共用版本），经 __APP_VERSION__ 注入，dev/build 均生效。
   const rootPkg = JSON.parse(
     readFileSync(path.resolve(ROOT, "package.json"), "utf-8"),
@@ -56,13 +54,15 @@ export default defineConfig(({ mode }) => {
       __APP_VERSION__: JSON.stringify(rootPkg.version),
     },
     // Electron 生产模式经 loadFile(file://)、VSCode Webview 经 asWebviewUri 加载：必须相对路径。
-    base: isPlatformBuild ? "./" : "/",
-    // 各平台渲染器独立产物目录，与浏览器构建（base /）分开（exactOptionalPropertyTypes 下按条件展开）。
+    base: isPlatformBuild ? "./" : "/",    // 各平台渲染器独立产物目录，与浏览器构建（base /）分开（exactOptionalPropertyTypes 下按条件展开）。
     ...(isElectron
       ? { build: { outDir: RENDERER_DIST, emptyOutDir: true } }
       : {}),
     ...(isVscode
       ? { build: { outDir: RENDERER_DIST_VSCODE, emptyOutDir: true } }
+      : {}),
+    ...(isAndroid
+      ? { build: { outDir: RENDERER_DIST_ANDROID, emptyOutDir: true } }
       : {}),
     plugins: [
       react(),
