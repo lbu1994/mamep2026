@@ -72,16 +72,81 @@ async function waitForWebviewFrame(page: Page): Promise<Frame> {
   );
 }
 
-/** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。 */
-async function setRadixHex(frame: Frame): Promise<void> {
-  await frame
-    .locator(".table-toolbar__radix .ant-segmented-item")
-    .filter({ hasText: "HEX" })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
-  await expect(frame.locator(".table-toolbar__radix")).toContainText("HEX", {
-    timeout: 5000,
+/**
+ * VSCode webview 是否处于移动布局（视口 < 1024px，ADR-050 Phase 3）。
+ *
+ * VS Code 面板为窄窗口（实测两侧栏同时展开时编辑区 < 1024px），共享 UI 因此走移动分支：
+ * 底部面板 → 底部抽屉（Header「Open panel」入口）、工具栏次要控件 → 「更多」面板。
+ * 桌面布局下下列 helper 自动退化为 no-op，两套布局共用同一份用例（不依赖窗口宽度）。
+ */
+async function isMobileLayout(frame: Frame): Promise<boolean> {
+  return await frame.evaluate(
+    () => window.matchMedia("(max-width: 1023px)").matches,
+  );
+}
+
+/** 移动布局下的底部面板抽屉内容（antd v6 Drawer：className 落在 .ant-drawer-section）。 */
+async function openBottomPanel(frame: Frame): Promise<void> {
+  if (!(await isMobileLayout(frame))) return;
+  await frame.getByRole("button", { name: "Open panel" }).click();
+  await expect(frame.locator(".bottom-panel--drawer")).toBeVisible({
+    timeout: 10_000,
   });
+}
+
+/**
+ * 收起底部面板抽屉（移动布局）；桌面布局为 no-op。
+ *
+ * 抽屉带遮罩，会拦截表格交互，故清空日志后必须先收起再操作表格。
+ * 优先点抽屉自带关闭按钮（closable 默认开启），不可用时回退 Esc（antd keyboard 默认开启）。
+ */
+async function closeBottomPanel(frame: Frame): Promise<void> {
+  if (!(await isMobileLayout(frame))) return;
+  const closeButton = frame.locator(
+    ".ant-drawer:has(.mamep-mobile-drawer--panel) .ant-drawer-close",
+  );
+  if (await closeButton.isVisible()) {
+    await closeButton.click();
+  } else {
+    await frame.page().keyboard.press("Escape");
+  }
+  await expect(frame.locator(".bottom-panel--drawer")).toBeHidden({
+    timeout: 10_000,
+  });
+}
+
+/** 展开底部面板（移动布局）并切到通信日志页签；桌面布局等价于点页签。 */
+async function openCommLog(frame: Frame): Promise<void> {
+  await openBottomPanel(frame);
+  await frame.getByRole("tab", { name: "Comm Log" }).click();
+}
+
+/**
+ * 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。
+ *
+ * 移动布局：地址进制收在工具栏「更多」面板内 —— 先展开、点选后收起（浮层会遮挡表格右侧
+ * 的 Read/Write 按钮）。桌面布局：直接点击工具栏内 Segmented。
+ */
+async function setRadixHex(frame: Frame): Promise<void> {
+  const mobile = await isMobileLayout(frame);
+  const moreButton = frame.getByRole("button", {
+    name: "More toolbar actions",
+  });
+  const morePanel = frame.locator(".table-toolbar__more");
+  if (mobile) {
+    await moreButton.click();
+    await expect(morePanel).toBeVisible({ timeout: 5000 });
+  }
+  const radix = frame.locator(".table-toolbar__radix");
+  await radix.locator(".ant-segmented-item", { hasText: "HEX" }).click();
+  await expect(radix.locator(".ant-segmented-item-selected")).toHaveText(
+    "HEX",
+    { timeout: 5000 },
+  );
+  if (mobile) {
+    await moreButton.click();
+    await expect(morePanel).toBeHidden({ timeout: 5000 });
+  }
 }
 
 /** 在弹窗内按 Form.Item 标签定位并填写 InputNumber（TCP Port / Unit ID 等）。 */
@@ -326,8 +391,11 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
   await test.step("通信日志：请求/响应/异常帧字节", async () => {
     // Listy 虚拟列表只渲染视口内的行：共享会话下历史帧已被滚动挤出，
     // 清空后在测试内重建目标帧（写值门控异常 0x03、只读区异常 0x02、读 0x0000）。
-    await frame.getByRole("tab", { name: "Comm Log" }).click();
+    // 移动布局（窄窗口）：底部面板在带遮罩的抽屉内 → 先展开清空、收起抽屉再操作表格，
+    // 生成目标帧后重新展开断言（抽屉开合不丢日志内容）。
+    await openCommLog(frame);
     await frame.getByRole("button", { name: /Clear/i }).click();
+    await closeBottomPanel(frame);
     await setRowAddress(frame, "0400");
     await writeRow(frame, "8000");
     await setRowAddress(frame, "0100");
@@ -338,6 +406,7 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
       timeout: CONNECTED_TIMEOUT,
     });
     await frame.waitForTimeout(300);
+    await openCommLog(frame);
     const list = frame.locator(".comm-log .ant-listy-holder");
     // Listy 虚拟列表默认停在底部（最新帧可见）；最早帧（写门控异常 01 90 03）可能被
     // 挤出视口（TCP 帧含 MBAP 头行更高，且延迟响应的迟到帧也会占用视口）。滚动到顶部
@@ -354,6 +423,8 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await expect(list).toContainText("01 90 02", { timeout: 5000 });
     await expect(list).toContainText("01 03 00 00 00 01", { timeout: 5000 });
     await expect(list).toContainText("01 03 02 04 D2", { timeout: 5000 });
+    // 收起抽屉（移动布局）：遮罩会拦截后续步骤的表格点击。
+    await closeBottomPanel(frame);
   });
 
   await test.step("写后回读 Verify=ON（默认）：写忽略区 0x0900 → Data 显示回读值 0000", async () => {
