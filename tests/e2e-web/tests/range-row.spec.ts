@@ -148,6 +148,51 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   expect(written).toEqual({ a: 0xaaaa, b: 0xbbbb });
 });
 
+test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", async ({ page }) => {
+  await openApp(page);
+  const first = parentRow(page, 0);
+  const address = first.getByLabel("Register");
+  await address.click();
+  await address.fill("0-1");
+  await address.press("Enter");
+
+  // 先读取（registerValues 非空：1111 / 2222）并展开子行。
+  await mockSet(page, 0x0000, 0x1111);
+  await mockSet(page, 0x0001, 0x2222);
+  await first.getByRole("button", { name: "Read", exact: true }).click();
+  await expect(first.getByLabel("Data")).toHaveText("1111 2222");
+  await first.locator('button[aria-label="Expand row"]').click();
+  const childRows = page.locator(
+    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=':c']",
+  );
+  await expect(childRows).toHaveCount(2);
+  await expect(childRows.nth(0).locator("td").nth(7)).toHaveText("1111");
+  await expect(childRows.nth(1).locator("td").nth(7)).toHaveText("2222");
+
+  // 仅手工编辑父行组合文本（不读不写）：子行须随父行文本更新（修复前仍显示旧读值）。
+  const data = first.getByLabel("Data");
+  await data.click();
+  await data.fill("FFFF 0000");
+  await data.press("Enter");
+  await expect(childRows.nth(0).locator("td").nth(7)).toHaveText("FFFF");
+  await expect(childRows.nth(1).locator("td").nth(7)).toHaveText("0000");
+
+  // 改后写入的是父行文本解析值（FFFF / 0000），证明原始值同步未影响待写值语义。
+  await first.getByRole("button", { name: "Write", exact: true }).click();
+  await expect(
+    first.locator(".register-table__status-dot--success"),
+  ).toBeVisible();
+  const written = await page.evaluate(() => ({
+    a: (
+      window as unknown as { __mamepMock: MamepMockApi }
+    ).__mamepMock.getRegister(0x0000),
+    b: (
+      window as unknown as { __mamepMock: MamepMockApi }
+    ).__mamepMock.getRegister(0x0001),
+  }));
+  expect(written).toEqual({ a: 0xffff, b: 0x0000 });
+});
+
 test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启恢复（2026-08-27）", async ({
   page,
 }) => {

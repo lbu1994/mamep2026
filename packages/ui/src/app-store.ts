@@ -51,6 +51,7 @@ import {
   moveRows,
   pasteClipboardRows,
   renumberRows,
+  retargetRowDataType,
   rowTypeCountError,
   setBitComment as setBitCommentUseCase,
   setBitName as setBitNameUseCase,
@@ -435,20 +436,55 @@ function fixActiveSheetId(
   return sheets.find((s) => s.open)?.sheetId ?? sheets[0]?.sheetId ?? null;
 }
 
-/** 把表编辑快照应用到工作区：表存在→恢复结构；不存在→重建并放回原 order 位置。 */
+/**
+ * 撤销/重做应用表快照后，把「快照恢复的 Type」与「未回退的运行时文本」对齐（ADR-053）。
+ * `cellText` 属运行时字段（§24.4 不随撤销回退），若快照恢复的 `dataType` 与当前不同，
+ * 必须按「现类型解析现文本 → 恢复类型格式化」刷新，否则会残留「类型 A + 文本 B」
+ * （并发作写入时按新类型解析旧文本的隐患）。
+ */
+function retargetSnapshotRowTypes(
+  liveSheet: RegisterSheet,
+  restored: RegisterSheet,
+  resolver: DataTypeResolver,
+): RegisterSheet {
+  const liveRows = new Map(liveSheet.rows.map((row) => [row.rowId, row]));
+  let changed = false;
+  const rows = restored.rows.map((row) => {
+    const live = liveRows.get(row.rowId);
+    if (live === undefined || live.dataType === row.dataType) return row;
+    changed = true;
+    return retargetRowDataType(
+      { ...row, dataType: live.dataType, cellText: live.cellText },
+      row.dataType,
+      resolver,
+    );
+  });
+  return changed ? { ...restored, rows } : restored;
+}
+
+/** 把表编辑快照应用到工作区：表存在→恢复结构（并同步 Type ↔ 文本，ADR-053）；
+ *  不存在→重建并放回原 order 位置。 */
 function applySheetSnapshotToWorkspace(
   workspace: Workspace,
   sheetId: SheetId,
   snapshot: SheetEditSnapshot,
+  resolver: DataTypeResolver,
 ): { workspace: Workspace; activeSheetId: SheetId | null } {
-  const existing = workspace.sheets.some((s) => s.sheetId === sheetId);
-  const sheets = existing
-    ? workspace.sheets.map((s) =>
-        s.sheetId === sheetId ? applySheetSnapshot(s, snapshot) : s,
-      )
-    : [...workspace.sheets, sheetFromSnapshot(snapshot)].sort(
-        (a, b) => a.order - b.order,
-      );
+  const existing = workspace.sheets.find((s) => s.sheetId === sheetId);
+  const sheets =
+    existing === undefined
+      ? [...workspace.sheets, sheetFromSnapshot(snapshot)].sort(
+          (a, b) => a.order - b.order,
+        )
+      : workspace.sheets.map((s) =>
+          s.sheetId === sheetId
+            ? retargetSnapshotRowTypes(
+                s,
+                applySheetSnapshot(s, snapshot),
+                resolver,
+              )
+            : s,
+        );
   return {
     workspace: { ...workspace, sheets, updatedAt: Date.now() },
     activeSheetId: fixActiveSheetId(sheets, workspace.activeSheetId),
@@ -599,6 +635,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           workspace,
           sheetId,
           before,
+          get().dataTypeResolver,
         );
         workspace = applied.workspace;
         activeSheetId = applied.activeSheetId;
@@ -645,7 +682,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         workspace = removed.workspace;
         activeSheetId = removed.activeSheetId;
       } else {
-        const applied = applySheetSnapshotToWorkspace(workspace, sheetId, after);
+        const applied = applySheetSnapshotToWorkspace(
+          workspace,
+          sheetId,
+          after,
+          get().dataTypeResolver,
+        );
         workspace = applied.workspace;
         activeSheetId = applied.activeSheetId;
       }
@@ -1642,11 +1684,11 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const currentRow = sheet?.rows.find((r) => r.rowId === rowId);
     if (currentRow === undefined || sheet === undefined) return;
     const beforeSnapshot = snapshotSheet(sheet);
-    get().updateRow(rowId, (row) => ({
-      ...row,
-      dataType,
-      updatedAt: Date.now(),
-    }));
+    // Type/Scale 切换即时刷新显示文本（ADR-053）：按旧 Type 解析当前文本 → 新 Type 格式化写回；
+    // 原始值不变、绝不按新进制重解释；解析失败/空文本保留原文。不算编辑（不置脏标记/完成态）。
+    get().updateRow(rowId, (row) =>
+      retargetRowDataType(row, dataType, get().dataTypeResolver),
+    );
     // 撤销入栈：Type 修改（可撤销，§24.4）。
     const afterSheet = findSheetById(get().workspace, sheet.sheetId);
     if (afterSheet !== undefined) {

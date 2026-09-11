@@ -5,11 +5,14 @@ import {
   defaultConfig,
   fail,
   ok,
+  type DataType,
+  type RegisterRow,
   type RowId,
   type SheetId,
 } from "@mamep2026/domain";
 import { useAppStore } from "./app-store";
 import { initI18n } from "./i18n";
+import { buildTreeRows, type VirtualChildRow } from "./tree-rows";
 
 beforeEach(() => {
   useAppStore.setState({
@@ -718,6 +721,85 @@ describe("位明细动作（ADR-052，2026-09-11）", () => {
   });
 });
 
+describe("setRowDataType（Type/Scale 切换即时刷新显示，ADR-053）", () => {
+  function addRowWithText(
+    dataType: DataType,
+    cellText: string,
+    registerCount = 1,
+  ): RegisterRow {
+    const sheetId = firstSheetId();
+    useAppStore.getState().addRow(sheetId);
+    const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    useAppStore.getState().updateRow(row.rowId, (r) => ({
+      ...r,
+      dataType,
+      cellText,
+      registerCount,
+      registerValues: [{ value: 0x00ab }],
+    }));
+    const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    if (updated === undefined) throw new Error("missing updated row");
+    return updated;
+  }
+
+  function rowOf(rowId: RowId): RegisterRow | undefined {
+    return useAppStore
+      .getState()
+      .workspace.sheets.flatMap((s) => s.rows)
+      .find((r) => r.rowId === rowId);
+  }
+
+  it("切换 Type 按新 Type 重新显示同一数值，原始值不变", () => {
+    useAppStore.setState({ rowDirty: {}, rowSuccess: {}, rowResults: {} });
+    const row = addRowWithText("hex", "00AB");
+    useAppStore.getState().setRowDataType(row.rowId, "unsigned");
+    const updated = rowOf(row.rowId);
+    expect(updated?.dataType).toBe("unsigned");
+    expect(updated?.cellText).toBe("171");
+    // 原始值不变（未按新进制重解释文本）。
+    expect(updated?.registerValues?.[0]?.value).toBe(0x00ab);
+    // 刷新不算编辑：不置脏标记/编辑完成态。
+    expect(useAppStore.getState().rowDirty[row.rowId]).toBeUndefined();
+    expect(useAppStore.getState().rowSuccess[row.rowId]).toBeUndefined();
+  });
+
+  it("关键反例：unsigned 171 切 hex 得 00AB（不得重解释为 0171）", () => {
+    const row = addRowWithText("unsigned", "171");
+    useAppStore.getState().setRowDataType(row.rowId, "hex");
+    expect(rowOf(row.rowId)?.cellText).toBe("00AB");
+  });
+
+  it("范围行按组合类型刷新", () => {
+    const row = addRowWithText("hex", "1111 2222", 2);
+    useAppStore.getState().setRowDataType(row.rowId, "unsigned");
+    expect(rowOf(row.rowId)?.cellText).toBe("286335522");
+  });
+
+  it("空文本 / 解析失败：保留原文，仅切换类型", () => {
+    const emptyRow = addRowWithText("hex", "");
+    useAppStore.getState().setRowDataType(emptyRow.rowId, "signed");
+    expect(rowOf(emptyRow.rowId)?.cellText).toBe("");
+    expect(rowOf(emptyRow.rowId)?.dataType).toBe("signed");
+
+    const badRow = addRowWithText("unsigned", "zz");
+    useAppStore.getState().setRowDataType(badRow.rowId, "hex");
+    expect(rowOf(badRow.rowId)?.cellText).toBe("zz");
+    expect(rowOf(badRow.rowId)?.dataType).toBe("hex");
+  });
+
+  it("撤销单步：一次 Ctrl+Z 同时回退类型与刷新后的文本", () => {
+    useAppStore.setState({ undoStack: [], redoStack: [] });
+    const row = addRowWithText("hex", "00AB");
+    useAppStore.setState({ undoStack: [], redoStack: [] });
+    useAppStore.getState().setRowDataType(row.rowId, "unsigned");
+    expect(useAppStore.getState().undoStack).toHaveLength(1);
+    useAppStore.getState().undo();
+    expect(rowOf(row.rowId)?.dataType).toBe("hex");
+    expect(rowOf(row.rowId)?.cellText).toBe("00AB");
+  });
+});
+
 describe("setSheetColumnWidths", () => {
   it("只修改目标表的 columnWidths，不影响其他表（每表独立不共享）", () => {
     const store = useAppStore.getState();
@@ -1292,6 +1374,44 @@ describe("commitCellText（Data 单元格提交校验）", () => {
     const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
     expect(updated?.cellText).toBe("00AB");
     expect(useAppStore.getState().rowDirty[row.rowId]).toBeUndefined();
+  });
+
+  it("范围行父行提交：同步 registerValues，子行显示随父行文本更新（2026-09-11 bug 修复）", () => {
+    resetRowStatus();
+    const sheetId = firstSheetId();
+    useAppStore.getState().addRow(sheetId);
+    const added = useAppStore
+      .getState()
+      .workspace.sheets.find((s) => s.sheetId === sheetId)?.rows[0];
+    if (added === undefined) throw new Error("missing row");
+    useAppStore.getState().commitRowAddress(added.rowId, "1000-1001");
+    // 模拟已读取：registerValues=[0x1234, 0xABCD]、cellText="1234 ABCD"。
+    useAppStore.getState().updateRow(added.rowId, (r) => ({
+      ...r,
+      dataType: "hex" as DataType,
+      cellText: "1234 ABCD",
+      registerValues: [{ value: 0x1234 }, { value: 0xabcd }],
+    }));
+
+    const result = useAppStore
+      .getState()
+      .commitCellText(added.rowId, "FFFF 0000");
+    expect(result.ok).toBe(true);
+    const row = useAppStore
+      .getState()
+      .workspace.sheets.flatMap((s) => s.rows)
+      .find((r) => r.rowId === added.rowId);
+    expect(row?.cellText).toBe("FFFF 0000");
+    // 原始值单一事实源随提交同步（子行 / 位明细数据源）。
+    expect(row?.registerValues?.map((v) => v.value)).toEqual([0xffff, 0x0000]);
+    // 子行显示与父行文本一致（修复前仍为上次读取值 1234 / ABCD）。
+    const parent = buildTreeRows(row === undefined ? [] : [row])[0] as {
+      children?: VirtualChildRow[];
+    };
+    expect(parent.children?.map((c) => c.__virtualChild.dataText)).toEqual([
+      "FFFF",
+      "0000",
+    ]);
   });
 
 // ---- 撤销/重做（TECH_DESIGN §24.4，PRD §8.3 P1）----

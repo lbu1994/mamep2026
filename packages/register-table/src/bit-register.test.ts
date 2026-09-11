@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { createEmptyRow, newRowId, type RegisterRow } from "@mamep2026/domain";
+import { commitCellText } from "./cell-text";
 import {
   BITS_PER_REGISTER,
   bitMaskText,
@@ -193,6 +194,23 @@ describe("setRegisterBit", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe("BIT_INDEX_OUT_OF_RANGE");
+  });
+
+  it("父行手工编辑后位切换以编辑后的值为基准（不覆盖用户输入，2026-09-11 bug 修复）", () => {
+    const row = makeRow({
+      registerCount: 2,
+      dataType: "hex",
+      cellText: "1234 ABCD",
+      registerValues: [{ value: 0x1234 }, { value: 0xabcd }],
+    });
+    const committed = commitCellText(row, "FFFF 0000");
+    expect(committed.ok).toBe(true);
+    if (!committed.ok) return;
+    // 清 bit0：0xFFFF → 0xFFFE（基准须为编辑后的 FFFF，而非旧读值 1234）。
+    const toggled = setRegisterBit(committed.value, 0, 0, 0);
+    expect(toggled.ok).toBe(true);
+    if (!toggled.ok) return;
+    expect(toggled.value.cellText).toBe("FFFE 0000");
   });
 });
 
