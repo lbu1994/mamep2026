@@ -533,16 +533,14 @@ describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
     fireEvent.click(option);
     await waitFor(() => {
       expect(
-        useAppStore
-          .getState()
-          .workspace.sheets.find((s) => s.sheetId === first)?.writeVerify,
+        useAppStore.getState().workspace.sheets.find((s) => s.sheetId === first)
+          ?.writeVerify,
       ).toEqual({ mode: "delayed", delayMs: 200 });
     });
     // 第二张表仍为默认 immediate。
     expect(
-      useAppStore
-        .getState()
-        .workspace.sheets.find((s) => s.sheetId === second)?.writeVerify,
+      useAppStore.getState().workspace.sheets.find((s) => s.sheetId === second)
+        ?.writeVerify,
     ).toEqual({ mode: "immediate", delayMs: null });
   });
 });
@@ -625,7 +623,9 @@ describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）
 
   it("默认 OFF；切到 ON 更新本表 addressTransform（内置 builtin.address-adjust）", async () => {
     const sid = sheetId();
-    expect(useAppStore.getState().workspace.sheets[0]?.addressTransform).toBeNull();
+    expect(
+      useAppStore.getState().workspace.sheets[0]?.addressTransform,
+    ).toBeNull();
     render(<RegisterTable sheetId={sid} />);
     // 工具栏 label 文本（i18n table.addressAdjust）+ 相邻 Segmented（.table-toolbar__adjust）。
     const label = screen.getByText("Address Adjust");
@@ -663,7 +663,9 @@ describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）
       ).find((el) => el.textContent === "OFF") as HTMLElement,
     );
     await waitFor(() => {
-      expect(useAppStore.getState().workspace.sheets[0]?.addressTransform).toBeNull();
+      expect(
+        useAppStore.getState().workspace.sheets[0]?.addressTransform,
+      ).toBeNull();
     });
   });
 });
@@ -730,7 +732,9 @@ describe("RegisterTable No 列宽度自适应（2026-08-27）", () => {
     expect(firstRowTd).toBeTruthy();
     // 行号（第一行 order=1）与 antd 树形展开图标（ADR-030「加号按钮」）同格。
     expect(firstRowTd?.textContent?.trim()).toBe("1");
-    expect(firstRowTd?.querySelector(".ant-table-row-expand-icon")).toBeTruthy();
+    expect(
+      firstRowTd?.querySelector(".ant-table-row-expand-icon"),
+    ).toBeTruthy();
     // nowrap 类（防换行），配合自适应宽度保证单行。
     expect(firstRowTd?.classList.contains("register-table__cell--no")).toBe(
       true,
@@ -816,8 +820,7 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
     fireEvent.change(input, { target: { value: "H1" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(
-      useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[0]
-        ?.name,
+      useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[0]?.name,
     ).toBe("H1");
   });
 
@@ -889,9 +892,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
       host: null,
       workspace: {
         ...workspace,
-        sheets: [
-          { ...sheet, type: options.sheetType ?? sheet.type, rows },
-        ],
+        sheets: [{ ...sheet, type: options.sheetType ?? sheet.type, rows }],
       },
       connectionState: "connected",
       rowResults: {},
@@ -1001,7 +1002,8 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     fireEvent.change(input, { target: { value: "warning" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(
-      useAppStore.getState().workspace.sheets[0]?.rows[0]?.bitComments?.[0]?.[15],
+      useAppStore.getState().workspace.sheets[0]?.rows[0]
+        ?.bitComments?.[0]?.[15],
     ).toBe("warning");
     expect(useAppStore.getState().undoStack).toHaveLength(1);
   });
@@ -1050,9 +1052,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     fireEvent.click(toggle);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
     expect(row?.registerValues?.map((v) => v.value)).toEqual([0x0001, 0x0002]);
-    expect(row?.cellText).toBe(
-      "00000000 00000001 00000000 00000010",
-    );
+    expect(row?.cellText).toBe("00000000 00000001 00000000 00000010");
   });
 
   it("只读表（input-register）可展开位明细但切换与 Name/注释编辑禁用", () => {
@@ -1167,10 +1167,10 @@ describe("RegisterTable Read All 全局 message（2026-08-28）", () => {
       expect(document.querySelector(".read-all-result")).toBeTruthy();
     });
     // （antd 图标 class 用 icon.name：ExclamationCircleFilled → anticon-exclamation-circle）
+    expect(document.querySelector(".anticon-exclamation-circle")).toBeTruthy();
     expect(
-      document.querySelector(".anticon-exclamation-circle"),
+      document.querySelector(".read-all-result .ant-tag-error"),
     ).toBeTruthy();
-    expect(document.querySelector(".read-all-result .ant-tag-error")).toBeTruthy();
   });
 });
 
@@ -1195,7 +1195,6 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
       cellValidationErrors: {},
       connectionModalOpen: false,
       settingsModalOpen: false,
-      pluginModalOpen: false,
       helpModalOpen: false,
       workspaceImportDraft: null,
       pendingDeleteSheetId: null,
@@ -1212,12 +1211,9 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
             cancel: vi.fn(),
           }) as BatchReadHandle,
       ),
-      readRow: vi.fn(
-        async (): Promise<Result<number | number[]>> => ok(42),
-      ),
-      writeRow: vi.fn(
-        async (): Promise<Result<WriteOutcome>> =>
-          ok({ kind: "write-succeeded-no-verify" } as WriteOutcome),
+      readRow: vi.fn(async (): Promise<Result<number | number[]>> => ok(42)),
+      writeRow: vi.fn(async (): Promise<Result<WriteOutcome>> =>
+        ok({ kind: "write-succeeded-no-verify" } as WriteOutcome),
       ),
       getCommProperties: vi.fn(() => ({
         protocol: "rtu" as const,
@@ -1283,8 +1279,8 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
   });
 
   it("F8 读取选中行（readRow 被调用，Data 值更新为回读值）", async () => {
-    const readRow = vi.fn(
-      async (): Promise<Result<number | number[]>> => ok(42),
+    const readRow = vi.fn(async (): Promise<Result<number | number[]>> =>
+      ok(42),
     );
     useAppStore.setState({
       host: makeHost({ readRow }),
@@ -1306,9 +1302,8 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
   });
 
   it("Ctrl+Shift+Enter 写入选中行（writeRow 被调用）", async () => {
-    const writeRow = vi.fn(
-      async (): Promise<Result<WriteOutcome>> =>
-        ok({ kind: "write-succeeded-no-verify" } as WriteOutcome),
+    const writeRow = vi.fn(async (): Promise<Result<WriteOutcome>> =>
+      ok({ kind: "write-succeeded-no-verify" } as WriteOutcome),
     );
     useAppStore.setState({
       host: makeHost({ writeRow }),
@@ -1327,14 +1322,16 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     render(<RegisterTable sheetId={sheetId()} />);
     const before = useAppStore
       .getState()
-      .workspace.sheets[0]?.rows.find((r) => r.rowId === rowIdAt(0))
-      ?.pollingEnabled;
+      .workspace.sheets[0]?.rows.find(
+        (r) => r.rowId === rowIdAt(0),
+      )?.pollingEnabled;
 
     fireKeyOn(window, "p", { alt: true });
     const after = useAppStore
       .getState()
-      .workspace.sheets[0]?.rows.find((r) => r.rowId === rowIdAt(0))
-      ?.pollingEnabled;
+      .workspace.sheets[0]?.rows.find(
+        (r) => r.rowId === rowIdAt(0),
+      )?.pollingEnabled;
     expect(after).toBe(!before);
   });
 
@@ -1369,8 +1366,8 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
   });
 
   it("弹窗打开时表格级快捷键被抑制（F8 不读取）", () => {
-    const readRow = vi.fn(
-      async (): Promise<Result<number | number[]>> => ok(42),
+    const readRow = vi.fn(async (): Promise<Result<number | number[]>> =>
+      ok(42),
     );
     useAppStore.setState({
       host: makeHost({ readRow }),

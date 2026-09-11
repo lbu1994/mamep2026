@@ -1,3 +1,12 @@
+/**
+ * 插件管理区块（2026-09-12：由独立 `PluginManagerModal` 弹窗改为内联区块，嵌入 Settings
+ * 抽屉的「Plugins」页签）。入口整合后删除顶栏 Plugin Manager 按钮与窄窗口 More 项，
+ * 插件管理统一从 Settings 进入。
+ *
+ * 功能与行为零改动（ADR-038 安装 / ADR-044 卸载与隔离 / ADR-045 Restore bundled）：安装
+ * （manifest JSON 或单文件 JS）、启用/禁用、卸载（仅 installed）、恢复随包插件、加载错误展示；
+ * 安装/卸载确认继续用 `App.useApp().modal.confirm`（渲染到 body portal，不受 Drawer 影响）。
+ */
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -7,14 +16,17 @@ import {
   Empty,
   Flex,
   Listy,
-  Modal,
   Space,
   Switch,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
-import { DeleteOutlined, ReloadOutlined, UploadOutlined } from "@ant-design/icons";
+import {
+  DeleteOutlined,
+  ReloadOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
 import {
   PERMISSION_LABEL_KEYS,
   pluginManifestSchema,
@@ -32,11 +44,9 @@ function permissionLabel(
   return labelKey !== undefined ? t(labelKey) : permission;
 }
 
-export function PluginManagerModal(): React.ReactNode {
+export function PluginManagerSection(): React.ReactNode {
   const { t } = useTranslation();
   const { message, modal } = App.useApp();
-  const open = useAppStore((s) => s.pluginModalOpen);
-  const setOpen = useAppStore((s) => s.setPluginModalOpen);
   const host = useAppStore((s) => s.host);
   const registry = host?.pluginRegistry ?? null;
   const [, forceRender] = useState(0);
@@ -338,120 +348,124 @@ export function PluginManagerModal(): React.ReactNode {
   };
 
   return (
-    <Modal
-      title={t("plugins.title")}
-      open={open}
-      onCancel={() => setOpen(false)}
-      footer={
+    <div className="plugin-manager" data-testid="plugin-manager">
+      <Space orientation="vertical" style={{ width: "100%" }}>
         <Flex justify="flex-end" gap={8}>
-          <Button icon={<ReloadOutlined />} onClick={handleRestoreBundled}>
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            onClick={handleRestoreBundled}
+          >
             {t("plugins.restoreBundled")}
           </Button>
-          <Button icon={<UploadOutlined />} onClick={handleInstallClick}>
+          <Button
+            size="small"
+            icon={<UploadOutlined />}
+            onClick={handleInstallClick}
+          >
             {t("plugins.install")}
           </Button>
         </Flex>
-      }
-    >
-      {host?.capabilities.pluginInstall === "upload" ? (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,.mjs,application/json,text/javascript"
-          style={{ display: "none" }}
-          onChange={handleFileInput}
-          data-testid="plugin-manifest-file-input"
-        />
-      ) : null}
-      {plugins.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={t("plugins.empty")}
-          style={{ padding: "16px 0" }}
-        />
-      ) : (
-        <Listy
-          rowKey={(plugin) => plugin.id}
-          items={plugins}
-          itemRender={(plugin) => (
-            <Flex justify="space-between" align="center" gap={8}>
-              <div style={{ minWidth: 0 }}>
-                <div>
-                  <Typography.Text strong>{plugin.name}</Typography.Text>{" "}
-                  <Tag>{plugin.version}</Tag>
-                  {registry?.getSource(plugin.id) === "installed" ? (
-                    <Tag color="green">{t("plugins.installedTag")}</Tag>
-                  ) : null}
-                </div>
-                <Typography.Text type="secondary">
-                  {plugin.description}
-                </Typography.Text>
-                <Space size={[8, 4]} wrap style={{ marginTop: 4 }}>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {t("plugins.author")}: {plugin.author ?? "—"}
+        {host?.capabilities.pluginInstall === "upload" ? (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.mjs,application/json,text/javascript"
+            style={{ display: "none" }}
+            onChange={handleFileInput}
+            data-testid="plugin-manifest-file-input"
+          />
+        ) : null}
+        {plugins.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={t("plugins.empty")}
+            style={{ padding: "16px 0" }}
+          />
+        ) : (
+          <Listy
+            rowKey={(plugin) => plugin.id}
+            items={plugins}
+            itemRender={(plugin) => (
+              <Flex justify="space-between" align="center" gap={8}>
+                <div style={{ minWidth: 0 }}>
+                  <div>
+                    <Typography.Text strong>{plugin.name}</Typography.Text>{" "}
+                    <Tag>{plugin.version}</Tag>
+                    {registry?.getSource(plugin.id) === "installed" ? (
+                      <Tag color="green">{t("plugins.installedTag")}</Tag>
+                    ) : null}
+                  </div>
+                  <Typography.Text type="secondary">
+                    {plugin.description}
                   </Typography.Text>
-                  <Tooltip title={t("plugins.platformWebTooltip")}>
-                    <Tag color={plugin.platform.web ? "blue" : "default"}>
-                      {t("plugins.platformWeb")}
-                    </Tag>
-                  </Tooltip>
-                  <Tooltip title={t("plugins.platformNodeTooltip")}>
-                    <Tag color={plugin.platform.node ? "green" : "default"}>
-                      {t("plugins.platformNode")}
-                    </Tag>
-                  </Tooltip>
-                  {plugin.permissions.length > 0 ? (
-                    <>
-                      <Typography.Text
-                        type="secondary"
-                        style={{ fontSize: 12 }}
-                      >
-                        {t("plugins.permissions")}:
-                      </Typography.Text>
-                      {plugin.permissions.map((permission) => (
-                        <Tag key={permission} color="geekblue">
-                          {permissionLabel(t, permission)}
-                        </Tag>
-                      ))}
-                    </>
+                  <Space size={[8, 4]} wrap style={{ marginTop: 4 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {t("plugins.author")}: {plugin.author ?? "—"}
+                    </Typography.Text>
+                    <Tooltip title={t("plugins.platformWebTooltip")}>
+                      <Tag color={plugin.platform.web ? "blue" : "default"}>
+                        {t("plugins.platformWeb")}
+                      </Tag>
+                    </Tooltip>
+                    <Tooltip title={t("plugins.platformNodeTooltip")}>
+                      <Tag color={plugin.platform.node ? "green" : "default"}>
+                        {t("plugins.platformNode")}
+                      </Tag>
+                    </Tooltip>
+                    {plugin.permissions.length > 0 ? (
+                      <>
+                        <Typography.Text
+                          type="secondary"
+                          style={{ fontSize: 12 }}
+                        >
+                          {t("plugins.permissions")}:
+                        </Typography.Text>
+                        {plugin.permissions.map((permission) => (
+                          <Tag key={permission} color="geekblue">
+                            {permissionLabel(t, permission)}
+                          </Tag>
+                        ))}
+                      </>
+                    ) : null}
+                  </Space>
+                </div>
+                <Flex align="center" gap={4}>
+                  {registry?.getSource(plugin.id) === "installed" ? (
+                    <Tooltip title={t("plugins.uninstall")}>
+                      <Button
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleUninstall(plugin.id)}
+                        aria-label={t("plugins.uninstall")}
+                      />
+                    </Tooltip>
                   ) : null}
-                </Space>
-              </div>
-              <Flex align="center" gap={4}>
-                {registry?.getSource(plugin.id) === "installed" ? (
-                  <Tooltip title={t("plugins.uninstall")}>
-                    <Button
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => handleUninstall(plugin.id)}
-                      aria-label={t("plugins.uninstall")}
-                    />
-                  </Tooltip>
-                ) : null}
-                <Switch
-                  size="small"
-                  checked={registry?.isEnabled(plugin.id) ?? false}
-                  onChange={(checked) => {
-                    registry?.setEnabled(plugin.id, checked);
-                    forceRender((v) => v + 1);
-                  }}
-                />
+                  <Switch
+                    size="small"
+                    checked={registry?.isEnabled(plugin.id) ?? false}
+                    onChange={(checked) => {
+                      registry?.setEnabled(plugin.id, checked);
+                      forceRender((v) => v + 1);
+                    }}
+                  />
+                </Flex>
               </Flex>
-            </Flex>
-          )}
-        />
-      )}
-      {loadErrors.length > 0 ? (
-        <div>
-          <Typography.Text strong>{t("plugins.loadErrors")}</Typography.Text>
-          {loadErrors.map((error, index) => (
-            <Typography.Paragraph key={index} type="danger">
-              [{error.errorCode}] {error.message}
-            </Typography.Paragraph>
-          ))}
-        </div>
-      ) : null}
-    </Modal>
+            )}
+          />
+        )}
+        {loadErrors.length > 0 ? (
+          <div>
+            <Typography.Text strong>{t("plugins.loadErrors")}</Typography.Text>
+            {loadErrors.map((error, index) => (
+              <Typography.Paragraph key={index} type="danger">
+                [{error.errorCode}] {error.message}
+              </Typography.Paragraph>
+            ))}
+          </div>
+        ) : null}
+      </Space>
+    </div>
   );
 }

@@ -10,13 +10,14 @@ import type { Result } from "@mamep2026/domain";
 import type { AppHost } from "../host";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
-import { PluginManagerModal } from "./PluginManagerModal";
+import { PluginManagerSection } from "./PluginManagerSection";
 
-// PluginManagerModal 使用 App.useApp()（antd message/modal），测试渲染必须包 <AntApp>。
-function renderModal(): ReturnType<typeof render> {
+// PluginManagerSection 使用 App.useApp()（antd message/modal），测试渲染必须包 <AntApp>。
+// 2026-09-12：由独立弹窗改为 Settings「Plugins」页签内的内联区块，无需开合状态。
+function renderSection(): ReturnType<typeof render> {
   return render(
     <AntApp>
-      <PluginManagerModal />
+      <PluginManagerSection />
     </AntApp>,
   );
 }
@@ -84,7 +85,6 @@ function setHostWithPlugin(
       restoreAllBundledPlugins: vi.fn(async () => undefined),
       ...overrides,
     } as unknown as AppHost,
-    pluginModalOpen: true,
   });
 }
 
@@ -150,19 +150,18 @@ function clickConfirmOk(): void {
   fireEvent.click(ok as HTMLElement);
 }
 
-describe("PluginManagerModal", () => {
+describe("PluginManagerSection", () => {
   beforeEach(() => {
     initI18n();
     useAppStore.setState({
       host: null,
       workspace: useAppStore.getState().workspace,
-      pluginModalOpen: false,
     });
   });
 
   it("shows the empty state when no plugins are registered", () => {
     setHostWithPlugin(new PluginRegistry());
-    renderModal();
+    renderSection();
     expect(screen.getByText("No built-in plugins registered.")).toBeTruthy();
   });
 
@@ -180,7 +179,7 @@ describe("PluginManagerModal", () => {
       contributes: { panels: [] },
     });
     setHostWithPlugin(registry);
-    renderModal();
+    renderSection();
 
     expect(screen.getByText("Author: Mamep2026 Team")).toBeTruthy();
     // 平台能力：Web/Node 双 Tag。
@@ -203,7 +202,7 @@ describe("PluginManagerModal", () => {
       contributes: { panels: [] },
     });
     setHostWithPlugin(registry);
-    renderModal();
+    renderSection();
 
     // 作者缺失 → 占位符「—」。
     expect(screen.getByText("Author: —")).toBeTruthy();
@@ -239,7 +238,7 @@ describe("PluginManagerModal", () => {
       { source: "installed" },
     );
     setHostWithPlugin(registry);
-    renderModal();
+    renderSection();
 
     // 用户安装插件行包含「Installed」标签；内置插件行不含。
     const installedRow = screen
@@ -255,7 +254,7 @@ describe("PluginManagerModal", () => {
   describe("安装入口（2026-08-30，PRD §8.3 P1，ADR-038）", () => {
     it("shows the Install Plugin button in the footer", () => {
       setHostWithPlugin(new PluginRegistry());
-      renderModal();
+      renderSection();
       expect(
         screen.getByRole("button", { name: /Install Plugin/i }),
       ).toBeTruthy();
@@ -264,7 +263,7 @@ describe("PluginManagerModal", () => {
     it("browser (upload): file pick → security confirm → confirm registers installed plugin", async () => {
       const registry = new PluginRegistry();
       setHostWithPlugin(registry);
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await pickManifestFile(JSON.stringify(manifestJson));
@@ -292,7 +291,7 @@ describe("PluginManagerModal", () => {
     it("browser (upload): invalid JSON shows an error and does not register", async () => {
       const registry = new PluginRegistry();
       setHostWithPlugin(registry);
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       const input = screen.getByTestId(
@@ -317,7 +316,7 @@ describe("PluginManagerModal", () => {
     it("browser (upload): schema-invalid manifest shows an error and does not register", async () => {
       const registry = new PluginRegistry();
       setHostWithPlugin(registry);
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       const input = screen.getByTestId(
@@ -345,7 +344,7 @@ describe("PluginManagerModal", () => {
     it("browser (upload): node-only plugin rejected before confirm (platform guard)", async () => {
       const registry = new PluginRegistry();
       setHostWithPlugin(registry);
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       const input = screen.getByTestId(
@@ -379,7 +378,7 @@ describe("PluginManagerModal", () => {
     it("cancel on security confirm does not register", async () => {
       const registry = new PluginRegistry();
       setHostWithPlugin(registry);
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await pickManifestFile(JSON.stringify(manifestJson));
@@ -404,7 +403,7 @@ describe("PluginManagerModal", () => {
         capabilities: desktopCaps,
         openTextFile,
       });
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await waitFor(() => {
@@ -432,7 +431,7 @@ describe("PluginManagerModal", () => {
         }),
       );
       setHostWithPlugin(registry, { capabilities: desktopCaps, openTextFile });
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await waitFor(() => {
@@ -463,7 +462,7 @@ describe("PluginManagerModal", () => {
         },
         openTextFile,
       });
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await waitFor(() => {
@@ -503,7 +502,7 @@ describe("PluginManagerModal", () => {
         { source: "installed" },
       );
       setHostWithPlugin(registry);
-      renderModal();
+      renderSection();
 
       const installedRow = screen
         .getByText("User Plugin")
@@ -535,7 +534,7 @@ describe("PluginManagerModal", () => {
         { source: "installed" },
       );
       setHostWithPlugin(registry);
-      renderModal();
+      renderSection();
       expect(registry.list()).toHaveLength(1);
 
       fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
@@ -568,7 +567,7 @@ describe("PluginManagerModal", () => {
         { source: "installed" },
       );
       setHostWithPlugin(registry);
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
       const cancel = document.querySelector(".ant-modal .ant-btn-default");
@@ -586,7 +585,7 @@ describe("PluginManagerModal", () => {
       setHostWithPlugin(new PluginRegistry(), {
         restoreAllBundledPlugins,
       });
-      renderModal();
+      renderSection();
 
       const restoreButton = screen.getByRole("button", {
         name: /Restore bundled/i,
@@ -615,7 +614,7 @@ describe("PluginManagerModal", () => {
         capabilities: executableCaps,
         createPluginRemoteRuntime,
       });
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await pickPluginSourceFile(entrySource);
@@ -649,7 +648,7 @@ describe("PluginManagerModal", () => {
         capabilities: executableCaps,
         createPluginRemoteRuntime: vi.fn(() => runtime),
       });
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await pickPluginSourceFile(entrySource);
@@ -673,7 +672,7 @@ describe("PluginManagerModal", () => {
         capabilities: browserCaps, // executablePlugins: false
         createPluginRemoteRuntime,
       });
-      renderModal();
+      renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       const input = screen.getByTestId(

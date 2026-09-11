@@ -78,7 +78,7 @@ test("narrow viewport moves secondary header actions into a More menu", async ({
   await page.setViewportSize({ width: 900, height: 768 });
   await openApp(page);
 
-  // 次要操作被收纳：Plugin Manager 按钮不再直接渲染，出现 More 按钮。
+  // 次要操作被收纳：Settings / Help 收进 More（Plugin Manager 已并入 Settings，2026-09-12）。
   await expect(
     page.getByRole("button", { name: "Plugin Manager" }),
   ).toHaveCount(0);
@@ -91,6 +91,17 @@ test("narrow viewport moves secondary header actions into a More menu", async ({
   await expect(menu.getByText("Settings", { exact: true })).toBeVisible();
   await expect(menu.getByText("Help", { exact: true })).toBeVisible();
   await expect(menu.getByText("Theme", { exact: true })).toHaveCount(0);
+
+  // 插件管理仍可达（并入 Settings）：More → Settings → Plugins 页签。
+  await menu.getByText("Settings", { exact: true }).click();
+  await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+    timeout: 5000,
+  });
+  await page
+    .locator(".settings-drawer")
+    .getByRole("tab", { name: "Plugins" })
+    .click();
+  await expect(page.getByTestId("plugin-manager")).toBeVisible();
 
   // 连接状态始终可见（并入单按钮；窄窗口收起文字，但保留状态点 + 状态属性，不隐藏连接状态）。
   const connBtn = page.locator(".connection-cluster__button");

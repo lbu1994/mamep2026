@@ -1,13 +1,14 @@
 /**
  * 插件安装入口 e2e（mockTransport=1，浏览器端，2026-08-30，PRD §8.3 P1，ADR-038）。
  * 覆盖：
- * - 安装成功：Plugin Manager → Install Plugin → 客户端文件选择 → §6.10.4 安全确认弹窗
+ * - 安装成功：Settings → Plugins 页签 → Install Plugin → 客户端文件选择 → §6.10.4 安全确认弹窗
  *   （来源/版本/权限/平台/风险）→ 确认 → 列表出现「Installed」标签；
  * - 坏文件：非法 JSON / schema 不合法 → 报错且不注册；
  * - 取消安全确认：不注册；
  * - 重启持久化：安装 + 启停状态经 IndexedDB 落盘，reload 后仍在（Installed 标签 + 启用开关）；
  * - 全程无 console 错误。
- * 注意：隐藏文件输入框随插件管理弹窗挂载（在弹窗体内），安装前必须先打开 Plugin Manager。
+ * 2026-09-12：插件管理并入 Settings（删除顶栏 Plugin Manager 入口），助手按 Settings → Plugins 导航。
+ * 注意：隐藏文件输入框随插件管理区块挂载（在 Settings 的 Plugins 页签内），安装前必须先打开该页签。
  */
 import { expect, test, type Page } from "@playwright/test";
 
@@ -33,14 +34,24 @@ async function openApp(page: Page): Promise<void> {
   });
 }
 
-/** 打开 Plugin Manager 弹窗，返回弹窗定位器（按标题定位，无论是否已有插件）。 */
+/** 打开 Settings 抽屉的 Plugins 页签，返回插件管理区块定位器
+ * （2026-09-12：插件管理由独立弹窗并入 Settings）。 */
 async function openPluginManager(page: Page) {
-  await page.getByRole("button", { name: "Plugin Manager" }).click();
-  const modal = page
-    .locator(".ant-modal-container")
-    .filter({ hasText: "Plugin Manager" });
-  await expect(modal).toBeVisible();
-  return modal;
+  if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
+    await page
+      .getByRole("button", { name: "Settings" })
+      .evaluate((el) => (el as HTMLElement).click());
+    await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+      timeout: 5000,
+    });
+  }
+  await page
+    .locator(".settings-drawer")
+    .getByRole("tab", { name: "Plugins" })
+    .click();
+  const section = page.getByTestId("plugin-manager");
+  await expect(section).toBeVisible();
+  return section;
 }
 
 /** 经隐藏文件输入选择 manifest JSON（浏览器端 pluginInstall === "upload" 路径）。 */
@@ -162,12 +173,11 @@ test("重启持久化：安装 + 启停状态 reload 后仍在", async ({ page }
   // 等 IndexedDB 自动保存落盘（防抖）再 reload（ADR-031 踩坑）。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText(
-    "Disconnect",
-    { timeout: 15000 },
-  );
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+    timeout: 15000,
+  });
 
-  // 重开 Plugin Manager：插件仍在且为禁用态。
+  // 重开 Settings → Plugins：插件仍在且为禁用态。
   modal = await openPluginManager(page);
   await expect(modal).toContainText("E2E Installed");
   await expect(modal).toContainText("Installed");
@@ -183,9 +193,7 @@ test("重启持久化：安装 + 启停状态 reload 后仍在", async ({ page }
   expect(errors).toEqual([]);
 });
 
-test("卸载：确认后从列表移除并提示成功（随包插件可卸载）", async ({
-  page,
-}) => {
+test("卸载：确认后从列表移除并提示成功（随包插件可卸载）", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
   page.on("console", (message) => {
@@ -199,9 +207,9 @@ test("卸载：确认后从列表移除并提示成功（随包插件可卸载�
   const bundledRow = modal
     .locator(".ant-listy-item")
     .filter({ hasText: "Example Panel" });
-  await expect(bundledRow.locator('button[aria-label="Uninstall"]')).toHaveCount(
-    1,
-  );
+  await expect(
+    bundledRow.locator('button[aria-label="Uninstall"]'),
+  ).toHaveCount(1);
 
   // 安装一个插件。
   await modal.getByRole("button", { name: "Install Plugin" }).click();
@@ -215,9 +223,7 @@ test("卸载：确认后从列表移除并提示成功（随包插件可卸载�
   const installedRow = modal
     .locator(".ant-listy-item")
     .filter({ hasText: "E2E Installed" });
-  await installedRow
-    .locator('button[aria-label="Uninstall"]')
-    .click();
+  await installedRow.locator('button[aria-label="Uninstall"]').click();
   confirm = page
     .locator(".ant-modal-container")
     .filter({ hasText: "Uninstall this plugin?" });
@@ -265,10 +271,9 @@ test("卸载持久化：卸载后 reload 不再出现", async ({ page }) => {
   // 等 IndexedDB 自动保存落盘（防抖）再 reload → 卸载后插件不再出现。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText(
-    "Disconnect",
-    { timeout: 15000 },
-  );
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+    timeout: 15000,
+  });
   modal = await openPluginManager(page);
   await expect(modal).not.toContainText("E2E Installed");
   expect(errors).toEqual([]);

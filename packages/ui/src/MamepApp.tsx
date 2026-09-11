@@ -98,7 +98,9 @@ import { useOpenedOnce } from "./opened-once";
  * `useOpenedOnce`（首次打开才挂载，此后常驻以保留 antd 关闭动画）。
  *
  * Settings 于 2026-09-12 由 Modal 改为右侧 Drawer（`SettingsDrawer`）；仍是懒加载 +
- * `useOpenedOnce` 门控，store 字段名（`settingsModalOpen`）保持不变。
+ * `useOpenedOnce` 门控，store 字段名（`settingsModalOpen`）保持不变。插件管理（原独立
+ * `PluginManagerModal` 弹窗）已于 2026-09-12 并入 Settings 的「Plugins」页签，独立的
+ * 懒加载映射与挂载门控随之移除。
  *
  * `ConnectionSettingsModal` **保持静态导入**：非 mock（浏览器/Electron/VSCode）启动后
  * 工作区加载完成即自动打开，属首屏路径——懒加载只会多一次异步跳变（实测会让「启动弹窗」
@@ -106,11 +108,6 @@ import { useOpenedOnce } from "./opened-once";
  */
 const HelpDrawer = lazy(() =>
   import("./components/HelpDrawer").then((m) => ({ default: m.HelpDrawer })),
-);
-const PluginManagerModal = lazy(() =>
-  import("./components/PluginManagerModal").then((m) => ({
-    default: m.PluginManagerModal,
-  })),
 );
 const WorkspaceImportModal = lazy(() =>
   import("./components/WorkspaceImportModal").then((m) => ({
@@ -205,7 +202,6 @@ export function MamepApp(): React.ReactNode {
   );
   const selectedSerialHandle = useAppStore((s) => s.selectedSerialHandle);
   const setConnectError = useAppStore((s) => s.setConnectError);
-  const setPluginModalOpen = useAppStore((s) => s.setPluginModalOpen);
   const settingsOpen = useAppStore((s) => s.settingsModalOpen);
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
@@ -334,11 +330,9 @@ export function MamepApp(): React.ReactNode {
   // 懒加载弹窗/抽屉的挂载门控（代码分割，2026-09-11）：首次打开才挂载该组件（chunk 按需
   // 下载），此后常驻以保留 antd 关闭动画。弹窗自身的开合仍由其内部读 store 的 open 控制。
   // （ConnectionSettingsModal 例外：启动即自动打开、属首屏路径，故静态导入、不门控。）
-  const pluginModalOpen = useAppStore((s) => s.pluginModalOpen);
   const workspaceImportOpen = useAppStore(
     (s) => s.workspaceImportDraft !== null,
   );
-  const pluginManagerMounted = useOpenedOnce(pluginModalOpen);
   const workspaceImportMounted = useOpenedOnce(workspaceImportOpen);
   const settingsMounted = useOpenedOnce(settingsOpen);
   const helpMounted = useOpenedOnce(helpOpen);
@@ -450,8 +444,7 @@ export function MamepApp(): React.ReactNode {
   // 硬件返回键（Android，ADR-050 Phase 3）：先关最上层覆盖层（移动端抽屉等，经 overlay-close 栈），
   // 无覆盖层时不消费 → 宿主兑底最小化应用（不退出进程）。浏览器/桌面无此能力 → 返回 null。
   useEffect(() => {
-    const unsubscribe =
-      host?.onHardwareBack?.(() => closeTopOverlay()) ?? null;
+    const unsubscribe = host?.onHardwareBack?.(() => closeTopOverlay()) ?? null;
     return () => {
       unsubscribe?.();
     };
@@ -631,11 +624,6 @@ export function MamepApp(): React.ReactNode {
 
   // 顶栏次要操作：窄窗口收入 More 下拉（与展开态按钮共享动作）。
   const secondaryMenuItems: NonNullable<MenuProps["items"]> = [
-    {
-      key: "plugins",
-      label: t("topbar.pluginManager"),
-      onClick: () => setPluginModalOpen(true),
-    },
     {
       key: "settings",
       label: t("topbar.settings"),
@@ -837,7 +825,7 @@ export function MamepApp(): React.ReactNode {
             </div>
             <span className="mamep-header__spacer" />
             <div className="mamep-header__group">
-              {/* Connection 入口始终可见（不收进 More），置于 Plugin Manager 左侧 */}
+              {/* Connection 入口始终可见（不收进 More），置于 Settings/Help 之前 */}
               <Button
                 size="small"
                 icon={<ApiOutlined />}
@@ -871,13 +859,6 @@ export function MamepApp(): React.ReactNode {
                 </Dropdown>
               ) : (
                 <>
-                  <Button
-                    size="small"
-                    icon={<AppstoreOutlined />}
-                    onClick={() => setPluginModalOpen(true)}
-                  >
-                    {t("topbar.pluginManager")}
-                  </Button>
                   <Button
                     size="small"
                     icon={<SettingOutlined />}
@@ -914,105 +895,107 @@ export function MamepApp(): React.ReactNode {
             }}
           >
             {!isMobileLayout && (
-            <Splitter.Panel
-              className={`sheet-sidebar ant-layout-sider${sidebarCollapsed ? " ant-layout-sider-collapsed" : ""}`}
-              size={sidebarCollapsed ? 36 : (dragSidebarWidth ?? sidebarWidth)}
-              resizable={!sidebarCollapsed}
-              {...(sidebarCollapsed ? {} : { min: 120, max: "40%" })}
-            >
-              <div className="sheet-sidebar__head">
-                <span className="sheet-sidebar__title">
-                  {t("sidebar.workspace")}
-                </span>
-                <Tooltip title={t("topbar.toggleSidebar")}>
-                  <Button
-                    type="text"
-                    size="small"
-                    className="sheet-sidebar__collapse"
-                    aria-label={t("topbar.toggleSidebar")}
-                    icon={
-                      sidebarCollapsed ? <RightOutlined /> : <LeftOutlined />
+              <Splitter.Panel
+                className={`sheet-sidebar ant-layout-sider${sidebarCollapsed ? " ant-layout-sider-collapsed" : ""}`}
+                size={
+                  sidebarCollapsed ? 36 : (dragSidebarWidth ?? sidebarWidth)
+                }
+                resizable={!sidebarCollapsed}
+                {...(sidebarCollapsed ? {} : { min: 120, max: "40%" })}
+              >
+                <div className="sheet-sidebar__head">
+                  <span className="sheet-sidebar__title">
+                    {t("sidebar.workspace")}
+                  </span>
+                  <Tooltip title={t("topbar.toggleSidebar")}>
+                    <Button
+                      type="text"
+                      size="small"
+                      className="sheet-sidebar__collapse"
+                      aria-label={t("topbar.toggleSidebar")}
+                      icon={
+                        sidebarCollapsed ? <RightOutlined /> : <LeftOutlined />
+                      }
+                      onClick={() =>
+                        setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
+                      }
+                    />
+                  </Tooltip>
+                </div>
+                {/* 分区标题保留（新建入口已移入各分组头右侧 +，ADR-041 决策②） */}
+                <div className="sheet-sidebar__section">
+                  <span className="sheet-sidebar__section-title">
+                    {t("sidebar.registerTables")}
+                  </span>
+                </div>
+                <div ref={sidebarListRef} className="sheet-sidebar__groups">
+                  <Menu
+                    className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
+                    mode="inline"
+                    inlineCollapsed={sidebarCollapsed}
+                    selectable
+                    selectedKeys={
+                      currentSheet !== undefined ? [currentSheet.sheetId] : []
                     }
-                    onClick={() =>
-                      setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
-                    }
+                    {...(sidebarCollapsed
+                      ? {}
+                      : { openKeys: sheetGroupOpenKeys })}
+                    onOpenChange={handleGroupOpenChange}
+                    onClick={({ key, domEvent }) => {
+                      // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
+                      // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
+                      // 而非“切换表”意图，忽略以免把 active 切回源表。
+                      const target = domEvent.target as HTMLElement;
+                      if (target.closest(".ant-dropdown") !== null) return;
+                      // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
+                      openSheet(key as SheetId);
+                    }}
+                    onDragStart={(event) => {
+                      const li = (
+                        event.target as HTMLElement
+                      ).closest<HTMLLIElement>("li[data-sheet-index]");
+                      if (li?.dataset.sheetIndex !== undefined) {
+                        dragIndex.current = Number(li.dataset.sheetIndex);
+                        dragGroup.current = li.dataset.sheetGroup ?? null;
+                      }
+                    }}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const li = (
+                        event.target as HTMLElement
+                      ).closest<HTMLLIElement>("li[data-sheet-index]");
+                      const fromIndex = dragIndex.current;
+                      const fromGroup = dragGroup.current;
+                      dragIndex.current = null;
+                      dragGroup.current = null;
+                      if (li?.dataset.sheetIndex === undefined) return;
+                      if (fromIndex === null) return;
+                      // 跨组禁拖（ADR-041 决策⑥）：源/目标分组不同则忽略。
+                      if (li.dataset.sheetGroup !== fromGroup) return;
+                      const toIndex = Number(li.dataset.sheetIndex);
+                      if (fromIndex === toIndex) return;
+                      const source = sheetMeta[fromIndex];
+                      if (source !== undefined) {
+                        moveSheetTo(source.sheetId, toIndex);
+                      }
+                    }}
+                    items={sidebarMenuItems}
                   />
-                </Tooltip>
-              </div>
-              {/* 分区标题保留（新建入口已移入各分组头右侧 +，ADR-041 决策②） */}
-              <div className="sheet-sidebar__section">
-                <span className="sheet-sidebar__section-title">
-                  {t("sidebar.registerTables")}
-                </span>
-              </div>
-              <div ref={sidebarListRef} className="sheet-sidebar__groups">
-                <Menu
-                  className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
-                  mode="inline"
-                  inlineCollapsed={sidebarCollapsed}
-                  selectable
-                  selectedKeys={
-                    currentSheet !== undefined ? [currentSheet.sheetId] : []
-                  }
-                  {...(sidebarCollapsed
-                    ? {}
-                    : { openKeys: sheetGroupOpenKeys })}
-                  onOpenChange={handleGroupOpenChange}
-                  onClick={({ key, domEvent }) => {
-                    // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
-                    // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
-                    // 而非“切换表”意图，忽略以免把 active 切回源表。
-                    const target = domEvent.target as HTMLElement;
-                    if (target.closest(".ant-dropdown") !== null) return;
-                    // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
-                    openSheet(key as SheetId);
-                  }}
-                  onDragStart={(event) => {
-                    const li = (
-                      event.target as HTMLElement
-                    ).closest<HTMLLIElement>("li[data-sheet-index]");
-                    if (li?.dataset.sheetIndex !== undefined) {
-                      dragIndex.current = Number(li.dataset.sheetIndex);
-                      dragGroup.current = li.dataset.sheetGroup ?? null;
-                    }
-                  }}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    const li = (
-                      event.target as HTMLElement
-                    ).closest<HTMLLIElement>("li[data-sheet-index]");
-                    const fromIndex = dragIndex.current;
-                    const fromGroup = dragGroup.current;
-                    dragIndex.current = null;
-                    dragGroup.current = null;
-                    if (li?.dataset.sheetIndex === undefined) return;
-                    if (fromIndex === null) return;
-                    // 跨组禁拖（ADR-041 决策⑥）：源/目标分组不同则忽略。
-                    if (li.dataset.sheetGroup !== fromGroup) return;
-                    const toIndex = Number(li.dataset.sheetIndex);
-                    if (fromIndex === toIndex) return;
-                    const source = sheetMeta[fromIndex];
-                    if (source !== undefined) {
-                      moveSheetTo(source.sheetId, toIndex);
-                    }
-                  }}
-                  items={sidebarMenuItems}
-                />
-              </div>
-              <div className="sheet-sidebar__footer">
-                {t(
-                  host?.platform === "electron"
-                    ? "sidebar.footerClient"
-                    : host?.platform === "vscode"
-                      ? "sidebar.footerExtension"
-                      : host?.platform === "android"
-                        ? "sidebar.footerAndroid"
-                        : "sidebar.footerBrowser",
-                  { version: host?.appVersion ?? "" },
-                )}
-              </div>
-            </Splitter.Panel>
+                </div>
+                <div className="sheet-sidebar__footer">
+                  {t(
+                    host?.platform === "electron"
+                      ? "sidebar.footerClient"
+                      : host?.platform === "vscode"
+                        ? "sidebar.footerExtension"
+                        : host?.platform === "android"
+                          ? "sidebar.footerAndroid"
+                          : "sidebar.footerBrowser",
+                    { version: host?.appVersion ?? "" },
+                  )}
+                </div>
+              </Splitter.Panel>
             )}
             <Splitter.Panel>
               <div className="mamep-body">
@@ -1121,17 +1104,19 @@ export function MamepApp(): React.ReactNode {
                     </div>
                   </Splitter.Panel>
                   {!isMobileLayout && (
-                  <Splitter.Panel
-                    size={
-                      bottomPanelCollapsed
-                        ? COLLAPSED_BOTTOM_PANEL_HEIGHT
-                        : (dragPanelHeight ?? bottomPanelHeight)
-                    }
-                    resizable={!bottomPanelCollapsed}
-                    {...(bottomPanelCollapsed ? {} : { min: 120, max: "60%" })}
-                  >
-                    <BottomPanel />
-                  </Splitter.Panel>
+                    <Splitter.Panel
+                      size={
+                        bottomPanelCollapsed
+                          ? COLLAPSED_BOTTOM_PANEL_HEIGHT
+                          : (dragPanelHeight ?? bottomPanelHeight)
+                      }
+                      resizable={!bottomPanelCollapsed}
+                      {...(bottomPanelCollapsed
+                        ? {}
+                        : { min: 120, max: "60%" })}
+                    >
+                      <BottomPanel />
+                    </Splitter.Panel>
                   )}
                 </Splitter>
               </div>
@@ -1140,11 +1125,6 @@ export function MamepApp(): React.ReactNode {
         </Layout>
 
         <ConnectionSettingsModal />
-        {pluginManagerMounted && (
-          <Suspense fallback={null}>
-            <PluginManagerModal />
-          </Suspense>
-        )}
         {workspaceImportMounted && (
           <Suspense fallback={null}>
             <WorkspaceImportModal />

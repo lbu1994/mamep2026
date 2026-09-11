@@ -46,7 +46,6 @@ export function isAnyModalOpen(): boolean {
   return (
     s.connectionModalOpen ||
     s.settingsModalOpen ||
-    s.pluginModalOpen ||
     s.helpModalOpen ||
     s.workspaceImportDraft !== null ||
     s.pendingDeleteSheetId !== null ||

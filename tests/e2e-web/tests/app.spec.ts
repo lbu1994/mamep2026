@@ -312,9 +312,12 @@ test("TM opens a Memory Trace window and collects samples", async ({
   } catch (_err) {
     // 偶发掉线：reload 后重连 Mock 并重试一次（仅防御性重试，非掩盖真实回归）。
     await page.reload();
-    await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
-      timeout: 15000,
-    });
+    await expect(page.locator(".ant-layout-header")).toContainText(
+      "Disconnect",
+      {
+        timeout: 15000,
+      },
+    );
     await openTrace();
   }
   await expect(traceWindow).toContainText("Play");
@@ -404,16 +407,24 @@ test("sheets can be added and the workspace survives a reload", async ({
   await expect(page.locator(".ant-layout-header")).toContainText("Online");
 });
 
-test("plugin manager lists the built-in plugin with enable toggle", async ({
+test("plugins tab in Settings lists the built-in plugin with enable toggle", async ({
   page,
 }) => {
   await openApp(page);
 
+  // 插件管理已并入 Settings（2026-09-12）：顶栏 Settings → Plugins 页签。
   await page
-    .getByRole("button", { name: "Plugin Manager" })
+    .getByRole("button", { name: "Settings" })
     .evaluate((el) => (el as HTMLElement).click());
-  await page.waitForSelector(".ant-modal-container:visible", { timeout: 5000 });
-  const modal = page.locator(".ant-modal-container:visible");
+  await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+    timeout: 5000,
+  });
+  await page
+    .locator(".settings-drawer")
+    .getByRole("tab", { name: "Plugins" })
+    .click();
+  const modal = page.getByTestId("plugin-manager");
+  await expect(modal).toBeVisible();
   await expect(modal).toContainText("Example Panel");
   await expect(modal).toContainText("1.0.0");
   // 作者（示例插件已声明 author）。

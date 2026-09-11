@@ -74,7 +74,7 @@ describe("isArrowNavigationBlocked", () => {
       isArrowNavigationBlocked(inTable.querySelector('input[type="text"]')),
     ).toBe(true);
     expect(
-      isArrowNavigationBlocked(inTable.querySelector('input:not([type])')),
+      isArrowNavigationBlocked(inTable.querySelector("input:not([type])")),
     ).toBe(true);
   });
 });
@@ -84,7 +84,6 @@ describe("isAnyModalOpen", () => {
     useAppStore.setState({
       connectionModalOpen: false,
       settingsModalOpen: false,
-      pluginModalOpen: false,
       helpModalOpen: false,
       workspaceImportDraft: null,
       pendingDeleteSheetId: null,

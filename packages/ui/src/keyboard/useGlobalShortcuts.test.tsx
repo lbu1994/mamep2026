@@ -33,7 +33,6 @@ beforeEach(() => {
   useAppStore.setState({
     connectionModalOpen: false,
     settingsModalOpen: false,
-    pluginModalOpen: false,
     helpModalOpen: false,
     workspaceImportDraft: null,
     pendingDeleteSheetId: null,

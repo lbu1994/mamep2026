@@ -13,7 +13,6 @@ export const en = {
     disconnect: "Disconnect",
     connected: "Online / Disconnect",
     reconnect: "Reconnect",
-    pluginManager: "Plugin Manager",
     settings: "Settings",
     help: "Help",
     about: "About",
@@ -293,7 +292,6 @@ export const en = {
     notesPlaceholder: "Device model, firmware version, test notes…",
   },
   plugins: {
-    title: "Plugin Manager",
     name: "Name",
     version: "Version",
     enabled: "Enabled",
@@ -413,6 +411,9 @@ export const en = {
   },
   settings: {
     title: "Settings",
+    // 抽屉页签（2026-09-12 插件管理并入）：General=既有设置项，Plugins=插件管理。
+    tabGeneral: "General",
+    tabPlugins: "Plugins",
     theme: "Theme",
     themeLight: "Light",
     themeDark: "Dark",
@@ -459,7 +460,8 @@ export const en = {
   recovery: {
     recoveredBackup:
       "Workspace recovered from backup ({{time}}). Some recent changes may be lost.",
-    recoveredFresh: "Workspace restore failed; started with an empty workspace.",
+    recoveredFresh:
+      "Workspace restore failed; started with an empty workspace.",
   },
   messages: {
     appStarted: "Application started (offline).",
@@ -529,8 +531,7 @@ export const en = {
     tcpPortInUse: "TCP port is already in use.",
     tcpOpenFailed: "Failed to open the TCP connection.",
     tcpUnsupported: "Modbus TCP is not supported in this environment.",
-    bridgePayloadInvalid:
-      "The platform bridge returned an invalid response.",
+    bridgePayloadInvalid: "The platform bridge returned an invalid response.",
     tcpHostInvalid: "Invalid TCP host.",
     tcpPortOutOfRange: "TCP port is out of range (1..65535).",
     tcpUnitIdOutOfRange: "TCP unit ID is out of range (0..255).",
@@ -567,7 +568,6 @@ export const zh: TranslationResources = {
     disconnect: "断开",
     connected: "在线 / 断开",
     reconnect: "重连",
-    pluginManager: "插件管理",
     settings: "设置",
     help: "帮助",
     about: "关于",
@@ -834,7 +834,6 @@ export const zh: TranslationResources = {
     notesPlaceholder: "设备型号、固件版本、测试记录…",
   },
   plugins: {
-    title: "插件管理",
     name: "名称",
     version: "版本",
     enabled: "启用",
@@ -948,6 +947,9 @@ export const zh: TranslationResources = {
   },
   settings: {
     title: "设置",
+    // 抽屉页签（2026-09-12 插件管理并入）：General=既有设置项，Plugins=插件管理。
+    tabGeneral: "常规",
+    tabPlugins: "插件",
     theme: "主题",
     themeLight: "浅色",
     themeDark: "深色",

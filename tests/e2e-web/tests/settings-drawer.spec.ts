@@ -47,7 +47,9 @@ async function expectDrawerClosed(page: Page): Promise<void> {
   ).toBeHidden();
 }
 
-test("Ctrl+, 打开的是 Settings 抽屉而非 Modal，Esc 可关闭", async ({ page }) => {
+test("Ctrl+, 打开的是 Settings 抽屉而非 Modal，Esc 可关闭", async ({
+  page,
+}) => {
   const errors = await openApp(page);
 
   await page.keyboard.press("Control+,");
@@ -57,17 +59,20 @@ test("Ctrl+, 打开的是 Settings 抽屉而非 Modal，Esc 可关闭", async ({
   await expect(drawer).toHaveClass(/ant-drawer/);
   // 标题与内容（原 Modal 内的设置项原样保留）。
   await expect(drawer.locator(".ant-drawer-header")).toContainText("Settings");
+  // 2026-09-12 插件管理并入：抽屉内含 General / Plugins 两个页签，默认停在 General。
+  await expect(drawer.getByRole("tab", { name: "General" })).toBeVisible();
+  await expect(drawer.getByRole("tab", { name: "Plugins" })).toBeVisible();
   await expect(drawer.getByLabel("Accent color")).toBeVisible();
-  await expect(drawer.getByRole("button", { name: "Reset Workspace" })).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: "Reset Workspace" }),
+  ).toBeVisible();
   await expect(
     drawer.getByRole("button", { name: "Export Workspace" }),
   ).toBeVisible();
   // 不再是 Modal。
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
   // 宽度沿用数值 size={420}（窄屏由 CSS max-width 兜底）。
-  const wrapper = page.locator(
-    ".settings-drawer .ant-drawer-content-wrapper",
-  );
+  const wrapper = page.locator(".settings-drawer .ant-drawer-content-wrapper");
   const box = await wrapper.boundingBox();
   expect(box).not.toBeNull();
   expect(Math.round(box?.width ?? 0)).toBe(EXPECTED_DRAWER_WIDTH);

@@ -4,7 +4,7 @@
  * 验证：
  * - 内置仅一个选项：Ant Design 默认蓝（其值由 antd 运行时令牌决定，ADR-048：不写死色值）；
  *   --mamep-brand-primary 与页面 --ant-color-primary 同步（浅/深）；
- * - 默认（未安装 example-theme）仅默认蓝；经 Plugin Manager 手动安装后可选主题色出现且**不自动应用**；
+ * - 默认（未安装 example-theme）仅默认蓝；经 Settings → Plugins 手动安装后可选主题色出现且**不自动应用**；
  * - 选中插件色 → antd token / --mamep-brand-primary 同步 + reload 持久化；
  * - 禁用插件后选项消失、已选色回退默认；
  * - 全程无 console 错误。
@@ -34,41 +34,56 @@ async function openApp(page: Page): Promise<string[]> {
   return errors;
 }
 
-/** 打开 Settings 抽屉（2026-09-12：容器由 Modal 改为 Drawer，类名 .settings-drawer）。 */
-async function openSettings(page: Page): Promise<void> {
-  await page
-    .getByRole("button", { name: "Settings" })
-    .evaluate((el) => (el as HTMLElement).click());
-  await page.waitForSelector(".settings-drawer.ant-drawer-open", {
-    timeout: 5000,
-  });
+/** 切到 Settings 抽屉的指定页签（2026-09-12：抽屉内含 General / Plugins 页签）。 */
+async function clickSettingsTab(page: Page, name: string): Promise<void> {
+  await page.locator(".settings-drawer").getByRole("tab", { name }).click();
 }
 
-/** 关闭 Settings 抽屉（点击抽屉右上角关闭按钮；Plugin Manager 仍为 Modal，不共用本助手）。 */
+/** 打开 Settings 抽屉并停在 General 页签（已打开时幂等）。
+ * 2026-09-12：容器由 Modal 改为 Drawer（类名 .settings-drawer）；插件管理并入后页签会保留上次选择，
+ * 故助手显式回到 General，供主题/语言类断言使用。 */
+async function openSettings(page: Page): Promise<void> {
+  if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
+    await page
+      .getByRole("button", { name: "Settings" })
+      .evaluate((el) => (el as HTMLElement).click());
+    await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+      timeout: 5000,
+    });
+  }
+  await clickSettingsTab(page, "General");
+}
+
+/** 关闭 Settings 抽屉（等离场动画结束；插件管理已并入，不再有独立弹窗）。 */
 async function closeSettings(page: Page): Promise<void> {
   await page.locator(".settings-drawer .ant-drawer-close").first().click();
-  // 等离场动画结束（开合类即时移除，内容 wrapper 才 finally display:none）。
   await expect(
     page.locator(".settings-drawer .ant-drawer-content-wrapper"),
   ).toBeHidden();
   await expect(page.locator(".settings-drawer.ant-drawer-open")).toHaveCount(0);
 }
 
-/** 打开 Plugin Manager 弹窗，返回弹窗定位器。 */
+/** 打开 Settings 抽屉的 Plugins 页签，返回插件管理区块定位器（已打开时幂等）。 */
 async function openPluginManager(page: Page) {
-  await page.getByRole("button", { name: "Plugin Manager" }).click();
-  const modal = page
-    .locator(".ant-modal-container")
-    .filter({ hasText: "Plugin Manager" });
-  await expect(modal).toBeVisible();
-  return modal;
+  if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
+    await page
+      .getByRole("button", { name: "Settings" })
+      .evaluate((el) => (el as HTMLElement).click());
+    await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+      timeout: 5000,
+    });
+  }
+  await clickSettingsTab(page, "Plugins");
+  const section = page.getByTestId("plugin-manager");
+  await expect(section).toBeVisible();
+  return section;
 }
 
-/** 经 Plugin Manager 手动安装 example-theme（浏览器 pluginInstall==="upload" 路径，
+/** 经 Settings → Plugins 手动安装 example-theme（浏览器 pluginInstall==="upload" 路径，
  * 选 plugins/example-theme/manifest.json）。2026-09-03：该示例不随包，需手动安装。 */
 async function installExampleTheme(page: Page): Promise<void> {
-  const modal = await openPluginManager(page);
-  await modal.getByRole("button", { name: "Install Plugin" }).click();
+  const section = await openPluginManager(page);
+  await section.getByRole("button", { name: "Install Plugin" }).click();
   const input = page.locator('input[data-testid="plugin-manifest-file-input"]');
   await expect(input).toBeAttached();
   const content = readFileSync(EXAMPLE_THEME_MANIFEST, "utf8");
@@ -84,18 +99,9 @@ async function installExampleTheme(page: Page): Promise<void> {
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "Install", exact: true }).click();
   await expect(confirm).toBeHidden();
-  await expect(modal).toContainText("Example Theme");
-  // 关闭 Plugin Manager。
-  await modal
-    .getByRole("button", { name: "Close" })
-    .click()
-    .catch(() => {
-      return page
-        .locator(".ant-modal-container:visible .ant-modal-close")
-        .first()
-        .click();
-    });
-  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+  await expect(section).toContainText("Example Theme");
+  // 关闭 Settings 抽屉（后续断言/用例经 openSettings 重新打开）。
+  await closeSettings(page);
 }
 
 /** 读取 .ant-app 上的 --mamep-brand-primary（.ant-app 作用域映射 var(--ant-color-primary)，ADR-048）。 */
@@ -167,9 +173,12 @@ test("默认仅内置 Ant Design 默认蓝；插件色不自动应用（ADR-047 
   // 安装前：Settings 选择器仅内置默认蓝（example-theme 未安装）。
   await openSettings(page);
   await themeColorSelect(page).click();
-  const optionsBefore = page
-    .locator(".ant-select-dropdown:visible .ant-select-item-option");
-  await expect(optionsBefore.filter({ hasText: "Default blue" })).toHaveCount(1);
+  const optionsBefore = page.locator(
+    ".ant-select-dropdown:visible .ant-select-item-option",
+  );
+  await expect(optionsBefore.filter({ hasText: "Default blue" })).toHaveCount(
+    1,
+  );
   await expect(optionsBefore.filter({ hasText: "Indigo" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await closeSettings(page);
@@ -178,8 +187,9 @@ test("默认仅内置 Ant Design 默认蓝；插件色不自动应用（ADR-047 
   await installExampleTheme(page);
   await openSettings(page);
   await themeColorSelect(page).click();
-  const optionsAfter = page
-    .locator(".ant-select-dropdown:visible .ant-select-item-option");
+  const optionsAfter = page.locator(
+    ".ant-select-dropdown:visible .ant-select-item-option",
+  );
   await expect(optionsAfter.filter({ hasText: "Default blue" })).toHaveCount(1);
   await expect(optionsAfter.filter({ hasText: "Indigo" })).toHaveCount(1);
   await page.keyboard.press("Escape");
@@ -252,8 +262,9 @@ test("选中插件色：antd token 与 CSS 变量同步 + reload 持久化", asy
   });
   await openSettings(page);
   await themeColorSelect(page).click();
-  const options = page
-    .locator(".ant-select-dropdown:visible .ant-select-item-option");
+  const options = page.locator(
+    ".ant-select-dropdown:visible .ant-select-item-option",
+  );
   await expect(options.filter({ hasText: "Indigo" })).toHaveCount(1);
   await page.keyboard.press("Escape");
   await closeSettings(page);
@@ -300,23 +311,16 @@ test("禁用插件后选项消失、已选色回退默认（ADR-047）", async (
   await closeSettings(page);
 
   // 禁用 example-theme（按插件行定位，而非第一个 = example-panel）。
-  const modal = await openPluginManager(page);
-  const row = modal
+  const section = await openPluginManager(page);
+  const row = section
     .locator(".ant-listy-item")
     .filter({ hasText: "Example Theme" });
   const switchEl = row.locator(".ant-switch");
   await switchEl.click();
   await expect(switchEl).not.toHaveClass(/ant-switch-checked/);
-  await modal
-    .getByRole("button", { name: "Close" })
-    .click()
-    .catch(() => {
-      return page
-        .locator(".ant-modal-container .ant-modal-close")
-        .first()
-        .click();
-    });
-  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+  // 切回 General 页签并关闭抽屉。
+  await clickSettingsTab(page, "General");
+  await closeSettings(page);
 
   // 回退默认蓝（运行时 antd 令牌）；选择器仅剩内置默认蓝选项。
   const antdBlue = await antdPrimary(page);
@@ -324,8 +328,9 @@ test("禁用插件后选项消失、已选色回退默认（ADR-047）", async (
   await expect.poll(() => primaryButtonColor(page)).toBe(hexToRgb(antdBlue));
   await openSettings(page);
   await themeColorSelect(page).click();
-  const options = page
-    .locator(".ant-select-dropdown:visible .ant-select-item-option");
+  const options = page.locator(
+    ".ant-select-dropdown:visible .ant-select-item-option",
+  );
   await expect(options.filter({ hasText: "Default blue" })).toHaveCount(1);
   await expect(options.filter({ hasText: "Indigo" })).toHaveCount(0);
   await page.keyboard.press("Escape");

@@ -286,7 +286,7 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "- **Reset Workspace**: restore the default workspace and erase saved data.",
       "- **Import / Export Workspace**: exchange the workspace as a JSON file.",
       "",
-      "Plugins are managed in **Plugin Manager** (see **Plugins**).",
+      "The **Plugins** tab of Settings manages installed plugins (install, enable/disable, uninstall, restore bundled).",
     ]),
     "zh-CN": md([
       "# 设置与主题",
@@ -303,14 +303,14 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "- **重置工作区**：恢复默认工作区并清除已保存数据。",
       "- **导入 / 导出工作区**：以 JSON 文件交换工作区。",
       "",
-      "插件在 **Plugin Manager** 中管理（见「插件」）。",
+      "Settings 的 **插件** 页签用于管理已安装插件（安装、启用/禁用、卸载、恢复随包插件）。",
     ]),
   },
   plugins: {
     "en-US": md([
       "# Plugins",
       "",
-      "Plugins extend the app with table types, toolbars, themes, and documentation. Open **Plugin Manager** from the top bar.",
+      "Plugins extend the app with table types, toolbars, themes, and documentation. Open **Settings** → **Plugins**.",
       "",
       "## Install",
       "",
@@ -334,7 +334,7 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
     "zh-CN": md([
       "# 插件",
       "",
-      "插件用于扩展表类型、工具栏、主题与文档。打开顶部栏 **Plugin Manager**。",
+      "插件用于扩展表类型、工具栏、主题与文档。打开 **设置** → **插件**。",
       "",
       "## 安装",
       "",

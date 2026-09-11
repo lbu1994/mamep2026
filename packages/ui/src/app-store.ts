@@ -134,7 +134,6 @@ export interface AppStoreState {
   selectedSerialPortId: string | null;
   /** 连接设置/直连的错误展示（决策 5）：Header 直连失败回退弹窗时经此显示；会话内，不持久化。 */
   connectError: string | null;
-  pluginModalOpen: boolean;
   settingsModalOpen: boolean;
   /** 帮助/关于弹窗（2026-08-30 键盘操作：Ctrl+/ 或 ? 打开，入 store 供快捷键弹窗抑制）。 */
   helpModalOpen: boolean;
@@ -186,7 +185,6 @@ export interface AppStoreState {
     portId: string | null,
   ) => void;
   setConnectError: (error: string | null) => void;
-  setPluginModalOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
   setHelpModalOpen: (open: boolean) => void;
   setPendingDeleteSheetId: (sheetId: SheetId | null) => void;
@@ -311,10 +309,7 @@ export interface AppStoreState {
   /** 设置某张表的 Slave Address（每表独立，随表持久化，IndexedDB 自动保存，2026-08-19）。 */
   setSheetSlaveAddress: (sheetId: SheetId, slave: number) => void;
   /** 设置某张表的写后回读配置（每表独立，随表持久化，2026-08-26）。 */
-  setSheetWriteVerify: (
-    sheetId: SheetId,
-    settings: ReadVerifySettings,
-  ) => void;
+  setSheetWriteVerify: (sheetId: SheetId, settings: ReadVerifySettings) => void;
   /** 设置某张表的表级地址变换配置（每表独立，随表持久化，ADR-042；可撤销）。 */
   setSheetAddressTransform: (
     sheetId: SheetId,
@@ -532,7 +527,6 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   selectedSerialHandle: null,
   selectedSerialPortId: null,
   connectError: null,
-  pluginModalOpen: false,
   settingsModalOpen: false,
   helpModalOpen: false,
   pendingDeleteSheetId: null,
@@ -588,7 +582,6 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setSerialSelection: (selectedSerialHandle, selectedSerialPortId) =>
     set({ selectedSerialHandle, selectedSerialPortId }),
   setConnectError: (connectError) => set({ connectError }),
-  setPluginModalOpen: (pluginModalOpen) => set({ pluginModalOpen }),
   setSettingsModalOpen: (settingsModalOpen) => set({ settingsModalOpen }),
   setHelpModalOpen: (helpModalOpen) => set({ helpModalOpen }),
   setPendingDeleteSheetId: (pendingDeleteSheetId) =>
@@ -641,9 +634,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         activeSheetId = applied.activeSheetId;
         // 删除唯一表时 UI 重建的默认空表：撤销删除后应移除（只保留被恢复的表）。
         if (entry.removeFallback === true) {
-          const sheets = workspace.sheets.filter(
-            (s) => s.sheetId === sheetId,
-          );
+          const sheets = workspace.sheets.filter((s) => s.sheetId === sheetId);
           workspace = {
             ...workspace,
             sheets,

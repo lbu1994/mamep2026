@@ -185,7 +185,6 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     useAppStore.setState({
       connectionModalOpen: false,
       settingsModalOpen: false,
-      pluginModalOpen: false,
       helpModalOpen: false,
       workspaceImportDraft: null,
       pendingDeleteSheetId: null,

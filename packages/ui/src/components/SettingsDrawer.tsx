@@ -10,6 +10,10 @@
  * - 工作区导入/导出入口（ADR-033，WorkspaceFileActions）；
  * - 插件 settings 贡献分区（ADR-039，声明式标题占位）。
  *
+ * 2026-09-12 插件管理并入：抽屉体内改为 `Tabs`（`General` / `Plugins`），删除独立
+ * Plugin Manager 弹窗入口。`Plugins` 页签 = 插件管理区块（`PluginManagerSection`，
+ * ADR-038/044/045）+ 插件 settings 贡献分区；`General` 为上述既有设置项，内容与顺序不变。
+ *
  * 组件自读 store（`settingsModalOpen` 等），仅需 `host` 读取插件贡献与重置工作区；
  * 主题装配链（基础主题 + 所选预设 merge）仍由 MamepApp 负责，不影响 ConfigProvider。
  *
@@ -34,6 +38,7 @@ import {
   Segmented,
   Select,
   Space,
+  Tabs,
   Typography,
 } from "antd";
 import type { AppHost } from "../host";
@@ -46,6 +51,7 @@ import {
   type ThemeContribution,
 } from "../plugin/theme-contributions";
 import type { SettingsContribution } from "../plugin/plugin-registries";
+import { PluginManagerSection } from "./PluginManagerSection";
 import { WorkspaceFileActions } from "./WorkspaceFileActions";
 
 /** 主题色选项 label：色块 + 名称（ADR-047）。 */
@@ -120,6 +126,109 @@ export function SettingsDrawer({
     });
   };
 
+  // 常规页签（内容与顺序零改动）。
+  const generalTab = (
+    <Space orientation="vertical" style={{ width: "100%" }}>
+      <div>
+        <Typography.Text>{t("settings.theme")}</Typography.Text>
+        <Segmented
+          style={{ marginLeft: 8 }}
+          value={theme}
+          onChange={(value) => setTheme(value as "light" | "dark")}
+          options={[
+            { value: "light", label: t("settings.themeLight") },
+            { value: "dark", label: t("settings.themeDark") },
+          ]}
+        />
+      </div>
+      <div>
+        <Typography.Text>{t("settings.themeColor")}</Typography.Text>
+        <Select
+          size="small"
+          style={{ marginLeft: 8, minWidth: 160 }}
+          aria-label={t("settings.themeColor")}
+          value={themePrimary ?? DEFAULT_THEME_COLOR_ID}
+          onChange={(value) =>
+            setThemePrimary(value === DEFAULT_THEME_COLOR_ID ? null : value)
+          }
+          options={[
+            {
+              value: DEFAULT_THEME_COLOR_ID,
+              label: t("settings.themeColorDefault"),
+            },
+            ...themeColorOptions.map((option) => ({
+              value: option.id,
+              label: themeColorOptionLabel(
+                themeColorTitle(option, i18n.language, t),
+                option.colorPrimary,
+              ),
+            })),
+          ]}
+        />
+      </div>
+      <div>
+        <Typography.Text type="secondary">{t("app.title")}</Typography.Text>{" "}
+        <Select
+          size="small"
+          value={i18n.language}
+          style={{ width: 100, marginLeft: 8 }}
+          onChange={(value) => {
+            // 语言切换：立即生效 + 记入工作区偏好（随自动保存持久化）。
+            const language = value as "en-US" | "zh-CN";
+            setLanguage(language);
+            void i18n.changeLanguage(language);
+          }}
+          options={[
+            { value: "en-US", label: "English" },
+            { value: "zh-CN", label: "中文" },
+          ]}
+        />
+      </div>
+      <div>
+        <Popconfirm
+          title={t("settings.resetConfirmTitle")}
+          description={t("settings.resetConfirmContent")}
+          okText={t("settings.resetOk")}
+          cancelText={t("connection.cancel")}
+          okButtonProps={{ danger: true }}
+          onConfirm={() => void handleResetWorkspace()}
+        >
+          <Button danger size="small">
+            {t("settings.resetWorkspace")}
+          </Button>
+        </Popconfirm>
+      </div>
+      <div>
+        <WorkspaceFileActions />
+      </div>
+      <Typography.Paragraph type="secondary">
+        {t("settings.aboutText")}
+      </Typography.Paragraph>
+    </Space>
+  );
+
+  // 插件页签（2026-09-12 入口整合）：插件管理区块（安装/启停/卸载/恢复）
+  // + 插件 settings 贡献分区（ADR-039）。
+  const pluginsTab = (
+    <Space orientation="vertical" style={{ width: "100%" }}>
+      <PluginManagerSection />
+      {settingsContributions.length > 0 && (
+        <div className="plugin-settings" data-testid="plugin-settings">
+          {settingsContributions.map((contribution) => (
+            <div key={contribution.payload.id}>
+              <Divider titlePlacement="left" plain>
+                {t(contribution.payload.titleKey)}
+              </Divider>
+              <Typography.Text type="secondary">
+                {t("plugins.settingsPlaceholder")}
+              </Typography.Text>
+            </div>
+          ))}
+        </div>
+      )}
+    </Space>
+  );
+
   return (
     <Drawer
       title={t("settings.title")}
@@ -129,97 +238,20 @@ export function SettingsDrawer({
       onClose={() => setOpen(false)}
       rootClassName="settings-drawer"
     >
-      <Space orientation="vertical" style={{ width: "100%" }}>
-        <div>
-          <Typography.Text>{t("settings.theme")}</Typography.Text>
-          <Segmented
-            style={{ marginLeft: 8 }}
-            value={theme}
-            onChange={(value) => setTheme(value as "light" | "dark")}
-            options={[
-              { value: "light", label: t("settings.themeLight") },
-              { value: "dark", label: t("settings.themeDark") },
-            ]}
-          />
-        </div>
-        <div>
-          <Typography.Text>{t("settings.themeColor")}</Typography.Text>
-          <Select
-            size="small"
-            style={{ marginLeft: 8, minWidth: 160 }}
-            aria-label={t("settings.themeColor")}
-            value={themePrimary ?? DEFAULT_THEME_COLOR_ID}
-            onChange={(value) =>
-              setThemePrimary(value === DEFAULT_THEME_COLOR_ID ? null : value)
-            }
-            options={[
-              {
-                value: DEFAULT_THEME_COLOR_ID,
-                label: t("settings.themeColorDefault"),
-              },
-              ...themeColorOptions.map((option) => ({
-                value: option.id,
-                label: themeColorOptionLabel(
-                  themeColorTitle(option, i18n.language, t),
-                  option.colorPrimary,
-                ),
-              })),
-            ]}
-          />
-        </div>
-        <div>
-          <Typography.Text type="secondary">{t("app.title")}</Typography.Text>{" "}
-          <Select
-            size="small"
-            value={i18n.language}
-            style={{ width: 100, marginLeft: 8 }}
-            onChange={(value) => {
-              // 语言切换：立即生效 + 记入工作区偏好（随自动保存持久化）。
-              const language = value as "en-US" | "zh-CN";
-              setLanguage(language);
-              void i18n.changeLanguage(language);
-            }}
-            options={[
-              { value: "en-US", label: "English" },
-              { value: "zh-CN", label: "中文" },
-            ]}
-          />
-        </div>
-        <div>
-          <Popconfirm
-            title={t("settings.resetConfirmTitle")}
-            description={t("settings.resetConfirmContent")}
-            okText={t("settings.resetOk")}
-            cancelText={t("connection.cancel")}
-            okButtonProps={{ danger: true }}
-            onConfirm={() => void handleResetWorkspace()}
-          >
-            <Button danger size="small">
-              {t("settings.resetWorkspace")}
-            </Button>
-          </Popconfirm>
-        </div>
-        <div>
-          <WorkspaceFileActions />
-        </div>
-        {settingsContributions.length > 0 && (
-          <div className="plugin-settings" data-testid="plugin-settings">
-            {settingsContributions.map((contribution) => (
-              <div key={contribution.payload.id}>
-                <Divider titlePlacement="left" plain>
-                  {t(contribution.payload.titleKey)}
-                </Divider>
-                <Typography.Text type="secondary">
-                  {t("plugins.settingsPlaceholder")}
-                </Typography.Text>
-              </div>
-            ))}
-          </div>
-        )}
-        <Typography.Paragraph type="secondary">
-          {t("settings.aboutText")}
-        </Typography.Paragraph>
-      </Space>
+      <Tabs
+        items={[
+          {
+            key: "general",
+            label: t("settings.tabGeneral"),
+            children: generalTab,
+          },
+          {
+            key: "plugins",
+            label: t("settings.tabPlugins"),
+            children: pluginsTab,
+          },
+        ]}
+      />
     </Drawer>
   );
 }

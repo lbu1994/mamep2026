@@ -60,13 +60,24 @@ async function openApp(page: Page): Promise<void> {
   });
 }
 
+/** 打开 Settings 抽屉的 Plugins 页签，返回插件管理区块定位器
+ * （2026-09-12：插件管理由独立弹窗并入 Settings）。 */
 async function openPluginManager(page: Page) {
-  await page.getByRole("button", { name: "Plugin Manager" }).click();
-  const modal = page
-    .locator(".ant-modal-container")
-    .filter({ hasText: "Plugin Manager" });
-  await expect(modal).toBeVisible();
-  return modal;
+  if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
+    await page
+      .getByRole("button", { name: "Settings" })
+      .evaluate((el) => (el as HTMLElement).click());
+    await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+      timeout: 5000,
+    });
+  }
+  await page
+    .locator(".settings-drawer")
+    .getByRole("tab", { name: "Plugins" })
+    .click();
+  const section = page.getByTestId("plugin-manager");
+  await expect(section).toBeVisible();
+  return section;
 }
 
 /** 经隐藏文件输入选择单文件 JS 插件（浏览器端 pluginInstall === "upload" 路径）。 */
@@ -114,7 +125,9 @@ test("安装单文件 JS 插件：隔离线程加载 manifest → 确认（Isola
   expect(errors).toEqual([]);
 });
 
-test("重启持久化：entrySource 落盘，reload 后恢复并重新激活", async ({ page }) => {
+test("重启持久化：entrySource 落盘，reload 后恢复并重新激活", async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
   page.on("console", (message) => {
@@ -136,12 +149,11 @@ test("重启持久化：entrySource 落盘，reload 后恢复并重新激活", a
   // 等 IndexedDB 自动保存落盘（防抖）再 reload（ADR-031 踩坑）。
   await page.waitForTimeout(1200);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText(
-    "Disconnect",
-    { timeout: 15000 },
-  );
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+    timeout: 15000,
+  });
 
-  // 重开 Plugin Manager：插件仍在（entrySource 恢复），且可卸载（installed）。
+  // 重开 Settings → Plugins：插件仍在（entrySource 恢复），且可卸载（installed）。
   modal = await openPluginManager(page);
   await expect(modal).toContainText("E2E Exec");
   await expect(modal).toContainText("Installed");
@@ -185,10 +197,9 @@ test("卸载可执行插件：确认后移除，reload 不再出现", async ({ p
   // 等自动保存落盘再 reload → 不再出现。
   await page.waitForTimeout(1200);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText(
-    "Disconnect",
-    { timeout: 15000 },
-  );
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+    timeout: 15000,
+  });
   modal = await openPluginManager(page);
   await expect(modal).not.toContainText("E2E Exec");
   expect(errors).toEqual([]);
