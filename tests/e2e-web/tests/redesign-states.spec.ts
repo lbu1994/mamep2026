@@ -74,7 +74,8 @@ test("WP polling shows a non-color polling indicator while online", async ({
 test("narrow viewport moves secondary header actions into a More menu", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1024, height: 768 });
+  // 移动布局断点已统一为 1023px（ADR-050 Phase 3）：1024 属桌面档，故此处改用 900。
+  await page.setViewportSize({ width: 900, height: 768 });
   await openApp(page);
 
   // 次要操作被收纳：Plugin Manager 按钮不再直接渲染，出现 More 按钮。

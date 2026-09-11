@@ -86,7 +86,16 @@ const CommLogRow = memo(function CommLogRow({
 });
 CommLogRow.displayName = "CommLogRow";
 
-export function BottomPanel(): React.ReactNode {
+export interface BottomPanelProps {
+  /**
+   * 形态（ADR-050 Phase 3）：
+   * - `docked`（默认）：桌面常驻面板，可拖拽调高、可折叠；
+   * - `drawer`：移动端底部抽屉内，高度由抽屉控制，**不套用折叠态也不渲染折叠按钮**。
+   */
+  variant?: "docked" | "drawer";
+}
+
+export function BottomPanel({ variant = "docked" }: BottomPanelProps = {}): React.ReactNode {
   const { t, i18n } = useTranslation();
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
@@ -112,9 +121,9 @@ export function BottomPanel(): React.ReactNode {
     "panels",
   );
 
-  const collapsed = panelLayout.bottomPanelCollapsed;
+  // drawer 形态下抽屉自身控制高度，忽略持久化的折叠态（否则抽屉内会出现“只剩标签栏”的空白）。
+  const collapsed = variant === "drawer" ? false : panelLayout.bottomPanelCollapsed;
   const activeTab = panelLayout.activeBottomTab;
-
   // 折叠时新错误到达 → Messages 标签红点（事件驱动，避免在 effect 中 setState）。
   const [seenCount, setSeenCount] = useState(0);
   const lastErrorIndex = useMemo(() => {
@@ -452,22 +461,32 @@ export function BottomPanel(): React.ReactNode {
   return (
     <div
       className={
-        collapsed ? "bottom-panel bottom-panel--collapsed" : "bottom-panel"
+        collapsed
+          ? "bottom-panel bottom-panel--collapsed"
+          : variant === "drawer"
+            ? "bottom-panel bottom-panel--drawer"
+            : "bottom-panel"
       }
     >
       <Tabs
         size="small"
         activeKey={activeTab}
         onChange={handleTabChange}
-        tabBarExtraContent={
-          <Button
-            type="text"
-            size="small"
-            aria-label={collapsed ? t("panel.expand") : t("panel.collapse")}
-            icon={collapsed ? <UpOutlined /> : <DownOutlined />}
-            onClick={toggleCollapsed}
-          />
-        }
+        {...(variant === "drawer"
+          ? {}
+          : {
+              tabBarExtraContent: (
+                <Button
+                  type="text"
+                  size="small"
+                  aria-label={
+                    collapsed ? t("panel.expand") : t("panel.collapse")
+                  }
+                  icon={collapsed ? <UpOutlined /> : <DownOutlined />}
+                  onClick={toggleCollapsed}
+                />
+              ),
+            })}
         items={[
           {
             key: "messages",

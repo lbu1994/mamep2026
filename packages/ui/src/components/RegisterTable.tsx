@@ -19,6 +19,7 @@ import {
   Flex,
   Input,
   InputNumber,
+  Popover,
   Segmented,
   Select,
   Switch,
@@ -29,6 +30,7 @@ import type { InputRef } from "antd";
 import {
   ColumnWidthOutlined,
   HolderOutlined,
+  MoreOutlined,
   PlusOutlined,
   RedoOutlined,
   ReloadOutlined,
@@ -39,7 +41,9 @@ import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/core";
 import {
   closestCenter,
   DndContext,
+  KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -86,6 +90,7 @@ import {
   type VirtualChildRow,
 } from "../tree-rows";
 import { useAppStore } from "../app-store";
+import { useIsMobileLayout } from "../layout/breakpoints";
 import type { RowFailure } from "../row-result";
 import { computeNoColumnWidth } from "../no-column-width";
 import { usePluginContributions } from "../plugin/use-contributions";
@@ -1105,6 +1110,10 @@ interface RegisterTableProps {
 
 /** 表格行高（size="small" 实测固定 29px），虚拟滚动需要固定行高。 */
 const ROW_HEIGHT = 29;
+/** 移动布局行高（触摸目标 ≥44dp，ADR-050 Phase 3）：与 apps/web/src/mobile.css 的 td height 同源。 */
+const MOBILE_ROW_HEIGHT = 44;
+/** 移动布局横向滚动下限（列总宽之和小于该值时仍可横向滑动，避免列被挤压换行）。 */
+const MOBILE_SCROLL_X = 960;
 /** 虚拟滚动启用阈值：行数超过该值启用 antd Table virtual（避免小表无谓开销）。 */
 const VIRTUAL_SCROLL_THRESHOLD = 500;
 /** 虚拟表在隐藏/未测量时的兜底表体高度（px）：scroll.y 必须为数字，显示后由 ResizeObserver 校正。 */
@@ -1772,6 +1781,12 @@ export const RegisterTable = memo(function RegisterTable({
   const hasCustomColumnLayout =
     Object.keys(colWidths).length > 0 || columnOrder !== null;
 
+  // 移动布局（ADR-050 Phase 3）：与 MamepApp 同一断点；影响横向滚动下限、前两列固定、
+  // 行高与列宽/列拖拽可用性。**必须定义在 baseColumns/columns 之前**（下方会用到）。
+  const isMobileLayout = useIsMobileLayout();
+  /** 行高（虚拟滚动与实测高度共用；移动端提高以满足触摸目标 ≥44dp）。 */
+  const rowHeight = isMobileLayout ? MOBILE_ROW_HEIGHT : ROW_HEIGHT;
+
   const baseColumns = useMemo<ColumnType<RegisterRow>[]>(
     () => [
       {
@@ -1984,6 +1999,9 @@ export const RegisterTable = memo(function RegisterTable({
       applyColumnOrder(baseColumns, columnOrder).map((col) => {
         const key = col.key !== undefined ? String(col.key) : undefined;
         const fixed = key !== undefined && FIXED_WIDTH_COLUMNS.has(key);
+        // 窄屏（移动布局）**不做任何列固定**（2026-09-11 用户决策）：
+        // 固定列在多列间横滑时占用可视宽度、且与触摸横滑手势争抢，
+        // 故移动端与桌面保持一致（都不固定）。
         // 仅「有默认宽且非固定宽」的可调列接受 colWidths 覆盖：固定列忽略（防御：残留 state
         // 不得改变固定列宽）；弹性列（Comment 无 width）绝不接受覆盖，防止持久化残留数据
         // 破坏弹性列设计（table-layout:fixed 下需保留至少一列无宽弹性列）。
@@ -1998,7 +2016,8 @@ export const RegisterTable = memo(function RegisterTable({
             "width" in column && typeof column.width === "number"
               ? column.width
               : undefined;
-          const resizable = !fixed && cellWidth !== undefined;
+          // 移动端禁用列宽调整（触摸下 mouse-only 手柄不可用且易误触，ADR-050 Phase 3）。
+          const resizable = !fixed && cellWidth !== undefined && !isMobileLayout;
           const onResize =
             resizable && column.key !== undefined
               ? handleResize(column.key)
@@ -2016,7 +2035,14 @@ export const RegisterTable = memo(function RegisterTable({
           onHeaderCell,
         };
       }),
-    [baseColumns, colWidths, columnOrder, handleResize, makeCommitColWidths],
+    [
+      baseColumns,
+      colWidths,
+      columnOrder,
+      handleResize,
+      makeCommitColWidths,
+      isMobileLayout,
+    ],
   );
 
   // ---- 列拖拽排序（2026-08-18）----
@@ -2029,6 +2055,24 @@ export const RegisterTable = memo(function RegisterTable({
         distance: 1,
       },
     }),
+  );
+
+  // 移动布局：列拖拽排序禁用（触摸下长按/拖动与横向滚动、长按行菜单互相冲突，
+  // 且列序属于桌面端精细布局操作）；空 sensors 使列拖拽失效但保留键盘/无拖拽路径。
+  // useMemo 包一层：保持引用稳定（否则下方 HeaderCell useMemo 的依赖不断变化）。
+  const effectiveColumnSensors = useMemo(
+    () => (isMobileLayout ? [] : columnSensors),
+    [isMobileLayout, columnSensors],
+  );
+
+  // 行拖拽（仅最右拖拽手柄激活）：显式列出 sensors 以追加 TouchSensor（dnd-kit 默认不含触摸），
+  // 长按 250ms 激活——避免与横向滚动、长按行菜单（500ms）互相干扰。
+  const rowSensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 },
+    }),
+    useSensor(KeyboardSensor),
   );
 
   // 列默认顺序的 key（columnOrder 为 null 时使用；列集合固定，仅标题随 radix/语言变化，故首渲染后稳定）。
@@ -2087,7 +2131,7 @@ export const RegisterTable = memo(function RegisterTable({
         sheet?.columnOrder ?? defaultColumnKeysRef.current ?? [];
       return (
         <DndContext
-          sensors={columnSensors}
+          sensors={effectiveColumnSensors}
           modifiers={[restrictToHorizontalAxis]}
           onDragEnd={handleColumnDragEnd}
           collisionDetection={closestCenter}
@@ -2104,7 +2148,7 @@ export const RegisterTable = memo(function RegisterTable({
     };
     HeaderWrapper.displayName = "RegisterTableColumnDragHeader";
     return HeaderWrapper;
-  }, [sheetId, columnSensors, handleColumnDragEnd]);
+  }, [sheetId, effectiveColumnSensors, handleColumnDragEnd]);
 
   // 当前列 key 顺序签名：仅随「列顺序」变化（列宽拖拽不变），驱动数据行在排序后同步重渲染。
   const columnOrderSignature = columns.map((col) => String(col.key)).join(",");
@@ -2220,74 +2264,15 @@ export const RegisterTable = memo(function RegisterTable({
     return MemoizedTr;
   }, []);
 
-  return (
-    <Flex vertical style={{ height: "100%" }} ref={flexRef}>
-      <div className="table-toolbar">
-        <div className="table-toolbar__group">
-          <Tooltip title={t("table.undoHint")}>
-            <Button
-              size="small"
-              icon={<UndoOutlined />}
-              disabled={!canUndo}
-              onClick={undo}
-              aria-label={t("table.undo")}
-            >
-              {t("table.undo")}
-            </Button>
-          </Tooltip>
-          <Tooltip title={t("table.redoHint")}>
-            <Button
-              size="small"
-              icon={<RedoOutlined />}
-              disabled={!canRedo}
-              onClick={redo}
-              aria-label={t("table.redo")}
-            >
-              {t("table.redo")}
-            </Button>
-          </Tooltip>
-        </div>
-        <span className="table-toolbar__sep" aria-hidden="true" />
-        <div className="table-toolbar__group">
-          {rows.length > 0 ? (
-            <Button
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => addRow(sheetId)}
-            >
-              {t("table.addRow")}
-            </Button>
-          ) : null}
-          {selectedRowIds.length > 0 ? (
-            <span className="table-toolbar__info">
-              {t("table.rowsSelected", { count: selectedRowIds.length })}
-            </span>
-          ) : null}
-        </div>
-        <span className="table-toolbar__sep" aria-hidden="true" />
-        <div className="table-toolbar__group">
-          <Button
-            size="small"
-            type="primary"
-            loading={readAllRunning}
-            icon={<ReloadOutlined />}
-            onClick={() => void handleReadAll()}
-          >
-            {t("topbar.readAll")}
-          </Button>
-          {readAllRunning ? (
-            <Button
-              size="small"
-              icon={<StopOutlined />}
-              onClick={handleCancelReadAll}
-              aria-label={t("table.cancelReadAll")}
-            >
-              {t("table.cancelReadAll")}
-            </Button>
-          ) : null}
-        </div>
-        <span className="table-toolbar__spacer" />
-        <div className="table-toolbar__group">
+  /**
+   * 工具栏次要控件组（ADR-050 Phase 3）：地址进制 / 从站地址(Unit ID) / 写后回读 /
+   * 表级 Address Adjust / 恢复列布局 / 行数。
+   *
+   * 桌面（≥ 1024px）直接铺在工具栏右侧；移动端收进「更多」Popover 面板——**同一份 JSX
+   * 复用**，避免桌面/移动两套实现漂移（漏改一处就是功能缺失）。
+   */
+  const secondaryToolbarGroup = (
+    <div className="table-toolbar__group">
           <Tooltip title={t("table.addressFormatHint")}>
             <span className="table-toolbar__radix">
               <span className="table-toolbar__radix-label">
@@ -2414,7 +2399,97 @@ export const RegisterTable = memo(function RegisterTable({
           <span className="table-toolbar__info">
             {t("table.rowCount", { count: rows.length })}
           </span>
+    </div>
+  );
+
+  return (
+    <Flex vertical style={{ height: "100%" }} ref={flexRef}>
+      <div className="table-toolbar">
+        <div className="table-toolbar__group">
+          <Tooltip title={t("table.undoHint")}>
+            <Button
+              size="small"
+              icon={<UndoOutlined />}
+              disabled={!canUndo}
+              onClick={undo}
+              aria-label={t("table.undo")}
+            >
+              {t("table.undo")}
+            </Button>
+          </Tooltip>
+          <Tooltip title={t("table.redoHint")}>
+            <Button
+              size="small"
+              icon={<RedoOutlined />}
+              disabled={!canRedo}
+              onClick={redo}
+              aria-label={t("table.redo")}
+            >
+              {t("table.redo")}
+            </Button>
+          </Tooltip>
         </div>
+        <span className="table-toolbar__sep" aria-hidden="true" />
+        <div className="table-toolbar__group">
+          {rows.length > 0 ? (
+            <Button
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => addRow(sheetId)}
+            >
+              {t("table.addRow")}
+            </Button>
+          ) : null}
+          {selectedRowIds.length > 0 ? (
+            <span className="table-toolbar__info">
+              {t("table.rowsSelected", { count: selectedRowIds.length })}
+            </span>
+          ) : null}
+        </div>
+        <span className="table-toolbar__sep" aria-hidden="true" />
+        <div className="table-toolbar__group">
+          <Button
+            size="small"
+            type="primary"
+            loading={readAllRunning}
+            icon={<ReloadOutlined />}
+            onClick={() => void handleReadAll()}
+          >
+            {t("topbar.readAll")}
+          </Button>
+          {readAllRunning ? (
+            <Button
+              size="small"
+              icon={<StopOutlined />}
+              onClick={handleCancelReadAll}
+              aria-label={t("table.cancelReadAll")}
+            >
+              {t("table.cancelReadAll")}
+            </Button>
+          ) : null}
+        </div>
+        <span className="table-toolbar__spacer" />
+        {/* 移动端（ADR-050 Phase 3）：次要控件收进「更多」面板，避免工具栏换行挤压表格；
+            桌面端保持直接铺开（大屏一步到位，不增加点击成本）。 */}
+        {isMobileLayout ? (
+          <Popover
+            trigger="click"
+            placement="bottomRight"
+            content={
+              <div className="table-toolbar__more">{secondaryToolbarGroup}</div>
+            }
+          >
+            <Button
+              size="small"
+              icon={<MoreOutlined />}
+              aria-label={t("table.toolbarMoreLabel")}
+            >
+              {t("table.toolbarMore")}
+            </Button>
+          </Popover>
+        ) : (
+          secondaryToolbarGroup
+        )}
         {toolbarActions.length > 0 ? (
           <>
             <span className="table-toolbar__sep" aria-hidden="true" />
@@ -2458,6 +2533,7 @@ export const RegisterTable = memo(function RegisterTable({
         onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
+        sensors={rowSensors}
       >
         <Dropdown
           trigger={["contextMenu"]}
@@ -2498,11 +2574,11 @@ export const RegisterTable = memo(function RegisterTable({
                 rows.length > VIRTUAL_SCROLL_THRESHOLD
                   ? ({
                       style: { flex: 1, minHeight: 0 },
-                      listItemHeight: ROW_HEIGHT,
+                      listItemHeight: rowHeight,
                     } as RegisterTableVirtualProps)
                   : {})}
                 scroll={{
-                  x: 920,
+                  x: isMobileLayout ? MOBILE_SCROLL_X : 920,
                   // 虚拟表 scroll.y 必须为数字：隐藏未测量表（tableBodyHeight=0）用兜底高度，
                   // 显示后由 ResizeObserver 校正。否则 rc-table 虚拟渲染失败（0 行 + 报错，2026-08-18 复现）。
                   ...(tableBodyHeight > 0 ||

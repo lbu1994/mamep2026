@@ -8,6 +8,7 @@ import {
   Button,
   ConfigProvider,
   Divider,
+  Drawer,
   Dropdown,
   Empty,
   Layout,
@@ -45,6 +46,8 @@ import {
   DisconnectOutlined,
   FundOutlined,
   LeftOutlined,
+  MenuOutlined,
+  MessageOutlined,
   MoreOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
@@ -69,6 +72,8 @@ import {
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { mergeThemeConfig } from "@mamep2026/ui-theme";
 import { connectionButtonSpec } from "./connection-button";
+import { useIsMobileLayout } from "./layout/breakpoints";
+import { closeTopOverlay, useOverlayClose } from "./overlay-close";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
 import { canDirectConnect, runConnect } from "./connection-actions";
@@ -331,16 +336,15 @@ export function MamepApp(): React.ReactNode {
   );
   const [sidebarRenamingSheetId, setSidebarRenamingSheetId] =
     useState<SheetId | null>(null);
-  // 窄窗口（≤1100px）将顶栏次要操作（Plugin Manager/Settings/Help）收入 More 下拉；
-  // Connection 入口与连接状态/Disconnect 始终可见（不收进 More）。
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 1100px)");
-    const update = (): void => setNarrow(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
+  // 移动布局（ADR-050 Phase 3）：< 1024px 时侧栏→左抽屉、底部面板→底部抽屉；
+  // 同一阈值也决定顶栏次要操作的收纳（Phase 3 前为 1100px，现统一为 1023px，避免两套阈值打架）。
+  const isMobileLayout = useIsMobileLayout();
+  const narrow = isMobileLayout;
+  // 移动端两个抽屉的开合（会话内状态，不入持久化）：返回键优先关它们（见 overlay-close）。
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  useOverlayClose(mobileSidebarOpen, () => setMobileSidebarOpen(false));
+  useOverlayClose(mobilePanelOpen, () => setMobilePanelOpen(false));
   // Splitter 受控 size 拖拽过程缓冲：onResize 更新本地，onResizeEnd 才持久化到 panelLayout（避免高频写 store）。
   const [dragPanelHeight, setDragPanelHeight] = useState<number | null>(null);
   // 侧边栏宽度拖拽缓冲：与底部面板同模式，onResize 更新本地、onResizeEnd 才写 store。
@@ -418,6 +422,27 @@ export function MamepApp(): React.ReactNode {
     if (host === null || host === undefined) return;
     host.setAddressTransform(activeSheetAddressTransform);
   }, [host, activeSheetAddressTransform, connectionState]);
+
+  // 屏幕常亮（KeepAwake，ADR-050 Phase 3）：只要存在持续轮询或追踪就保持屏幕不休眠。
+  // 仅 Android 实现（其余平台不实现该方法 → 可选链空操作）；值变化时才调用（幂等）。
+  const hasContinuousWork = useAppStore((s) =>
+    s.workspace.sheets.some((sheet) =>
+      sheet.rows.some((row) => row.pollingEnabled || row.traceEnabled),
+    ),
+  );
+  useEffect(() => {
+    host?.setKeepScreenOn?.(hasContinuousWork);
+  }, [host, hasContinuousWork]);
+
+  // 硬件返回键（Android，ADR-050 Phase 3）：先关最上层覆盖层（移动端抽屉等，经 overlay-close 栈），
+  // 无覆盖层时不消费 → 宿主兑底最小化应用（不退出进程）。浏览器/桌面无此能力 → 返回 null。
+  useEffect(() => {
+    const unsubscribe =
+      host?.onHardwareBack?.(() => closeTopOverlay()) ?? null;
+    return () => {
+      unsubscribe?.();
+    };
+  }, [host]);
 
   // Trace 采样 -> store。
   useEffect(() => {
@@ -754,6 +779,18 @@ export function MamepApp(): React.ReactNode {
       <AntApp>
         <Layout style={{ height: "100vh" }}>
           <Layout.Header className="mamep-header">
+            {/* 移动布局：表列表入口（左抽屉）；桌面由常驻侧栏承担同一职责。 */}
+            {isMobileLayout && (
+              <Button
+                size="small"
+                type="text"
+                className="mamep-header__menu"
+                aria-label={t("mobile.openTables")}
+                title={t("mobile.openTables")}
+                icon={<MenuOutlined />}
+                onClick={() => setMobileSidebarOpen(true)}
+              />
+            )}
             <div className="mamep-header__brand">
               {/* 品牌图标：内联 SVG 组件（颜色随主题：浅=黑、暗=白，见 assets/AppIcon.tsx） */}
               <Avatar
@@ -814,10 +851,21 @@ export function MamepApp(): React.ReactNode {
               <Button
                 size="small"
                 icon={<ApiOutlined />}
+                aria-label={t("topbar.connectionSettings")}
                 onClick={() => setConnectionModalOpen(true)}
               >
-                {t("topbar.connectionSettings")}
+                {isMobileLayout ? undefined : t("topbar.connectionSettings")}
               </Button>
+              {/* 移动布局：底部面板入口（底部抽屉）；桌面由常驻底部面板承担。 */}
+              {isMobileLayout && (
+                <Button
+                  size="small"
+                  icon={<MessageOutlined />}
+                  aria-label={t("mobile.openPanel")}
+                  title={t("mobile.openPanel")}
+                  onClick={() => setMobilePanelOpen(true)}
+                />
+              )}
               {narrow ? (
                 <Dropdown
                   menu={{ items: secondaryMenuItems }}
@@ -875,6 +923,7 @@ export function MamepApp(): React.ReactNode {
               }
             }}
           >
+            {!isMobileLayout && (
             <Splitter.Panel
               className={`sheet-sidebar ant-layout-sider${sidebarCollapsed ? " ant-layout-sider-collapsed" : ""}`}
               size={sidebarCollapsed ? 36 : (dragSidebarWidth ?? sidebarWidth)}
@@ -974,6 +1023,7 @@ export function MamepApp(): React.ReactNode {
                 )}
               </div>
             </Splitter.Panel>
+            )}
             <Splitter.Panel>
               <div className="mamep-body">
                 {/* 浏览器兼容性提示（PRD §8.3 / §15.7）：不支持 Web Serial / 非安全上下文时展示 */}
@@ -1080,6 +1130,7 @@ export function MamepApp(): React.ReactNode {
                       )}
                     </div>
                   </Splitter.Panel>
+                  {!isMobileLayout && (
                   <Splitter.Panel
                     size={
                       bottomPanelCollapsed
@@ -1091,6 +1142,7 @@ export function MamepApp(): React.ReactNode {
                   >
                     <BottomPanel />
                   </Splitter.Panel>
+                  )}
                 </Splitter>
               </div>
             </Splitter.Panel>
@@ -1100,6 +1152,67 @@ export function MamepApp(): React.ReactNode {
         <ConnectionSettingsModal />
         <PluginManagerModal />
         <WorkspaceImportModal />
+
+        {/* 移动端抽屉（ADR-050 Phase 3）：侧栏表列表 + 底部面板。
+            开合为会话内状态（不入持久化）；返回键优先关它们（overlay-close 栈）。 */}
+        <Drawer
+          placement="left"
+          open={isMobileLayout && mobileSidebarOpen}
+          onClose={() => setMobileSidebarOpen(false)}
+          size={280}
+          className="mamep-mobile-drawer mamep-mobile-drawer--sidebar"
+          styles={{ body: { padding: 0 } }}
+        >
+          <div className="sheet-sidebar sheet-sidebar--drawer">
+            <div className="sheet-sidebar__section">
+              <span className="sheet-sidebar__section-title">
+                {t("sidebar.registerTables")}
+              </span>
+            </div>
+            <div className="sheet-sidebar__groups">
+              <Menu
+                className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
+                mode="inline"
+                selectable
+                selectedKeys={
+                  currentSheet !== undefined ? [currentSheet.sheetId] : []
+                }
+                openKeys={sheetGroupOpenKeys}
+                onOpenChange={handleGroupOpenChange}
+                onClick={({ key, domEvent }) => {
+                  const target = domEvent.target as HTMLElement;
+                  if (target.closest(".ant-dropdown") !== null) return;
+                  openSheet(key as SheetId);
+                  // 选中表后自动收起抽屉（移动端没有常驻侧栏，避免遮挡表格）。
+                  setMobileSidebarOpen(false);
+                }}
+                items={sidebarMenuItems}
+              />
+            </div>
+            <div className="sheet-sidebar__footer">
+              {t(
+                host?.platform === "electron"
+                  ? "sidebar.footerClient"
+                  : host?.platform === "vscode"
+                    ? "sidebar.footerExtension"
+                    : host?.platform === "android"
+                      ? "sidebar.footerAndroid"
+                      : "sidebar.footerBrowser",
+                { version: host?.appVersion ?? "" },
+              )}
+            </div>
+          </div>
+        </Drawer>
+        <Drawer
+          placement="bottom"
+          open={isMobileLayout && mobilePanelOpen}
+          onClose={() => setMobilePanelOpen(false)}
+          size="60vh"
+          className="mamep-mobile-drawer mamep-mobile-drawer--panel"
+          styles={{ body: { padding: 0 } }}
+        >
+          <BottomPanel variant="drawer" />
+        </Drawer>
         {traceWindowKeys.map((rowId) => (
           <TraceWindow key={rowId} rowId={rowId as RowId} />
         ))}

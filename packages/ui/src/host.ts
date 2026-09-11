@@ -92,6 +92,25 @@ export interface AppHost {
   scheduleSave(workspace: Workspace): void;
   /** 立即保存当前待写快照（应用关闭/页面隐藏前调用，ADR-049 崩溃后状态恢复）。 */
   flush(): Promise<Result<void>>;
+  /**
+   * 应用进入/离开后台（移动端生命周期，ADR-050 Phase 3）。
+   * 挂起时暂停轮询与追踪（**保留配置**），恢复时按原配置重启；幂等。
+   * 可选：会话不在本进程的平台（如 Electron/VSCode 的远程会话）暂不实现。
+   */
+  setBackgroundSuspended?(suspended: boolean): void;
+  /**
+   * 屏幕常亮（KeepAwake，ADR-050 Phase 3）：有持续轮询/追踪时开启。
+   * 仅 Android 实现；其余平台不实现（保持系统默认灭屏策略）。
+   */
+  setKeepScreenOn?(enabled: boolean): void;
+  /**
+   * 订阅硬件返回键（Android，ADR-050 Phase 3）。
+   *
+   * `handler` 返回 `true` 表示已消费（宿主不再执行默认行为）；返回 `false` 时宿主
+   * 最小化应用。返回取消订阅函数；平台无硬件返回键（浏览器/桌面）返回 `null`。
+   * UI 层据此实现「先关最上层覆盖层，无覆盖层才最小化」的返回键语义。
+   */
+  onHardwareBack?(handler: () => boolean): (() => void) | null;
   /** 最近一次加载的恢复元数据（ADR-049 恢复提示；null=无恢复相关信息）。 */
   getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null;
   getSaveStatus(): SaveStatus;

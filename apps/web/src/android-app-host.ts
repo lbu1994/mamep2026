@@ -59,6 +59,7 @@ import {
   androidCapabilities,
   applyAndroidTcpDefaults,
   serialUnsupportedError,
+  type AndroidAppLifecycleBridge,
   type MamepTransportBridge,
 } from "@mamep2026/platform-android";
 import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
@@ -78,6 +79,11 @@ export interface AndroidAppHostOptions {
   clock?: Clock | undefined;
   /** dev mock 传输（`?mockTransport=1`）；Android 正常情况下为 false。 */
   mockTransport?: boolean | undefined;
+  /**
+   * 应用生命周期桥（`@capacitor/app`，ADR-050 Phase 3）：硬件返回键 + 前后台状态。
+   * 生产 = `createCapacitorAppLifecycleBridge()`（composition root 注入）；测试注入 fake。
+   */
+  appLifecycle?: AndroidAppLifecycleBridge | null | undefined;
 }
 
 export class AndroidAppHost implements AppHost {
@@ -94,6 +100,8 @@ export class AndroidAppHost implements AppHost {
   private readonly tcp: TcpSessionHost;
   /** 平台宿主的串口面（enumerated 平台专用）；注入的自定义宿主不提供则为 null。 */
   private readonly serialHost: AndroidSerialHostPort | null;
+  /** 应用生命周期桥（`@capacitor/app`，ADR-050 Phase 3）；未注入时为 null（无硬件返回键）。 */
+  private readonly appLifecycle: AndroidAppLifecycleBridge | null;
 
   /** 当前活动协议（Phase 1 仅 tcp 可达；rtu 保留以便 Phase 2 直接复用）。 */
   private activeProtocol: "rtu" | "tcp" | null = null;
@@ -117,6 +125,7 @@ export class AndroidAppHost implements AppHost {
       new AndroidPlatformHost({ bridge: options.bridge });
     this.platformHost = platformHost;
     this.serialHost = hasSerialApi(platformHost) ? platformHost : null;
+    this.appLifecycle = options.appLifecycle ?? null;
     this.capabilities = androidCapabilities;
     this.isMockMode = options.mockTransport === true;
 
@@ -266,6 +275,67 @@ export class AndroidAppHost implements AppHost {
       this.portLabel = null;
     }
     return selected;
+  }
+
+  /**
+   * 应用进入/离开后台（ADR-050 Phase 3）：按活动协议路由到本地会话宿主。
+   * 后台暂停轮询/追踪（保留配置），回前台按原配置恢复；幂等。
+   */
+  setBackgroundSuspended(suspended: boolean): void {
+    if (this.activeProtocol === "tcp") {
+      if (suspended) {
+        this.tcp.pauseBackground();
+      } else {
+        this.tcp.resumeBackground();
+      }
+      return;
+    }
+    this.inner.setBackgroundSuspended(suspended);
+  }
+
+  /** 屏幕常亮（KeepAwake）：持续轮询/追踪期间保持屏幕不休眠（仅 Android 实现）。 */
+  setKeepScreenOn(enabled: boolean): void {
+    if (this.platformHost instanceof AndroidPlatformHost) {
+      this.platformHost.setKeepScreenOn(enabled);
+    }
+  }
+
+  /**
+   * 硬件返回键（ADR-050 Phase 3）：`handler` 返回 `true`（已关掉覆盖层）时不做事；
+   * 未消费时最小化应用（Android 惯例：根页面退到后台而非退出进程）。
+   *
+   * 桥不可用（`@capacitor/app` 未装配）时返回 `null`，调用方退回系统默认行为。
+   * 订阅是异步建立的：`handler` 可能已订阅但在途，用 `disposed` 标记保证取消语义正确
+   * （已取消则立即退订，不遗漏监听器）。
+   */
+  onHardwareBack(handler: () => boolean): (() => void) | null {
+    const lifecycle = this.appLifecycle;
+    if (lifecycle === null) return null;
+    let disposed = false;
+    let unsubscribe: (() => void) | null = null;
+    void lifecycle
+      .onBackButton(() => {
+        if (handler()) return true;
+        // 未消费 → 最小化；仍回答“已处理”，避免 Capacitor 默认退出应用。
+        void lifecycle.minimizeApp().catch(() => {
+          // 最小化失败不阻断返回键链路（详见 capacitor-app.ts）。
+        });
+        return true;
+      })
+      .then((off) => {
+        if (disposed) {
+          off();
+          return;
+        }
+        unsubscribe = off;
+      })
+      .catch(() => {
+        // 桥不可用（插件未注册）：静默降级为无返回键拦截。
+      });
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
   }
 
   async connect(

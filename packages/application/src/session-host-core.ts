@@ -85,6 +85,8 @@ export class SessionHostCore {
   private trace: TraceCoordinator | null = null;
   private portLabel: string | null = null;
   private pollingTargets: Array<{ key: string; address: number; quantity?: number }> = [];
+  /** 后台挂起标志（移动端生命周期）：挂起期间不启动轮询/追踪，回前台按原配置恢复。 */
+  private backgroundSuspended = false;
   private readonly activeTraces = new Map<
     string,
     { address: number; speedMs: number; quantity: number }
@@ -149,12 +151,14 @@ export class SessionHostCore {
     this.trace = new TraceCoordinator(session, this.clock);
     this.trace.onSample((sample) => this.events.onTraceSample(sample));
 
-    if (this.pollingTargets.length > 0) {
+    if (this.pollingTargets.length > 0 && !this.backgroundSuspended) {
       this.polling.setTargets(this.pollingTargets);
       this.polling.start();
     }
-    for (const [key, entry] of this.activeTraces) {
-      this.trace.start(key, entry.address, entry.speedMs, entry.quantity);
+    if (!this.backgroundSuspended) {
+      for (const [key, entry] of this.activeTraces) {
+        this.trace.start(key, entry.address, entry.speedMs, entry.quantity);
+      }
     }
     return ok(undefined);
   }
@@ -269,7 +273,7 @@ export class SessionHostCore {
   ): void {
     this.pollingTargets = rows;
     this.polling?.setTargets(rows);
-    if (rows.length > 0 && this.session !== null) {
+    if (rows.length > 0 && this.session !== null && !this.backgroundSuspended) {
       this.polling?.start();
     } else {
       this.polling?.stop();
@@ -277,7 +281,11 @@ export class SessionHostCore {
   }
 
   startPolling(): void {
-    if (this.pollingTargets.length > 0 && this.session !== null) {
+    if (
+      this.pollingTargets.length > 0 &&
+      this.session !== null &&
+      !this.backgroundSuspended
+    ) {
       this.polling?.start();
     }
   }
@@ -286,8 +294,42 @@ export class SessionHostCore {
     this.polling?.stop();
   }
 
+  /**
+   * 应用进入后台（移动端生命周期，ADR-050 Phase 3）：暂停轮询与追踪。
+   *
+   * 只暂停"持续占用总线"的后台任务；`pollingTargets` 与 `activeTraces` **保留**，
+   * 供回前台时按原配置恢复（与断线重连的恢复路径同源）。幂等：重复调用无副作用。
+   */
+  pauseBackground(): void {
+    this.backgroundSuspended = true;
+    this.stopPolling();
+    this.trace?.stopAll();
+  }
+
+  /**
+   * 回到前台：按挂起前的配置恢复轮询与追踪。
+   * 幂等；未挂起时无操作；离线（无会话）时不启动（连接建立时会自行恢复）。
+   */
+  resumeBackground(): void {
+    if (!this.backgroundSuspended) return;
+    this.backgroundSuspended = false;
+    if (this.session === null) return;
+    if (this.pollingTargets.length > 0) {
+      this.polling?.setTargets(this.pollingTargets);
+      this.polling?.start();
+    }
+    for (const [key, entry] of this.activeTraces) {
+      this.trace?.start(key, entry.address, entry.speedMs, entry.quantity);
+    }
+  }
+
+  isBackgroundSuspended(): boolean {
+    return this.backgroundSuspended;
+  }
+
   traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
     this.activeTraces.set(key, { address, speedMs, quantity });
+    if (this.backgroundSuspended) return;
     this.trace?.start(key, address, speedMs, quantity);
   }
 

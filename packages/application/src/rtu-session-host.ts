@@ -159,6 +159,20 @@ export class RtuSessionHost {
     this.core.stopPolling();
   }
 
+  /** 应用进入后台（ADR-050 Phase 3）：暂停轮询/追踪，保留配置供回前台恢复。 */
+  pauseBackground(): void {
+    this.core.pauseBackground();
+  }
+
+  /** 应用回到前台：按挂起前配置恢复轮询/追踪；幂等。 */
+  resumeBackground(): void {
+    this.core.resumeBackground();
+  }
+
+  isBackgroundSuspended(): boolean {
+    return this.core.isBackgroundSuspended();
+  }
+
   traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
     this.core.traceStart(key, address, speedMs, quantity);
   }

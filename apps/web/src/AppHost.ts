@@ -422,6 +422,18 @@ export class BrowserAppHost implements AppHost {
     return this.autoSave.flush();
   }
 
+  /**
+   * 应用进入/离开后台（移动端生命周期，ADR-050 Phase 3）：暂停/恢复轮询与追踪。
+   * 配置（pollingTargets / activeTraces）保留在会话宿主内，回前台按原配置重启。
+   */
+  setBackgroundSuspended(suspended: boolean): void {
+    if (suspended) {
+      this.rtu.pauseBackground();
+    } else {
+      this.rtu.resumeBackground();
+    }
+  }
+
   /** 最近一次加载的恢复元数据（ADR-049 恢复提示）。 */
   getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null {
     return this.repository.getRecoveryInfo();

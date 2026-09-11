@@ -1,5 +1,6 @@
 package com.mamep2026.app
 
+import android.view.WindowManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -280,6 +281,36 @@ class MamepTransportPlugin : Plugin() {
             call.resolve()
         } catch (error: Exception) {
             call.reject("NOT_OPEN", "close failed: ${error.message}", error)
+        }
+    }
+
+    /**
+     * 屏幕常亮（KeepAwake，ADR-050 Phase 3）：持续轮询/追踪期间保持屏幕不休眠。
+     * 与活动传输无关，故在 closeActiveTransport 中**不**清除；幂等。
+     */
+    @PluginMethod
+    fun setKeepScreenOn(call: PluginCall) {
+        val enabled = call.getBoolean("enabled")
+        if (enabled == null) {
+            call.reject("KEEP_AWAKE_INVALID", "enabled (boolean) is required")
+            return
+        }
+        try {
+            val host = activity
+            if (host == null) {
+                call.resolve()
+                return
+            }
+            host.runOnUiThread {
+                if (enabled) {
+                    host.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    host.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+            call.resolve()
+        } catch (error: Exception) {
+            call.reject("KEEP_AWAKE_FAILED", "setKeepScreenOn failed: ${error.message}", error)
         }
     }
 

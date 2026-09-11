@@ -143,7 +143,7 @@ MVP 交付形态为三端运行骨架加核心调试闭环：
 - 浏览器、Electron 和 VSCode 三端均能启动并加载同一套共享 UI 页面，页面显示一致；
 - 三端功能完整度按 PRD 优先级逐步补齐，骨架阶段不要求串口、TCP 等能力生效；
 - 三端骨架必须符合各自安全边界：Electron 为 Main、Preload、Renderer 隔离，VSCode 为 Extension Host 与 Webview 隔离；
-- Android 客户端（2026-09-10 纳入的第四平台，ADR-050）**不属于 MVP P0 交付范围**，按 ADR-050 分期推进（Phase 1 骨架 + TCP → Phase 2 USB-RS485 → Phase 3 UI 适配）；**Phase 1/2 均已落地**，Phase 3 起按 ADR-050 继续。
+- Android 客户端（2026-09-10 纳入的第四平台，ADR-050）**不属于 MVP P0 交付范围**，按 ADR-050 分期推进（Phase 1 骨架 + TCP → Phase 2 USB-RS485 → Phase 3 UI 适配）；**Phase 1/2/3 均已落地**（Phase 3 余项：真机 e2e 执行、长按行菜单确认，见 ADR-050 §14.4），Phase 4/5 按 ADR-050 继续。
 
 > 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 端骨架已落地（2026-08-23：`apps/vscode-extension/` 命令打开 Webview 加载共享 UI——生产 `asWebviewUri` 打包资源 / dev `MAMEP_DEV_URL` iframe，Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC，能力矩阵如实声明，`tests/e2e-vscode` 真实 VSCode 集成测试）；Node 串口原型已通过（2026-08-23，ADR-020：`packages/platform-node` 落地 Node Serial Adapter，serialport@13 选型，Layer 1 Fake 57 用例 + Layer 2 com0com COM4/COM5 虚拟串口 7 用例全绿，Electron/VSCode 独立探针就绪，能力矩阵未翻转，见 docs/node-serial-prototype-验证记录.md）。
 

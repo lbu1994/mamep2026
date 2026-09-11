@@ -35,6 +35,11 @@ export const en = {
     footerExtension: "Extension v{{version}}",
     footerAndroid: "Android v{{version}}",
   },
+  // 移动布局（ADR-050 Phase 3）：抽屉入口。
+  mobile: {
+    openTables: "Open table list",
+    openPanel: "Open panel",
+  },
   connection: {
     title: "Connection Settings",
     groupCommunication: "Communication",
@@ -189,6 +194,9 @@ export const en = {
     closeToRightConfirmContent:
       "Close the {{count}} table(s) to the right? They will remain in the sidebar.",
     moreActions: "More actions",
+    toolbarMore: "More",
+    // 可访问名：避免与顶栏的 More 按钮重名（两个同名按钮会让屏幕阅读器/e2e 无法区分）。
+    toolbarMoreLabel: "More toolbar actions",
     addressError: "Invalid address",
     emptySheet: "Add registers to start monitoring.",
     emptySheetHint: "Define a register, then read or write it from the device.",
@@ -577,6 +585,11 @@ export const zh: TranslationResources = {
     footerExtension: "插件 v{{version}}",
     footerAndroid: "Android v{{version}}",
   },
+  // 移动布局（ADR-050 Phase 3）：抽屉入口。
+  mobile: {
+    openTables: "打开表列表",
+    openPanel: "打开面板",
+  },
   connection: {
     title: "连接设置",
     groupCommunication: "通信",
@@ -721,6 +734,8 @@ export const zh: TranslationResources = {
     closeToRightConfirmContent:
       "关闭右侧 {{count}} 个标签页？它们仍保留在侧边栏中。",
     moreActions: "更多操作",
+    toolbarMore: "更多",
+    toolbarMoreLabel: "更多工具栏操作",
     addressError: "地址无效",
     emptySheet: "添加寄存器开始监控。",
     emptySheetHint: "定义寄存器后，即可从设备读取或写入。",

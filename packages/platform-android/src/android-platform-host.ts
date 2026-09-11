@@ -28,6 +28,7 @@ import { CapacitorTcpTransport } from "./capacitor-tcp-transport";
 import { CapacitorUsbSerialTransport } from "./capacitor-usb-serial-transport";
 import type { MamepTransportBridge } from "./bridge";
 import {
+  bridgeKeepScreenOnParamsSchema,
   bridgeListSerialPortsResultSchema,
   bridgeOpenSerialParamsSchema,
   buildBridgeParams,
@@ -170,5 +171,19 @@ export class AndroidPlatformHost implements PlatformHost {
         connectTimeoutMs: profile.connectTimeoutMs,
       }),
     );
+  }
+
+  /**
+   * 屏幕常亮（KeepAwake，ADR-050 Phase 3）：由 UI 依据「是否存在持续轮询/追踪」驱动。
+   * 幂等；失败不抛出（屏幕常亮属体验优化，不应影响通信主流程）。
+   */
+  setKeepScreenOn(enabled: boolean): void {
+    const params = buildBridgeParams(
+      bridgeKeepScreenOnParamsSchema,
+      { enabled },
+      "setKeepScreenOn",
+    );
+    if (!params.ok) return;
+    void this.bridge.setKeepScreenOn(params.value).catch(() => undefined);
   }
 }

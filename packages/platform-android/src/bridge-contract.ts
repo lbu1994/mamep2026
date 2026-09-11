@@ -17,6 +17,7 @@ export const MAMEP_TRANSPORT_METHODS = [
   "openTcp",
   "write",
   "close",
+  "setKeepScreenOn",
 ] as const;
 
 /** 桥事件白名单。 */
@@ -74,6 +75,14 @@ export const bridgeOpenSerialParamsSchema = z.object({
 });
 export type BridgeOpenSerialParams = z.infer<
   typeof bridgeOpenSerialParamsSchema
+>;
+
+/** setKeepScreenOn 入参（ADR-050 Phase 3 KeepAwake）：持续轮询/追踪期间保持屏幕常亮。 */
+export const bridgeKeepScreenOnParamsSchema = z.object({
+  enabled: z.boolean(),
+});
+export type BridgeKeepScreenOnParams = z.infer<
+  typeof bridgeKeepScreenOnParamsSchema
 >;
 
 /** data 事件回包：原生侧整帧聚合后单次投递。 */

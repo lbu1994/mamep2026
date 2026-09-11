@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { initI18n } from "@mamep2026/ui";
 import "./index.css";
+// 移动布局（< 1024px，ADR-050 Phase 3）：桌面媒体查询内不生效。
+import "./mobile.css";
 import App from "./App.tsx";
 import { installVscodeDevBridgeIfNeeded } from "./vscode-dev-bridge";
 

@@ -9,6 +9,7 @@
  */
 import { registerPlugin } from "@capacitor/core";
 import type {
+  BridgeKeepScreenOnParams,
   BridgeOpenSerialParams,
   BridgeOpenTcpParams,
   BridgeWriteParams,
@@ -27,6 +28,7 @@ interface MamepTransportPluginHandle {
   openSerial(params: BridgeOpenSerialParams): Promise<unknown>;
   write(params: BridgeWriteParams): Promise<unknown>;
   close(): Promise<unknown>;
+  setKeepScreenOn(params: BridgeKeepScreenOnParams): Promise<unknown>;
   addListener(
     event: MamepTransportEvent,
     handler: (payload: unknown) => void,
@@ -57,6 +59,9 @@ export function createCapacitorTransportBridge(): MamepTransportBridge {
     },
     async close(): Promise<void> {
       await plugin.close();
+    },
+    async setKeepScreenOn(params: BridgeKeepScreenOnParams): Promise<void> {
+      await plugin.setKeepScreenOn(params);
     },
     async addListener<E extends MamepTransportEvent>(
       event: E,

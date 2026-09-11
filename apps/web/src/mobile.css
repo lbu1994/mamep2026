@@ -1,0 +1,105 @@
+/* ==========================================================================
+   移动布局（< 1024px，ADR-050 Phase 3）
+   断点数值与 packages/ui/src/layout/breakpoints.ts 的 MOBILE_LAYOUT_MAX_WIDTH
+   同源（媒体查询无法引用 JS 常量，故此处手写同值；行为由 e2e 守）。
+   桌面（≥ 1024px）不受本节任何规则影响。
+   ========================================================================== */
+@media (max-width: 1023px) {
+  /* 顶栏：安全区避让（刘海/挖孔）+ 更紧凑的间距（移动端按钮退化为图标态）。 */
+  .mamep-header.ant-layout-header {
+    gap: 6px;
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+
+  /* 触摸目标：图标按钮保持视觉尺寸，但保证足够点按范围（≥32px）。 */
+  .mamep-header .ant-btn {
+    min-width: 32px;
+    height: 30px;
+  }
+
+  /* 工具栏溢出到「更多」下拉后仍可能换行，允许换行避免横向挤压。 */
+  .table-toolbar {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  /* 「更多」面板（ADR-050 Phase 3）：次要控件纵向堆叠，标签保持可见（触摸无 hover 提示）。
+     必须限制面板宽度：控件组默认不换行（inline-flex），一行铺开会比手机视口更宽，
+     Popover 定位后选项会落到视口之外（e2e 实测 click 报 "outside of the viewport"）。 */
+  .table-toolbar__more {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+    max-width: min(78vw, 320px);
+  }
+
+  .table-toolbar__more .table-toolbar__group {
+    flex: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 100%;
+  }
+
+  .table-toolbar .ant-btn {
+    min-width: 32px;
+  }
+
+  /* 表格：长按行菜单期间抑制系统长按菜单/文本选择（编辑态另行恢复）。 */
+  .register-table-wrap {
+    -webkit-touch-callout: none;
+  }
+
+  /* 行高 44dp（触摸目标）：与 RegisterTable 的 MOBILE_ROW_HEIGHT 常量同源。
+     选择器必须压过 index.css 的桌面规则
+     `.register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td`（height: 29px，
+     特异性 0-3-2），故此处保持 4 个 class 前缀（0-4-2）；仅靠加载顺序不足以取胜。 */
+  .register-table-wrap .register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td {
+    height: 44px;
+    padding-block: 4px;
+  }
+
+  .register-table-wrap .ant-table-tbody > tr > td {
+    user-select: none;
+  }
+
+  /* 编辑态（单元格内出现输入控件）恢复文本选择，否则无法选中/移动光标。 */
+  .register-table-wrap .ant-table-tbody > tr > td:has(input),
+  .register-table-wrap .ant-table-tbody > tr > td:has(textarea) {
+    user-select: text;
+  }
+
+  /* 触摸惯性滚动。 */
+  .register-table-wrap .ant-table-content,
+  .register-table-wrap .ant-table-body {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 底部面板抽屉：撑满抽屉高度 + 底部安全区（手势条）避让。 */
+  .mamep-mobile-drawer--panel .ant-drawer-body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mamep-mobile-drawer--panel .bottom-panel {
+    height: 100%;
+    border-top: none;
+  }
+
+  /* 侧栏抽屉：与常驻侧栏同一套内部结构（表列表可滚动 + 底部版本信息）。 */
+  .mamep-mobile-drawer--sidebar .ant-drawer-body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .sheet-sidebar--drawer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .sheet-sidebar--drawer .sheet-sidebar__groups {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+}

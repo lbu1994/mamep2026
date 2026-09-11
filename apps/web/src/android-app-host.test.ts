@@ -18,6 +18,7 @@ import {
   decodeBase64ToBytes,
   ANDROID_TCP_DEFAULT_REQUEST_TIMEOUT_MS,
   ANDROID_TCP_DEFAULT_RETRY_COUNT,
+  type AndroidAppLifecycleBridge,
 } from "@mamep2026/platform-android";
 import { FakeTransportBridge } from "@mamep2026/platform-android/testing";
 import { AndroidAppHost } from "./android-app-host";
@@ -28,7 +29,45 @@ async function flushMicrotasks(times = 12): Promise<void> {
   }
 }
 
-function createHost(bridge = new FakeTransportBridge()): {
+/**
+ * 假应用生命周期桥（ADR-050 Phase 3）：记录订阅/退订与最小化调用，
+ * `backHandlers` / `stateHandlers` 由用例直接触发，避免依赖真实 `@capacitor/app`。
+ */
+class FakeAppLifecycleBridge implements AndroidAppLifecycleBridge {
+  readonly backHandlers: Array<() => boolean> = [];
+  readonly stateHandlers: Array<(isActive: boolean) => void> = [];
+  minimizeCount = 0;
+  backRemoveCount = 0;
+  stateRemoveCount = 0;
+  /** true 时 `onBackButton` 直接 reject（模拟插件未注册）。 */
+  rejectBackButton = false;
+
+  async onBackButton(handler: () => boolean): Promise<() => void> {
+    if (this.rejectBackButton) throw new Error("plugin not implemented");
+    this.backHandlers.push(handler);
+    return () => {
+      this.backRemoveCount += 1;
+    };
+  }
+
+  async onAppStateChange(
+    handler: (isActive: boolean) => void,
+  ): Promise<() => void> {
+    this.stateHandlers.push(handler);
+    return () => {
+      this.stateRemoveCount += 1;
+    };
+  }
+
+  async minimizeApp(): Promise<void> {
+    this.minimizeCount += 1;
+  }
+}
+
+function createHost(
+  bridge = new FakeTransportBridge(),
+  appLifecycle: AndroidAppLifecycleBridge | null = null,
+): {
   host: AndroidAppHost;
   bridge: FakeTransportBridge;
 } {
@@ -37,6 +76,7 @@ function createHost(bridge = new FakeTransportBridge()): {
     host: new AndroidAppHost({
       bridge,
       repository: new InMemoryWorkspaceRepository(),
+      appLifecycle,
     }),
   };
 }
@@ -300,5 +340,63 @@ describe("AndroidAppHost：释放", () => {
     // dispose 后不再有事件投递（订阅集合已清空）。
     bridge.emitClosed();
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("AndroidAppHost：硬件返回键（ADR-050 Phase 3）", () => {
+  it("已消费时不最小化应用，取消订阅后立即退订", async () => {
+    const lifecycle = new FakeAppLifecycleBridge();
+    const { host } = createHost(new FakeTransportBridge(), lifecycle);
+
+    const unsubscribe = host.onHardwareBack(() => true);
+    await flushMicrotasks();
+    expect(lifecycle.backHandlers).toHaveLength(1);
+
+    expect(lifecycle.backHandlers[0]!()).toBe(true);
+    await flushMicrotasks();
+    expect(lifecycle.minimizeCount).toBe(0);
+
+    unsubscribe?.();
+    expect(lifecycle.backRemoveCount).toBe(1);
+  });
+
+  it("未消费时最小化应用，且仍向 Capacitor 回答「已处理」（不退出进程）", async () => {
+    const lifecycle = new FakeAppLifecycleBridge();
+    const { host } = createHost(new FakeTransportBridge(), lifecycle);
+
+    host.onHardwareBack(() => false);
+    await flushMicrotasks();
+
+    expect(lifecycle.backHandlers[0]!()).toBe(true);
+    await flushMicrotasks();
+    expect(lifecycle.minimizeCount).toBe(1);
+  });
+
+  it("未注入生命周期桥（浏览器/桌面）返回 null", () => {
+    const { host } = createHost();
+    expect(host.onHardwareBack(() => true)).toBeNull();
+  });
+
+  it("订阅尚在途中就取消：解析后立即退订，不泄漏监听", async () => {
+    const lifecycle = new FakeAppLifecycleBridge();
+    const { host } = createHost(new FakeTransportBridge(), lifecycle);
+
+    const unsubscribe = host.onHardwareBack(() => true);
+    unsubscribe?.();
+    await flushMicrotasks();
+
+    expect(lifecycle.backRemoveCount).toBe(1);
+  });
+
+  it("桥不可用（插件未注册）时静默降级，取消订阅不抛错", async () => {
+    const lifecycle = new FakeAppLifecycleBridge();
+    lifecycle.rejectBackButton = true;
+    const { host } = createHost(new FakeTransportBridge(), lifecycle);
+
+    const unsubscribe = host.onHardwareBack(() => true);
+    await flushMicrotasks();
+
+    expect(lifecycle.backHandlers).toHaveLength(0);
+    expect(() => unsubscribe?.()).not.toThrow();
   });
 });

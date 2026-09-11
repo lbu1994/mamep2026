@@ -5,6 +5,7 @@
  * 单测注入 `./testing/fake-transport-bridge.ts`（沿用 platform-node 的 `SerialPortLike` 注入先例）。
  */
 import type {
+  BridgeKeepScreenOnParams,
   BridgeOpenSerialParams,
   BridgeOpenTcpParams,
   BridgeWriteParams,
@@ -40,4 +41,31 @@ export interface MamepTransportBridge {
     event: E,
     handler: BridgeEventHandlerMap[E],
   ): Promise<BridgeListenerHandle>;
+  /**
+   * 屏幕常亮开关（KeepAwake，ADR-050 Phase 3）：与活动传输**无关**，
+   * 而是由「是否存在持续轮询/追踪」驱动；幂等。
+   */
+  setKeepScreenOn(params: BridgeKeepScreenOnParams): Promise<void>;
+}
+
+/**
+ * 应用生命周期桥（`@capacitor/app`，ADR-050 Phase 3）。
+ *
+ * 真实实现见 `./capacitor-app.ts`（独立子路径导出，非 Android 构建不加载 `@capacitor/app`）；
+ * 与 `MamepTransportBridge` 分开是因为它服务的是 UI 生命周期（返回键/前后台），
+ * 与通信传输无关，也可独立注入（见 `AndroidAppHostOptions.appLifecycle`）。
+ */
+export interface AndroidAppLifecycleBridge {
+  /**
+   * 订阅硬件返回键。
+   *
+   * `handler` 返回 `true` 表示已消费（不再执行默认行为）；返回 `false` 时桥调用
+   * `minimizeApp()`（Android 惯例：根页面按返回键退到后台而非退出进程）。
+   * 返回取消订阅函数（异步解析：桥不可用时 reject）。
+   */
+  onBackButton(handler: () => boolean): Promise<() => void>;
+  /** 订阅前后台状态变化（`isActive=false` 表示进入后台）。返回取消订阅函数。 */
+  onAppStateChange(handler: (isActive: boolean) => void): Promise<() => void>;
+  /** 最小化应用到后台（Android 专属）。 */
+  minimizeApp(): Promise<void>;
 }

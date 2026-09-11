@@ -109,6 +109,11 @@ const sdk = resolveAndroidSdk();
 console.log(`[build:android] JDK: ${jdk.home}（Java ${jdk.major}）`);
 console.log(`[build:android] Android SDK: ${sdk}`);
 
+// 图标随构建同步（2026-09-11）：mipmap 各密度由 scripts/generate-icons.mjs 从
+// build/AppIcon.svg 生成（白底 + 黑色线条），避免改了源 SVG 却忘记重跑 pnpm icons
+// 导致 APK 里仍是旧图标。与 dist:portable / dist:vscode 同一约定。
+run("node", ["scripts/generate-icons.mjs"], { cwd: ROOT });
+
 if (!skipWeb) {
   run("pnpm", ["--filter", "@mamep2026/web", "build:android"], { cwd: ROOT });
 }

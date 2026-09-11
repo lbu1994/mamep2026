@@ -3,6 +3,7 @@
  * 记录调用、可注入失败、可驱动事件——单测无需 Android 环境即可覆盖传输语义。
  */
 import type {
+  BridgeKeepScreenOnParams,
   BridgeOpenSerialParams,
   BridgeOpenTcpParams,
   BridgeWriteParams,
@@ -27,6 +28,8 @@ export class FakeTransportBridge implements MamepTransportBridge {
   readonly serialOpenCalls: BridgeOpenSerialParams[] = [];
   /** write 收到的 base64 载荷（按调用顺序）。 */
   readonly writeCalls: string[] = [];
+  /** setKeepScreenOn 调用序列（Phase 3 KeepAwake）。 */
+  readonly keepScreenOnCalls: boolean[] = [];
   /** listSerialPorts 的回包（可注入非法形状以覆盖契约违规）。 */
   serialPortsResult: unknown = { ports: [] };
   listSerialPortsCount = 0;
@@ -71,6 +74,10 @@ export class FakeTransportBridge implements MamepTransportBridge {
   async close(): Promise<void> {
     this.closeCount += 1;
     if (this.closeError !== null) throw toError(this.closeError);
+  }
+
+  async setKeepScreenOn(params: BridgeKeepScreenOnParams): Promise<void> {
+    this.keepScreenOnCalls.push(params.enabled);
   }
 
   async addListener<E extends MamepTransportEvent>(

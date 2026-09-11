@@ -41,6 +41,7 @@ import {
 import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
 import { isAndroidPlatform } from "@mamep2026/platform-android";
 import { createCapacitorTransportBridge } from "@mamep2026/platform-android/capacitor";
+import { createCapacitorAppLifecycleBridge } from "@mamep2026/platform-android/capacitor-app";
 import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
 import { AndroidAppHost } from "./android-app-host";
 import { ElectronAppHost } from "./electron-app-host";
@@ -117,8 +118,10 @@ export default function App(): React.ReactNode {
   // 否则按浏览器 Host 装配（Web Serial + IndexedDB）。
   useEffect(() => {
     const bridge = window.mamepHost;
-    // Android（Capacitor）平台探测：读 globalThis.Capacitor.getPlatform()（不调用任何插件）。
+    // Android 平台探测：读 globalThis.Capacitor.getPlatform()（不调用任何插件）。
     const android = bridge === undefined && isAndroidPlatform(globalThis);
+    // 应用生命周期桥（ADR-050 Phase 3）：返回键（宿主）与前后台（下方 effect）共用同一实例。
+    const appLifecycle = android ? createCapacitorAppLifecycleBridge() : null;
     // codec 注册表（ADR-041 决策 A）：随包插件 activate 填充，connect 按活动表协议路由。
     const codecRegistry = createCodecRegistry();
     // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，三端共享装配。
@@ -176,6 +179,9 @@ export default function App(): React.ReactNode {
               const kv = createIdbKeyValueStore();
               return new AndroidAppHost({
                 bridge: createCapacitorTransportBridge(),
+                // 生命周期（备返键 / 前后台，ADR-050 Phase 3）：硬件返回键先关移动端覆盖层
+                // （overlay-close 栈，见 MamepApp），无覆盖层时由宿主最小化应用。
+                appLifecycle,
                 repository: new IndexedDBWorkspaceRepository(kv),
                 pluginStore: new IndexedDBPluginStore(kv),
                 codecRegistry,
@@ -309,13 +315,41 @@ export default function App(): React.ReactNode {
     //   pagehide，会破坏「清工作区→reload」的测试隔离（把已清空的工作区又写回）。
     // pending 被清空故幂等；崩溃无 graceful 时机，由 autosave（500ms）兜底。
     const onVisibilityChange = (): void => {
-      if (document.visibilityState === "hidden") {
+      const hidden = document.visibilityState === "hidden";
+      // 后台暂停轮询/追踪（移动端生命周期，ADR-050 Phase 3）：配置保留在会话宿主内，
+      // 回前台按原配置恢复。非 Android 平台同样受益（切标签页/最小化时不再空转总线）。
+      host.setBackgroundSuspended?.(hidden);
+      if (hidden) {
         void host.flush();
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
 
+    // Android 前后台状态（`@capacitor/app`，ADR-050 Phase 3）：部分 OEM 上 WebView 的
+    // visibilitychange 在进程被冻结时不可靠，故用原生 appStateChange 兑底。两条路径都调用
+    // 幂等的 setBackgroundSuspended（已挂起再挂起 / 未挂起时恢复均为空操作），可安全重复。
+    let appStateDisposed = false;
+    let unsubscribeAppState: (() => void) | null = null;
+    if (appLifecycle !== null) {
+      void appLifecycle
+        .onAppStateChange((isActive) => {
+          host.setBackgroundSuspended?.(!isActive);
+        })
+        .then((off) => {
+          if (appStateDisposed) {
+            off();
+            return;
+          }
+          unsubscribeAppState = off;
+        })
+        .catch(() => {
+          // 桥不可用（插件未注册）：保持 visibilitychange 单路径，不阻断启动。
+        });
+    }
+
     return () => {
+      appStateDisposed = true;
+      unsubscribeAppState?.();
       document.removeEventListener("visibilitychange", onVisibilityChange);
       // 释放 host（断开会话 + 退订桥事件 + 清空订阅），避免 StrictMode 双挂载下旧 host
       // 残留订阅导致事件重复投递（comm-log 一条变两条，2026-08-23）。

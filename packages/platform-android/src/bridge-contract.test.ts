@@ -18,6 +18,7 @@ describe("bridge-contract：方法/事件白名单", () => {
       "openTcp",
       "write",
       "close",
+      "setKeepScreenOn",
     ]);
     expect([...MAMEP_TRANSPORT_EVENTS]).toEqual(["data", "closed", "error"]);
   });

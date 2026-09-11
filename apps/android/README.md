@@ -6,7 +6,22 @@
 - 页面来源：`apps/web` 的 `--mode android` 产物（`apps/web/dist-android/`，Capacitor `webDir` 指向它）
 - 应用标识：`appId = com.mamep2026.app`、`appName = Mamep2026`
 - 页面 URL：`https://localhost/`（Capacitor `androidScheme: "https"` → 安全上下文）
-- Phase 1 能力：**Modbus TCP**（原生 socket）；Phase 2 能力：**USB-RS485 串口**（USB Host + `usb-serial-for-android`）
+- **启动图标**：由 `scripts/generate-icons.mjs` 从 `build/AppIcon.svg` 生成（全白底 + 黑色线条；
+  legacy 白底方形/圆形 + 自适应图标透明底前景，背景色 `res/values/ic_launcher_background.xml` = `#FFFFFF`）。
+  `pnpm build:android` 会自动同步生成，**不要手改 mipmap PNG**（改图形请改源 SVG）。
+- Phase 1 能力：**Modbus TCP**（原生 socket）；Phase 2 能力：**USB-RS485 串口**（USB Host + `usb-serial-for-android`）；
+  Phase 3：**移动布局与生命周期**（抽屉布局 / 工具栏「更多」面板 / 硬件返回键 / 前后台挂起 / KeepAwake）
+
+## 移动布局与生命周期（Phase 3）
+
+- 依赖：`@capacitor/app ^8.1.1`（**MIT**，npm 可直达，非 JitPack）——用于硬件返回键、前后台状态、`minimizeApp`。
+  **注意：新增后必须重新 `pnpm build:android`（内含 `cap sync`）**，否则原生工程里没有该插件，返回键仍是系统默认。
+- 返回键：`backButton` → UI 先关最上层覆盖层（移动抽屉等，`overlay-close` 栈）；无覆盖层时才 `minimizeApp()`
+  （Android 惯例：退到后台而不是退出进程）。
+- 前后台：`appStateChange`（原生）与 WebView 的 `visibilitychange` **双通道**驱动后台挂起（幂等互补）——
+  挂起时暂停轮询/追踪（保留配置），回前台按原配置恢复。
+- 屏幕常亮：存在持续轮询/追踪时置 `FLAG_KEEP_SCREEN_ON`（自研零依赖，不用 KeepAwake 插件）。
+- 触摸：行高 44dp、工具栏次要控件收进「更多」面板、长按行菜单（依赖 WebView `contextmenu` + 抑制系统长按选择）。
 
 ## USB 串口（Phase 2）
 

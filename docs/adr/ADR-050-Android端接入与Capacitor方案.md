@@ -1,7 +1,7 @@
 # ADR-050：Android 端接入与 Capacitor 方案（第四平台）
 
 - 日期：2026-09-10
-- 状态：**Phase 0 + Phase 1 + Phase 2 已落地**（Phase 1 真机 TCP e2e 全绿；Phase 2 USB-RS485 实现完成、真机 UI 面 e2e 全绿，USB 读写闭环待硬件，见 [docs/adr-050-验证记录.md](../adr-050-验证记录.md) §5/§6）
+- 状态：**Phase 0/1/2 已落地；Phase 3 落地（移动布局 + 后台挂起/恢复 + KeepAwake + 工具栏溢出 + 返回键）**（余项：真机 e2e 执行、长按行菜单真机确认、平板横屏，见 §14.4）
 - 关联：PRD §2.1 / §5.1 / §7（新增 §7.5）/ §8.2、TECH_DESIGN §7（能力矩阵新增 Android 列）/ §9.1 / §9.5 / §5.1.6、
   ADR-013（monorepo 分层）、ADR-022（两端 TCP 接线）、ADR-024（真实端口 e2e）、ADR-036（文件持久化）、
   ADR-044（可执行插件隔离）、ADR-045（随包插件一次性安装）、ADR-046（浏览器兼容性检测）、ADR-049（关闭 flush / 恢复）
@@ -292,6 +292,80 @@ packages/ui/src/i18n/index.ts       # +errors.serialDriverUnsupported（其余�
 | 真机 e2e | `pnpm test:e2e:android` **5 passed / 2 skipped**：`rtu-ui` 3 个（协议分组 + RTU 表单齐全 + 串口下拉可打开 + 无 console 错误）、`tcp-loop` 2 个（Phase 1 闭环无回归）；`rtu-loop` 2 个按预期跳过（需硬件） |
 | **未完成** | **USB-RS485 读写闭环真机验证**（用户无硬件，硬件到位后设 `MAMEP_ANDROID_USB_SERIAL=1` 执行） |
 
+### 14. Phase 3（响应式布局 + 触摸交互 + 移动端生命周期）落地情况（2026-09-10）
+
+#### 14.1 用户决策
+
+| # | 决策点 | 结论 |
+| --- | --- | --- |
+| 1 | 断点 | **统一为 1023px**（删掉 Phase 3 前的 1100px，避免 1024~1100 区间两套阈值打架）；< 1024 = 移动布局 |
+| 2 | 移动布局形态 | 侧栏 → `Drawer placement="left"`（280px）；底部面板 → `Drawer placement="bottom"`（60vh）；移动端**不渲染 Splitter 的侧栏/底部面板面板** |
+| 3 | 工具栏溢出 | 保留高频控件（撤销/重做、新建行、Read All/取消），其余（进制 / 从站地址 / 写后回读 / Address Adjust / 恢复列布局 / 行数）收进「更多」`Popover` 面板；**桌面不受影响**（≥1024px 仍直接铺开）——同一份 JSX 变量复用，避免两套实现漂移 |
+| 4 | 表格 | `scroll.x` 移动端 960（桌面 920）；**窄屏不做任何列固定**（2026-09-11 用户决策：固定列在多列横滑时占用可视宽度且与触摸横滑手势争抢，原 `fixed:"left"` 已移除）+ **移动端禁用列宽调整与列拖拽排序** |
+| 5 | 后台挂起层位 | **application 层** `SessionHostCore.pauseBackground/resumeBackground`（保留 `pollingTargets`/`activeTraces`，复用断线重连恢复路径）+ `AppHost` 可选方法 |
+| 6 | 返回键与生命周期事件源 | **`@capacitor/app` 已接入**：`backButton` 先关覆盖层（overlay-close 栈）再 `minimizeApp()`；`appStateChange` 与 `visibilitychange` 双通道驱动后台挂起（幂等） |
+| 7 | 触摸交互 | 行高 44dp（移动端）、长按行菜单（靠 WebView 长按触发的 `contextmenu` + CSS 抑制选择）、双击重命名保留、行拖拽加 `TouchSensor`（长按 250ms）、**侧栏排序移动端不做** |
+| 8 | KeepAwake | **做**，自研零依赖：原生 `FLAG_KEEP_SCREEN_ON`，由 UI 按「是否存在持续轮询/追踪」自动开关 |
+| 9 | 响应式实现 | 自研 `useIsMobileLayout()`（与 CSS 同一数值，媒体查询手写同值 + 注释同源标记） |
+| 10 | 持久化 | 移动端不新增工作区字段（抽屉开合为会话内状态） |
+
+#### 14.2 已完成的落点
+
+```
+packages/ui/src/layout/breakpoints.ts      # MOBILE_LAYOUT_MAX_WIDTH=1023 + useIsMobileLayout()
+packages/ui/src/overlay-close.ts           # 覆盖层关闭栈（返回键「先关最上层」的基础设施，LIFO + useOverlayClose）
+packages/ui/src/MamepApp.tsx               # 移动布局：汉堡按钮 + 左抽屉（表列表）、面板按钮 + 底部抽屉；1100px 局部实现删除
+packages/ui/src/components/BottomPanel.tsx # variant="docked"|"drawer"（drawer 不套折叠态、不渲染折叠按钮）
+packages/ui/src/components/RegisterTable.tsx # 移动：scroll.x 960 + 无列固定 + 行高 44 + 禁用列宽/列拖拽 + 行拖拽 TouchSensor
+packages/ui/src/host.ts                    # AppHost 可选 setBackgroundSuspended / setKeepScreenOn
+packages/application/src/session-host-core.ts # pauseBackground / resumeBackground / isBackgroundSuspended（+ 挂起期间不启动轮询的守卫）
+packages/application/src/{rtu,tcp}-session-host.ts # 薄封装转发
+packages/platform-android/*                # 桥方法 setKeepScreenOn（白名单 + Zod + fake 桥）+ AndroidPlatformHost.setKeepScreenOn
+packages/platform-android/src/capacitor-app.ts # 生命周期桥（@capacitor/app：backButton / appStateChange / minimizeApp）
+apps/web/src/{App.tsx,android-app-host.ts,AppHost.ts} # visibilitychange + appStateChange → setBackgroundSuspended；返回键经 AppHost.onHardwareBack
+packages/ui/src/MamepApp.tsx               # 返回键订阅：closeTopOverlay() 优先，未消费则宿主最小化
+packages/ui/src/components/RegisterTable.tsx # 移动端次要控件收进「更多」Popover（secondaryToolbarGroup 同一份 JSX 复用）
+apps/web/src/mobile.css                    # <1024 样式段（安全区 / 触摸目标 / 行高 / 抽屉 / 选择抑制 / 「更多」面板宽度）
+apps/android/.../MamepTransportPlugin.kt    # setKeepScreenOn（FLAG_KEEP_SCREEN_ON）
+```
+
+#### 14.3 验收（本次）
+
+| 项 | 结果 |
+| --- | --- |
+| 单测 | `pnpm test`（仅单测，不含 e2e 包）全绿；`apps/web` 105（+5 返回键）、`ui`、`platform-android` 等无回归 |
+| 类型 / Lint | `pnpm typecheck` 32/32、`pnpm lint` EXIT=0 |
+| 移动布局 e2e（web） | `tests/e2e-web/tests/mobile-layout.spec.ts` **5/5 全绿**：侧栏→左抽屉（选中即收起）/ 底部面板→底部抽屉 / 表格横滚+固定前两列+行高 44 / 工具栏「更多」面板 / 无 console 错误 |
+| 桌面回归 | `pnpm test:e2e:web`（141 用例）：第 1 轮 **140/141**（失败 = 本次引入：工具栏「更多」按钮与顶栏 More **可访问名重名** → 已修）；第 2 轮 **140/141**（失败 = 既有用例 `app.spec.ts:195` 偶发 `Execution context was destroyed`，**单跑 `app.spec.ts` 10/10 通过**）；第 3 轮由用户要求中止（已跑到第 8 项均通过，含该用例）。**两处失败均经定位，无产品缺陷遗留** |
+| 真机 e2e（Android） | 新增 `tests/e2e-android/tests/mobile-ui.spec.ts`（移动布局 + 返回键关抽屉/最小化）——**已写好，待真机执行**（需用户设备） |
+
+**回归中发现并修复**（均为本次 Phase 3 引入，由 e2e 抳出）：
+
+1. **`Drawer` 用了弃用的 `width`/`height`** → antd v6 每次渲染 `console.error`（“'width' is deprecated. Please use 'size' instead.”），
+   而单测（jsdom）不校验 console 错误 → 浏览器全量 e2e 中 **47 个「无 console 错误」断言级联失败**。修：改 `size`（v6 下 `size` 接 number|string）。
+   教训：**新的 antd 组件 / 属性上线后必须跑一次全量 e2e**（弃用警告只在真实浏览器 console 里暴露）。
+2. **移动端行高 44px 未生效**：`index.css` 的桌面规则 `.register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td`（29px）特异性 0-3-2 高于
+   移动端的 0-2-2，仅靠加载顺序不足 → 修：移动端选择器提升为 4 个 class 前缀（见 `mobile.css` 注释）。
+3. **工具栏「更多」按钮与顶栏 More 可访问名重名**：`getByRole("button", { name: "More", exact: true })` 命中 2 个（strict mode violation），
+   屏幕阅读器同样无法区分 → 修：`aria-label` 改用独立键 `table.toolbarMoreLabel`（可视文本仍为 “More”），既有用例无需改动即通过。
+4. **既存偶发（非本次引入）**：`app.spec.ts:195` 出现一次 `Execution context was destroyed, most likely because of a navigation`，
+   同用例在第 1/3 轮均通过、单跑 `app.spec.ts` 10/10 通过 → 记为 e2e flake（Playwright 本地未开 retries），与本次改动无关。
+
+#### 14.4 **尚未完成 / 未验证（重要，不得当作已交付）**
+
+1. **Tooltip 移动端触发方式：评估后未改（待真机确认）**。原计划把 hover 改为 click。
+   分析后暂不改：① 触摸设备上浏览器会为点按合成 `mouseenter`（antd Tooltip 默认 `trigger: "hover"` 可显示）；
+   ② 逐单元格改 trigger 需要每个单元格组件订阅断点（computed 行×列的订阅量）或引入 context 透传，代价与收益不相称。
+   **真机验证项**：若实测点按 Wp / 错误图标不显示提示，再按 context（`MobileLayoutContext`）方案补齐。
+2. **长按行菜单未真机验证**：未新增自定义长按计时逻辑，依赖 Android WebView 对长按触发的 `contextmenu`
+   （已配 CSS `-webkit-touch-callout/user-select` 抑制系统菜单）。**需真机确认**（`mobile-ui.spec.ts` 未覆盖右键菜单）。
+3. **真机 e2e 未执行**：`mobile-ui.spec.ts`（移动布局 + 返回键）已写好但**未在真机上跑过**；既有 `tcp-loop`/`rtu-ui`
+   也**未在真机上回归**（已入库的 UI 变动：顶栏新增两个按钮、表格固定列/行高、工具栏「更多」面板可能影响其定位器，需一并校验）。
+   另需 `pnpm build:android` 重建 APK（新增 `@capacitor/app` 需 `cap sync` 同步原生依赖）。
+4. **平板横屏（≥1024）未验证**：断点为 1023px，平板横屏走桌面布局；无设备/模拟方案落地（可用 CDP `Emulation.setDeviceMetricsOverride` 后续补）。
+5. **`@capacitor/app` 原生依赖同步**：`apps/android` 已声明 `@capacitor/app ^8.1.1`，但原生工程需 `pnpm build:android`（内含 `cap sync`）
+   才能生成对应 Gradle 依赖；**未跑构建前测试机上的返回键行为仍是系统默认**。
+
 ## 决策点
 
 1. **平台范围**：确认 Android 纳入产品范围，作为第四平台推进（PRD / TECH_DESIGN / AGENTS 同步更新）。
@@ -316,7 +390,7 @@ packages/ui/src/i18n/index.ts       # +errors.serialDriverUnsupported（其余�
 | Phase 0 | 本 ADR + PRD / TECH_DESIGN / AGENTS 同步 + 桥延迟 spike + CSP `worker-src` 修复 | 2–3 天 |
 | Phase 1 | `packages/platform-android`（能力矩阵 / 桥契约 / 错误映射 / TCP 传输 / PlatformHost）+ `apps/android`（Capacitor 工程 + app 内 Kotlin TCP 插件）+ `apps/web` 的 `--mode android` 与 `AndroidAppHost` + 真机 TCP e2e ——**已完成（2026-09-10，e2e 2/2 全绿）** | ~1 周 |
 | Phase 2 | USB-RS485 插件（枚举 / 授权 / detach / 错误映射）+ 真机 RTU 闭环 ——**实现已完成（2026-09-10）**；真机 UI 面 e2e 全绿，**USB 读写闭环待硬件** | 1–1.5 周 |
-| Phase 3 | 响应式布局 + 触摸交互 + 移动端生命周期 | 1–2 周 |
+| Phase 3 | 响应式布局 + 触摸交互 + 移动端生命周期 ——**落地（2026-09-10）**：移动布局（1023 断点 / 侧栏→Drawer / 底部面板→底部抽屉）+ 后台挂起恢复 + KeepAwake + 工具栏「更多」面板 + `@capacitor/app` 返回键/前后台；余项：真机 e2e 执行与长按确认（见 §14.4） | 1–2 周 |
 | Phase 4（另行确认） | BLE（BLE UART 优先）+ profile schema v9 + 文件导入导出/分享 | 1–2 周 |
 | Phase 5（另行确认） | 第三方脚本插件门控 + APK/AAB 打包签名 | 0.5–1 周 |
 
