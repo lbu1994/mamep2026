@@ -1186,6 +1186,34 @@ describe("commitCellText（Data 单元格提交校验）", () => {
     expect(useAppStore.getState().rowDirty[row.rowId]).toBeUndefined();
   });
 
+  it("提交非规范写法：写回规范文本并置编辑完成态（ADR-051）", () => {
+    resetRowStatus();
+    const row = addFirstRow();
+    const result = useAppStore.getState().commitCellText(row.rowId, "0005");
+    expect(result.ok).toBe(true);
+    const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    expect(updated?.cellText).toBe("5");
+    expect(useAppStore.getState().rowDirty[row.rowId]).toBe(true);
+  });
+
+  it("提交等价形式：写回规范文本但不置编辑完成态（ADR-051）", () => {
+    resetRowStatus();
+    const row = addFirstRow();
+    // 值与显示文本已是规范形式（hex 00AB），改输入小写等价写法。
+    useAppStore
+      .getState()
+      .updateRow(row.rowId, (r) => ({
+        ...r,
+        dataType: "hex",
+        cellText: "00AB",
+      }));
+    const result = useAppStore.getState().commitCellText(row.rowId, "00ab");
+    expect(result.ok).toBe(true);
+    const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    expect(updated?.cellText).toBe("00AB");
+    expect(useAppStore.getState().rowDirty[row.rowId]).toBeUndefined();
+  });
+
 // ---- 撤销/重做（TECH_DESIGN §24.4，PRD §8.3 P1）----
 describe("撤销/重做", () => {
   beforeEach(() => {

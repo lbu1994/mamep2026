@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRawValue, isScaled, isSigned, parseCellText } from "./data-types";
+import { formatRawValue, groupBinaryBits, isScaled, isSigned, parseCellText } from "./data-types";
 import type { DataType } from "@mamep2026/domain";
 
 function expectParse(text: string, type: DataType, expectedRaw: number): void {
@@ -90,22 +90,30 @@ describe("HEX type", () => {
 });
 
 describe("Binary type", () => {
-  it("formats as fixed 16 bits", () => {
-    expect(formatRawValue(0, "binary")).toBe("0000000000000000");
-    expect(formatRawValue(5, "binary")).toBe("0000000000000101");
-    expect(formatRawValue(0xffff, "binary")).toBe("1111111111111111");
+  it("formats as fixed 16 bits grouped every 8 bits（ADR-051）", () => {
+    expect(formatRawValue(0, "binary")).toBe("00000000 00000000");
+    expect(formatRawValue(5, "binary")).toBe("00000000 00000101");
+    expect(formatRawValue(0xffff, "binary")).toBe("11111111 11111111");
   });
 
-  it("parses 1-16 bits without 0b prefix or inner spaces", () => {
+  it("groups every 8 bits via groupBinaryBits", () => {
+    expect(groupBinaryBits("0000000011111111")).toBe("00000000 11111111");
+    expect(groupBinaryBits("0000000000000001")).toBe("00000000 00000001");
+  });
+
+  it("parses 1-16 bits ignoring whitespace, rejecting 0b prefix", () => {
     expectParse("101", "binary", 5);
     expectParse("1111111111111111", "binary", 0xffff);
     expectParse(" 101 ", "binary", 5);
+    expectParse("00000000 00000101", "binary", 5);
+    expectParse("0000\t0000\n0000 0101", "binary", 5);
   });
 
-  it("rejects 0b prefix, inner spaces, more than 16 bits and empty input", () => {
+  it("rejects 0b prefix, non-0/1 characters, more than 16 bits and empty input", () => {
     expectParseFail("0b101", "binary", "DATA_BINARY_INVALID");
-    expectParseFail("10 1", "binary", "DATA_BINARY_INVALID");
+    expectParseFail("10 2", "binary", "DATA_BINARY_INVALID");
     expectParseFail("11111111111111111", "binary", "DATA_BINARY_TOO_LONG");
+    expectParseFail("0000 0000 0000 0000 0", "binary", "DATA_BINARY_TOO_LONG");
     expectParseFail("", "binary", "DATA_EMPTY");
   });
 });

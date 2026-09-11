@@ -46,9 +46,17 @@ describe("formatRawValues (ADR-030)", () => {
     expect(formatRawValues([0x1234, 0xabcd], "hex")).toBe("1234 ABCD");
   });
 
-  it("formats binary as a concatenated bit string", () => {
+  it("formats binary grouped every 8 bits（ADR-051）", () => {
     expect(formatRawValues([0x0001, 0x0002], "binary")).toBe(
-      "00000000000000010000000000000010",
+      "00000000 00000001 00000000 00000010",
+    );
+    expect(formatRawValues([0x0001, 0x0002, 0x0003], "binary")).toBe(
+      "00000000 00000001 00000000 00000010 00000000 00000011",
+    );
+    expect(
+      formatRawValues([0xffff, 0xffff, 0xffff, 0xffff], "binary"),
+    ).toBe(
+      "11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111",
     );
   });
 
@@ -111,6 +119,15 @@ describe("parseCompositeText (ADR-030)", () => {
       valueOf(
         parseCompositeText(
           "00000000000000010000000000000010",
+          "binary",
+          2,
+        ),
+      ),
+    ).toEqual([1, 2]);
+    expect(
+      valueOf(
+        parseCompositeText(
+          "00000000 00000001 00000000 00000010",
           "binary",
           2,
         ),
@@ -194,7 +211,7 @@ describe("round-trip (ADR-030)", () => {
   it("formatRawValues(parseCompositeText(text)) normalizes to display form", () => {
     const cases: Array<[string, import("@mamep2026/domain").DataType, number]> = [
       ["1234 ABCD", "hex", 2],
-      ["00000000000000010000000000000010", "binary", 2],
+      ["00000000 00000001 00000000 00000010", "binary", 2],
       ["65538", "unsigned", 2],
       ["-1", "signed", 2],
       ["18446744073709551615", "unsigned", 4],

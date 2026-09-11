@@ -70,13 +70,22 @@ export function getScaleDigits(type: DataType): number {
   return SCALE_DIGITS[type] ?? 0;
 }
 
+/**
+ * 二进制位串按每 8 位（1 字节）一组加单空格（ADR-051）：
+ * 16 位 → `00000000 11111111`；32 位 4 组、48 位 6 组、64 位 8 组。
+ * 单寄存器与范围行共用（范围行不额外强调寄存器边界，统一单空格）。
+ */
+export function groupBinaryBits(bits: string): string {
+  return bits.replace(/(.{8})(?=.)/g, "$1 ");
+}
+
 /** 把原始值按类型格式化为单元格显示文本。 */
 export function formatRawValue(raw: number, type: DataType): string {
   switch (type) {
     case "hex":
       return raw.toString(16).toUpperCase().padStart(4, "0");
     case "binary":
-      return raw.toString(2).padStart(16, "0");
+      return groupBinaryBits(raw.toString(2).padStart(16, "0"));
     case "string":
       return String.fromCharCode((raw >> 8) & 0xff, raw & 0xff);
     case "bool":
@@ -175,16 +184,22 @@ function parseHex(text: string): Result<number> {
   return ok(Number.parseInt(hexPart, 16));
 }
 
+/**
+ * 二进制解析（ADR-051）：忽略任意空白（空格/制表/换行）后校验，位数上限按去空白后的位数判定；
+ * 与范围行 `parseCompositeBinary` 对称，便于粘贴已分组的文本（如 `0000 0000 1111 1111`）。
+ * 仍不接受 `0b` 前缀。
+ */
 function parseBinary(text: string): Result<number> {
-  if (!/^[01]+$/.test(text)) {
+  const compact = text.replace(/\s+/g, "");
+  if (!/^[01]+$/.test(compact)) {
     return fail(
       dataError(
         "DATA_BINARY_INVALID",
-        `binary input must only contain 0 and 1 without prefix or spaces: ${JSON.stringify(text)}`,
+        `binary input must only contain 0 and 1 without prefix: ${JSON.stringify(text)}`,
       ),
     );
   }
-  if (text.length > 16) {
+  if (compact.length > 16) {
     return fail(
       dataError(
         "DATA_BINARY_TOO_LONG",
@@ -192,7 +207,7 @@ function parseBinary(text: string): Result<number> {
       ),
     );
   }
-  return ok(Number.parseInt(text, 2));
+  return ok(Number.parseInt(compact, 2));
 }
 
 /** 单寄存器字符串（registerCount=1，ADR-030）：最多 2 字符，高字节在前，不足补空格。 */

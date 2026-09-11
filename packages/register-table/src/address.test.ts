@@ -60,7 +60,7 @@ describe("commitAddress (hex)", () => {
 });
 
 describe("commitAddress (dec)", () => {
-  it("commits a valid decimal draft keeping trimmed original text", () => {
+  it("commits a valid decimal draft and normalizes to plain decimal", () => {
     const row = createEmptyRow();
     const result = commitAddress(row, " 31 ", "dec");
     expect(result.ok).toBe(true);
@@ -70,13 +70,13 @@ describe("commitAddress (dec)", () => {
     }
   });
 
-  it("keeps leading zeros in dec mode (no padding applied)", () => {
+  it("normalizes away leading zeros in dec mode（ADR-051）", () => {
     const row = createEmptyRow();
     const result = commitAddress(row, "0031", "dec");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.addressValue?.value).toBe(31);
-      expect(result.value.addressDraft).toBe("0031");
+      expect(result.value.addressDraft).toBe("31");
     }
   });
 
@@ -96,7 +96,11 @@ describe("commitAddress (dec)", () => {
   it("treats blank input as empty address (no request to send)", () => {
     const result = commitAddress(createEmptyRow(), "   ", "dec");
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.addressValue).toBeNull();
+    if (result.ok) {
+      expect(result.value.addressValue).toBeNull();
+      // 空输入归一为 ""（ADR-051）。
+      expect(result.value.addressDraft).toBe("");
+    }
   });
 });
 

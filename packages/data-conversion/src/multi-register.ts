@@ -17,7 +17,7 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
-import { getScaleDigits, isScaled, isSigned } from "./data-types";
+import { getScaleDigits, groupBinaryBits, isScaled, isSigned } from "./data-types";
 
 const DECIMAL_ALLOWED = [1, 2, 4];
 const BINARY_ALLOWED = [1, 2, 3, 4];
@@ -78,9 +78,12 @@ export function formatRawValues(values: number[], type: DataType): string {
         .map((value) => value.toString(16).toUpperCase().padStart(4, "0"))
         .join(" ");
     case "binary":
-      return values
-        .map((value) => value.toString(2).padStart(16, "0"))
-        .join("");
+      // 每 8 位一组（ADR-051）：32 位 4 组、48 位 6 组、64 位 8 组。
+      return groupBinaryBits(
+        values
+          .map((value) => value.toString(2).padStart(16, "0"))
+          .join(""),
+      );
     case "string":
       return decodeAscii(values);
     case "unsigned":
@@ -231,7 +234,7 @@ function parseCompositeHex(
   return ok(values);
 }
 
-/** binary：位串（可带空格分隔 16 位组），不足 registerCount*16 位前补零。 */
+/** binary：位串（忽略任意空白，与单寄存器 parseBinary 对称，ADR-051），不足 registerCount*16 位前补零。 */
 function parseCompositeBinary(
   text: string,
   registerCount: number,

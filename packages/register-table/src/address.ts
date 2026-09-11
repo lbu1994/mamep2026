@@ -2,7 +2,8 @@
  * 地址提交与 Address Adjust（docs/AGENTS.md §17.2、ADR-013、ADR-014、ADR-030）。
  * - 编辑态 addressDraft 与提交值 addressValue 分离；
  * - 校验失败保留用户输入并返回结构化错误；
- * - 成功提交后按进制归一化：HEX 4 位大写补零；DEC 去首尾空格（不补零）；
+ * - 成功提交后按进制规范化（ADR-051，2026-09-11）：HEX 4 位大写补零；DEC 去前导零（不再保留
+ *   用户原文）；范围行两端各自规范化；空输入归一为 ""；
  * - 范围行（ADR-030）：draft 支持 `start-end`，提交后更新 registerCount（覆盖寄存器数）；
  * - Address Adjust（ADR-042 插件 Phase D；2026-09-02 插件外部化）：表级 addressTransform 配置
  *   → 运行时变换 apply，ON 时发送地址 = 用户地址 − 1（0 下溢报错），日志记录双地址。
@@ -38,12 +39,11 @@ export function commitAddress(
     parsedValue === null ? null : RegisterAddress.create(parsedValue.value);
   if (addressResult !== null && !addressResult.ok) return addressResult;
   const count = parsedValue === null ? 1 : parsedValue.count;
+  // 规范化（ADR-051）：HEX 4 位大写补零；DEC 去前导零；范围行两端各自规范化；空输入归一为 ""。
   const normalizedDraft =
     parsedValue === null
-      ? draft
-      : radix === "hex"
-        ? formatRegisterAddressRange(parsedValue.value, count, radix)
-        : draft.trim();
+      ? ""
+      : formatRegisterAddressRange(parsedValue.value, count, radix);
   return ok({
     ...row,
     addressDraft: normalizedDraft,

@@ -1,9 +1,11 @@
 /**
  * 行剪贴板模型（纯函数）。
  * - 复制/剪切只携带可粘贴字段，运行时状态（轮询/追踪/结果值）一律清零；
- * - 地址以内部十进制数值传递，粘贴时按目标表进制重新格式化，避免跨表进制歧义；
+ * - 地址以内部十进制数值传递，粘贴时按目标表进制重新格式化（ADR-051：与提交路径同源规范化），
+ *   避免跨表进制歧义；
  * - 系统剪贴板 CSV：表头 Name,Register,Data,Type,Comment，Register 为十进制数值；
  *   多寄存器范围行（ADR-030）编码为 "start-end"（十进制），解码时恢复 registerCount；
+ * - Data 文本粘贴时按行自身 Type 规范化（ADR-051）：解析成功写回规范显示文本，失败保留原文；
  * - 非法数据不得静默丢弃：粘贴返回结构化 issue 汇总（docs/AGENTS.md §32-26）。
  */
 import {
@@ -15,7 +17,11 @@ import {
   type RegisterRow,
   type RegisterSheet,
 } from "@mamep2026/domain";
-import { formatRegisterAddress, formatRegisterAddressRange } from "@mamep2026/data-conversion";
+import {
+  formatRegisterAddressRange,
+  type DataTypeResolver,
+} from "@mamep2026/data-conversion";
+import { canonicalCellText } from "./cell-text";
 import { resizeRegisters } from "./child-register";
 import { renumberRows } from "./row-operations";
 
@@ -82,13 +88,16 @@ export function cutRowsFromSheet(
 
 /**
  * 在目标行之后粘贴载荷行（新 rowId、运行时状态清零、renumber）；
- * 目标行不存在时追加末尾；地址按目标表进制重新格式化。
+ * 目标行不存在时追加末尾；地址按目标表进制重新格式化；
+ * Data 文本按行自身 Type 规范化（ADR-051；解析失败保留原文，不静默丢弃）。
+ * resolver 用于插件类型（缺省仅内置）。
  */
 export function pasteClipboardRows(
   sheet: RegisterSheet,
   afterRowId: string,
   payload: readonly RowClipboardData[],
   radix: RegisterRadix,
+  resolver?: DataTypeResolver,
 ): { sheet: RegisterSheet; issues: ClipboardIssue[] } {
   const issues: ClipboardIssue[] = [];
   const newRows = payload.map((data, index) => {
@@ -96,24 +105,23 @@ export function pasteClipboardRows(
     row.name = data.name;
     row.comment = data.comment;
     row.dataType = data.dataType;
-    row.cellText = data.cellText;
     // 多寄存器范围行（ADR-030）：恢复覆盖寄存器数（运行时 registerValues 清零）。
     row.registerCount = data.registerCount;
     // 子行元数据初始化（2026-08-27）：按父行 dataType 生成默认数组（剪贴板不携带子行元数据）。
     row.registers = resizeRegisters(row, data.registerCount);
+    // Data 文本规范化（ADR-051）：成功写回规范文本；失败保留原文（错误在写入/编辑时按既有校验提示）。
+    const canonical = canonicalCellText(row, data.cellText, resolver);
+    row.cellText = canonical.ok ? canonical.value : data.cellText;
     if (data.addressValue !== null) {
       const addressResult = RegisterAddress.create(data.addressValue);
       if (addressResult.ok) {
         row.addressValue = addressResult.value;
-        // 范围行（ADR-030）：addressDraft 用范围格式化（"start-end"），与 commitAddress 一致。
-        row.addressDraft =
-          data.registerCount > 1
-            ? formatRegisterAddressRange(
-                addressResult.value.value,
-                data.registerCount,
-                radix,
-              )
-            : formatRegisterAddress(addressResult.value.value, radix);
+        // 地址按目标表进制规范化（ADR-051）：范围行 "start-end"，单地址等同。
+        row.addressDraft = formatRegisterAddressRange(
+          addressResult.value.value,
+          data.registerCount,
+          radix,
+        );
       } else {
         issues.push({ rowIndex: index, code: "INVALID_ADDRESS" });
       }

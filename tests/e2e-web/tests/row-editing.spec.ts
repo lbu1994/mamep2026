@@ -45,6 +45,29 @@ function selectionCheckbox(page: Page, index: number) {
   );
 }
 
+/** 拦截 navigator.clipboard（writeText 记录 + readText 返回最近一次写入），
+ *  避免 E2E 依赖系统剪贴板权限（与 comm-log.spec / range-row.spec 同模式）。 */
+async function interceptClipboard(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const writes: string[] = [];
+    (window as unknown as { __clipboardWrites: string[] }).__clipboardWrites =
+      writes;
+    try {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          writeText: async (text: string) => {
+            writes.push(text);
+          },
+          readText: async () => writes[writes.length - 1] ?? "",
+        },
+        configurable: true,
+      });
+    } catch {
+      // 忽略替换失败，测试后续会给出明确失败信息。
+    }
+  });
+}
+
 test("row context menu inserts an empty row below the target", async ({
   page,
 }) => {
@@ -202,4 +225,67 @@ test("Register column keeps showing validation error after a valid address exist
     target.locator(".register-table__editable-cell-value-wrap--error"),
   ).toBeVisible();
   await expect(target.getByLabel("Register").first()).toHaveText("xyz");
+});
+
+test("单元格提交后按类型规范化（ADR-051）", async ({ page }) => {
+  await openApp(page);
+  const base = await rowCount(page);
+  await addRows(page, 3);
+
+  // DEC 地址：去掉前导零。
+  const decTarget = row(page, base);
+  const decAddress = decTarget.getByLabel("Register").first();
+  await decAddress.click();
+  await decAddress.fill("0031");
+  await decAddress.press("Enter");
+  await expect(decAddress).toHaveText("31");
+
+  // HEX Data：去空格、去 0x 前缀、补零大写。
+  const hexTarget = row(page, base + 1);
+  const hexData = hexTarget.getByLabel("Data");
+  await hexData.click();
+  await hexData.fill(" ab ");
+  await hexData.press("Enter");
+  await expect(hexData).toHaveText("00AB");
+
+  // Unsigned Data：去掉前导零。
+  const unsignedTarget = row(page, base + 2);
+  await unsignedTarget.getByLabel("Type").click();
+  await page
+    .locator(".ant-select-dropdown:visible [title='Unsigned Dec.']")
+    .click();
+  const unsignedData = unsignedTarget.getByLabel("Data");
+  await unsignedData.click();
+  await unsignedData.fill("0005");
+  await unsignedData.press("Enter");
+  await expect(unsignedData).toHaveText("5");
+});
+
+test("粘贴时按行类型规范化 Data 文本（ADR-051）", async ({ page }) => {
+  await interceptClipboard(page);
+  await openApp(page);
+  // 注入未规范化的 CSV：hex 小写、unsigned 前导零、binary 未分组、非法值保留。
+  const csv = [
+    "Name,Register,Data,Type,Comment",
+    "A,16,1f,hex,",
+    "B,17,0005,unsigned,",
+    "C,18,101,binary,",
+    "D,19,zz,unsigned,",
+  ].join("\n");
+  await page.evaluate(
+    async (text) => await navigator.clipboard.writeText(text),
+    csv,
+  );
+
+  // 选中首行作为粘贴锚点后 Ctrl+V（与既有剪贴板用例同模式）。
+  await selectionCheckbox(page, 0).check();
+  await page.keyboard.press("Control+v");
+
+  await expect(row(page, 1).getByLabel("Data")).toHaveText("001F");
+  await expect(row(page, 2).getByLabel("Data")).toHaveText("5");
+  await expect(row(page, 3).getByLabel("Data")).toHaveText(
+    "00000000 00000101",
+  );
+  // 非法文本保留原文（写入/编辑时仍按既有校验提示）。
+  await expect(row(page, 4).getByLabel("Data")).toHaveText("zz");
 });

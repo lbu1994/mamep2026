@@ -89,6 +89,19 @@ describe("buildTreeRows", () => {
     expect(children[1]?.cellText).toBe("4660");
   });
 
+  it("formats a binary child value grouped every 8 bits（ADR-051）", () => {
+    const row = makeRow({
+      registerCount: 2,
+      registerValues: [{ value: 0x1111 }, { value: 0x00f0 }],
+      dataType: "binary",
+      registers: null,
+    });
+    const tree = buildTreeRows([row]);
+    const children = (tree[0] as { children?: Array<{ cellText: string }> }).children ?? [];
+    expect(children[0]?.cellText).toBe("00010001 00010001");
+    expect(children[1]?.cellText).toBe("00000000 11110000");
+  });
+
   it("falls back to parent dataType when registers meta is missing", () => {
     const row = makeRow({
       registerCount: 2,

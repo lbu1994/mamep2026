@@ -817,6 +817,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         : { ...r, cellText: text, updatedAt: Date.now() },
     );
     // 校验结果 → 行状态：成功清校验错误并置编辑完成态；失败记录校验错误、清设备失败/成功态。
+    // after 用规范化后的文本（ADR-051）：输入等价形式（如 00AB 手输 00ab）不视为值变化。
     set((state) => {
       const next = applyCellCommit(
         {
@@ -827,7 +828,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
         rowId,
         row.cellText,
-        text,
+        result.ok ? result.value.cellText : text,
         result,
       );
       return {
@@ -1217,6 +1218,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       targetId,
       payload,
       sheet.registerRadix,
+      // Data 文本按行 Type 规范化（ADR-051）：插件类型经注入 resolver。
+      get().dataTypeResolver,
     );
     const allIssues = [...issues, ...pasteIssues];
     set({

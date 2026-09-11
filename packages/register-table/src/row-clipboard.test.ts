@@ -141,6 +141,68 @@ describe("pasteClipboardRows", () => {
     expect(updated.rows[1]?.name).toBe("X");
     expect(updated.rows[1]?.addressDraft).toBe("0010");
   });
+
+  it("normalizes pasted cell text by row type, keeping invalid text as-is（ADR-051）", () => {
+    const sheet = sheetWithRows(1);
+    const normalizedPayload: RowClipboardData[] = [
+      {
+        name: "H",
+        addressValue: null,
+        registerCount: 1,
+        dataType: "hex",
+        cellText: "1f",
+        comment: "",
+      },
+      {
+        name: "B",
+        addressValue: null,
+        registerCount: 1,
+        dataType: "binary",
+        cellText: "101",
+        comment: "",
+      },
+      {
+        name: "U",
+        addressValue: null,
+        registerCount: 1,
+        dataType: "unsigned",
+        cellText: "0005",
+        comment: "",
+      },
+      {
+        name: "Bad",
+        addressValue: null,
+        registerCount: 1,
+        dataType: "unsigned",
+        cellText: "zz",
+        comment: "",
+      },
+      {
+        name: "R",
+        addressValue: 0x10,
+        registerCount: 2,
+        dataType: "hex",
+        cellText: "1234abcd",
+        comment: "",
+      },
+    ];
+    const { sheet: updated, issues } = pasteClipboardRows(
+      sheet,
+      "missing",
+      normalizedPayload,
+      "dec",
+    );
+    expect(updated.rows.slice(1).map((row) => row.cellText)).toEqual([
+      "001F",
+      "00000000 00000101",
+      "5",
+      "zz",
+      "1234 ABCD",
+    ]);
+    // 地址按目标表进制规范化（范围行 "start-end"）。
+    expect(updated.rows[5]?.addressDraft).toBe("16-17");
+    expect(issues).toEqual([]);
+  });
 });
 
 describe("clipboard CSV encode/decode", () => {
