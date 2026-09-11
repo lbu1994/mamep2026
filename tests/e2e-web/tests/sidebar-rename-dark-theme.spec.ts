@@ -36,14 +36,16 @@ function sidebarItem(page: Page, name: string) {
     .filter({ hasText: new RegExp(`^${name}$`) });
 }
 
-/** 打开 Settings 弹窗并把主题切到 Dark，随后关闭弹窗。 */
+/** 打开 Settings 抽屉并把主题切到 Dark，随后关闭抽屉（2026-09-12：容器为 Drawer）。 */
 async function switchToDarkTheme(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: "Settings" })
     .evaluate((el) => (el as HTMLElement).click());
-  await page.waitForSelector(".ant-modal-container:visible", { timeout: 5000 });
+  await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+    timeout: 5000,
+  });
   await page
-    .locator(".ant-modal-container:visible .ant-segmented-item-label")
+    .locator(".settings-drawer .ant-segmented-item-label")
     .filter({ hasText: "Dark" })
     .first()
     .click();
@@ -52,11 +54,12 @@ async function switchToDarkTheme(page: Page): Promise<void> {
     "data-mamep-theme",
     "dark",
   );
-  await page
-    .locator(".ant-modal-container:visible .ant-modal-close")
-    .first()
-    .click();
-  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+  await page.locator(".settings-drawer .ant-drawer-close").first().click();
+  // 等离场动画结束，避免后续侧边栏交互落在仍在收起的抽屉/遮罩上。
+  await expect(
+    page.locator(".settings-drawer .ant-drawer-content-wrapper"),
+  ).toBeHidden();
+  await expect(page.locator(".settings-drawer.ant-drawer-open")).toHaveCount(0);
 }
 
 test("暗黑模式侧边栏 Rename 输入框跟随主题（非白底黑字）", async ({ page }) => {

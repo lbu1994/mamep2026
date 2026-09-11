@@ -1,8 +1,8 @@
 /**
- * Settings 弹窗（2026-09-11 构建产物代码分割：自 MamepApp 抽出为独立组件，
- * 由 MamepApp 经 `React.lazy` 按需加载）。
+ * Settings 抽屉（2026-09-12：容器由 Modal 改为右侧 Drawer，侧滑展开）。
  *
- * 内容与行为与抽出前完全一致：
+ * 由来：2026-09-11 构建产物代码分割时自 MamepApp 抽出为独立组件（`React.lazy` 按需加载），
+ * 本轮仅替换外层容器，**内容与行为零改动**：
  * - 主题明暗（`settings.themeLight/Dark`）；
  * - 主题色预设下拉（ADR-047/048：内置默认蓝 + 各启用插件注册色）；
  * - 界面语言（随工作区偏好持久化）；
@@ -12,13 +12,24 @@
  *
  * 组件自读 store（`settingsModalOpen` 等），仅需 `host` 读取插件贡献与重置工作区；
  * 主题装配链（基础主题 + 所选预设 merge）仍由 MamepApp 负责，不影响 ConfigProvider。
+ *
+ * 宽度策略：Drawer 的 `width`/`height` 在 antd v6 已弃用（且非纯数字字符串会触发
+ * rc-drawer 的「Invalid value type of width or height」警告），故用数值 `size={420}`，
+ * 窄屏兜底交给 `.settings-drawer` 的 CSS `max-width: 100vw`（apps/web/src/index.css）。
+ *
+ * 类名用 `rootClassName`（而非 `className`）：antd v6 的 `className` 落在内容面板
+ * （`.ant-drawer-section`）上，而开合类 `.ant-drawer-open`、`.ant-drawer-mask`、
+ * `.ant-drawer-content-wrapper` 都在**根元素**上；用根级类才能同时限定遮罩、宽度与开合态
+ * （e2e 断言 `.settings-drawer.ant-drawer-open`）。
+ *
+ * 关闭方式：右上角关闭按钮 / `Esc` / 点击遮罩（antd 默认行为，与改造前 Modal 一致）。
  */
 import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Button,
   Divider,
-  Modal,
+  Drawer,
   Popconfirm,
   Segmented,
   Select,
@@ -55,7 +66,7 @@ function themeColorOptionLabel(title: string, color: string): ReactNode {
   );
 }
 
-export function SettingsModal({
+export function SettingsDrawer({
   host,
 }: {
   host: AppHost | null;
@@ -80,7 +91,7 @@ export function SettingsModal({
     () => buildThemeColorOptions(themeContributions),
     [themeContributions],
   );
-  // settings 贡献消费方（ADR-039）：Settings 弹窗分区（声明式标题占位）。
+  // settings 贡献消费方（ADR-039）：设置分区（声明式标题占位）。
   const settingsContributions = usePluginContributions<SettingsContribution>(
     host,
     "settings",
@@ -110,11 +121,13 @@ export function SettingsModal({
   };
 
   return (
-    <Modal
+    <Drawer
       title={t("settings.title")}
+      placement="right"
+      size={420}
       open={open}
-      onCancel={() => setOpen(false)}
-      footer={null}
+      onClose={() => setOpen(false)}
+      rootClassName="settings-drawer"
     >
       <Space orientation="vertical" style={{ width: "100%" }}>
         <div>
@@ -207,6 +220,6 @@ export function SettingsModal({
           {t("settings.aboutText")}
         </Typography.Paragraph>
       </Space>
-    </Modal>
+    </Drawer>
   );
 }

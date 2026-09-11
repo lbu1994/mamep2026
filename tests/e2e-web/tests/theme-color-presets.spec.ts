@@ -34,19 +34,24 @@ async function openApp(page: Page): Promise<string[]> {
   return errors;
 }
 
+/** 打开 Settings 抽屉（2026-09-12：容器由 Modal 改为 Drawer，类名 .settings-drawer）。 */
 async function openSettings(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: "Settings" })
     .evaluate((el) => (el as HTMLElement).click());
-  await page.waitForSelector(".ant-modal-container:visible", { timeout: 5000 });
+  await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+    timeout: 5000,
+  });
 }
 
-async function closeModal(page: Page): Promise<void> {
-  await page
-    .locator(".ant-modal-container:visible .ant-modal-close")
-    .first()
-    .click();
-  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+/** 关闭 Settings 抽屉（点击抽屉右上角关闭按钮；Plugin Manager 仍为 Modal，不共用本助手）。 */
+async function closeSettings(page: Page): Promise<void> {
+  await page.locator(".settings-drawer .ant-drawer-close").first().click();
+  // 等离场动画结束（开合类即时移除，内容 wrapper 才 finally display:none）。
+  await expect(
+    page.locator(".settings-drawer .ant-drawer-content-wrapper"),
+  ).toBeHidden();
+  await expect(page.locator(".settings-drawer.ant-drawer-open")).toHaveCount(0);
 }
 
 /** 打开 Plugin Manager 弹窗，返回弹窗定位器。 */
@@ -167,7 +172,7 @@ test("默认仅内置 Ant Design 默认蓝；插件色不自动应用（ADR-047 
   await expect(optionsBefore.filter({ hasText: "Default blue" })).toHaveCount(1);
   await expect(optionsBefore.filter({ hasText: "Indigo" })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await closeModal(page);
+  await closeSettings(page);
 
   // 手动安装 example-theme 后：可选主题色出现，但仍不自动应用。
   await installExampleTheme(page);
@@ -178,7 +183,7 @@ test("默认仅内置 Ant Design 默认蓝；插件色不自动应用（ADR-047 
   await expect(optionsAfter.filter({ hasText: "Default blue" })).toHaveCount(1);
   await expect(optionsAfter.filter({ hasText: "Indigo" })).toHaveCount(1);
   await page.keyboard.press("Escape");
-  await closeModal(page);
+  await closeSettings(page);
 
   await expect.poll(() => primaryButtonColor(page)).toBe(hexToRgb(antdBlue));
 
@@ -197,7 +202,7 @@ test("默认蓝跟随 antd 令牌：--mamep-brand-primary 与 --ant-color-primar
   // 切深色：antd 令牌更新，mamep 令牌同步跟随。
   await openSettings(page);
   await page
-    .locator(".ant-modal-container:visible .ant-segmented-item-label")
+    .locator(".settings-drawer .ant-segmented-item-label")
     .filter({ hasText: "Dark" })
     .first()
     .click();
@@ -209,7 +214,7 @@ test("默认蓝跟随 antd 令牌：--mamep-brand-primary 与 --ant-color-primar
     .not.toBe(lightAntd);
   const darkAntd = await antdPrimary(page);
   await expect.poll(() => brandPrimary(page)).toBe(darkAntd);
-  await closeModal(page);
+  await closeSettings(page);
 
   expect(errors).toEqual([]);
 });
@@ -239,7 +244,7 @@ test("选中插件色：antd token 与 CSS 变量同步 + reload 持久化", asy
   await expect.poll(() => primaryButtonColor(page)).toBe("rgb(79, 70, 229)");
 
   // 持久化：关闭弹窗 → 刷新 → 仍是靛蓝。
-  await closeModal(page);
+  await closeSettings(page);
   await page.waitForTimeout(1000);
   await page.reload();
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
@@ -251,7 +256,7 @@ test("选中插件色：antd token 与 CSS 变量同步 + reload 持久化", asy
     .locator(".ant-select-dropdown:visible .ant-select-item-option");
   await expect(options.filter({ hasText: "Indigo" })).toHaveCount(1);
   await page.keyboard.press("Escape");
-  await closeModal(page);
+  await closeSettings(page);
   await expect.poll(() => brandPrimary(page)).toBe(INDIGO);
 
   expect(errors).toEqual([]);
@@ -266,7 +271,7 @@ test("选中插件色后切深色：主色由 antd 算法派生，CSS 变量与 
   await selectThemeColor(page, "Indigo");
   // 切深色（Settings 内 Light/Dark Segmented）。
   await page
-    .locator(".ant-modal-container:visible .ant-segmented-item-label")
+    .locator(".settings-drawer .ant-segmented-item-label")
     .filter({ hasText: "Dark" })
     .first()
     .click();
@@ -282,7 +287,7 @@ test("选中插件色后切深色：主色由 antd 算法派生，CSS 变量与 
   await expect.poll(() => brandPrimary(page)).toBe(darkAntd);
   // 主按钮背景 = 派生后的暗色主色。
   await expect.poll(() => primaryButtonColor(page)).toBe(hexToRgb(darkAntd));
-  await closeModal(page);
+  await closeSettings(page);
   expect(errors).toEqual([]);
 });
 
@@ -292,7 +297,7 @@ test("禁用插件后选项消失、已选色回退默认（ADR-047）", async (
   await installExampleTheme(page);
   await openSettings(page);
   await selectThemeColor(page, "Indigo");
-  await closeModal(page);
+  await closeSettings(page);
 
   // 禁用 example-theme（按插件行定位，而非第一个 = example-panel）。
   const modal = await openPluginManager(page);
@@ -324,7 +329,7 @@ test("禁用插件后选项消失、已选色回退默认（ADR-047）", async (
   await expect(options.filter({ hasText: "Default blue" })).toHaveCount(1);
   await expect(options.filter({ hasText: "Indigo" })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await closeModal(page);
+  await closeSettings(page);
 
   expect(errors).toEqual([]);
 });

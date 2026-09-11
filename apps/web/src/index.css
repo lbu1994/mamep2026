@@ -1830,3 +1830,15 @@ textarea:focus-visible {
   border-radius: 4px;
   padding: 3px 5px;
 }
+
+/* ---------------- 8. Settings 抽屉（2026-09-12，容器由 Modal 改为 Drawer） ---------------- */
+
+/*
+ * 宽度用数值 size={420}（antd v6 的 width/height 已弃用，非纯数字字符串会触发 rc-drawer
+ * 警告），窄屏（含手机竖屏）在此兜底为不超出视口。
+ * 类名是 Drawer 的 `rootClassName`（根元素 .ant-drawer）：antd v6 的 `className` 落在
+ * 内容面板 .ant-drawer-section 上，而 content-wrapper / mask / 开合类都在根元素。
+ */
+.settings-drawer .ant-drawer-content-wrapper {
+  max-width: 100vw;
+}

@@ -33,23 +33,31 @@ async function setName(page: Page, index: number, name: string): Promise<void> {
   await nameInput.press("Enter");
 }
 
-/** 打开 Settings 弹窗（顶栏按钮），返回弹窗定位器。 */
+/**
+ * 打开 Settings 抽屉（顶栏按钮；2026-09-12：容器由 Modal 改为 Drawer），返回抽屉定位器。
+ * 注意：开合类 `.ant-drawer-open` 在抽屉**根元素**上（antd v6 的 `className` 落在内容面板
+ * `.ant-drawer-section`，故组件用 `rootClassName`）；关闭后根元素仍留在 DOM（仅内容 wrapper
+ * 被置 `display:none`），因此开合判定一律用 `.settings-drawer.ant-drawer-open`。
+ */
 async function openSettings(page: Page) {
   await page.getByRole("button", { name: "Settings" }).click();
-  const modal = page
-    .locator(".ant-modal-container")
+  await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+    timeout: 5000,
+  });
+  return page
+    .locator(".settings-drawer")
     .filter({ hasText: "Reset Workspace" });
-  await expect(modal).toBeVisible();
-  return modal;
 }
 
-/** 关闭 Settings 弹窗（点击弹窗关闭按钮）。 */
+/** 关闭 Settings 抽屉（点击抽屉右上角关闭按钮）。 */
 async function closeSettings(page: Page): Promise<void> {
-  const modal = page
-    .locator(".ant-modal-container")
-    .filter({ hasText: "Reset Workspace" });
-  await modal.getByRole("button", { name: "Close" }).click();
-  await expect(modal).toBeHidden();
+  await page.locator(".settings-drawer .ant-drawer-close").first().click();
+  // 等离场动画结束：开合类即时移除，但内容 wrapper 要动画跑完才置 display:none；
+  // 只等开合类会在动画期间继续操作（点击被遮罩/抽屉吞掉）→ 后续步骤失败。
+  await expect(
+    page.locator(".settings-drawer .ant-drawer-content-wrapper"),
+  ).toBeHidden();
+  await expect(page.locator(".settings-drawer.ant-drawer-open")).toHaveCount(0);
 }
 
 /** 读取下载文件全部内容（UTF-8）。 */

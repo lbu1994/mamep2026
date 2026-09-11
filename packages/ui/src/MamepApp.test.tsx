@@ -228,11 +228,13 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     expect(useAppStore.getState().helpModalOpen).toBe(true);
   });
 
-  it("Ctrl+, 打开设置弹窗", async () => {
+  it("Ctrl+, 打开设置抽屉（容器为 Drawer）", async () => {
     render(<MamepApp />);
     fireAppKey(",", { ctrl: true });
     await screen.findByText("Theme", undefined, LAZY_MOUNT_TIMEOUT);
     expect(useAppStore.getState().settingsModalOpen).toBe(true);
+    // 2026-09-12：容器由 Modal 改为 Drawer（store 字段名保留 settingsModalOpen）。
+    expect(document.querySelector(".settings-drawer")).not.toBeNull();
   });
 
   it("Ctrl+Enter 未连接时打开连接设置弹窗", async () => {

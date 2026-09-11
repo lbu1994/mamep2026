@@ -97,6 +97,9 @@ import { useOpenedOnce } from "./opened-once";
  * 挂起时会把该 boundary 下的其余兄弟节点一并卸载（弹窗互相消失）。挂载门控见
  * `useOpenedOnce`（首次打开才挂载，此后常驻以保留 antd 关闭动画）。
  *
+ * Settings 于 2026-09-12 由 Modal 改为右侧 Drawer（`SettingsDrawer`）；仍是懒加载 +
+ * `useOpenedOnce` 门控，store 字段名（`settingsModalOpen`）保持不变。
+ *
  * `ConnectionSettingsModal` **保持静态导入**：非 mock（浏览器/Electron/VSCode）启动后
  * 工作区加载完成即自动打开，属首屏路径——懒加载只会多一次异步跳变（实测会让「启动弹窗」
  * 晚于 e2e 的等待窗口出现）。
@@ -117,9 +120,9 @@ const WorkspaceImportModal = lazy(() =>
 const TraceWindow = lazy(() =>
   import("./components/TraceWindow").then((m) => ({ default: m.TraceWindow })),
 );
-const SettingsModal = lazy(() =>
-  import("./components/SettingsModal").then((m) => ({
-    default: m.SettingsModal,
+const SettingsDrawer = lazy(() =>
+  import("./components/SettingsDrawer").then((m) => ({
+    default: m.SettingsDrawer,
   })),
 );
 
@@ -210,7 +213,7 @@ export function MamepApp(): React.ReactNode {
   const themePrimary = useAppStore((s) => s.themePrimary);
   // 宿主完整主题（VSCode ui-theme 装配，ADR-027）；null=回退 buildTheme 两态。
   const themeConfig = useAppStore((s) => s.themeConfig);
-  // 插件主题贡献（2026-09-02，ADR-047）：此处仅用于解析所选预设（选项列表由 SettingsModal
+  // 插件主题贡献（2026-09-02，ADR-047）：此处仅用于解析所选预设（选项列表由 SettingsDrawer
   // 自行读取）；**不再自动应用**（ADR-042 插件层最高优先已移除）。
   const themeContributions = usePluginContributions<ThemeContribution>(
     host,
@@ -231,7 +234,7 @@ export function MamepApp(): React.ReactNode {
           themeConfigForColorOption(selectedThemeColor),
         );
   // 文档贡献（ADR-043 E-5）：Help 弹窗渲染插件寄存器手册等。
-  // （settings 贡献消费方已随 Settings 抽出到 SettingsModal，2026-09-11 代码分割。）
+  // （settings 贡献消费方已随 Settings 抽出到 SettingsDrawer，2026-09-11 代码分割。）
   const documentationContributions =
     usePluginContributions<DocumentationContribution>(host, "documentation");
   // 表类型贡献（ADR-041）：侧边栏按协议分组，插件组动态加载（插件启用 + 能力矩阵支持）。
@@ -1216,7 +1219,7 @@ export function MamepApp(): React.ReactNode {
 
         {settingsMounted && (
           <Suspense fallback={null}>
-            <SettingsModal host={host} />
+            <SettingsDrawer host={host} />
           </Suspense>
         )}
 
