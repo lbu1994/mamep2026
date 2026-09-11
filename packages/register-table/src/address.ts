@@ -25,6 +25,7 @@ import {
   parseRegisterAddressDraft,
 } from "@mamep2026/data-conversion";
 import { resizeRegisters } from "./child-register";
+import { resizeBitComments, resizeBitNames } from "./bit-register";
 
 /** 提交地址草稿：更新 addressValue + registerCount；draft 保留（不因校验清空），成功提交按进制归一化。 */
 export function commitAddress(
@@ -54,6 +55,9 @@ export function commitAddress(
       count === row.registerCount ? row.registerValues : null,
     // 子行元数据按索引保留/截断/补齐（2026-08-27，不随值清空）。
     registers: resizeRegisters(row, count),
+    // 位级注释/名称按寄存器序号保留/截断/补齐（ADR-052，不随值清空）。
+    bitComments: resizeBitComments(row.bitComments, count),
+    bitNames: resizeBitNames(row.bitNames, count),
     updatedAt: Date.now(),
   });
 }

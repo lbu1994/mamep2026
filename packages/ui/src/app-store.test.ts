@@ -638,6 +638,86 @@ describe("commitChildCellText / setChildMeta（范围行子行可编辑化，202
   });
 });
 
+describe("位明细动作（ADR-052，2026-09-11）", () => {
+  function binaryRowId(): RowId {
+    const store = useAppStore.getState();
+    const sheetId = firstSheetId();
+    store.addRow(sheetId);
+    const row = useAppStore
+      .getState()
+      .workspace.sheets.find((s) => s.sheetId === sheetId)?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    store.setRowDataType(row.rowId, "binary");
+    // 建行/改 Type 本身就是可撤销编辑：先清空，保证后续断言只反映被测动作。
+    useAppStore.setState({ undoStack: [], redoStack: [] });
+    return row.rowId;
+  }
+
+  function rowOf(rowId: RowId) {
+    return useAppStore
+      .getState()
+      .workspace.sheets.flatMap((s) => s.rows)
+      .find((r) => r.rowId === rowId);
+  }
+
+  beforeEach(() => {
+    useAppStore.setState({ undoStack: [], redoStack: [] });
+  });
+
+  it("setRegisterBitValue 只改当前值（不入撤销栈）", () => {
+    const rowId = binaryRowId();
+    useAppStore.getState().setRegisterBitValue(rowId, 0, 3, 1);
+    const row = rowOf(rowId);
+    expect(row?.registerValues?.[0]?.value).toBe(0x0008);
+    expect(row?.cellText).toBe("00000000 00001000");
+    // 位值=当前值变更（与 Data 编辑一致）：不入撤销栈。
+    expect(useAppStore.getState().undoStack).toHaveLength(0);
+  });
+
+  it("setRegisterBitValue 对范围行按寄存器序号写入对应寄存器", () => {
+    const store = useAppStore.getState();
+    const sheetId = firstSheetId();
+    store.addRow(sheetId);
+    const row = useAppStore
+      .getState()
+      .workspace.sheets.find((s) => s.sheetId === sheetId)?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    store.commitRowAddress(row.rowId, "1000-1001");
+    store.setRowDataType(row.rowId, "binary");
+    useAppStore.setState({ undoStack: [], redoStack: [] });
+
+    // 第 2 个寄存器（registerIndex=1）置 bit0。
+    useAppStore.getState().setRegisterBitValue(row.rowId, 1, 0, 1);
+    const updated = rowOf(row.rowId);
+    expect(updated?.registerValues?.map((v) => v.value)).toEqual([0, 1]);
+    expect(updated?.cellText).toBe(
+      "00000000 00000000 00000000 00000001",
+    );
+  });
+
+  it("setBitName 写入位名称并入撤销栈（与位注释对称）", () => {
+    const rowId = binaryRowId();
+    useAppStore.getState().setBitName(rowId, 0, 15, "Alarm bit");
+    expect(rowOf(rowId)?.bitNames?.[0]?.[15]).toBe("Alarm bit");
+    expect(useAppStore.getState().undoStack).toHaveLength(1);
+    useAppStore.getState().undo();
+    expect(rowOf(rowId)?.bitNames).toBeNull();
+  });
+
+  it("setBitComment 写入位注释并入撤销栈（撤销回退注释、保留当前值）", () => {
+    const rowId = binaryRowId();
+    useAppStore.getState().setRegisterBitValue(rowId, 0, 3, 1);
+    useAppStore.getState().setBitComment(rowId, 0, 3, "motor on");
+    expect(rowOf(rowId)?.bitComments?.[0]?.[3]).toBe("motor on");
+    expect(useAppStore.getState().undoStack).toHaveLength(1);
+    useAppStore.getState().undo();
+    const row = rowOf(rowId);
+    expect(row?.bitComments).toBeNull();
+    // §24.4：读值/当前值不回退。
+    expect(row?.registerValues?.[0]?.value).toBe(0x0008);
+  });
+});
+
 describe("setSheetColumnWidths", () => {
   it("只修改目标表的 columnWidths，不影响其他表（每表独立不共享）", () => {
     const store = useAppStore.getState();

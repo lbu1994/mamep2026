@@ -86,7 +86,10 @@ import {
 } from "../type-split";
 import {
   buildTreeRows,
+  isVirtualBitRow,
   isVirtualChildRow,
+  isVirtualRow,
+  type VirtualBitRow,
   type VirtualChildRow,
 } from "../tree-rows";
 import { useAppStore } from "../app-store";
@@ -166,6 +169,8 @@ interface EditableCellValueProps {
   emptyText?: string;
   /** 非编辑态值右侧的附加节点（如 Data 列状态点）；编辑态不显示。 */
   trailing?: React.ReactNode;
+  /** 只读（ADR-052 位明细行）：禁用进入编辑，仅展示文本。 */
+  disabled?: boolean;
   /** 提交回调（Enter/失焦）：参数为最终草稿；草稿未变时不调用。 */
   onCommit: (value: string) => void;
 }
@@ -177,6 +182,7 @@ function EditableCellValue({
   errorTip,
   emptyText,
   trailing,
+  disabled = false,
   onCommit,
 }: EditableCellValueProps): React.ReactNode {
   const [editing, setEditing] = useState(false);
@@ -243,18 +249,23 @@ function EditableCellValue({
     <div
       className={
         "register-table__editable-cell-value-wrap" +
-        (error ? " register-table__editable-cell-value-wrap--error" : "")
+        (error ? " register-table__editable-cell-value-wrap--error" : "") +
+        (disabled ? " register-table__editable-cell-value-wrap--readonly" : "")
       }
-      role="button"
-      tabIndex={0}
+      {...(disabled
+        ? {}
+        : {
+            role: "button",
+            tabIndex: 0,
+            onClick: startEdit,
+            onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                startEdit();
+              }
+            },
+          })}
       aria-label={ariaLabel}
-      onClick={startEdit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          startEdit();
-        }
-      }}
     >
       <span className="register-table__editable-cell-value-wrap__text">
         {value === "" && emptyText !== undefined ? (
@@ -897,6 +908,159 @@ const ChildCommentCell = memo(function ChildCommentCell({
   );
 });
 
+// ---- 位明细虚拟行（ADR-052，2026-09-11）----
+// 位行 = 一个 16 位寄存器展开出的 16 行之一（bit15 → bit0）：Name 列只读展示位号，
+// Register 列只读展示位掩码 `0x8000`，Data 列可输入 0/1 + 右侧独立「切换」控件
+// （两者只改当前值、**不写设备**），Comment 列可编辑位注释（入撤销栈）。
+// 其余列（No/TM/WP/Read/Write/Type/Scale/拖拽/多选/右键菜单）维持不可用；
+// 只读表（discrete-input/input-register）可展开查看但切换与注释编辑禁用。
+
+/** 位行 Name 列：位名称（可编辑，语义同 Comment 列；只读表禁用）。 */
+const BitNameCell = memo(function BitNameCell({
+  row,
+  writable,
+}: {
+  row: VirtualBitRow;
+  /** 本表可写（只读表禁用编辑）。 */
+  writable: boolean;
+}) {
+  const setBitName = useAppStore((s) => s.setBitName);
+  return (
+    <EditableCellValue
+      value={row.name}
+      ariaLabel="Name"
+      disabled={!writable}
+      onCommit={(value) =>
+        setBitName(
+          row.__virtualBit.parentRowId,
+          row.__virtualBit.registerIndex,
+          row.__virtualBit.bit,
+          value,
+        )
+      }
+    />
+  );
+});
+
+/**
+ * 位行 Register 列：寄存器地址 + Bit 序号（如 `2000 Bit 15`，只读）；
+ * 位掩码（如 `0x8000`）作为 hover 提示保留（ADR-052 需求追加）。
+ */
+const BitRegisterCell = memo(function BitRegisterCell({
+  row,
+  radix,
+}: {
+  row: VirtualBitRow;
+  radix: RegisterRadix;
+}) {
+  const { t } = useTranslation();
+  return (
+    <span
+      className="register-table__cell--mono"
+      title={row.__virtualBit.maskText}
+    >
+      {`${formatRegisterAddress(row.__virtualBit.address, radix)} ${t(
+        "table.bitLabel",
+        { bit: row.__virtualBit.bit },
+      )}`}
+    </span>
+  );
+});
+
+/**
+ * 位行 Data 列：文本可编辑（输入 0/1）+ 右侧切换控件。
+ * 切换控件必须 `stopPropagation`：否则点击会同时触发外层「进入编辑」（ADR-052 决策 7）。
+ */
+const BitDataCell = memo(function BitDataCell({
+  row,
+  writable,
+}: {
+  row: VirtualBitRow;
+  /** 本表可写（只读表禁用切换与输入）。 */
+  writable: boolean;
+}) {
+  const { t } = useTranslation();
+  const setRegisterBitValue = useAppStore((s) => s.setRegisterBitValue);
+  const [invalid, setInvalid] = useState(false);
+  const value = row.__virtualBit.value;
+  const text = value === null ? "" : String(value);
+  const commit = (draft: string): void => {
+    const trimmed = draft.trim();
+    if (trimmed !== "0" && trimmed !== "1") {
+      // 非法输入：保留草稿 + 错误提示，不写坏当前值（与 Data 单元格同语义）。
+      setInvalid(true);
+      return;
+    }
+    setInvalid(false);
+    setRegisterBitValue(
+      // 必须用**真实**父行 rowId（范围行的寄存器子行 id 是派生的虚拟 id，store 中不存在）。
+      row.__virtualBit.parentRowId,
+      row.__virtualBit.registerIndex,
+      row.__virtualBit.bit,
+      trimmed === "1" ? 1 : 0,
+    );
+  };
+  const toggle = (
+    <Switch
+      size="small"
+      className="register-table__bit-toggle"
+      disabled={!writable}
+      checked={value === 1}
+      aria-label={t("table.bitToggle", { bit: row.__virtualBit.bit })}
+      onClick={(_, event) => event.stopPropagation()}
+      onChange={(checked) => {
+        if (!writable) return;
+        setRegisterBitValue(
+          // 同上：真实父行 rowId + 寄存器序号（范围行子行 id 不入 store）。
+          row.__virtualBit.parentRowId,
+          row.__virtualBit.registerIndex,
+          row.__virtualBit.bit,
+          checked ? 1 : 0,
+        );
+      }}
+    />
+  );
+  return (
+    <EditableCellValue
+      value={text}
+      ariaLabel={t("table.bitValueAria", { bit: row.__virtualBit.bit })}
+      emptyText="—"
+      error={invalid}
+      errorTip={t("table.bitValueInvalid")}
+      disabled={!writable}
+      trailing={toggle}
+      onCommit={commit}
+    />
+  );
+});
+
+/** 位行 Comment 列：可编辑位注释（入撤销栈；只读表禁用）。 */
+const BitCommentCell = memo(function BitCommentCell({
+  row,
+  writable,
+}: {
+  row: VirtualBitRow;
+  /** 本表可写（只读表禁用编辑）。 */
+  writable: boolean;
+}) {
+  const setBitComment = useAppStore((s) => s.setBitComment);
+  return (
+    <EditableCellValue
+      value={row.comment}
+      ariaLabel="Comment"
+      disabled={!writable}
+      onCommit={(value) =>
+        setBitComment(
+          row.__virtualBit.parentRowId,
+          row.__virtualBit.registerIndex,
+          row.__virtualBit.bit,
+          value,
+        )
+      }
+    />
+  );
+});
+
 // ---- dnd-kit 拖拽排序列（2026-08-16）----
 // 最右列拖拽手柄：仅手柄可拖（setActivatorNodeRef + listeners 经 RowContext 传给手柄按钮），
 // 行体空白处不触发拖拽，避免与单元格编辑/多选冲突。排序动作经 app-store.moveRowToIndex
@@ -1146,6 +1310,8 @@ export const RegisterTable = memo(function RegisterTable({
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.type ??
       "holding-register",
   );
+  // 本表可写（ADR-052 位明细）：只读表（discrete-input/input-register）位切换与位注释编辑禁用。
+  const sheetWritable = sheetTypeWritable(sheetType);
   const toolbarActions = usePluginContributions<ToolbarActionContribution[]>(
     host,
     "toolbarAction",
@@ -1181,6 +1347,17 @@ export const RegisterTable = memo(function RegisterTable({
   // 表内是否存在范围行：有则禁用虚拟滚动（antd tree 数据 + virtual 不兼容，ADR-030 风险 1 回退）。
   const hasRangeRows = useMemo(
     () => rows.some((r) => r.registerCount > 1),
+    [rows],
+  );
+  // 表内是否存在二进制行（ADR-052）：位明细同为 tree 数据，与 virtual 同样不兼容，
+  // 沿用「存在即降级」先例（位行仅在展开时生成，但仅此一次简单判定代价最低）。
+  const hasBinaryRows = useMemo(
+    () =>
+      rows.some(
+        (r) =>
+          r.dataType === "binary" ||
+          (r.registers?.some((meta) => meta.dataType === "binary") ?? false),
+      ),
     [rows],
   );
   const addRow = useAppStore((s) => s.addRow);
@@ -1799,7 +1976,7 @@ export const RegisterTable = memo(function RegisterTable({
         align: "center",
         className: "register-table__cell--no",
         render: (_, row) =>
-          isVirtualChildRow(row) ? null : <NoCell order={row.order} />,
+          isVirtualRow(row) ? null : <NoCell order={row.order} />,
       },
       {
         title: t("table.tm"),
@@ -1807,7 +1984,7 @@ export const RegisterTable = memo(function RegisterTable({
         width: 40,
         align: "center",
         render: (_, row) =>
-          isVirtualChildRow(row) ? null : (
+          isVirtualRow(row) ? null : (
             <TmCell
               rowId={row.rowId}
               traceEnabled={row.traceEnabled}
@@ -1823,7 +2000,9 @@ export const RegisterTable = memo(function RegisterTable({
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
         render: (_, row) =>
-          isVirtualChildRow(row) ? (
+          isVirtualBitRow(row) ? (
+            <BitNameCell row={row} writable={sheetWritable} />
+          ) : isVirtualChildRow(row) ? (
             <ChildNameCell row={row} />
           ) : (
             <NameCell rowId={row.rowId} name={row.name} />
@@ -1843,7 +2022,9 @@ export const RegisterTable = memo(function RegisterTable({
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
         render: (_, row) =>
-          isVirtualChildRow(row) ? (
+          isVirtualBitRow(row) ? (
+            <BitRegisterCell row={row} radix={registerRadix} />
+          ) : isVirtualChildRow(row) ? (
             <ChildAddressCell row={row} radix={registerRadix} />
           ) : (
             <RegisterCell
@@ -1861,7 +2042,7 @@ export const RegisterTable = memo(function RegisterTable({
         width: 56,
         align: "center",
         render: (_, row) =>
-          isVirtualChildRow(row) ? null : (
+          isVirtualRow(row) ? null : (
             <WpCell
               rowId={row.rowId}
               pollingEnabled={row.pollingEnabled}
@@ -1875,7 +2056,7 @@ export const RegisterTable = memo(function RegisterTable({
         width: 64,
         align: "center",
         render: (_, row) =>
-          isVirtualChildRow(row) ? null : (
+          isVirtualRow(row) ? null : (
             <ReadCell
               rowId={row.rowId}
               hasAddress={row.addressValue !== null}
@@ -1892,7 +2073,9 @@ export const RegisterTable = memo(function RegisterTable({
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
         render: (_, row) =>
-          isVirtualChildRow(row) ? (
+          isVirtualBitRow(row) ? (
+            <BitDataCell row={row} writable={sheetWritable} />
+          ) : isVirtualChildRow(row) ? (
             <ChildDataCell row={row} />
           ) : (
             <DataCell
@@ -1910,7 +2093,7 @@ export const RegisterTable = memo(function RegisterTable({
         width: 64,
         align: "center",
         render: (_, row) =>
-          isVirtualChildRow(row) ? null : (
+          isVirtualRow(row) ? null : (
             <WriteCell
               sheetId={sheetId}
               rowId={row.rowId}
@@ -1928,7 +2111,7 @@ export const RegisterTable = memo(function RegisterTable({
         align: "center",
         className: "register-table__cell--center",
         render: (_, row) =>
-          isVirtualChildRow(row) ? (
+          isVirtualBitRow(row) ? null : isVirtualChildRow(row) ? (
             <ChildTypeCell row={row} />
           ) : (
             <TypeCell
@@ -1948,7 +2131,7 @@ export const RegisterTable = memo(function RegisterTable({
         align: "center",
         className: "register-table__cell--center",
         render: (_, row) =>
-          isVirtualChildRow(row) ? (
+          isVirtualBitRow(row) ? null : isVirtualChildRow(row) ? (
             <ChildScaleCell row={row} />
           ) : (
             <ScaleCell rowId={row.rowId} dataType={row.dataType} />
@@ -1960,7 +2143,9 @@ export const RegisterTable = memo(function RegisterTable({
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
         render: (_, row) =>
-          isVirtualChildRow(row) ? (
+          isVirtualBitRow(row) ? (
+            <BitCommentCell row={row} writable={sheetWritable} />
+          ) : isVirtualChildRow(row) ? (
             <ChildCommentCell row={row} />
           ) : (
             <CommentCell rowId={row.rowId} comment={row.comment} />
@@ -1973,20 +2158,20 @@ export const RegisterTable = memo(function RegisterTable({
         align: "center",
         // 仅最后一列（drag 列）响应右键打开行级菜单：preventDefault 抑制系统菜单并记录目标行；
         // 不 stopPropagation，放行冒泡到 Dropdown trigger 以记录鼠标点坐标（alignPoint 定位）。
-        // 虚拟子行（ADR-030）不响应右键菜单（不可交互）。
+        // 虚拟子行/位明细行（ADR-030/ADR-052）不响应右键菜单（不可交互）。
         onCell: (record) => ({
-          onContextMenu: isVirtualChildRow(record)
+          onContextMenu: isVirtualRow(record)
             ? undefined
             : (event) =>
                 rowHandlersRef.current.onRowContextMenu(record.rowId, event),
         }),
         render: (_, row) =>
-          isVirtualChildRow(row) ? null : (
+          isVirtualRow(row) ? null : (
             <DragHandle ariaLabel={t("table.dragHandle")} />
           ),
       },
     ],
-    [t, registerRadix, cellValidationErrors, sheetId, maxOrder],
+    [t, registerRadix, cellValidationErrors, sheetId, maxOrder, sheetWritable],
   );
 
   // 合并拖拽列宽、按持久化列顺序重排，并挂载 onHeaderCell（供 HeaderCell 接收 id/width/onResize）。
@@ -2242,8 +2427,8 @@ export const RegisterTable = memo(function RegisterTable({
     const MemoizedTr = memo(
       forwardRef<HTMLTableRowElement, MemoTableRowProps>(
         function RegisterTableRow(props, ref) {
-          // 虚拟子行走普通 <tr>（无 useSortable）；父行/普通行走 SortableRow。
-          if (isVirtualChildRow(props._record)) {
+          // 虚拟子行/位明细行（ADR-030/ADR-052）：普通 <tr>（无 useSortable）；父行/普通行走 SortableRow。
+          if (isVirtualRow(props._record)) {
             return <ChildRow {...props} ref={ref} />;
           }
           return <SortableRow {...props} ref={ref} />;
@@ -2560,15 +2745,19 @@ export const RegisterTable = memo(function RegisterTable({
                 pagination={false}
                 bordered
                 rowClassName={(_record, index) =>
-                  isVirtualChildRow(_record)
-                    ? "register-table__row--child"
-                    : index % 2 === 1
-                      ? "register-table__row--striped"
-                      : ""
+                  isVirtualBitRow(_record)
+                    ? "register-table__row--bit"
+                    : isVirtualChildRow(_record)
+                      ? "register-table__row--child"
+                      : index % 2 === 1
+                        ? "register-table__row--striped"
+                        : ""
                 }
                 // 范围行（ADR-030）：tree 数据 + virtual 不兼容 → 禁用虚拟滚动（风险 1 回退）。
                 virtual={
-                  rows.length > VIRTUAL_SCROLL_THRESHOLD && !hasRangeRows
+                  rows.length > VIRTUAL_SCROLL_THRESHOLD &&
+                  !hasRangeRows &&
+                  !hasBinaryRows
                 }
                 {...(tableBodyHeight > 0 ||
                 rows.length > VIRTUAL_SCROLL_THRESHOLD
@@ -2597,9 +2786,9 @@ export const RegisterTable = memo(function RegisterTable({
                   selectedRowKeys: selectedRowIds,
                   onChange: (keys) =>
                     setSelectedRowIds(keys.map((k) => String(k)) as RowId[]),
-                  // 虚拟子行（ADR-030）：不可多选（复选框禁用）。
+                  // 虚拟子行/位明细行（ADR-030/ADR-052）：不可多选（复选框禁用）。
                   getCheckboxProps: (record) => ({
-                    disabled: isVirtualChildRow(record),
+                    disabled: isVirtualRow(record),
                   }),
                   selections: [
                     Table.SELECTION_ALL,

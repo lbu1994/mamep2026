@@ -52,7 +52,10 @@ import {
   pasteClipboardRows,
   renumberRows,
   rowTypeCountError,
+  setBitComment as setBitCommentUseCase,
+  setBitName as setBitNameUseCase,
   setChildMeta as setChildMetaUseCase,
+  setRegisterBit as setRegisterBitUseCase,
   type ChildMetaPatch,
   type ClipboardIssue,
   type RowClipboardData,
@@ -233,6 +236,37 @@ export interface AppStoreState {
     parentRowId: RowId,
     index: number,
     patch: ChildMetaPatch,
+  ) => void;
+  /**
+   * 位明细（ADR-052）：设置某寄存器的一位（0/1）。
+   * 只改当前值（registerValues + 父行 cellText），**不写设备、不入撤销栈**（与 Data 编辑一致）。
+   * `registerRowId`：该寄存器所在行（单寄存器行=自身；范围行=父行），`registerIndex` 为寄存器序号。
+   */
+  setRegisterBitValue: (
+    registerRowId: RowId,
+    registerIndex: number,
+    bit: number,
+    value: 0 | 1,
+  ) => void;
+  /**
+   * 位明细（ADR-052）：写入某寄存器的位注释（空串=清除）。
+   * 属编辑字段（同 Name/Comment），随工作区持久化并**入撤销栈**（ADR-032）。
+   */
+  setBitComment: (
+    parentRowId: RowId,
+    registerIndex: number,
+    bit: number,
+    comment: string,
+  ) => void;
+  /**
+   * 位明细（ADR-052 需求追加）：写入某寄存器的位名称（空串=清除）。
+   * 与 `setBitComment` 完全对称（编辑字段、入撤销栈）。
+   */
+  setBitName: (
+    parentRowId: RowId,
+    registerIndex: number,
+    bit: number,
+    name: string,
   ) => void;
   addRow: (sheetId: SheetId) => void;
   deleteRow: (sheetId: SheetId, rowId: RowId) => void;
@@ -885,6 +919,79 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const result = setChildMetaUseCase(row, index, patch);
     if (!result.ok) return;
     // 范围行子行元数据修改（可撤销，§24.4；Data/读值路径不经过此）。
+    const before = snapshotSheet(sheet);
+    get().updateRow(parentRowId, (r) =>
+      r.rowId === result.value.rowId ? result.value : r,
+    );
+    const afterSheet = findSheetById(get().workspace, sheet.sheetId);
+    if (afterSheet !== undefined) {
+      pushSheetEntry(
+        get,
+        set,
+        sheet.sheetId,
+        before,
+        snapshotSheet(afterSheet),
+      );
+    }
+  },
+
+  setRegisterBitValue: (registerRowId, registerIndex, bit, value) => {
+    const sheets = get().workspace.sheets;
+    const sheet = sheets.find((s) =>
+      s.rows.some((r) => r.rowId === registerRowId),
+    );
+    const row = sheet?.rows.find((r) => r.rowId === registerRowId);
+    if (row === undefined) return;
+    const result = setRegisterBitUseCase(
+      row,
+      registerIndex,
+      bit,
+      value,
+      get().dataTypeResolver,
+    );
+    if (!result.ok) return;
+    // 位值=当前值变更（与 Data 编辑一致，ADR-052/ADR-032）：不入撤销栈、不写设备。
+    get().updateRow(registerRowId, (r) =>
+      r.rowId === result.value.rowId ? result.value : r,
+    );
+  },
+
+  setBitComment: (parentRowId, registerIndex, bit, comment) => {
+    const sheets = get().workspace.sheets;
+    const sheet = sheets.find((s) =>
+      s.rows.some((r) => r.rowId === parentRowId),
+    );
+    const row = sheet?.rows.find((r) => r.rowId === parentRowId);
+    if (row === undefined || sheet === undefined) return;
+    const result = setBitCommentUseCase(row, registerIndex, bit, comment);
+    if (!result.ok) return;
+    // 位注释=编辑字段（可撤销，§24.4 / ADR-052 决策 5）。
+    const before = snapshotSheet(sheet);
+    get().updateRow(parentRowId, (r) =>
+      r.rowId === result.value.rowId ? result.value : r,
+    );
+    const afterSheet = findSheetById(get().workspace, sheet.sheetId);
+    if (afterSheet !== undefined) {
+      pushSheetEntry(
+        get,
+        set,
+        sheet.sheetId,
+        before,
+        snapshotSheet(afterSheet),
+      );
+    }
+  },
+
+  setBitName: (parentRowId, registerIndex, bit, name) => {
+    const sheets = get().workspace.sheets;
+    const sheet = sheets.find((s) =>
+      s.rows.some((r) => r.rowId === parentRowId),
+    );
+    const row = sheet?.rows.find((r) => r.rowId === parentRowId);
+    if (row === undefined || sheet === undefined) return;
+    const result = setBitNameUseCase(row, registerIndex, bit, name);
+    if (!result.ok) return;
+    // 位名称=编辑字段（可撤销，ADR-052 需求追加，与位注释一致）。
     const before = snapshotSheet(sheet);
     get().updateRow(parentRowId, (r) =>
       r.rowId === result.value.rowId ? result.value : r,

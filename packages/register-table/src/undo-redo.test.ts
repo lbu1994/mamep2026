@@ -81,6 +81,8 @@ describe("RowEditFields", () => {
       dataType: row.dataType,
       pollingEnabled: row.pollingEnabled,
       registers: row.registers,
+      bitComments: row.bitComments,
+      bitNames: row.bitNames,
     });
     expect(restored.name).toBe("new");
     // 运行时字段不回退（§24.4「不撤销设备读取结果」）。
@@ -103,6 +105,8 @@ describe("RowEditFields", () => {
       dataType: row.dataType,
       pollingEnabled: row.pollingEnabled,
       registers: row.registers,
+      bitComments: row.bitComments,
+      bitNames: row.bitNames,
     });
     expect(restored.registerCount).toBe(2);
     expect(restored.registerValues).toBeNull();
@@ -135,6 +139,43 @@ describe("snapshotSheet / applySheetSnapshot", () => {
     // 读值不回退（保持编辑后的当前值）。
     expect(restoredR1?.cellText).toBe("9999");
     expect(restoredR1?.registerValues).toEqual([raw(9999)]);
+  });
+
+  it("restores bit comments as an edit field and keeps current read values（ADR-052）", () => {
+    const sheet = sheetWithRows(1);
+    const rowId = sheet.rows[0]?.rowId;
+    expect(rowId).toBeDefined();
+    const withComments: RegisterSheet = {
+      ...sheet,
+      rows: sheet.rows.map((row) =>
+        row.rowId === rowId
+          ? {
+              ...row,
+              dataType: "binary",
+              bitComments: [
+                Array.from({ length: 16 }, (_, index) =>
+                  index === 0 ? "carry" : "",
+                ),
+              ],
+              cellText: "9999",
+              registerValues: [raw(9999)],
+            }
+          : row,
+      ),
+    };
+    // 快照（含位注释）→ 之后清除注释 → 撤销应用快照：注释回退，读值不回退。
+    const before = snapshotSheet(withComments);
+    const edited: RegisterSheet = {
+      ...withComments,
+      rows: withComments.rows.map((row) =>
+        row.rowId === rowId ? { ...row, bitComments: null } : row,
+      ),
+    };
+    const restored = applySheetSnapshot(edited, before);
+    const restoredRow = findRow(restored, "R1");
+    expect(restoredRow?.bitComments?.[0]?.[0]).toBe("carry");
+    expect(restoredRow?.cellText).toBe("9999");
+    expect(restoredRow?.registerValues).toEqual([raw(9999)]);
   });
 
   it("restores a deleted row with its full content (undo delete)", () => {

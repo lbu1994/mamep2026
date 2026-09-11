@@ -237,6 +237,38 @@ describe("commitAddress 范围行（ADR-030）", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("ADDRESS_RANGE_REVERSED");
   });
+
+  it("位注释与位名称随范围长度保留/截断（ADR-052）", () => {
+    const slots = (label: string) =>
+      Array.from({ length: 16 }, (_, index) => (index === 0 ? label : ""));
+    const row = {
+      ...createEmptyRow(),
+      registerCount: 2,
+      bitComments: [slots("a"), slots("b")],
+      bitNames: [slots("na"), slots("nb")],
+    };
+    // 扩大：按寄存器序号保留前两项，其余补 null。
+    const wider = commitAddress(row, "1000-1003", "dec");
+    expect(wider.ok).toBe(true);
+    if (!wider.ok) return;
+    expect(wider.value.bitComments).toHaveLength(4);
+    expect(wider.value.bitComments?.[0]?.[0]).toBe("a");
+    expect(wider.value.bitComments?.[1]?.[0]).toBe("b");
+    expect(wider.value.bitComments?.[2]).toBeNull();
+    expect(wider.value.bitNames).toHaveLength(4);
+    expect(wider.value.bitNames?.[0]?.[0]).toBe("na");
+    expect(wider.value.bitNames?.[1]?.[0]).toBe("nb");
+    expect(wider.value.bitNames?.[2]).toBeNull();
+    // 缩小到单寄存器行：仅保留第 1 个寄存器的位注释/位名称（单寄存器行外层长度 1）。
+    const narrowed = commitAddress(row, "1000", "dec");
+    expect(narrowed.ok).toBe(true);
+    if (!narrowed.ok) return;
+    expect(narrowed.value.registerCount).toBe(1);
+    expect(narrowed.value.bitComments).toHaveLength(1);
+    expect(narrowed.value.bitComments?.[0]?.[0]).toBe("a");
+    expect(narrowed.value.bitNames).toHaveLength(1);
+    expect(narrowed.value.bitNames?.[0]?.[0]).toBe("na");
+  });
 });
 
 describe("isRowTypeCountValid / rowTypeCountError（ADR-030）", () => {

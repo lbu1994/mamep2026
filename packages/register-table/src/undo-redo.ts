@@ -17,6 +17,8 @@ import {
   type DataType,
   type ReadVerifySettings,
   type RegisterAddress,
+  type RegisterBitComments,
+  type RegisterBitNames,
   type RegisterRadix,
   type RegisterRow,
   type RegisterSheet,
@@ -45,9 +47,13 @@ export interface RowEditFields {
   pollingEnabled: boolean;
   /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据。 */
   registers: RegisterSubRowMeta[] | null;
+  /** 位级注释（ADR-052，2026-09-11）：null=无位注释。 */
+  bitComments: RegisterBitComments | null;
+  /** 位级名称（ADR-052 需求追加）：null=无位名称。 */
+  bitNames: RegisterBitNames | null;
 }
 
-/** 提取行的编辑字段（浅拷贝 registers，避免与当前行共享引用）。 */
+/** 提取行的编辑字段（浅拷贝 registers / bitComments / bitNames，避免与当前行共享引用）。 */
 export function extractRowEditFields(row: RegisterRow): RowEditFields {
   return {
     name: row.name,
@@ -58,6 +64,16 @@ export function extractRowEditFields(row: RegisterRow): RowEditFields {
     dataType: row.dataType,
     pollingEnabled: row.pollingEnabled,
     registers: row.registers === null ? null : [...row.registers],
+    bitComments:
+      row.bitComments === null
+        ? null
+        : row.bitComments.map((group) =>
+            group === null ? null : [...group],
+          ),
+    bitNames:
+      row.bitNames === null
+        ? null
+        : row.bitNames.map((group) => (group === null ? null : [...group])),
   };
 }
 
@@ -79,6 +95,8 @@ export function applyRowEditFields(
     dataType: fields.dataType,
     pollingEnabled: fields.pollingEnabled,
     registers: fields.registers,
+    bitComments: fields.bitComments,
+    bitNames: fields.bitNames,
     updatedAt: Date.now(),
   };
   if (

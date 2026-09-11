@@ -38,6 +38,14 @@
  * v7→v8（2026-09-02，主题色预设 ID ADR-047，逆转 ADR-042 任意取色）：
  * - 旧 preferences.themePrimary 的 {light,dark} 任意 HEX 无可映射预设 → 一律置 null（内置默认蓝）；
  * - schemaVersion 升为 8。
+ *
+ * v8→v9（2026-09-11，位级注释 ADR-052）：
+ * - 各 row 补 bitComments=null（老数据无位注释；无数据转换）；
+ * - schemaVersion 升为 9。
+ *
+ * v9→v10（2026-09-11，位级名称 ADR-052 需求追加）：
+ * - 各 row 补 bitNames=null（v9 数据仅有位注释，名称缺省为空；bitComments 原值保留）；
+ * - schemaVersion 升为 10。
  */
 import { createMamepError, BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID, type Result } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
@@ -258,6 +266,61 @@ const migrationV7ToV8: Migration = {
   },
 };
 
+const migrationV8ToV9: Migration = {
+  fromVersion: 8,
+  toVersion: 9,
+  migrate(data) {
+    // ADR-052：位级注释新增，老数据无位注释 → 各 row 补 bitComments=null（无数据转换，仅升版本）。
+    const sheets = Array.isArray(data.sheets)
+      ? (data.sheets as Record<string, unknown>[])
+      : [];
+    return {
+      ...data,
+      schemaVersion: 9,
+      sheets: sheets.map((sheet) => {
+        const rows = Array.isArray(sheet.rows)
+          ? (sheet.rows as Record<string, unknown>[])
+          : [];
+        return {
+          ...sheet,
+          rows: rows.map((row) => ({
+            ...row,
+            bitComments: row.bitComments === undefined ? null : row.bitComments,
+          })),
+        };
+      }),
+    };
+  },
+};
+
+const migrationV9ToV10: Migration = {
+  fromVersion: 9,
+  toVersion: 10,
+  migrate(data) {
+    // ADR-052 需求追加：位级名称新增（位 Name 列可编辑）→ 各 row 补 bitNames=null；
+    // v9 的 bitComments 原值保留（不丢已有位注释）。
+    const sheets = Array.isArray(data.sheets)
+      ? (data.sheets as Record<string, unknown>[])
+      : [];
+    return {
+      ...data,
+      schemaVersion: 10,
+      sheets: sheets.map((sheet) => {
+        const rows = Array.isArray(sheet.rows)
+          ? (sheet.rows as Record<string, unknown>[])
+          : [];
+        return {
+          ...sheet,
+          rows: rows.map((row) => ({
+            ...row,
+            bitNames: row.bitNames === undefined ? null : row.bitNames,
+          })),
+        };
+      }),
+    };
+  },
+};
+
 export const migrations: readonly Migration[] = [
   migrationV1ToV2,
   migrationV2ToV3,
@@ -266,6 +329,8 @@ export const migrations: readonly Migration[] = [
   migrationV5ToV6,
   migrationV6ToV7,
   migrationV7ToV8,
+  migrationV8ToV9,
+  migrationV9ToV10,
 ];
 
 /** 按版本顺序应用迁移；无法迁移的数据返回结构化错误。 */

@@ -1,4 +1,5 @@
 export * from "./address";
+export * from "./bit-register";
 export * from "./cell-text";
 export * from "./child-register";
 export * from "./column-order";

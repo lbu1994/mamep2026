@@ -140,6 +140,10 @@ export const en = {
     scaleHint:
       "Scale factor applied to unsigned/signed values (0.1 = one decimal place).",
     comment: "Comment",
+    bitLabel: "Bit {{bit}}",
+    bitToggle: "Toggle bit {{bit}}",
+    bitValueAria: "Bit {{bit}} value",
+    bitValueInvalid: "Enter 0 or 1.",
     emptyAddressTooltip:
       "Set a valid register address first to enable this control.",
     addressFormatHint:
@@ -683,6 +687,10 @@ export const zh: TranslationResources = {
     scale: "倍率",
     scaleHint: "应用于无符号/有符号值的倍率（0.1 = 一位小数）。",
     comment: "备注",
+    bitLabel: "位 {{bit}}",
+    bitToggle: "切换位 {{bit}}",
+    bitValueAria: "位 {{bit}} 数值",
+    bitValueInvalid: "请输入 0 或 1。",
     emptyAddressTooltip: "请先填写合法寄存器地址以启用该控件。",
     addressFormatHint: "仅影响寄存器地址的显示与输入进制，不影响 Data 值格式。",
     addRow: "新增行",

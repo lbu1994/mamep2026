@@ -859,6 +859,218 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
   });
 });
 
+describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
+  function setupBinaryRow(options: { sheetType?: string } = {}): void {
+    initI18n();
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet === undefined) throw new Error("missing sheet");
+    const rows = sheet.rows.map((row, index) =>
+      index === 0
+        ? {
+            ...row,
+            dataType: "binary" as const,
+            registerValues: [{ value: 0x8001 }],
+            cellText: "10000000 00000001",
+            bitComments: [
+              Array.from({ length: 16 }, (_, bit) =>
+                bit === 15 ? "alarm" : "",
+              ),
+            ],
+            bitNames: [
+              Array.from({ length: 16 }, (_, bit) =>
+                bit === 15 ? "Alarm bit" : "",
+              ),
+            ],
+          }
+        : row,
+    );
+    useAppStore.setState({
+      host: null,
+      workspace: {
+        ...workspace,
+        sheets: [
+          { ...sheet, type: options.sheetType ?? sheet.type, rows },
+        ],
+      },
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+      undoStack: [],
+      redoStack: [],
+    });
+  }
+
+  function expandBitRow(): void {
+    const expandIcon = document.querySelector(".ant-table-row-expand-icon");
+    if (expandIcon === null) throw new Error("missing expand icon");
+    fireEvent.click(expandIcon);
+  }
+
+  it("Register 列按「寄存器地址 + Bit 序号」渲染（bit15 → bit0），掩码作为 hover 提示", () => {
+    setupBinaryRow();
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandBitRow();
+    // 默认表 radix=dec（defaultConfig.registerTable.addressRadix），空地址即 0。
+    const bit15 = screen.getByText("0 Bit 15");
+    expect(bit15.getAttribute("title")).toBe("0x8000");
+    const bit0 = screen.getByText("0 Bit 0");
+    expect(bit0.getAttribute("title")).toBe("0x0001");
+  });
+
+  it("位行 Name 可编辑并写回父行 bitNames（入撤销栈）", () => {
+    setupBinaryRow();
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandBitRow();
+    // Name 单元格顺序：父行 1 + 位行 16（bit15 在前）。
+    const cells = screen.getAllByLabelText("Name");
+    const bitName = cells[1];
+    if (bitName === undefined) throw new Error("missing bit name cell");
+    fireEvent.click(bitName);
+    const input = screen.getAllByLabelText("Name")[1];
+    if (input === undefined) throw new Error("missing bit name input");
+    fireEvent.change(input, { target: { value: "Alarm" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      useAppStore.getState().workspace.sheets[0]?.rows[0]?.bitNames?.[0]?.[15],
+    ).toBe("Alarm");
+    expect(useAppStore.getState().undoStack).toHaveLength(1);
+  });
+
+  it("位行 Data 文本可输入 0/1（非法输入报错不改值）", () => {
+    setupBinaryRow();
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandBitRow();
+    const cell = screen.getAllByLabelText("Bit 0 value")[0];
+    if (cell === undefined) throw new Error("missing bit 0 cell");
+    fireEvent.click(cell);
+    const input = screen.getAllByLabelText("Bit 0 value")[0];
+    if (input === undefined) throw new Error("missing bit 0 input");
+    fireEvent.change(input, { target: { value: "2" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // 非法输入：保留草稿 + 错误态，不改当前值。
+    expect(
+      useAppStore.getState().workspace.sheets[0]?.rows[0]?.registerValues?.[0]
+        ?.value,
+    ).toBe(0x8001);
+
+    // 重新进入编辑（非法提交后回到展示态）并输入合法值。
+    const retryCell = screen.getAllByLabelText("Bit 0 value")[0];
+    if (retryCell === undefined) throw new Error("missing bit 0 cell");
+    fireEvent.click(retryCell);
+    const retry = screen.getAllByLabelText("Bit 0 value")[0];
+    if (retry === undefined) throw new Error("missing bit 0 input");
+    fireEvent.change(retry, { target: { value: "0" } });
+    fireEvent.keyDown(retry, { key: "Enter" });
+    const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    expect(row?.registerValues?.[0]?.value).toBe(0x8000);
+    expect(row?.cellText).toBe("10000000 00000000");
+  });
+
+  it("点击切换控件改位值并同步父行当前值（不入撤销栈、不进入编辑态）", () => {
+    setupBinaryRow();
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandBitRow();
+    const toggle = screen.getAllByLabelText("Toggle bit 0")[0];
+    if (toggle === undefined) throw new Error("missing toggle");
+    fireEvent.click(toggle);
+    const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    expect(row?.registerValues?.[0]?.value).toBe(0x8000);
+    expect(row?.cellText).toBe("10000000 00000000");
+    // 位值=当前值变更：不入撤销栈；且点击切换不进入编辑态。
+    expect(useAppStore.getState().undoStack).toHaveLength(0);
+    expect(
+      document.querySelectorAll("input[aria-label='Bit 0 value']").length,
+    ).toBe(0);
+  });
+
+  it("位注释可编辑并写回父行 bitComments（入撤销栈）", () => {
+    setupBinaryRow();
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandBitRow();
+    // 位行按 bit15 → bit0 渲染；第 1 个 Comment 单元格是父行，第 2 个是 bit15。
+    const cells = screen.getAllByLabelText("Comment");
+    const bitComment = cells[1];
+    if (bitComment === undefined) throw new Error("missing bit comment cell");
+    expect(bitComment.textContent).toBe("alarm");
+    fireEvent.click(bitComment);
+    const input = screen.getAllByLabelText("Comment")[1];
+    if (input === undefined) throw new Error("missing bit comment input");
+    fireEvent.change(input, { target: { value: "warning" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      useAppStore.getState().workspace.sheets[0]?.rows[0]?.bitComments?.[0]?.[15],
+    ).toBe("warning");
+    expect(useAppStore.getState().undoStack).toHaveLength(1);
+  });
+
+  it("范围行寄存器子行展开后切换位值 → 同步父行组合文本（两层嵌套）", () => {
+    initI18n();
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet === undefined) throw new Error("missing sheet");
+    const rows = sheet.rows.map((row, index) =>
+      index === 0
+        ? {
+            ...row,
+            registerCount: 2,
+            dataType: "binary" as const,
+            registerValues: [{ value: 0x8001 }, { value: 0x0002 }],
+            cellText: "10000000 00000001 00000000 00000010",
+          }
+        : row,
+    );
+    useAppStore.setState({
+      host: null,
+      workspace: { ...workspace, sheets: [{ ...sheet, rows }] },
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+      undoStack: [],
+      redoStack: [],
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+
+    // 第一层：展开范围行 → 2 个寄存器子行。
+    expandBitRow();
+    const childExpandIcons = document.querySelectorAll(
+      ".ant-table-row-expand-icon",
+    );
+    const childIcon = childExpandIcons[1];
+    if (childIcon === undefined) throw new Error("missing child expand icon");
+    fireEvent.click(childIcon);
+
+    // 第二层：寄存器 0 的 bit15（当前为 1）切为 0。
+    const toggle = screen.getAllByLabelText("Toggle bit 15")[0];
+    if (toggle === undefined) throw new Error("missing toggle");
+    fireEvent.click(toggle);
+    const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    expect(row?.registerValues?.map((v) => v.value)).toEqual([0x0001, 0x0002]);
+    expect(row?.cellText).toBe(
+      "00000000 00000001 00000000 00000010",
+    );
+  });
+
+  it("只读表（input-register）可展开位明细但切换与 Name/注释编辑禁用", () => {
+    setupBinaryRow({ sheetType: "input-register" });
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandBitRow();
+    expect(screen.getByText("0 Bit 15")).toBeDefined();
+    const toggle = screen.getAllByLabelText("Toggle bit 15")[0];
+    if (toggle === undefined) throw new Error("missing toggle");
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    // 只读：Name/Comment 单元格不进入编辑（无 role=button）。
+    const bitComment = screen.getAllByLabelText("Comment")[1];
+    expect(bitComment?.getAttribute("role")).toBeNull();
+    const bitName = screen.getAllByLabelText("Name")[1];
+    expect(bitName?.getAttribute("role")).toBeNull();
+  });
+});
+
 describe("RegisterTable Read All 全局 message（2026-08-28）", () => {
   beforeEach(() => {
     initI18n();

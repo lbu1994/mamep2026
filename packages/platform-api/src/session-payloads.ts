@@ -154,6 +154,16 @@ export const registerRowPayloadSchema = z.object({
     .array(registerSubRowMetaPayloadSchema)
     .nullable()
     .default(null),
+  /** 位级注释（ADR-052，2026-09-11）：外层长度=registerCount，内层长度 16（下标=bit 号） */
+  bitComments: z
+    .array(z.array(z.string()).nullable())
+    .nullable()
+    .default(null),
+  /** 位级名称（ADR-052 需求追加）：结构同 bitComments */
+  bitNames: z
+    .array(z.array(z.string()).nullable())
+    .nullable()
+    .default(null),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -167,6 +177,8 @@ export function toRegisterRowPayload(row: RegisterRow): RegisterRowPayload {
     registerValues:
       row.registerValues?.map((value) => value.value) ?? null,
     registers: row.registers ?? null,
+    bitComments: row.bitComments ?? null,
+    bitNames: row.bitNames ?? null,
   };
 }
 
@@ -196,6 +208,8 @@ export function registerRowFromPayload(
             (value): value is RawRegisterValue => value !== null,
           ),
     registers: payload.registers ?? null,
+    bitComments: payload.bitComments ?? null,
+    bitNames: payload.bitNames ?? null,
   };
 }
 

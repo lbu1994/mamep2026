@@ -208,6 +208,8 @@ describe("workspace schema round-trip", () => {
         cellText: "12.3",
         registerValues: [{ value: 123 }] as never,
         registers: null,
+        bitComments: null,
+        bitNames: null,
         createdAt: 1,
         updatedAt: 1,
       });
@@ -266,6 +268,8 @@ describe("workspace schema round-trip", () => {
           { name: "Hi", comment: "high", dataType: "unsigned" },
           { name: "Lo", comment: "low", dataType: "hex" },
         ],
+        bitComments: [["carry"], null],
+        bitNames: [["carry flag"], null],
         createdAt: 1,
         updatedAt: 1,
       });
@@ -279,6 +283,10 @@ describe("workspace schema round-trip", () => {
       { name: "Hi", comment: "high", dataType: "unsigned" },
       { name: "Lo", comment: "low", dataType: "hex" },
     ]);
+    // 位级注释（ADR-052）随工作区往返。
+    expect(row?.bitComments).toEqual([["carry"], null]);
+    // 位级名称（ADR-052 需求追加）随工作区往返。
+    expect(row?.bitNames).toEqual([["carry flag"], null]);
   });
 
   it("preserves unknown plugin settings", () => {
@@ -528,6 +536,8 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
           cellText: "123",
           registerValues: [{ value: 1230 }] as never,
           registers: null,
+          bitComments: null,
+          bitNames: null,
           createdAt: 1,
           updatedAt: 2,
         },
@@ -548,6 +558,8 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
             { name: "Hi", comment: "high", dataType: "unsigned" },
             { name: "Lo", comment: "low", dataType: "hex" },
           ],
+          bitComments: [["carry"], null],
+          bitNames: [["carry flag"], null],
           createdAt: 3,
           updatedAt: 4,
         },
@@ -570,9 +582,9 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
 
     const serialized = serializeWorkspace(workspace);
     // 导出文件为版本化 JSON（含 schemaVersion；TECH_DESIGN §6「版本化 JSON 更适合跨端导入导出」）。
-    // 当前为 v8（ADR-047：themePrimary 改预设 ID；ADR-043 E-3：dataType 开放）。
+    // 当前为 v10（ADR-052：行位级注释 bitComments（v9）+ 位级名称 bitNames（v10））。
     const raw = JSON.parse(serialized);
-    expect(raw.schemaVersion).toBe(8);
+    expect(raw.schemaVersion).toBe(10);
 
     // 导入路径：parseWorkspace（含迁移与断链检测）后字段完整。
     const parsed = parseWorkspace(raw);
@@ -608,6 +620,9 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
       { name: "Hi", comment: "high", dataType: "unsigned" },
       { name: "Lo", comment: "low", dataType: "hex" },
     ]);
+    // 位级注释/名称（ADR-052）随公开交换格式往返。
+    expect(range?.bitComments).toEqual([["carry"], null]);
+    expect(range?.bitNames).toEqual([["carry flag"], null]);
     expect(value.connectionProfiles[0]).toMatchObject({
       protocol: "tcp",
       host: "192.168.1.10",

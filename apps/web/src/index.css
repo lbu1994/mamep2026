@@ -826,6 +826,49 @@ body {
   border-color: var(--ant-color-error);
 }
 
+/* 只读可编辑单元格（ADR-052 位明细行；只读表）：无 hover 边框与手型，仅展示文本。 */
+.register-table__editable-cell-value-wrap--readonly {
+  cursor: default;
+}
+
+.register-table__editable-cell-value-wrap--readonly:hover {
+  border-color: transparent;
+}
+
+/* ---------------- 位明细行（ADR-052，2026-09-11） ----------------
+   位行 = 二进制寄存器展开出的 16 行（bit15 → bit0）：弱化前景色 + 等宽文本，
+   与范围行子行一起形成「父行 > 寄存器/位」的视觉层级。
+   Row 高沿用桌面 29px / 移动 44px（与 TS 常量一致，虚拟滚动按行高固定）。 */
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  tr.register-table__row--bit
+  .ant-table-cell {
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+/* 位行 hover 仍给到明确反馈（覆盖上面的弱化底色） */
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  tr.register-table__row--bit:hover
+  .ant-table-cell {
+  background: var(--ant-table-row-hover-bg);
+}
+
+/* 位行 Data 列的切换控件：右对齐、紧凑；移动端保证触摸命中区 ≥32px（ADR-050 Phase 3）。 */
+.register-table__bit-toggle {
+  flex: 0 0 auto;
+}
+
+@media (pointer: coarse) {
+  .register-table__bit-toggle {
+    padding: 8px 0;
+    box-sizing: content-box;
+  }
+}
+
 /* 表头单元格水平居中（统一视觉规范：寄存器表 / 追踪窗等全部 antd Table）。
    antd v6 已移除列级 headerAlign（列 align 会连带正文对齐），故用 CSS。
    注意：antd 自带 .ant-table-thead > tr > th { text-align: start }（含 :where 前缀，

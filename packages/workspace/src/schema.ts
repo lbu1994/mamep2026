@@ -53,6 +53,16 @@ const rowSchema = z.object({
     )
     .nullable()
     .default(null),
+  /** 位级注释（ADR-052，2026-09-11）：外层长度=registerCount，内层长度 16（下标=bit 号）；缺省 null（老数据） */
+  bitComments: z
+    .array(z.array(z.string()).nullable())
+    .nullable()
+    .default(null),
+  /** 位级名称（ADR-052 需求追加，2026-09-11）：结构同 bitComments；缺省 null（老数据） */
+  bitNames: z
+    .array(z.array(z.string()).nullable())
+    .nullable()
+    .default(null),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

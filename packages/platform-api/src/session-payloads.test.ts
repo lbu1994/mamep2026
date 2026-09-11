@@ -119,6 +119,42 @@ describe("RegisterRow payload 往返", () => {
     const restored = registerRowFromPayload(payload);
     expect(restored.registers).toBeNull();
   });
+
+  it("位级注释 bitComments 往返不丢失（ADR-052）", () => {
+    const row = makeRow(0x1000, "10000000 00000001");
+    row.dataType = "binary";
+    row.bitComments = [
+      Array.from({ length: 16 }, (_, index) =>
+        index === 0 ? "carry" : index === 15 ? "alarm" : "",
+      ),
+    ];
+    const payload = toRegisterRowPayload(row);
+    expect(payload.bitComments).toEqual(row.bitComments);
+    const restored = registerRowFromPayload(payload);
+    expect(restored.bitComments).toEqual(row.bitComments);
+  });
+
+  it("位级名称 bitNames 往返不丢失（ADR-052 需求追加）", () => {
+    const row = makeRow(0x1000, "10000000 00000001");
+    row.dataType = "binary";
+    row.bitNames = [
+      Array.from({ length: 16 }, (_, index) =>
+        index === 15 ? "Alarm bit" : "",
+      ),
+    ];
+    const payload = toRegisterRowPayload(row);
+    expect(payload.bitNames).toEqual(row.bitNames);
+    const restored = registerRowFromPayload(payload);
+    expect(restored.bitNames).toEqual(row.bitNames);
+  });
+
+  it("缺省 bitComments/bitNames 的 payload 往返后回退为 null", () => {
+    const row = makeRow(0x1000);
+    const payload = toRegisterRowPayload(row);
+    const restored = registerRowFromPayload(payload);
+    expect(restored.bitComments).toBeNull();
+    expect(restored.bitNames).toBeNull();
+  });
 });
 
 describe("CommunicationLogEvent payload 往返", () => {

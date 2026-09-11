@@ -135,6 +135,10 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "- **String**: ASCII string (two characters per register).",
       "",
       "Each type can have a **scale** (1, 0.1, 0.01, 0.001, 0.0001).",
+      "",
+      "## Bit details",
+      "",
+      "A **Binary** row expands (the `+` in the No column) into 16 bit rows (bit 15 → bit 0) showing the bit number, mask, value and an optional per-bit comment. Toggle or type `0`/`1` to change the register value only — nothing is sent to the device until you press **Write**.",
     ]),
     "zh-CN": md([
       "# 寄存器表",
@@ -160,6 +164,10 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "- **String**：ASCII 字符串（每寄存器 2 字符）。",
       "",
       "每种类型可带 **scale**（1、0.1、0.01、0.001、0.0001）。",
+      "",
+      "## 位明细",
+      "",
+      "**Binary** 行可展开（No 列的 `+`）为 16 行位明细（bit 15 → bit 0），显示位号、掩码、位值与可选位注释。切换或输入 `0`/`1` 只改当前值，**不写设备**，直到你按 **Write** 才会下发。",
     ]),
   },
   "read-write": {

@@ -135,6 +135,19 @@ export function createRegisterSubRowMetas(
   );
 }
 
+/**
+ * 位级注释存储（ADR-052，2026-09-11）：
+ * 外层 index = 寄存器序号（长度 = registerCount），内层长度固定 16、下标 = bit 号（0..15，显示时 bit15 在上）。
+ * 某寄存器的 16 条注释全空时该元素为 `null`；整体全空时 `RegisterRow.bitComments` 为 `null`。
+ */
+export type RegisterBitComments = (string[] | null)[];
+
+/**
+ * 位级名称存储（ADR-052 需求追加，2026-09-11）：结构同 `RegisterBitComments`（与注释对称）。
+ * 位 Name 列可编辑（同 Comment 列），随工作区持久化并入撤销栈。
+ */
+export type RegisterBitNames = (string[] | null)[];
+
 /** 寄存器行。addressDraft / addressValue / 校验状态分离（§17.2）。 */
 export interface RegisterRow {
   rowId: RowId;
@@ -158,6 +171,10 @@ export interface RegisterRow {
   registerValues: RawRegisterValue[] | null;
   /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据；范围行（registerCount>1）为长度=registerCount 的数组。 */
   registers: RegisterSubRowMeta[] | null;
+  /** 位级注释（ADR-052，2026-09-11）：null=无位注释；长度=registerCount 的数组，每项为长度 16 的注释数组（下标=bit 号）或 null。 */
+  bitComments: RegisterBitComments | null;
+  /** 位级名称（ADR-052，2026-09-11）：结构同 bitComments；位 Name 列可编辑（同 Comment 列）。 */
+  bitNames: RegisterBitNames | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -372,8 +389,8 @@ export interface Workspace {
   migrationHistory: MigrationRecord[];
 }
 
-/** 当前工作区 Schema 版本（2026-08-27 v4：范围行子行元数据 registers 落盘；2026-08-31 v5：sheet.type 表类型，ADR-041；2026-09-01 v6：sheet.addressTransform + preferences.themePrimary，ADR-042；2026-09-01 v7：dataType 开放，ADR-043；2026-09-02 v8：themePrimary 改预设 ID，ADR-047）。 */
-export const workspaceSchemaVersion = 8;
+/** 当前工作区 Schema 版本（2026-08-27 v4：范围行子行元数据 registers 落盘；2026-08-31 v5：sheet.type 表类型，ADR-041；2026-09-01 v6：sheet.addressTransform + preferences.themePrimary，ADR-042；2026-09-01 v7：dataType 开放，ADR-043；2026-09-02 v8：themePrimary 改预设 ID，ADR-047；2026-09-11 v9：行位级注释 bitComments，ADR-052；2026-09-11 v10：行位级名称 bitNames，ADR-052 需求追加）。 */
+export const workspaceSchemaVersion = 10;
 
 /**
  * 工作区加载/恢复元数据（ADR-049，2026-09-04）：
@@ -475,6 +492,8 @@ export function createEmptyRow(): RegisterRow {
     cellText: "",
     registerValues: null,
     registers: null,
+    bitComments: null,
+    bitNames: null,
     createdAt: now,
     updatedAt: now,
   };
