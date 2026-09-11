@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import type { MenuProps } from "antd";
@@ -14,10 +22,6 @@ import {
   Layout,
   Menu,
   Modal,
-  Popconfirm,
-  Segmented,
-  Select,
-  Space,
   Splitter,
   Tabs,
   Tooltip,
@@ -26,17 +30,13 @@ import {
 import { AppIcon } from "./assets/AppIcon";
 import { usePluginContributions } from "./plugin/use-contributions";
 import {
-  buildThemeColorOptions,
-  DEFAULT_THEME_COLOR_ID,
   deriveAppliedPrimary,
   findThemeColorOption,
-  themeColorTitle,
   themeConfigForColorOption,
   type ThemeContribution,
 } from "./plugin/theme-contributions";
 import {
   protocolForSheetType,
-  type SettingsContribution,
   type TableTypeContribution,
 } from "./plugin/plugin-registries";
 import {
@@ -80,41 +80,54 @@ import { canDirectConnect, runConnect } from "./connection-actions";
 import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { BrowserCompatibilityBanner } from "./components/BrowserCompatibilityBanner";
-import { RecoveryBanner } from "./components/RecoveryBanner";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
-import { HelpDrawer } from "./components/HelpDrawer";
+import { RecoveryBanner } from "./components/RecoveryBanner";
 import type { DocumentationContribution } from "./components/documentation-markdown";
-import { PluginManagerModal } from "./components/PluginManagerModal";
 import { RegisterTable } from "./components/RegisterTable";
 import { SheetNameEditor } from "./components/SheetNameEditor";
 import { buildSheetMenuItems } from "./components/SheetMenu";
-import { TraceWindow } from "./components/TraceWindow";
-import { WorkspaceFileActions } from "./components/WorkspaceFileActions";
-import { WorkspaceImportModal } from "./components/WorkspaceImportModal";
+import { useOpenedOnce } from "./opened-once";
+
+/**
+ * 代码分割（2026-09-11 ToDoList「构建产物代码分割」）：仅按需打开的弹窗/抽屉改为
+ * `React.lazy` 动态 import——antd 重组件与帮助正文等只在首次使用时下载，首个 chunk
+ * 显著减小（与 vite.config.ts 的 vendor 分包配合）。
+ *
+ * 注意：**每个懒组件必须各自包一层 `<Suspense>`**——若共用同一 boundary，任一组件
+ * 挂起时会把该 boundary 下的其余兄弟节点一并卸载（弹窗互相消失）。挂载门控见
+ * `useOpenedOnce`（首次打开才挂载，此后常驻以保留 antd 关闭动画）。
+ *
+ * `ConnectionSettingsModal` **保持静态导入**：非 mock（浏览器/Electron/VSCode）启动后
+ * 工作区加载完成即自动打开，属首屏路径——懒加载只会多一次异步跳变（实测会让「启动弹窗」
+ * 晚于 e2e 的等待窗口出现）。
+ */
+const HelpDrawer = lazy(() =>
+  import("./components/HelpDrawer").then((m) => ({ default: m.HelpDrawer })),
+);
+const PluginManagerModal = lazy(() =>
+  import("./components/PluginManagerModal").then((m) => ({
+    default: m.PluginManagerModal,
+  })),
+);
+const WorkspaceImportModal = lazy(() =>
+  import("./components/WorkspaceImportModal").then((m) => ({
+    default: m.WorkspaceImportModal,
+  })),
+);
+const TraceWindow = lazy(() =>
+  import("./components/TraceWindow").then((m) => ({ default: m.TraceWindow })),
+);
+const SettingsModal = lazy(() =>
+  import("./components/SettingsModal").then((m) => ({
+    default: m.SettingsModal,
+  })),
+);
 
 /** 折叠时底部面板仅保留标签栏的高度（px）。 */
 const COLLAPSED_BOTTOM_PANEL_HEIGHT = 40;
 
 /** Sheet 名重命名入口来源：页签头（tab）或侧边栏（sidebar），决定编辑态落在哪一处。 */
 type RenameSource = "tab" | "sidebar";
-
-/** Settings 主题色选项 label：色块 + 名称（ADR-047）。 */
-function themeColorOptionLabel(title: string, color: string): ReactNode {
-  return (
-    <Space size={4}>
-      <span
-        style={{
-          display: "inline-block",
-          width: 10,
-          height: 10,
-          borderRadius: 2,
-          background: color,
-        }}
-      />
-      {title}
-    </Space>
-  );
-}
 
 /** 侧边栏分组折叠态图标（ADR-041 分组）：按表类型区分，插件/未知组回退通用图标。 */
 function sidebarGroupIcon(sheetType: SheetType): ReactNode {
@@ -137,7 +150,7 @@ function sidebarGroupIcon(sheetType: SheetType): ReactNode {
 }
 
 export function MamepApp(): React.ReactNode {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   // 工作区加载恢复元数据（ADR-049 恢复提示）：加载后写入，用于主体顶部横幅。
   const workspaceRecovery = useAppStore((s) => s.workspaceRecovery);
@@ -190,27 +203,18 @@ export function MamepApp(): React.ReactNode {
   const selectedSerialHandle = useAppStore((s) => s.selectedSerialHandle);
   const setConnectError = useAppStore((s) => s.setConnectError);
   const setPluginModalOpen = useAppStore((s) => s.setPluginModalOpen);
-  const setWorkspace = useAppStore((s) => s.setWorkspace);
-  const appendMessage = useAppStore((s) => s.appendMessage);
   const settingsOpen = useAppStore((s) => s.settingsModalOpen);
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
-  const setTheme = useAppStore((s) => s.setTheme);
   // 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。
   const themePrimary = useAppStore((s) => s.themePrimary);
-  const setThemePrimary = useAppStore((s) => s.setThemePrimary);
   // 宿主完整主题（VSCode ui-theme 装配，ADR-027）；null=回退 buildTheme 两态。
   const themeConfig = useAppStore((s) => s.themeConfig);
-  // 插件主题贡献（2026-09-02，ADR-047）：插件经 theme 贡献点注册一个或多个可选主题色
-  // （colors[]）→ Settings 主题色选择器选项；**不再自动应用**（ADR-042 插件层最高优先已移除）。
+  // 插件主题贡献（2026-09-02，ADR-047）：此处仅用于解析所选预设（选项列表由 SettingsModal
+  // 自行读取）；**不再自动应用**（ADR-042 插件层最高优先已移除）。
   const themeContributions = usePluginContributions<ThemeContribution>(
     host,
     "theme",
-  );
-  // 主题色选择器选项（内置默认蓝恒在 + 各启用插件注册色；禁用/卸载后选项消失）。
-  const themeColorOptions = useMemo(
-    () => buildThemeColorOptions(themeContributions),
-    [themeContributions],
   );
   // 装配链（ADR-047）：base = VSCode 完整主题或 buildTheme 两态（ADR-027）→
   // 用户所选预设（themePrimary 预设 ID；解析不到 = 插件禁用/卸载 → 回退默认蓝）merge 覆盖。
@@ -226,12 +230,8 @@ export function MamepApp(): React.ReactNode {
           baseThemeConfig,
           themeConfigForColorOption(selectedThemeColor),
         );
-  // settings 贡献消费方（ADR-039）：Settings 弹窗分区（Phase A 声明式标题占位）。
-  const settingsContributions = usePluginContributions<SettingsContribution>(
-    host,
-    "settings",
-  );
   // 文档贡献（ADR-043 E-5）：Help 弹窗渲染插件寄存器手册等。
+  // （settings 贡献消费方已随 Settings 抽出到 SettingsModal，2026-09-11 代码分割。）
   const documentationContributions =
     usePluginContributions<DocumentationContribution>(host, "documentation");
   // 表类型贡献（ADR-041）：侧边栏按协议分组，插件组动态加载（插件启用 + 能力矩阵支持）。
@@ -295,7 +295,6 @@ export function MamepApp(): React.ReactNode {
       ),
     );
   };
-  const setLanguage = useAppStore((s) => s.setLanguage);
   const addSheet = useAppStore((s) => s.addSheet);
   const renameSheet = useAppStore((s) => s.renameSheet);
   // 只订阅追踪窗的键集合（useShallow 逐项比较）：TM 采样（appendTraceSample 重建整个
@@ -329,6 +328,17 @@ export function MamepApp(): React.ReactNode {
   // 帮助/关于弹窗（PRD §8.3 键盘操作，2026-08-30）：入 store 便于快捷键弹窗抑制。
   const helpOpen = useAppStore((s) => s.helpModalOpen);
   const setHelpOpen = useAppStore((s) => s.setHelpModalOpen);
+  // 懒加载弹窗/抽屉的挂载门控（代码分割，2026-09-11）：首次打开才挂载该组件（chunk 按需
+  // 下载），此后常驻以保留 antd 关闭动画。弹窗自身的开合仍由其内部读 store 的 open 控制。
+  // （ConnectionSettingsModal 例外：启动即自动打开、属首屏路径，故静态导入、不门控。）
+  const pluginModalOpen = useAppStore((s) => s.pluginModalOpen);
+  const workspaceImportOpen = useAppStore(
+    (s) => s.workspaceImportDraft !== null,
+  );
+  const pluginManagerMounted = useOpenedOnce(pluginModalOpen);
+  const workspaceImportMounted = useOpenedOnce(workspaceImportOpen);
+  const settingsMounted = useOpenedOnce(settingsOpen);
+  const helpMounted = useOpenedOnce(helpOpen);
   // Sheet 名重命名编辑态（组件/UI 层状态，不入全局 store）：页签头与侧边栏各自独立，
   // 互不驱动对方渲染；任一位置开始编辑时取消另一位置的编辑态，保证同一时刻至多一个。
   const [tabRenamingSheetId, setTabRenamingSheetId] = useState<SheetId | null>(
@@ -534,29 +544,6 @@ export function MamepApp(): React.ReactNode {
     } else {
       setConnectionModalOpen(true);
     }
-  };
-
-  const handleResetWorkspace = (): void => {
-    if (host === null || host === undefined) return;
-    void host.resetWorkspace().then((result) => {
-      if (result.ok) {
-        setWorkspace(result.value);
-        appendMessage({
-          timestamp: Date.now(),
-          level: "info",
-          messageKey: "messages.workspaceReset",
-          detail: null,
-        });
-      } else {
-        appendMessage({
-          timestamp: Date.now(),
-          level: "error",
-          messageKey: "messages.resetFailed",
-          params: { detail: result.error.code },
-          detail: result.error.code,
-        });
-      }
-    });
   };
 
   const startTabRename = (sheetId: SheetId): void => {
@@ -1150,8 +1137,16 @@ export function MamepApp(): React.ReactNode {
         </Layout>
 
         <ConnectionSettingsModal />
-        <PluginManagerModal />
-        <WorkspaceImportModal />
+        {pluginManagerMounted && (
+          <Suspense fallback={null}>
+            <PluginManagerModal />
+          </Suspense>
+        )}
+        {workspaceImportMounted && (
+          <Suspense fallback={null}>
+            <WorkspaceImportModal />
+          </Suspense>
+        )}
 
         {/* 移动端抽屉（ADR-050 Phase 3）：侧栏表列表 + 底部面板。
             开合为会话内状态（不入持久化）；返回键优先关它们（overlay-close 栈）。 */}
@@ -1214,111 +1209,16 @@ export function MamepApp(): React.ReactNode {
           <BottomPanel variant="drawer" />
         </Drawer>
         {traceWindowKeys.map((rowId) => (
-          <TraceWindow key={rowId} rowId={rowId as RowId} />
+          <Suspense key={rowId} fallback={null}>
+            <TraceWindow rowId={rowId as RowId} />
+          </Suspense>
         ))}
 
-        <Modal
-          title={t("settings.title")}
-          open={settingsOpen}
-          onCancel={() => setSettingsOpen(false)}
-          footer={null}
-        >
-          <Space orientation="vertical" style={{ width: "100%" }}>
-            <div>
-              <Typography.Text>{t("settings.theme")}</Typography.Text>
-              <Segmented
-                style={{ marginLeft: 8 }}
-                value={theme}
-                onChange={(value) => setTheme(value as "light" | "dark")}
-                options={[
-                  { value: "light", label: t("settings.themeLight") },
-                  { value: "dark", label: t("settings.themeDark") },
-                ]}
-              />
-            </div>
-            <div>
-              <Typography.Text>{t("settings.themeColor")}</Typography.Text>
-              <Select
-                size="small"
-                style={{ marginLeft: 8, minWidth: 160 }}
-                aria-label={t("settings.themeColor")}
-                value={themePrimary ?? DEFAULT_THEME_COLOR_ID}
-                onChange={(value) =>
-                  setThemePrimary(
-                    value === DEFAULT_THEME_COLOR_ID ? null : value,
-                  )
-                }
-                options={[
-                  {
-                    value: DEFAULT_THEME_COLOR_ID,
-                    label: t("settings.themeColorDefault"),
-                  },
-                  ...themeColorOptions.map((option) => ({
-                    value: option.id,
-                    label: themeColorOptionLabel(
-                      themeColorTitle(option, i18n.language, t),
-                      option.colorPrimary,
-                    ),
-                  })),
-                ]}
-              />
-            </div>
-            <div>
-              <Typography.Text type="secondary">
-                {t("app.title")}
-              </Typography.Text>{" "}
-              <Select
-                size="small"
-                value={i18n.language}
-                style={{ width: 100, marginLeft: 8 }}
-                onChange={(value) => {
-                  // 语言切换：立即生效 + 记入工作区偏好（随自动保存持久化）。
-                  const language = value as "en-US" | "zh-CN";
-                  setLanguage(language);
-                  void i18n.changeLanguage(language);
-                }}
-                options={[
-                  { value: "en-US", label: "English" },
-                  { value: "zh-CN", label: "中文" },
-                ]}
-              />
-            </div>
-            <div>
-              <Popconfirm
-                title={t("settings.resetConfirmTitle")}
-                description={t("settings.resetConfirmContent")}
-                okText={t("settings.resetOk")}
-                cancelText={t("connection.cancel")}
-                okButtonProps={{ danger: true }}
-                onConfirm={() => void handleResetWorkspace()}
-              >
-                <Button danger size="small">
-                  {t("settings.resetWorkspace")}
-                </Button>
-              </Popconfirm>
-            </div>
-            <div>
-              <WorkspaceFileActions />
-            </div>
-            {settingsContributions.length > 0 && (
-              <div className="plugin-settings" data-testid="plugin-settings">
-                {settingsContributions.map((contribution) => (
-                  <div key={contribution.payload.id}>
-                    <Divider titlePlacement="left" plain>
-                      {t(contribution.payload.titleKey)}
-                    </Divider>
-                    <Typography.Text type="secondary">
-                      {t("plugins.settingsPlaceholder")}
-                    </Typography.Text>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Typography.Paragraph type="secondary">
-              {t("settings.aboutText")}
-            </Typography.Paragraph>
-          </Space>
-        </Modal>
+        {settingsMounted && (
+          <Suspense fallback={null}>
+            <SettingsModal host={host} />
+          </Suspense>
+        )}
 
         <Modal
           title={t("table.deleteConfirmTitle")}
@@ -1358,11 +1258,15 @@ export function MamepApp(): React.ReactNode {
           </Typography.Text>
         </Modal>
 
-        <HelpDrawer
-          open={helpOpen}
-          onClose={() => setHelpOpen(false)}
-          documentationContributions={documentationContributions}
-        />
+        {helpMounted && (
+          <Suspense fallback={null}>
+            <HelpDrawer
+              open={helpOpen}
+              onClose={() => setHelpOpen(false)}
+              documentationContributions={documentationContributions}
+            />
+          </Suspense>
+        )}
         <AppShortcutLayer onOpenHelp={() => setHelpOpen(true)} />
       </AntApp>
     </ConfigProvider>

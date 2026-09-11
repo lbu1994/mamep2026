@@ -3,7 +3,9 @@ import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
-import { buildWebCsp } from "./src/csp";
+// 显式带 .ts 扩展名：Vite 未来主版本默认 configLoader: 'native'（Node 原生类型剥离，
+// 遵循 ESM 显式扩展名解析规则）下无扩展名相对导入不再支持。
+import { buildWebCsp } from "./src/csp.ts";
 
 // https://vite.dev/config/
 // 默认模式（pnpm dev / pnpm build）只构建网页端；
@@ -37,6 +39,30 @@ function injectCspMeta(): Plugin {
   };
 }
 
+/**
+ * 代码分割（2026-09-11 ToDoList「构建产物代码分割」）：四端渲染器共用本文件，一次生效
+ * （浏览器 `dist/`、Electron `dist-electron/`、VSCode `dist-vscode/`、Android `dist-android/`）。
+ *
+ * **做法与结论：不自定义分包规则，用 rolldown 默认的 `codeSplitting`。**
+ * 配合 `MamepApp` 的 `React.lazy` 懒加载，rolldown 会按「动态入口可达性」自动把产物切成
+ * 31 个 chunk：入口 192 kB、最大 472 kB（四端构建均无 Vite `> 500 kB` 告警），
+ * 且与懒加载配套（弹窗/抽屉各自的 chunk 独立交付）。
+ *
+ * ⚠️ 已实测的弯路（不得重走）：
+ * - 自定义 `groups`（`react` / `antd` / `vendor` **加 `maxSize: 400 * 1024`**）会把
+ *   **同一个 npm 包内部的循环依赖切到不同 chunk**，破坏模块初始化顺序 →
+ *   Electron 生产构建整体白屏：`TypeError: Class extends value undefined is not a constructor or null`
+ *   （出错点 `@ant-design/colors`：`Color` 基类与子类 `H` 被分到两个 chunk）。浏览器 dev
+ *   不打包，e2e-web 跑了也发现不了（只有四端**生产构建**能暴露）。
+ * - 改成「一个 npm 包一个 chunk」（`name` 函数）虽可运行，但 `antd` 单包即 **816 kB**，
+ *   告警仍在；而 `antd` 再按目录/体积细分又会回到上面的循环依赖问题。
+ * - 旧接口 `output.advancedChunks` 在 rolldown 1.x 已弃用（构建会打印弃用告警），
+ *   对应非弃用形态是 `output.codeSplitting`。
+ *
+ * 因此：任何分包调整都必须用**产物级**手段验证（`pnpm build:electron` + Electron 启动看
+ * 是否挂载 / `pnpm test:e2e:electron`、`pnpm test:e2e:vscode`），不能只看构建体积。
+ */
+
 export default defineConfig(({ mode }) => {
   const isElectron = mode === "electron";
   // VSCode Webview 模式：产物独立目录（apps/web/dist-vscode），base "./" 供 asWebviewUri 相对解析。
@@ -49,21 +75,28 @@ export default defineConfig(({ mode }) => {
     readFileSync(path.resolve(ROOT, "package.json"), "utf-8"),
   ) as { version: string };
 
+  // 各模式渲染器产物目录（浏览器沿用 Vite 默认 dist/；exactOptionalPropertyTypes 下按条件展开）。
+  const rendererOutDir = isElectron
+    ? RENDERER_DIST
+    : isVscode
+      ? RENDERER_DIST_VSCODE
+      : isAndroid
+        ? RENDERER_DIST_ANDROID
+        : undefined;
+
   return {
     define: {
       __APP_VERSION__: JSON.stringify(rootPkg.version),
     },
     // Electron 生产模式经 loadFile(file://)、VSCode Webview 经 asWebviewUri 加载：必须相对路径。
-    base: isPlatformBuild ? "./" : "/",    // 各平台渲染器独立产物目录，与浏览器构建（base /）分开（exactOptionalPropertyTypes 下按条件展开）。
-    ...(isElectron
-      ? { build: { outDir: RENDERER_DIST, emptyOutDir: true } }
-      : {}),
-    ...(isVscode
-      ? { build: { outDir: RENDERER_DIST_VSCODE, emptyOutDir: true } }
-      : {}),
-    ...(isAndroid
-      ? { build: { outDir: RENDERER_DIST_ANDROID, emptyOutDir: true } }
-      : {}),
+    base: isPlatformBuild ? "./" : "/",
+    build: {
+      // 各平台渲染器独立产物目录，与浏览器构建（base /）分开。
+      ...(rendererOutDir === undefined
+        ? {}
+        : { outDir: rendererOutDir, emptyOutDir: true }),
+      // 代码分割：不自定义 `codeSplitting.groups`（原因与实测踩坑见文件头注释）。
+    },
     plugins: [
       react(),
       injectCspMeta(),
