@@ -14,7 +14,7 @@
 
 > **本文件面向「已经在这个 Mamep2026 仓库里开发」的人。** 运行/交付插件时，**真正被安装的只有 `manifest.json`**；`src/` 下的文件是给「开发、类型检查、单测」用的，主软件在运行时**不会**读取它们。
 
-- 若你只是想**给使用本软件的人一个主题色插件**：直接把 `manifest.json` 交给对方，让对方在 Plugin Manager 里安装即可。
+- 若你只是想**给使用本软件的人一个主题色插件**：直接把 `manifest.json` 交给对方，让对方在 **Settings → Plugins** 里安装即可。
 - 若你想**在这个仓库里维护/验证该插件**（参与 `pnpm test` / `pnpm typecheck` / `pnpm lint`）：才需要 `src/`、`package.json`、`tsconfig.json`。
 - 若你想**从零理解插件体系**：看 [docs/插件开发入门指南.md](../../docs/插件开发入门指南.md)。
 

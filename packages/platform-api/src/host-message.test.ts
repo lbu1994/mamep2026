@@ -758,7 +758,7 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
     id: "installed-a",
     name: "Installed A",
     version: "1.0.0",
-    apiVersion: "1.0",
+    apiVersion: "2.0",
     description: "A user-installed plugin",
     platform: { web: true, node: false },
     permissions: ["ui-contribution"],
@@ -787,9 +787,15 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       kind: "plugin-store-save",
       payload: {
         data: {
-          schemaVersion: 3,
-          seeded: false,
-          plugins: [{ manifest: manifestPayload, enabled: true }],
+          schemaVersion: 4,
+          plugins: [
+            {
+              manifest: manifestPayload,
+              enabled: true,
+              entrySource: "export const manifest = {};",
+              executionMode: "same-process",
+            },
+          ],
         },
       },
     });
@@ -815,8 +821,7 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       kind: "plugin-store-save",
       payload: {
         data: {
-          schemaVersion: 3,
-          seeded: false,
+          schemaVersion: 4,
           plugins: [{ manifest: { id: "x" }, enabled: true }],
         },
       },
@@ -826,11 +831,17 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
 
   it("validates a plugin store data response via pluginStoreDataResponseSchema", () => {
     const parsed = pluginStoreDataResponseSchema.safeParse({
-      schemaVersion: 3,
-      seeded: false,
+      schemaVersion: 4,
       plugins: [{ manifest: manifestPayload, enabled: false }],
     });
     expect(parsed.success).toBe(true);
+    // v3 遗留字段不再被接受（schemaVersion 已升 4）。
+    expect(
+      pluginStoreDataResponseSchema.safeParse({
+        schemaVersion: 3,
+        plugins: [],
+      }).success,
+    ).toBe(false);
   });
 });
 

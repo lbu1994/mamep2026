@@ -1,0 +1,20 @@
+{
+  "id": "example-panel",
+  "name": "Example Panel",
+  "version": "1.0.0",
+  "apiVersion": "2.0",
+  "description": "An example plugin that demonstrates contributing a declarative panel via the panels contribution point.",
+  "author": "Mamep2026 Team",
+  "platform": { "web": true, "node": false },
+  "requiredCapabilities": [],
+  "permissions": ["ui-contribution"],
+  "contributes": {
+    "panels": [
+      {
+        "id": "overview",
+        "titleKey": "plugins.examplePanelTitle",
+        "title": { "en-US": "Example Panel", "zh-CN": "示例面板" }
+      }
+    ]
+  }
+}

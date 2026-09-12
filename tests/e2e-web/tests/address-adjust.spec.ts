@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { installExecutablePlugin } from "./helpers/manual-plugins";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
@@ -12,6 +13,13 @@ async function openApp(page: Page): Promise<string[]> {
   // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
+  });
+  // ADR-054：地址变换由插件提供（不再随包安装）——先手动安装，
+  // 并在确认框中授权「同进程执行」（隔离线程无法提供同步变换）。
+  await installExecutablePlugin(page, {
+    pluginId: "builtin-address-adjust",
+    pluginName: "Address Adjust",
+    executionMode: "same-process",
   });
   return errors;
 }

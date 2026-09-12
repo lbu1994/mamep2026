@@ -14,7 +14,7 @@ const manifest = {
   id: "installed-a",
   name: "Installed A",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "A user-installed plugin",
   requiredCapabilities: [],
   platform: { web: true, node: false },
@@ -23,9 +23,8 @@ const manifest = {
 };
 
 const emptyStore: PluginStoreDataResponse = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   plugins: [],
-  seeded: false,
 };
 
 function makeBridge(
@@ -61,9 +60,8 @@ describe("BridgePluginStore", () => {
     const bridge = makeBridge();
     const store = new BridgePluginStore(bridge);
     const data = {
-      schemaVersion: 3 as const,
+      schemaVersion: 4 as const,
       plugins: [{ manifest, enabled: true }],
-      seeded: false,
     };
     const result = await store.save(data);
     expect(result.ok).toBe(true);

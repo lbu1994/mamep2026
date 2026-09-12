@@ -10,7 +10,7 @@ function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
     id: "lifecycle-plugin",
     name: "Lifecycle Plugin",
     version: "1.0.0",
-    apiVersion: "1.0",
+    apiVersion: "2.0",
     description: "lifecycle test",
     requiredCapabilities: [],
     platform: { web: true, node: false },

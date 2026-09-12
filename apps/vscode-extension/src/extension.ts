@@ -17,8 +17,10 @@ import {
   createCodecRegistry,
   registerBasicTablesCodecs,
 } from "@mamep2026/communication";
-import { MemobusCodec } from "@mamep2026/yaskawa-memobus-67h-010dh-010eh";
-import { resolveAddressAdjustTransform } from "@mamep2026/address-adjust";
+import {
+  createHostPluginRuntime,
+  type HostPluginRuntime,
+} from "@mamep2026/platform-node/plugin";
 import { NodePlatformHost } from "@mamep2026/platform-node";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
@@ -34,6 +36,7 @@ import {
 import { DevFakeSerialFactory } from "./dev-fake-serial";
 import { createDevFakeTcpServer, type DevFakeTcpServer } from "./dev-fake-tcp";
 import { fakeDialogPaths, fakeOpenTextFile, fakeSaveTextFile } from "./dev-fake-dialog";
+import type { PluginStorePort } from "@mamep2026/plugin-api";
 import { GlobalStatePluginStore } from "./plugin-store";
 import {
   errorEnvelope,
@@ -51,6 +54,8 @@ let panel: vscode.WebviewPanel | undefined;
 let panelDisposables: vscode.Disposable[] = [];
 /** 装配后的依赖（供 deactivate 释放会话）。 */
 let deps: IpcDeps | undefined;
+/** 宿主侧插件执行面（ADR-055；供 deactivate 释放）。 */
+let hostPluginsRef: HostPluginRuntime | undefined;
 /** dev/e2e 假 TCP 设备（MAMEP_FAKE_TCP=1，deactivate 时停止）。 */
 let fakeTcpServer: DevFakeTcpServer | null = null;
 /** event Envelope 消息号（面板事件与主题事件共用，避免冲突）。 */
@@ -84,22 +89,24 @@ function hostEventMessage(
 function createSessionHost(
   isDev: boolean,
   postEvent: (event: HostEventMessage) => void,
+  hostPlugins: HostPluginRuntime,
 ): VscodeSessionHost {
   const factory =
     isDev && process.env.MAMEP_FAKE_SERIAL === "1"
       ? new DevFakeSerialFactory()
       : undefined;
   const platform = new NodePlatformHost({ factory });
-  // codec 注册表（ADR-043 E-6）：基础表（coil/discrete-input/input-register）与安川
-  // MEMOBUS codec 注册进 Extension Host 会话，供 session-connect 的 protocol 字段路由。
-  const codecRegistry = createCodecRegistry();
+  // codec 注册表（ADR-043 E-6；2026-09-12 ADR-055）：基础表 codec 为核心内建，
+  // 安川 MEMOBUS 等插件 codec 由**宿主侧插件运行时**按插件存储激活后注册进同一注册表；
+  // 会话按 session-connect 的 protocol 字段（codecId）解析 codec。
+  const codecRegistry = hostPlugins.getCodecRegistry();
   registerBasicTablesCodecs(codecRegistry);
-  codecRegistry.register(new MemobusCodec());
   return new VscodeSessionHost({
     platform,
     codecRegistry,
-    // 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件（host 端直接引用其导出）。
-    resolveAddressTransform: resolveAddressAdjustTransform,
+    // 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055 改为宿主侧插件运行时）：
+    // 读当前插件注册表（安装/禁用/卸载后自动跟随）。
+    resolveAddressTransform: hostPlugins.resolveAddressTransform,
     events: {
       onLog: (event) => {
         // 会话层帧计数（与物理写帧 1:1）：e2e 断言一次读取恰好一次收发。
@@ -137,6 +144,8 @@ function createDeps(
   context: vscode.ExtensionContext,
   isDev: boolean,
   postEvent: (event: HostEventMessage) => void,
+  hostPlugins: HostPluginRuntime,
+  pluginStore: PluginStorePort,
 ): IpcDeps {
   return {
     appVersion: () =>
@@ -155,7 +164,7 @@ function createDeps(
       await vscode.env.clipboard.writeText(text);
     },
     clipboardReadText: async () => vscode.env.clipboard.readText(),
-    session: createSessionHost(isDev, postEvent),
+    session: createSessionHost(isDev, postEvent, hostPlugins),
     sessionStats: () => ({ ...sessionStats }),
     // 通信日志 CSV 导出（save-text-file，2026-08-28）：保存对话框 + workspace.fs 落盘。
     saveTextFile: async (options) => {
@@ -225,7 +234,12 @@ function createDeps(
       }
     },
     // 插件存储（plugin-store-load/save，2026-08-30，ADR-038）：Extension Host globalState 承载。
-    pluginStore: new GlobalStatePluginStore(context.globalState),
+    pluginStore,
+    // 保存成功即同步宿主侧插件执行面（ADR-055，2026-09-12）：插件安装/卸载/启停后，
+    // 宿主会话内的插件同步能力（codec / addressTransform）随之更新。
+    onPluginStoreSaved: () => {
+      void hostPlugins.sync();
+    },
   };
 }
 
@@ -253,8 +267,29 @@ export function activate(context: vscode.ExtensionContext): void {
   const postEvent = (event: HostEventMessage): void => {
     if (panel !== undefined) void panel.webview.postMessage(event);
   };
-  const activeDeps = createDeps(context, isDev, postEvent);
+  // 宿主侧插件执行面（ADR-055，2026-09-12）：Extension Host 从同一份插件存储
+  // （context.globalState，即渲染端 plugin-store-save 的落点）加载「已启用 + same-process」
+  // 插件并执行，使其贡献的同步能力（codec / addressTransform）在宿主会话中真正生效
+  // —— 取代此前对 `@mamep2026/yaskawa-*` / `@mamep2026/address-adjust` 的静态 import。
+  const pluginStore = new GlobalStatePluginStore(context.globalState);
+  const hostPlugins = createHostPluginRuntime({
+    store: pluginStore,
+    codecRegistry: createCodecRegistry(),
+    onIssue: (issue) => {
+      // 宿主插件问题不阻断扩展激活：记录到扩展宿主日志（渲染端能力矩阵不感知，
+      // 表现为该协议连接失败，见 ADR-055 决策 3）。
+      console.warn(
+        `[mamep2026] host plugin issue (${issue.code}${issue.pluginId ? `, ${issue.pluginId}` : ""}): ${issue.technicalMessage}`,
+      );
+    },
+  });
+  hostPluginsRef = hostPlugins;
+
+  const activeDeps = createDeps(context, isDev, postEvent, hostPlugins, pluginStore);
   deps = activeDeps;
+  // 宿主侧插件执行面（ADR-055，2026-09-12）：启动同步一次（已安装的 same-process 插件
+  // 立即生效）；后续每次 plugin-store-save 由 ipc 回调再同步。
+  void hostPlugins.sync();
 
   // dev/e2e：MAMEP_FAKE_TCP=1 时启动本地回环 Modbus TCP Server（假 TCP 设备，127.0.0.1:1502）。
   // 与 MAMEP_FAKE_SERIAL 同为宿主进程内注入（仅 dev/test 门控，生产打包不装配）。
@@ -449,6 +484,9 @@ export function deactivate(): void {
   panel = undefined;
   // 扩展停用（§22.2）：释放会话（断开连接/释放串口），避免端口残留占用。
   void deps?.session.dispose();
+  // 释放宿主侧插件执行面（ADR-055）：注销插件并清空宿主注册表。
+  hostPluginsRef?.dispose();
+  hostPluginsRef = undefined;
   // 停止 dev/e2e 假 TCP 设备（若已启动）。
   if (fakeTcpServer !== null) {
     void fakeTcpServer.stop();

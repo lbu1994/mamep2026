@@ -23,6 +23,18 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
     ok: true as const,
     value: undefined,
   }));
+  /** 插件入口加载失败桩（本测试不使用插件安装流程）。 */
+  const pluginEntryUnavailable = async () => ({
+    ok: false as const,
+    error: {
+      code: "PLUGIN_LOAD_FAILED",
+      category: "plugin" as const,
+      severity: "error" as const,
+      retryable: false,
+      userMessageKey: "errors.pluginLoadFailed",
+      technicalMessage: "test stub",
+    },
+  });
   const host: AppHost = {
     capabilities: {
       modbusRtu: true,
@@ -47,10 +59,10 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
     pluginRegistry: new PluginRegistry(),
     appVersion: "0.0.0-test",
     platform: "browser",
-    // 2026-09-02 插件外部化（ADR-045）：AppHost 接口新增方法。
+    // ADR-054：安装入口改为「预览 + 安装」两步。
     startPlugins: vi.fn(async () => undefined),
-    restoreBundledPlugin: vi.fn(async () => undefined),
-    restoreAllBundledPlugins: vi.fn(async () => undefined),
+    previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
+    installPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
     loadWorkspace: vi.fn(async () => ({
       ok: true as const,
       value: createEmptyWorkspace(),
@@ -77,7 +89,6 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
     dispose: vi.fn(async () => undefined),
     getConnectionState: vi.fn(() => "disconnected" as const),
     getSession: vi.fn(() => null),
-    createPluginRemoteRuntime: vi.fn(),
     getCommProperties: vi.fn(),
     setSlaveAddress: vi.fn(),
     setAddressTransform: vi.fn(),

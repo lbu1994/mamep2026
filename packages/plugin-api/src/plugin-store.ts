@@ -9,40 +9,38 @@
  */
 import { z } from "zod";
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
-import {
-  PLUGIN_API_VERSION,
-  pluginManifestSchema,
-  type PluginManifest,
-} from "./manifest";
-import { normalizePermissions } from "./permissions";
+import { pluginManifestSchema, type PluginManifest } from "./manifest";
 
 /**
- * 插件存储 schema 版本（v2：Manifest v2 字段，ADR-039；
- * v3：随应用分发插件「一次性安装」标记，2026-09-02 插件外部化——首次启动时装配方
- * 自动安装随包插件（register + 持久化 manifest/启用状态），此后与用户安装插件完全等同
- * （含卸载=从存储删除、禁用=enabled 覆盖）；seeded=true 表示首次安装已完成，
- * 重启后不再自动安装（卸载持久生效），仅经 hydrate 恢复。
+ * 插件存储 schema 版本（v2：Manifest v2 字段，ADR-039；v3：随包插件一次性安装标记，
+ * 2026-09-02 ADR-045；**v4：删除随包插件机制，2026-09-12 ADR-054**——所有插件一律由用户
+ * 手动安装，插件记录新增 `executionMode`（安装时用户显式授权；缺省隔离执行），
+ * 并在迁移时清空全部已安装插件（用户需重新安装）。
  */
-export const PLUGIN_STORE_SCHEMA_VERSION = 3 as const;
+export const PLUGIN_STORE_SCHEMA_VERSION = 4 as const;
+
+/**
+ * 插件执行模式（2026-09-12，ADR-054）：isolated=隔离线程执行（默认，Web Worker /
+ * worker_threads）；same-process=与应用同进程执行（用户在安装确认框中显式授权后使用，
+ * 用于贡献 codec/dataType/addressTransform 等**同步**能力）。
+ */
+export type PluginExecutionMode = "isolated" | "same-process";
 
 export interface StoredPlugin {
   manifest: PluginManifest;
   enabled: boolean;
   /** 单文件 JS 插件源码（ADR-044 Phase F-2）：可执行插件持久化用；纯清单插件无此字段。 */
-  entrySource?: string;
+  entrySource?: string | undefined;
+  /** 执行模式（ADR-054）：无 entrySource（纯清单）时缺省；有执行面时必填。 */
+  executionMode?: PluginExecutionMode | undefined;
 }
 
 export interface PluginStoreData {
   schemaVersion: typeof PLUGIN_STORE_SCHEMA_VERSION;
   plugins: StoredPlugin[];
-  /** 随包插件首次自动安装是否已完成（2026-09-02 插件外部化）。 */
-  seeded: boolean;
 }
 
-/**
- * 注册表快照（不含 seeded）：seeded 属于持久化协调器的装配状态（ADR-045），
- * 由 PluginPersistenceCoordinator 合并进 PluginStoreData 落盘。
- */
+/** 注册表快照（与 PluginStoreData 同构；ADR-054 起不再含 seeded 装配状态）。 */
 export type PluginStoreSnapshot = Pick<
   PluginStoreData,
   "schemaVersion" | "plugins"
@@ -53,11 +51,11 @@ export const storedPluginSchema = z.object({
   manifest: pluginManifestSchema,
   enabled: z.boolean(),
   entrySource: z.string().optional(),
+  executionMode: z.enum(["isolated", "same-process"]).optional(),
 });
 export const pluginStoreDataSchema = z.object({
   schemaVersion: z.literal(PLUGIN_STORE_SCHEMA_VERSION),
   plugins: z.array(storedPluginSchema),
-  seeded: z.boolean(),
 });
 export type StoredPluginZod = z.infer<typeof storedPluginSchema>;
 export type PluginStoreDataZod = z.infer<typeof pluginStoreDataSchema>;
@@ -67,16 +65,15 @@ export function createEmptyPluginStoreData(): PluginStoreData {
   return {
     schemaVersion: PLUGIN_STORE_SCHEMA_VERSION,
     plugins: [],
-    seeded: false,
   };
 }
 
 /**
- * 存储数据迁移（ADR-039）：v1（manifest 无 apiVersion / requiredCapabilities、permissions 为
- * 自由 string[]）→ v2（Manifest v2 字段）。
- * - schemaVersion 2：严格校验（损坏/非法 → PLUGIN_STORE_SCHEMA_INVALID）；
- * - schemaVersion 1 / 缺失：迁移——plugins 必须为数组（否则视为损坏），非法条目跳过
- *   （不阻断其余条目），permissions 非法项丢弃。
+ * 存储数据迁移（ADR-039 / ADR-054）：
+ * - schemaVersion 4（当前）：严格校验，损坏/非法 → PLUGIN_STORE_SCHEMA_INVALID；
+ * - schemaVersion 1/2/3（历史，含随包插件机制）：**清空已安装插件**并升级到 v4
+ *   （ADR-054：删除随包插件机制、插件一律手动安装，旧记录随机制废弃，用户需重新安装）；
+ *   plugins 非数组视为损坏。
  */
 export function migratePluginStoreData(
   input: unknown,
@@ -102,8 +99,10 @@ export function migratePluginStoreData(
         manifest: p.manifest,
         enabled: p.enabled,
         ...(p.entrySource !== undefined ? { entrySource: p.entrySource } : {}),
+        ...(p.executionMode !== undefined
+          ? { executionMode: p.executionMode }
+          : {}),
       })),
-      seeded: parsed.data.seeded,
     });
   }
   if (!Array.isArray(raw.plugins)) {
@@ -113,42 +112,8 @@ export function migratePluginStoreData(
       ),
     );
   }
-  const migrated: StoredPlugin[] = [];
-  for (const entry of raw.plugins) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const stored = entry as { manifest?: unknown; enabled?: unknown };
-    if (typeof stored.manifest !== "object" || stored.manifest === null)
-      continue;
-    const m = stored.manifest as Record<string, unknown>;
-    const manifest: Record<string, unknown> = {
-      ...m,
-      apiVersion:
-        typeof m.apiVersion === "string" && m.apiVersion.length > 0
-          ? m.apiVersion
-          : PLUGIN_API_VERSION,
-      requiredCapabilities: Array.isArray(m.requiredCapabilities)
-        ? m.requiredCapabilities
-        : [],
-      permissions: normalizePermissions(m.permissions),
-      // 旧字段名 contributions（v1 固定 panels）与 v2 的 contributes 均兼容。
-      contributes:
-        typeof m.contributes === "object" && m.contributes !== null
-          ? m.contributes
-          : typeof m.contributions === "object" && m.contributions !== null
-            ? m.contributions
-            : {},
-    };
-    const parsed = pluginManifestSchema.safeParse(manifest);
-    if (!parsed.success) continue;
-    migrated.push({ manifest: parsed.data, enabled: stored.enabled === true });
-  }
-  // v2 → v3 迁移（2026-09-02 插件外部化）：旧数据无 seeded 标记，视为尚未执行随包插件
-  // 一次性安装（升级后首次启动将自动安装随包插件）。
-  return ok({
-    schemaVersion: PLUGIN_STORE_SCHEMA_VERSION,
-    plugins: migrated,
-    seeded: false,
-  });
+  // v1/v2/v3 → v4：清空已安装插件（ADR-054）。
+  return ok(createEmptyPluginStoreData());
 }
 
 function schemaInvalidError(technicalMessage: string) {

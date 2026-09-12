@@ -15,25 +15,6 @@ import {
   buildPollingTargets,
 } from "@mamep2026/register-table";
 import {
-  EXAMPLE_PANEL_PLUGIN_ID,
-  examplePanelManifest,
-} from "@mamep2026/example-panel";
-import {
-  ADDRESS_ADJUST_PLUGIN_ID,
-  addressAdjustManifest,
-  createAddressAdjustRuntime,
-} from "@mamep2026/address-adjust";
-import {
-  YASKAWA_MEMOBUS_PLUGIN_ID,
-  yaskawaMemobusManifest,
-  createYaskawaRuntime,
-} from "@mamep2026/yaskawa-memobus-67h-010dh-010eh";
-import {
-  CUSTOM_FUNCTION_PLUGIN_ID,
-  customFunctionManifest,
-  createCustomFunctionRuntime,
-} from "@mamep2026/custom-function-code";
-import {
   BrowserPlatformHost,
   createIdbKeyValueStore,
   IndexedDBWorkspaceRepository,
@@ -42,11 +23,12 @@ import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
 import { isAndroidPlatform } from "@mamep2026/platform-android";
 import { createCapacitorTransportBridge } from "@mamep2026/platform-android/capacitor";
 import { createCapacitorAppLifecycleBridge } from "@mamep2026/platform-android/capacitor-app";
-import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
+import { BrowserAppHost } from "./AppHost";
 import { AndroidAppHost } from "./android-app-host";
 import { ElectronAppHost } from "./electron-app-host";
 import { VscodeAppHost } from "./vscode-app-host";
 import { IndexedDBPluginStore } from "./indexeddb-plugin-store";
+import { createPluginSyncRegistries } from "./sync-registries";
 
 const MOCK_FLAG = "mockTransport";
 const COMPAT_MISS_FLAG = "compatMiss";
@@ -106,8 +88,8 @@ export default function App(): React.ReactNode {
   const setConnectionState = useAppStore((s) => s.setConnectionState);
 
   const mockTransport = useMemo(() => isMockMode(), []);
-  // 地址变换解析（2026-09-02 插件外部化）：跨 effect 共享（装配效应用例与工作区订阅副作用），
-  // 初始 no-op 兜底，effect 内装配后指向随包 address-adjust 插件注册表。
+  // 地址变换解析（ADR-054）：跨 effect 共享（装配效应用例与工作区订阅副作用），
+  // 初始 no-op 兜底，effect 内装配后指向插件经 ctx.registries 注册的变换注册表。
   const resolveTransformRef = useRef<
     (transformId: string) => AddressTransform | null
   >(() => null);
@@ -122,53 +104,33 @@ export default function App(): React.ReactNode {
     const android = bridge === undefined && isAndroidPlatform(globalThis);
     // 应用生命周期桥（ADR-050 Phase 3）：返回键（宿主）与前后台（下方 effect）共用同一实例。
     const appLifecycle = android ? createCapacitorAppLifecycleBridge() : null;
-    // codec 注册表（ADR-041 决策 A）：随包插件 activate 填充，connect 按活动表协议路由。
+    // codec 注册表（ADR-041 决策 A）：插件 activate 经 ctx.registries 填充，connect 按活动表协议路由。
     const codecRegistry = createCodecRegistry();
-    // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，三端共享装配。
+    // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，三端共享装配（核心能力）。
     registerBasicTablesCodecs(codecRegistry);
-    // 地址变换注册表（ADR-042）+ 数据类型解析器（ADR-043 E-3）：随包插件 activate 注入，
-    // 装配后经闭包传宿主/插件；地址变换解析按表应用（2026-09-02 插件外部化）。
+    // 地址变换注册表（ADR-042）+ 数据类型解析器（ADR-043 E-3）：插件 activate 经
+    // ctx.registries 注册（ADR-054：插件一律手动安装，核心不再内置任何插件）。
     const transformRegistry = createAddressTransformRegistry();
     const dataTypeResolver = createDataTypeResolver();
     const resolveAddressTransform = (transformId: string) =>
       transformRegistry.get(transformId) ?? null;
     resolveTransformRef.current = resolveAddressTransform;
-    // 随应用分发的插件（2026-09-02 插件外部化）：manifest + 同进程 runtime 工厂。
-    // 首次启动由 host.startPlugins() 一次性安装（installed + 持久化），重启经 hydrate +
-    // attachRuntime 恢复同步能力；插件包代码位于 plugins/ 目录，核心不再内置任何插件。
-    const bundledPlugins: BundledPluginEntry[] = [
-      {
-        pluginId: EXAMPLE_PANEL_PLUGIN_ID,
-        manifest: examplePanelManifest,
-        createRuntime: () => undefined,
-      },
-      {
-        pluginId: ADDRESS_ADJUST_PLUGIN_ID,
-        manifest: addressAdjustManifest,
-        createRuntime: () => createAddressAdjustRuntime({ transformRegistry }),
-      },
-      {
-        pluginId: YASKAWA_MEMOBUS_PLUGIN_ID,
-        manifest: yaskawaMemobusManifest,
-        createRuntime: () => createYaskawaRuntime({ codecRegistry }),
-      },
-      {
-        pluginId: CUSTOM_FUNCTION_PLUGIN_ID,
-        manifest: customFunctionManifest,
-        createRuntime: () =>
-          createCustomFunctionRuntime({ codecRegistry, dataTypeResolver }),
-      },
-    ];
+    // 同步贡献注册面（ADR-054）：插件 ctx.registries 的唯一注入点。
+    const syncRegistries = createPluginSyncRegistries({
+      codecRegistry,
+      dataTypeResolver,
+      addressTransformRegistry: transformRegistry,
+    });
     const host: AppHost =
       bridge !== undefined
         ? bridge.platform === "vscode"
           ? new VscodeAppHost(bridge, {
-              bundledPlugins,
+              syncRegistries,
               resolveAddressTransform,
             })
           : new ElectronAppHost(bridge, {
               codecRegistry,
-              bundledPlugins,
+              syncRegistries,
               resolveAddressTransform,
             })
         : android
@@ -185,7 +147,7 @@ export default function App(): React.ReactNode {
                 repository: new IndexedDBWorkspaceRepository(kv),
                 pluginStore: new IndexedDBPluginStore(kv),
                 codecRegistry,
-                bundledPlugins,
+                syncRegistries,
                 resolveAddressTransform,
                 mockTransport,
               });
@@ -211,13 +173,13 @@ export default function App(): React.ReactNode {
               pluginStore: new IndexedDBPluginStore(kv),
               // codec 注册表（ADR-041 决策 A）。
               codecRegistry,
-              // 随应用分发插件 + 地址变换解析（2026-09-02 插件外部化）。
-              bundledPlugins,
+              // 插件同步贡献注册面 + 地址变换解析（ADR-054）。
+              syncRegistries,
               resolveAddressTransform,
             });
           })();
     hostRef.current = host;
-    // 插件系统启动（2026-09-02 插件外部化）：首次一次性安装随包插件；重启恢复 runtime。
+    // 插件系统启动（ADR-054）：加载已安装插件（用户手动安装）并装配执行面。
     void host.startPlugins();
     // 数据类型解析器注入 store，单元格解析/读取格式化/CSV 白名单经它转发。
     setDataTypeResolver(dataTypeResolver);

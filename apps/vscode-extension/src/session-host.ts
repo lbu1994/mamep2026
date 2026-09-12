@@ -37,9 +37,12 @@ export interface VscodeSessionHostOptions {
   platform: NodePlatformHost;
   /** 会话事件（由装配方转换为 HostMessage v1 event 推送 Webview）。 */
   events: RtuSessionHostEvents;
-  /** codec 注册表（ADR-043 E-6）：基础表/安川 codec 会话经它解析。 */
+  /** codec 注册表（ADR-043 E-6；ADR-055 起由宿主侧插件运行时提供）：插件/基础表 codec 会话经它解析。 */
   codecRegistry?: CodecRegistry;
-  /** 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件提供（host 端直接引用插件导出）。 */
+  /**
+   * 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055）：由宿主侧插件运行时
+   * （HostPluginRuntime）注入，随插件安装/启停自动更新。
+   */
   resolveAddressTransform?: (
     transformId: string,
   ) => AddressTransform | null;

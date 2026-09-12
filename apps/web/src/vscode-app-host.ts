@@ -59,8 +59,13 @@ import {
   type TraceSamplePayload,
   type VscodeHostApi,
 } from "@mamep2026/platform-api";
-import type { PluginRegistry, PluginStorePort } from "@mamep2026/plugin-api";
-import { createUnavailableCommunicationApi } from "@mamep2026/plugin-api";
+import type {
+  PluginExecutionMode,
+  PluginManifest,
+  PluginRegistry,
+  PluginStorePort,
+  PluginSyncRegistries,
+} from "@mamep2026/plugin-api";
 import {
   buildVscodeTheme,
   readVscodeCssVars,
@@ -69,13 +74,12 @@ import {
 import {
   BrowserPlatformHost,
   createIdbKeyValueStore,
-  createWebPluginRemoteRuntime,
   IndexedDBWorkspaceRepository,
 } from "@mamep2026/platform-web";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { useAppStore } from "@mamep2026/ui";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
-import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
+import { BrowserAppHost, deriveCapabilities } from "./AppHost";
 import { BridgePluginStore } from "./bridge-plugin-store";
 
 /** VscodeAppHost 可注入依赖（测试用；生产走默认装配）。 */
@@ -84,9 +88,9 @@ export interface VscodeAppHostOptions {
   repository?: WorkspaceRepositoryPort | undefined;
   /** 插件存储（默认 BridgePluginStore 经 vscode-bridge；测试注入内存仓储）。 */
   pluginStore?: PluginStorePort | undefined;
-  /** 随应用分发插件（2026-09-02 插件外部化）：透传 inner（首次一次性安装 + 重启恢复）。 */
-  bundledPlugins?: BundledPluginEntry[] | undefined;
-  /** 地址变换解析（2026-09-02 插件外部化）：透传 inner（本地只读会话不用于通信）。 */
+  /** 同步贡献注册面（ADR-054）：透传 inner，供插件 activate 经 ctx.registries 注册。 */
+  syncRegistries?: PluginSyncRegistries | undefined;
+  /** 地址变换解析（ADR-054）：透传 inner（本地只读会话不用于通信）。 */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
   /**
    * 主题 CSS 变量读取源（默认 getComputedStyle(document.documentElement) 惰性委托；
@@ -115,7 +119,10 @@ function portLabelOf(ports: SerialPortOption[], portId: string): string {
 }
 
 export class VscodeAppHost implements AppHost {
-  readonly capabilities: PlatformCapabilities;
+  /** 能力矩阵派生（ADR-054）：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
+  get capabilities(): PlatformCapabilities {
+    return deriveCapabilities(vscodeCapabilities, this.pluginRegistry);
+  }
   readonly isMockMode = false;
   /** 桌面端不走浏览器兼容性提示（串口能力经能力矩阵声明）。 */
   readonly browserCompatibility: BrowserCompatibility | null = null;
@@ -169,11 +176,10 @@ export class VscodeAppHost implements AppHost {
       mockTransport: false,
       // 插件持久化（2026-08-30，ADR-038）：Extension Host globalState 经 vscode-bridge 薄桥。
       pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
-      // 随应用分发插件 + 地址变换解析（2026-09-02 插件外部化）。
-      bundledPlugins: options.bundledPlugins,
+      // 同步贡献注册面 + 地址变换解析（ADR-054）。
+      syncRegistries: options.syncRegistries,
       resolveAddressTransform: options.resolveAddressTransform,
     });
-    this.capabilities = vscodeCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;
     this.cssVarSource = options.cssVarSource ??
       // 惰性委托：构造时不触碰 DOM（测试 node 环境安全），读取时才访问 document。
@@ -412,31 +418,30 @@ export class VscodeAppHost implements AppHost {
     return this.connectionState;
   }
 
-  /** 启动插件系统（2026-09-02 插件外部化）：委托 inner（首次一次性安装随包插件 + 恢复）。 */
+  /** 启动插件系统（ADR-054）：委托 inner（加载已安装插件并装配执行面）。 */
   startPlugins(): Promise<void> {
     return this.inner.startPlugins();
   }
 
-  /** 恢复已卸载的随应用分发插件（2026-09-02 插件外部化）。 */
-  restoreBundledPlugin(pluginId: string): Promise<void> {
-    return this.inner.restoreBundledPlugin(pluginId);
+  /** 预览可执行插件 entry（ADR-054）。 */
+  previewPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>> {
+    return this.inner.previewPluginEntry(entrySource, executionMode);
   }
 
-  /** 恢复全部已卸载的随应用分发插件（2026-09-02 插件外部化）。 */
-  restoreAllBundledPlugins(): Promise<void> {
-    return this.inner.restoreAllBundledPlugins();
+  /** 安装可执行插件（ADR-054）：委托 inner（注册 + 持久化）。 */
+  installPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>> {
+    return this.inner.installPluginEntry(entrySource, executionMode);
   }
 
   /** 当前会话（ADR-044 Phase F-2）：VSCode 会话在 Extension Host，无本地会话 → null。 */
   getSession(): CommunicationSession | null {
     return null;
-  }
-
-  /** 插件隔离运行时（ADR-044 Phase F-2）：Webview 内 Web Worker 加载 entry。 */
-  createPluginRemoteRuntime(entrySource: string) {
-    return createWebPluginRemoteRuntime(entrySource, () =>
-      createUnavailableCommunicationApi(),
-    );
   }
 
   getCommProperties(): CommProperties {

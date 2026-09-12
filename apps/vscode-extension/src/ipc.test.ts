@@ -358,9 +358,8 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     expect(pluginStore.load).toHaveBeenCalled();
     if (result.type === "response") {
       expect(result.payload).toEqual({
-        schemaVersion: 3,
+        schemaVersion: 4,
         plugins: [],
-        seeded: false,
       });
     }
   });
@@ -397,15 +396,14 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
       save: vi.fn(async () => ok(undefined)),
     };
     const data = {
-      schemaVersion: 3,
-      seeded: false,
+      schemaVersion: 4,
       plugins: [
         {
           manifest: {
             id: "installed-a",
             name: "Installed A",
             version: "1.0.0",
-            apiVersion: "1.0",
+            apiVersion: "2.0",
             description: "A user-installed plugin",
             requiredCapabilities: [],
             platform: { web: true, node: false },
@@ -422,6 +420,47 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     );
     expect(result.type).toBe("response");
     expect(pluginStore.save).toHaveBeenCalledWith(data);
+  });
+
+  it("plugin-store-save 成功 → 触发宿主侧插件执行面同步（ADR-055）", async () => {
+    const pluginStore = {
+      load: vi.fn(async () => ok(createEmptyPluginStoreData())),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const onPluginStoreSaved = vi.fn();
+    const result = await handleVscodeInvoke(
+      request("plugin-store-save", {
+        data: { schemaVersion: 4, plugins: [] },
+      }),
+      makeDeps({ pluginStore, onPluginStoreSaved }),
+    );
+    expect(result.type).toBe("response");
+    expect(onPluginStoreSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it("plugin-store-save 失败 → 不触发宿主侧插件同步", async () => {
+    const pluginStore = {
+      load: vi.fn(async () => ok(createEmptyPluginStoreData())),
+      save: vi.fn(async () =>
+        fail(
+          createMamepError({
+            code: "PLUGIN_STORE_WRITE_FAILED",
+            category: "plugin",
+            userMessageKey: "errors.pluginStoreError",
+            technicalMessage: "boom",
+          }),
+        ),
+      ),
+    };
+    const onPluginStoreSaved = vi.fn();
+    const result = await handleVscodeInvoke(
+      request("plugin-store-save", {
+        data: { schemaVersion: 4, plugins: [] },
+      }),
+      makeDeps({ pluginStore, onPluginStoreSaved }),
+    );
+    expect(result.type).toBe("error");
+    expect(onPluginStoreSaved).not.toHaveBeenCalled();
   });
 
   it("拒绝未知 kind（不允许任意方法名调用）", async () => {

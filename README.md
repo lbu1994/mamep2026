@@ -6,6 +6,8 @@
 
 **Android 端（第四平台）Phase 1 已落地**（2026-09-10，ADR-050）：Capacitor 8 容器 + WebView 内**同一份共享 UI**，`packages/platform-android` 经 Capacitor 桥把 Modbus TCP 接到原生 `java.net.Socket`（会话仍在 JS，原生只做字节搬运）；真机 e2e（`pnpm test:e2e:android`）TCP 闭环 2/2 全绿；串口（USB-RS485）为 Phase 2，能力矩阵**如实声明**不支持。
 
+**宿主侧插件执行面已实施完成**（2026-09-12，ADR-055）：Electron 主进程 / VSCode Extension Host 改为从**同一份插件存储**加载「已启用 + 同进程」插件并执行（新增 `@mamep2026/platform-node/plugin` 的 `HostPluginRuntime`），使插件贡献的 codec / addressTransform 在宿主会话真正生效；两端对插件包的**静态 import 与依赖已删除**，`hostPlugins` 翻转为 `true`（浏览器 / Android 维持 false）；同步按「集合签名（id + entrySource）变化即全量重建 dataType/addressTransform 注册表」执行，避免卸载 / 禁用插件在宿主侧残留能力。附带修复**生产 CSP**：`script-src` 增加 `blob:`（只放行 `worker-src` 时 Worker 内 / 文档内对 Blob entry 的动态 `import()` 会被拦截 → 可执行插件在四端打包产物中均无法加载，dev e2e 无法暴露）。
+
 > **面向 AI 编码代理**：工作入口与速览见 [AGENTS.md](AGENTS.md)；完整 43 节开发手册见 [docs/AGENTS.md](docs/AGENTS.md)。
 
 ## 技术栈
@@ -25,7 +27,7 @@
 - `apps/vscode-extension/` — VSCode 扩展：Extension Host（`extension.ts` + `ipc.ts` + `session-host.ts`）经 Webview 加载共享 UI，HostMessage v1 类型化 RPC（ADR-019/021/022）
 - `apps/android/` — Android 容器工程（Capacitor 8 + app 内 Kotlin TCP 插件，JDK ≤24 构建；详见 `apps/android/README.md`，ADR-050）
 - `packages/` — 分层共享包：`domain`、`protocol-modbus`、`data-conversion`、`communication`、`workspace`、`logging`、`plugin-api`、`register-table`、`platform-api`（HostMessage v1 契约）、`platform-web`、`platform-node`（Node Serial/TCP Adapter）、`platform-android`（Android 适配层：Capacitor 桥契约 + TCP 传输，ADR-050）、`application`（三端共享会话编排 RtuSessionHost/TcpSessionHost）、`ui`、`ui-theme`（平台主题适配层：base 主题 + VSCode 完整令牌映射，ADR-027）、`test-kit`
-- `plugins/` — 外部插件（随应用分发、首次启动一次性安装：`example-panel`、`address-adjust`、`yaskawa-memobus-67h-010dh-010eh`、`custom-function-code`；`example-theme` 为**手动安装示例**不随包；**禁止新增内置插件**，ADR-045）
+- `plugins/` — 外部插件（**均需手动安装**，随包不分发安装：`address-adjust`、`yaskawa-memobus-67h-010dh-010eh`、`custom-function-code` 为可执行插件，`example-theme` / `example-panel`（`panels` 贡献示例） / 品牌主题色插件为纯清单插件；用 `pnpm build:plugins` 生成可安装产物到 `release/plugins/`；**禁止新增内置插件**，ADR-045 / ADR-054）
 - `config/` — 连接对象配置文件 `connections.json`（测试/验证基建：real e2e 参数与探针，ADR-023/034）
 - `scripts/` — 构建/打包/开发辅助（`build-vscode.mjs`、`package-electron.mjs`、`package-vscode.mjs`、`e2e-real.mjs`、`dev-vscode.mjs`、`dev-with-slave.mjs`、`generate-icons.mjs` 等）与 Modbus 从站（`modbus-slave/`：RTU/TCP 共享核心 `lib/modbus-core.mjs`）
 - `tests/` — `acceptance`（ATDD 核心闭环）、`e2e-web` / `e2e-electron` / `e2e-vscode`（Playwright，各自含 `tests-real|real` 真实端口套件，ADR-024）、`e2e-android`（真机 TCP e2e：CDP 接 WebView + `adb reverse`，需真机，ADR-050）

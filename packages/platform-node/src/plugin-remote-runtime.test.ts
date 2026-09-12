@@ -11,7 +11,7 @@ export const manifest = {
   id: "node-exec",
   name: "Node Exec",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "Executes in a worker_thread.",
   platform: { web: false, node: true },
   permissions: ["communication"],
@@ -71,7 +71,7 @@ describe("NodePluginRemoteRuntime（ADR-044 Phase F-2）", () => {
 
   it("activate 失败（entry 抛错）→ reject（PLUGIN_HOOK_FAILED 隔离由 registry 承接）", async () => {
     const badEntry = `
-      export const manifest = { id: "bad", name: "Bad", version: "1.0.0", apiVersion: "1.0", platform: { web: false, node: true }, permissions: [], contributes: {} };
+      export const manifest = { id: "bad", name: "Bad", version: "1.0.0", apiVersion: "2.0", platform: { web: false, node: true }, permissions: [], contributes: {} };
       export function activate() { throw new Error("activate boom"); }
     `;
     const runtime = new NodePluginRemoteRuntime(badEntry, makeFactory(makeApi()));

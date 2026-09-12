@@ -11,13 +11,16 @@ describe("compatibility（ADR-039：apiVersion 三级判定）", () => {
   });
 
   it("同 major 不同 minor → loadable-warning（带原因）", () => {
-    const result = checkCompatibility("1.5");
+    // 与宿主同 major、minor 不同（版本号无关写法，避免随 PLUGIN_API_VERSION 升级失效）。
+    const major = PLUGIN_API_VERSION.split(".")[0] ?? "1";
+    const result = checkCompatibility(`${major}.99`);
     expect(result.verdict).toBe("loadable-warning");
     expect(result.reason).toBeTruthy();
   });
 
   it("不同 major → forbidden（带原因）", () => {
-    const result = checkCompatibility("2.0");
+    const major = Number.parseInt(PLUGIN_API_VERSION.split(".")[0] ?? "1", 10);
+    const result = checkCompatibility(`${major + 1}.0`);
     expect(result.verdict).toBe("forbidden");
     expect(result.reason).toBeTruthy();
   });

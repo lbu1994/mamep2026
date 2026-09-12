@@ -26,7 +26,8 @@ import { RealNetFactory } from "./real-socket";
 import { NodeTcpTransport } from "./node-tcp-transport";
 import { nodeClock } from "./real-clock";
 
-/** 仅 TCP 的能力声明（Electron 主进程矩阵由 electronCapabilities 承担，本值备用/测试）。 */
+/** 仅 TCP 的能力声明（Electron 主进程矩阵由 electronCapabilities 承担，本值备用/测试）。
+ * hostPlugins:true——Node 侧宿主插件执行面已落地（`@mamep2026/platform-node/plugin`，ADR-055）。 */
 export const nodeTcpHostCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: false,
   modbusTcp: true,
@@ -39,7 +40,7 @@ export const nodeTcpHostCapabilities: PlatformCapabilities = Object.freeze({
   workspaceExport: "unsupported",
   pluginInstall: "unsupported",
   executablePlugins: false,
-  hostPlugins: false,
+  hostPlugins: true,
   protocolExtensions: [],
   tableTypes: ["holding-register"],
 });

@@ -5,6 +5,7 @@
  * - 插件 dataType（custom-function-code:scaled）出现在 Type 下拉且可编辑
  */
 import { expect, test, type Page } from "@playwright/test";
+import { installExecutablePlugin } from "./helpers/manual-plugins";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
@@ -12,6 +13,13 @@ async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
+  });
+  // ADR-054：示例插件不再随包安装——先手动安装并授权同进程执行
+  // （codec 与插件 dataType 均为同步注册面）。
+  await installExecutablePlugin(page, {
+    pluginId: "custom-function-code",
+    pluginName: "Custom Function Code",
+    executionMode: "same-process",
   });
 }
 
@@ -81,7 +89,7 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
   await page
     .getByRole("tab", { name: "Comm Log" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.locator(".ant-tabs").last()).toContainText(
+  await expect(page.locator(".comm-log__list")).toContainText(
     "01 65 00 01 00 01",
     { timeout: 5000 },
   );

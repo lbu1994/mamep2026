@@ -706,7 +706,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     id: "installed-a",
     name: "Installed A",
     version: "1.0.0",
-    apiVersion: "1.0",
+    apiVersion: "2.0",
     description: "A user-installed plugin",
     platform: { web: true, node: false },
     permissions: ["ui-contribution"],
@@ -730,9 +730,8 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     expect(pluginStore.load).toHaveBeenCalled();
     if (result.type === "response") {
       expect(result.payload).toEqual({
-        schemaVersion: 3,
+        schemaVersion: 4,
         plugins: [],
-        seeded: false,
       });
     }
   });
@@ -766,8 +765,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
   it("plugin-store-save 转发载荷给主进程插件存储", async () => {
     const pluginStore = makePluginStore();
     const data = {
-      schemaVersion: 3,
-      seeded: false,
+      schemaVersion: 4,
       plugins: [{ manifest: manifestPayload, enabled: true }],
     };
     const result = await handleRequest(
@@ -776,6 +774,44 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     );
     expect(result.type).toBe("response");
     expect(pluginStore.save).toHaveBeenCalledWith(data);
+  });
+
+  it("plugin-store-save 成功 → 触发宿主侧插件执行面同步（ADR-055）", async () => {
+    const pluginStore = makePluginStore();
+    const onPluginStoreSaved = vi.fn();
+    const result = await handleRequest(
+      request("plugin-store-save", {
+        data: { schemaVersion: 4, plugins: [] },
+      }),
+      makeDeps({ pluginStore, onPluginStoreSaved }),
+    );
+    expect(result.type).toBe("response");
+    expect(onPluginStoreSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it("plugin-store-save 失败 → 不触发宿主侧插件同步", async () => {
+    const pluginStore = {
+      ...makePluginStore(),
+      save: vi.fn(async () =>
+        fail(
+          createMamepError({
+            code: "PLUGIN_STORE_WRITE_FAILED",
+            category: "plugin",
+            userMessageKey: "errors.pluginStoreError",
+            technicalMessage: "boom",
+          }),
+        ),
+      ),
+    };
+    const onPluginStoreSaved = vi.fn();
+    const result = await handleRequest(
+      request("plugin-store-save", {
+        data: { schemaVersion: 4, plugins: [] },
+      }),
+      makeDeps({ pluginStore, onPluginStoreSaved }),
+    );
+    expect(result.type).toBe("error");
+    expect(onPluginStoreSaved).not.toHaveBeenCalled();
   });
 
   it("plugin-store-save 失败时错误投影 category/userMessageKey 原样往返", async () => {
@@ -794,7 +830,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     };
     const result = await handleRequest(
       request("plugin-store-save", {
-        data: { schemaVersion: 3, plugins: [], seeded: false },
+        data: { schemaVersion: 4, plugins: [] },
       }),
       makeDeps({ pluginStore }),
     );

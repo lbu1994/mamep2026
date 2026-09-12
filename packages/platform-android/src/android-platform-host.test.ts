@@ -28,11 +28,18 @@ describe("androidCapabilities（如实声明，docs/AGENTS.md §8.4）", () => {
     expect(androidCapabilities.workspaceExport).toBe("unsupported");
   });
 
-  it("与共享 UI 同源：协议扩展与表类型与三端一致", () => {
+  it("基础能力仅含核心协议扩展/表类型（插件贡献由 Host 经 deriveCapabilities 叠加，ADR-054）", () => {
     expect(androidCapabilities.protocolExtensions).toContain(
+      "modbus-basic-tables:coil",
+    );
+    // 插件提供的协议扩展（如安川）不再写死进基础能力值。
+    expect(androidCapabilities.protocolExtensions).not.toContain(
       "yaskawa-memobus-67h-010dh-010eh",
     );
     expect(androidCapabilities.tableTypes).toContain("holding-register");
+    expect(androidCapabilities.tableTypes).not.toContain(
+      "yaskawa-memobus-67h-010dh-010eh:holding-register",
+    );
   });
 
   it("能力对象只读（防止运行时被改写）", () => {

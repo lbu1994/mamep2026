@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import {
   PluginRegistry,
-  type PluginRemoteRuntime,
+  type PluginManifest,
 } from "@mamep2026/plugin-api";
 import type { OpenTextFileResponse } from "@mamep2026/platform-api";
 import type { Result } from "@mamep2026/domain";
@@ -22,14 +22,15 @@ function renderSection(): ReturnType<typeof render> {
   );
 }
 
-const manifestJson = {
+const manifestJson: PluginManifest = {
   id: "installed-a",
   name: "Installed A",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "A user-installed plugin.",
   author: "Someone",
   platform: { web: true, node: false },
+  requiredCapabilities: [],
   permissions: ["ui-contribution"],
   contributes: { panels: [] },
 };
@@ -78,11 +79,10 @@ function setHostWithPlugin(
       pluginRegistry: registry,
       capabilities: browserCaps,
       openTextFile: vi.fn(),
-      createPluginRemoteRuntime: vi.fn(() => fakeRemoteRuntime()),
-      // 2026-09-02 插件外部化（ADR-045）：Restore bundled 按钮调用点，桩需提供。
+      // ADR-054：安装入口改为「预览 + 安装」两步（host 承担 entry 加载）。
       startPlugins: vi.fn(async () => undefined),
-      restoreBundledPlugin: vi.fn(async () => undefined),
-      restoreAllBundledPlugins: vi.fn(async () => undefined),
+      previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
+      installPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
       ...overrides,
     } as unknown as AppHost,
   });
@@ -119,27 +119,18 @@ async function pickPluginSourceFile(
   });
 }
 
-/** 假隔离线程运行时（ADR-044 Phase F-2 单测）。 */
-function fakeRemoteRuntime(
-  overrides: Record<string, unknown> = {},
-): PluginRemoteRuntime & {
-  load: ReturnType<typeof vi.fn>;
-  activate: ReturnType<typeof vi.fn>;
-  dispose: ReturnType<typeof vi.fn>;
-} {
+/** 插件入口加载失败的结构化错误（默认为测试桩）。 */
+function pluginEntryUnavailable() {
   return {
-    load: vi.fn(async () => ({
-      ok: true,
-      value: manifestJson,
-    })),
-    activate: vi.fn(async () => {}),
-    deactivate: vi.fn(async () => {}),
-    dispose: vi.fn(async () => {}),
-    ...overrides,
-  } as unknown as PluginRemoteRuntime & {
-    load: ReturnType<typeof vi.fn>;
-    activate: ReturnType<typeof vi.fn>;
-    dispose: ReturnType<typeof vi.fn>;
+    ok: false as const,
+    error: {
+      code: "PLUGIN_LOAD_FAILED",
+      category: "plugin" as const,
+      severity: "error" as const,
+      retryable: false,
+      userMessageKey: "errors.pluginLoadFailed",
+      technicalMessage: "test stub",
+    },
   };
 }
 
@@ -171,7 +162,7 @@ describe("PluginManagerSection", () => {
       id: "example-panel",
       name: "Example Panel",
       version: "1.0.0",
-      apiVersion: "1.0",
+      apiVersion: "2.0",
       description: "A built-in UI-safe example plugin.",
       author: "Mamep2026 Team",
       platform: { web: true, node: false },
@@ -195,7 +186,7 @@ describe("PluginManagerSection", () => {
       id: "minimal",
       name: "Minimal",
       version: "0.1.0",
-      apiVersion: "1.0",
+      apiVersion: "2.0",
       description: "No author, no permissions.",
       platform: { web: true, node: false },
       permissions: [],
@@ -218,7 +209,7 @@ describe("PluginManagerSection", () => {
       id: "builtin-x",
       name: "Builtin Plugin",
       version: "1.0.0",
-      apiVersion: "1.0",
+      apiVersion: "2.0",
       description: "Builtin.",
       platform: { web: true, node: false },
       permissions: [],
@@ -229,7 +220,7 @@ describe("PluginManagerSection", () => {
         id: "installed-x",
         name: "User Plugin",
         version: "1.0.0",
-        apiVersion: "1.0",
+        apiVersion: "2.0",
         description: "Installed.",
         platform: { web: true, node: false },
         permissions: [],
@@ -482,7 +473,7 @@ describe("PluginManagerSection", () => {
         id: "builtin-x",
         name: "Builtin Plugin",
         version: "1.0.0",
-        apiVersion: "1.0",
+        apiVersion: "2.0",
         description: "Builtin.",
         platform: { web: true, node: false },
         permissions: [],
@@ -493,7 +484,7 @@ describe("PluginManagerSection", () => {
           id: "installed-x",
           name: "User Plugin",
           version: "1.0.0",
-          apiVersion: "1.0",
+          apiVersion: "2.0",
           description: "Installed.",
           platform: { web: true, node: false },
           permissions: [],
@@ -525,7 +516,7 @@ describe("PluginManagerSection", () => {
           id: "installed-x",
           name: "User Plugin",
           version: "1.0.0",
-          apiVersion: "1.0",
+          apiVersion: "2.0",
           description: "Installed.",
           platform: { web: true, node: false },
           permissions: [],
@@ -558,7 +549,7 @@ describe("PluginManagerSection", () => {
           id: "installed-x",
           name: "User Plugin",
           version: "1.0.0",
-          apiVersion: "1.0",
+          apiVersion: "2.0",
           description: "Installed.",
           platform: { web: true, node: false },
           permissions: [],
@@ -579,98 +570,127 @@ describe("PluginManagerSection", () => {
     });
   });
 
-  describe("随应用分发插件恢复（2026-09-02 插件外部化）", () => {
-    it("footer 显示「Restore bundled」，点击调用 host.restoreAllBundledPlugins", async () => {
-      const restoreAllBundledPlugins = vi.fn(async (): Promise<void> => {});
-      setHostWithPlugin(new PluginRegistry(), {
-        restoreAllBundledPlugins,
-      });
-      renderSection();
-
-      const restoreButton = screen.getByRole("button", {
-        name: /Restore bundled/i,
-      });
-      expect(restoreButton).toBeTruthy();
-      fireEvent.click(restoreButton);
-      await waitFor(() => {
-        expect(restoreAllBundledPlugins).toHaveBeenCalledTimes(1);
-      });
-      await waitFor(() => {
-        expect(screen.getByText("Bundled plugins restored.")).toBeTruthy();
-      });
-    });
-  });
-
-  describe("单文件 JS 可执行插件安装（2026-09-01，ADR-044 Phase F-2/3）", () => {
+  describe("单文件 JS 可执行插件安装（ADR-054：预览 + 执行模式授权 + 安装）", () => {
     const executableCaps = { ...browserCaps, executablePlugins: true } as const;
     const entrySource =
       "export const manifest = {...};\nexport function activate(ctx) {}";
 
-    it("隔离线程加载 manifest → 确认（含 Isolated worker）→ 注册 remoteRuntime + entrySource", async () => {
+    it("预览（隔离）→ 确认框展示清单与执行模式 → 按默认隔离安装", async () => {
       const registry = new PluginRegistry();
-      const runtime = fakeRemoteRuntime();
-      const createPluginRemoteRuntime = vi.fn(() => runtime);
+      const previewPluginEntry = vi.fn(
+        async (): Promise<Result<PluginManifest>> => ({
+          ok: true as const,
+          value: manifestJson,
+        }),
+      );
+      const installPluginEntry = vi.fn(
+        async (): Promise<Result<PluginManifest>> => ({
+          ok: true as const,
+          value: manifestJson,
+        }),
+      );
       setHostWithPlugin(registry, {
         capabilities: executableCaps,
-        createPluginRemoteRuntime,
+        previewPluginEntry,
+        installPluginEntry,
       });
       renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await pickPluginSourceFile(entrySource);
 
-      // 隔离运行时创建并加载 entry。
-      expect(createPluginRemoteRuntime).toHaveBeenCalledWith(entrySource);
-      expect(runtime.load).toHaveBeenCalledTimes(1);
-      // 确认框展示运行位置（Isolated worker）。
+      // 预览：先用隔离模式加载 entry 提取 manifest（不注册）。
+      expect(previewPluginEntry).toHaveBeenCalledWith(entrySource, "isolated");
       expect(
         screen.getAllByText("Install this plugin?").length,
       ).toBeGreaterThan(0);
-      expect(screen.getByText("Isolated worker")).toBeTruthy();
       expect(screen.getByText("Installed A")).toBeTruthy();
+      // 运行位置选择：默认隔离；同进程需显式选择。
+      expect(screen.getByText("Isolated worker (recommended)")).toBeTruthy();
+      expect(
+        screen.getByText("Same process (required for sync capabilities)"),
+      ).toBeTruthy();
 
       clickConfirmOk();
       await waitFor(() => {
-        expect(registry.list()).toHaveLength(1);
-        expect(registry.getSource("installed-a")).toBe("installed");
-        expect(registry.getEntrySource("installed-a")).toBe(entrySource);
-      });
-      // 注册时激活隔离线程。
-      await waitFor(() => {
-        expect(runtime.activate).toHaveBeenCalledTimes(1);
+        expect(installPluginEntry).toHaveBeenCalledWith(
+          entrySource,
+          "isolated",
+        );
       });
     });
 
-    it("取消确认 → 不注册且关闭隔离线程（dispose）", async () => {
+    it("选择同进程执行 → 安装时携带 same-process（用户显式授权）", async () => {
       const registry = new PluginRegistry();
-      const runtime = fakeRemoteRuntime();
+      const installPluginEntry = vi.fn(
+        async (): Promise<Result<PluginManifest>> => ({
+          ok: true as const,
+          value: manifestJson,
+        }),
+      );
       setHostWithPlugin(registry, {
         capabilities: executableCaps,
-        createPluginRemoteRuntime: vi.fn(() => runtime),
+        previewPluginEntry: vi.fn(
+          async (): Promise<Result<PluginManifest>> => ({
+            ok: true as const,
+            value: manifestJson,
+          }),
+        ),
+        installPluginEntry,
       });
       renderSection();
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await pickPluginSourceFile(entrySource);
-      // 确认框内的取消按钮（antd confirm 取消按钮 class）。
-      const confirmCancel = document.querySelector(
-        ".ant-modal-confirm .ant-btn-default",
+      fireEvent.click(
+        screen.getByText("Same process (required for sync capabilities)"),
       );
-      expect(confirmCancel).not.toBeNull();
-      fireEvent.click(confirmCancel as HTMLElement);
+      clickConfirmOk();
 
       await waitFor(() => {
-        expect(registry.list()).toHaveLength(0);
-        expect(runtime.dispose).toHaveBeenCalledTimes(1);
+        expect(installPluginEntry).toHaveBeenCalledWith(
+          entrySource,
+          "same-process",
+        );
       });
     });
 
-    it("executablePlugins 不支持 → 报错不注册", async () => {
+    it("预览失败 → 提示错误且不安装", async () => {
       const registry = new PluginRegistry();
-      const createPluginRemoteRuntime = vi.fn();
+      const installPluginEntry = vi.fn();
+      setHostWithPlugin(registry, {
+        capabilities: executableCaps,
+        previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
+        installPluginEntry,
+      });
+      renderSection();
+
+      fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
+      const input = screen.getByTestId(
+        "plugin-manifest-file-input",
+      ) as HTMLInputElement;
+      fireEvent.change(input, {
+        target: {
+          files: [
+            new File([entrySource], "plugin.mjs", { type: "text/javascript" }),
+          ],
+        },
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Failed to load the plugin entry."),
+        ).toBeTruthy();
+      });
+      expect(installPluginEntry).not.toHaveBeenCalled();
+    });
+
+    it("executablePlugins 不支持 → 报错不预览不安装", async () => {
+      const registry = new PluginRegistry();
+      const previewPluginEntry = vi.fn();
       setHostWithPlugin(registry, {
         capabilities: browserCaps, // executablePlugins: false
-        createPluginRemoteRuntime,
+        previewPluginEntry,
       });
       renderSection();
 
@@ -690,7 +710,7 @@ describe("PluginManagerSection", () => {
           screen.getByText(/Executable plugins are not supported/i),
         ).toBeTruthy();
       });
-      expect(createPluginRemoteRuntime).not.toHaveBeenCalled();
+      expect(previewPluginEntry).not.toHaveBeenCalled();
       expect(registry.list()).toHaveLength(0);
     });
   });

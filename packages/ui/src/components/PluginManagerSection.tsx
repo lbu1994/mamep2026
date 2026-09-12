@@ -3,8 +3,8 @@
  * 抽屉的「Plugins」页签）。入口整合后删除顶栏 Plugin Manager 按钮与窄窗口 More 项，
  * 插件管理统一从 Settings 进入。
  *
- * 功能与行为零改动（ADR-038 安装 / ADR-044 卸载与隔离 / ADR-045 Restore bundled）：安装
- * （manifest JSON 或单文件 JS）、启用/禁用、卸载（仅 installed）、恢复随包插件、加载错误展示；
+ * 功能与行为（ADR-038 安装 / ADR-044 卸载与隔离 / ADR-054 手动安装 + 同进程授权）：安装
+ * （manifest JSON 或单文件 JS）、启用/禁用、卸载（仅 installed）、加载错误展示；
  * 安装/卸载确认继续用 `App.useApp().modal.confirm`（渲染到 body portal，不受 Drawer 影响）。
  */
 import { useRef, useState } from "react";
@@ -16,24 +16,21 @@ import {
   Empty,
   Flex,
   Listy,
+  Radio,
   Space,
   Switch,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
-import {
-  DeleteOutlined,
-  ReloadOutlined,
-  UploadOutlined,
-} from "@ant-design/icons";
+import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import {
   PERMISSION_LABEL_KEYS,
   pluginManifestSchema,
   type PermissionId,
+  type PluginExecutionMode,
 } from "@mamep2026/plugin-api";
 import { useAppStore } from "../app-store";
-import type { AppHost } from "../host";
 
 /** 权限 → i18n 标签键映射（ADR-039）：共享自 plugin-api，未登记权限回退显示原始字符串。 */
 function permissionLabel(
@@ -56,9 +53,10 @@ export function PluginManagerSection(): React.ReactNode {
   const loadErrors = registry?.getLoadErrors() ?? [];
 
   /**
-   * 单文件 JS 插件安装（ADR-044 Phase F-2/3）：entrySource 含 manifest + activate，
-   * 在隔离线程（Web Worker）加载提取 manifest → 校验 → §6.10.4 安全确认（含运行位置）→
-   * registry.register({source:"installed", remoteRuntime, entrySource})。
+   * 单文件 JS 插件安装（ADR-054）：entry 含 manifest + activate。
+   * 1) 预览（按隔离模式加载 entry 提取 manifest，**不注册**）；
+   * 2) §6.10.4 安全确认（含「运行位置」选择：隔离线程 / 同进程执行）；
+   * 3) 按所选模式安装（同进程 = 用户显式授权：插件代码获得与应用同等权限）。
    */
   const handlePluginSourceText = async (text: string): Promise<void> => {
     if (registry === null || host === null) return;
@@ -66,21 +64,14 @@ export function PluginManagerSection(): React.ReactNode {
       message.error(t("plugins.executableUnsupported"));
       return;
     }
-    // 创建隔离运行时并加载 entry（Worker 内 import 提取 manifest）。
-    let runtime: ReturnType<AppHost["createPluginRemoteRuntime"]>;
-    let loadResult: Awaited<ReturnType<typeof runtime.load>>;
-    try {
-      runtime = host.createPluginRemoteRuntime(text);
-      loadResult = await runtime.load();
-    } catch {
-      message.error(t("errors.pluginLoadFailed"));
+    const preview = await host.previewPluginEntry(text, "isolated");
+    if (!preview.ok) {
+      message.error(t(preview.error.userMessageKey));
       return;
     }
-    if (!loadResult.ok) {
-      message.error(t("errors.pluginLoadFailed"));
-      return;
-    }
-    const manifest = loadResult.value;
+    const manifest = preview.value;
+    // 执行模式：默认隔离线程；同进程需在下方选项里显式选择（插件与应用同权限）。
+    const executionModeRef = { current: "isolated" as PluginExecutionMode };
     void modal.confirm({
       title: t("plugins.installConfirmTitle"),
       content: (
@@ -89,9 +80,28 @@ export function PluginManagerSection(): React.ReactNode {
             {t("plugins.installConfirmWarning")}
           </Typography.Paragraph>
           <Typography.Paragraph type="warning">
-            {t("plugins.executableEntryNotice")}
+            {t("plugins.executionModeWarning")}
           </Typography.Paragraph>
-          <Descriptions column={1} size="small">
+          <Radio.Group
+            defaultValue="isolated"
+            onChange={(event) => {
+              executionModeRef.current =
+                event.target.value === "same-process"
+                  ? "same-process"
+                  : "isolated";
+            }}
+            options={[
+              {
+                label: t("plugins.executionModeIsolated"),
+                value: "isolated",
+              },
+              {
+                label: t("plugins.executionModeSameProcess"),
+                value: "same-process",
+              },
+            ]}
+          />
+          <Descriptions column={1} size="small" style={{ marginTop: 12 }}>
             <Descriptions.Item label={t("plugins.name")}>
               <Typography.Text strong>{manifest.name}</Typography.Text>
             </Descriptions.Item>
@@ -100,11 +110,6 @@ export function PluginManagerSection(): React.ReactNode {
             </Descriptions.Item>
             <Descriptions.Item label={t("plugins.version")}>
               {manifest.version}
-            </Descriptions.Item>
-            <Descriptions.Item label={t("plugins.entry")}>
-              <Space size={4}>
-                <Tag color="orange">{t("plugins.entryIsolated")}</Tag>
-              </Space>
             </Descriptions.Item>
             <Descriptions.Item label={t("plugins.permissions")}>
               {manifest.permissions.length > 0 ? (
@@ -125,22 +130,17 @@ export function PluginManagerSection(): React.ReactNode {
       okText: t("plugins.installConfirmOk"),
       cancelText: t("connection.cancel"),
       okButtonProps: { danger: true },
-      onOk: () => {
-        const result = registry.register(manifest, {
-          source: "installed",
-          remoteRuntime: runtime,
-          entrySource: text,
-        });
+      onOk: async () => {
+        const result = await host.installPluginEntry(
+          text,
+          executionModeRef.current,
+        );
         if (!result.ok) {
           message.error(t(result.error.userMessageKey));
           return;
         }
         message.success(t("plugins.installSuccess"));
         forceRender((v) => v + 1);
-      },
-      onCancel: () => {
-        // 取消安装：关闭隔离线程。
-        void runtime.dispose();
       },
     });
   };
@@ -335,29 +335,10 @@ export function PluginManagerSection(): React.ReactNode {
     });
   };
 
-  /**
-   * 恢复随应用分发插件（2026-09-02 插件外部化）：用户卸载后经此处重新安装
-   * （host.restoreBundledPlugin：register + 持久化，已注册的自动跳过）。
-   */
-  const handleRestoreBundled = (): void => {
-    if (host === null) return;
-    void host.restoreAllBundledPlugins().then(() => {
-      message.success(t("plugins.restoreBundledSuccess"));
-      forceRender((v) => v + 1);
-    });
-  };
-
   return (
     <div className="plugin-manager" data-testid="plugin-manager">
       <Space orientation="vertical" style={{ width: "100%" }}>
         <Flex justify="flex-end" gap={8}>
-          <Button
-            size="small"
-            icon={<ReloadOutlined />}
-            onClick={handleRestoreBundled}
-          >
-            {t("plugins.restoreBundled")}
-          </Button>
           <Button
             size="small"
             icon={<UploadOutlined />}

@@ -6,7 +6,11 @@
  * i18n（2026-09-03 方案 A）：插件经 `title` 字段自带翻译（en-US / zh-CN），
  * 缺失语言时消费方回退英文（title["en-US"]），再回退应用 i18n 的 titleKey。
  */
-import type { PluginManifest, PluginRegistry } from "@mamep2026/plugin-api";
+import {
+  PLUGIN_API_VERSION,
+  type PluginManifest,
+  type PluginRegistry,
+} from "@mamep2026/plugin-api";
 
 export const EXAMPLE_THEME_PLUGIN_ID = "example-theme";
 
@@ -14,7 +18,7 @@ export const exampleThemeManifest: PluginManifest = {
   id: EXAMPLE_THEME_PLUGIN_ID,
   name: "Example Theme",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: PLUGIN_API_VERSION,
   description:
     "An example plugin that demonstrates contributing an optional theme color preset via the theme contribution point.",
   author: "Mamep2026 Team",

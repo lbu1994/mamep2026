@@ -51,7 +51,7 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
       if (msg.type === "init") {
         emit(workerRef.current!, {
           type: "ready",
-          manifest: { id: "exec", name: "Exec", version: "1.0.0", apiVersion: "1.0", platform: { web: true, node: false }, permissions: [], contributes: {} },
+          manifest: { id: "exec", name: "Exec", version: "1.0.0", apiVersion: "2.0", platform: { web: true, node: false }, permissions: [], contributes: {} },
         });
       }
     }, workerRef);

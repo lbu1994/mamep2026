@@ -15,7 +15,7 @@
 
 > **本文件面向「已经在这个 Mamep2026 仓库里开发」的人。** 运行/交付插件时，**真正被安装的只有 `manifest.json`**；`src/` 下的文件是给「开发、类型检查、单测」用的，主软件在运行时**不会**读取它们。
 
-- 若你只是想**给使用本软件的人一个主题色插件**：直接把 `manifest.json` 交给对方，让对方在 Plugin Manager 里安装即可。
+- 若你只是想**给使用本软件的人一个主题色插件**：直接把 `manifest.json` 交给对方，让对方在 **Settings → Plugins** 里安装即可。
 - 若你想**在这个仓库里维护/验证该插件**（参与 `pnpm test` / `pnpm typecheck` / `pnpm lint`）：才需要 `src/`、`package.json`、`tsconfig.json`。
 - 若你想**从零理解插件体系**（不依赖本仓库细节、纯概念）：看 [docs/插件开发入门指南.md](../../docs/插件开发入门指南.md)。
 
@@ -34,7 +34,7 @@
 ## 纯数据 vs 可执行插件
 
 - **纯数据插件（本例子，主题色）**：整个插件 = 一份 `manifest.json`（或带类型的 TS 导出）。无 `entry`、无 runtime、不执行任何代码。
-- **可执行插件**（如 `yaskawa-memobus-67h-010dh-010eh`、`custom-function-code`）：除 manifest 外还有可在隔离线程执行的 `entry`（Web Worker / `worker_threads`）；随包受信插件（同进程 runtime）还可贡献 `codec`/`dataType`/`addressTransform` 等同步纯函数，第三方隔离插件（仅 `remoteRuntime`）则不可贡献这些同步面（ADR-044）。本插件**不需要**任何这些。
+- **可执行插件**（如 `yaskawa-memobus-67h-010dh-010eh`、`custom-function-code`、`address-adjust`）：除 manifest 外还有可在隔离线程执行的 `entry`（Web Worker / `worker_threads`）；安装时选**同进程执行**（用户显式授权）才能贡献 `codec`/`dataType`/`addressTransform` 等同步纯函数，隔离线程则不可贡献这些同步面（ADR-044 / ADR-054）。本插件**不需要**任何这些。
 
 ## 最小可交付清单
 
@@ -105,7 +105,7 @@ export const exampleThemeManifest: PluginManifest = {
   id: EXAMPLE_THEME_PLUGIN_ID,
   name: "Example Theme",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "An example plugin that demonstrates contributing an optional theme color preset.",
   author: "Mamep2026 Team",
   platform: { web: true, node: false },

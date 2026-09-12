@@ -61,7 +61,13 @@ import {
   type SerialPortOption,
   type TraceSamplePayload,
 } from "@mamep2026/platform-api";
-import type { PluginRegistry, PluginStorePort } from "@mamep2026/plugin-api";
+import type {
+  PluginExecutionMode,
+  PluginManifest,
+  PluginRegistry,
+  PluginStorePort,
+  PluginSyncRegistries,
+} from "@mamep2026/plugin-api";
 import {
   BrowserPlatformHost,
   usbDeviceLabel,
@@ -71,7 +77,7 @@ import {
 } from "@mamep2026/platform-web";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
-import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
+import { BrowserAppHost, deriveCapabilities } from "./AppHost";
 import { BridgePluginStore } from "./bridge-plugin-store";
 import { FileWorkspaceRepository } from "./file-workspace-repository";
 
@@ -85,14 +91,17 @@ export interface ElectronAppHostOptions {
   pluginStore?: PluginStorePort | undefined;
   /** codec 注册表（ADR-041 决策 A）：RTU 本地路径复用浏览器 AppHost，按活动表协议路由。 */
   codecRegistry?: CodecRegistry | undefined;
-  /** 随应用分发插件（2026-09-02 插件外部化）：透传 inner（首次一次性安装 + 重启恢复）。 */
-  bundledPlugins?: BundledPluginEntry[] | undefined;
-  /** 地址变换解析（2026-09-02 插件外部化）：透传 inner（RTU 本地会话按表应用）。 */
+  /** 同步贡献注册面（ADR-054）：透传 inner，供插件 activate 经 ctx.registries 注册。 */
+  syncRegistries?: PluginSyncRegistries | undefined;
+  /** 地址变换解析（ADR-054）：透传 inner（RTU 本地会话按表应用）。 */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
 }
 
 export class ElectronAppHost implements AppHost {
-  readonly capabilities: PlatformCapabilities;
+  /** 能力矩阵派生（ADR-054）：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
+  get capabilities(): PlatformCapabilities {
+    return deriveCapabilities(electronCapabilities, this.pluginRegistry);
+  }
   readonly isMockMode = false;
   /** 桌面端不走浏览器兼容性提示（串口能力经能力矩阵声明）。 */
   readonly browserCompatibility: BrowserCompatibility | null = null;
@@ -159,11 +168,10 @@ export class ElectronAppHost implements AppHost {
       pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
       // codec 注册表（ADR-041 决策 A）：RTU 本地路径复用浏览器 AppHost。
       codecRegistry: options.codecRegistry,
-      // 随应用分发插件 + 地址变换解析（2026-09-02 插件外部化）。
-      bundledPlugins: options.bundledPlugins,
+      // 同步贡献注册面 + 地址变换解析（ADR-054）。
+      syncRegistries: options.syncRegistries,
       resolveAddressTransform: options.resolveAddressTransform,
     });
-    this.capabilities = electronCapabilities;
     this.pluginRegistry = this.inner.pluginRegistry;
     // RTU 本地会话事件（inner）转发到本 Host 的合并订阅集合（TCP 远程事件同样转发）。
     this.inner.subscribeConnectionState((state) => {
@@ -462,29 +470,30 @@ export class ElectronAppHost implements AppHost {
       : this.inner.getConnectionState();
   }
 
-  /** 启动插件系统（2026-09-02 插件外部化）：委托 inner（首次一次性安装随包插件 + 恢复）。 */
+  /** 启动插件系统（ADR-054）：委托 inner（加载已安装插件并装配执行面）。 */
   startPlugins(): Promise<void> {
     return this.inner.startPlugins();
   }
 
-  /** 恢复已卸载的随应用分发插件（2026-09-02 插件外部化）。 */
-  restoreBundledPlugin(pluginId: string): Promise<void> {
-    return this.inner.restoreBundledPlugin(pluginId);
+  /** 预览可执行插件 entry（ADR-054）。 */
+  previewPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>> {
+    return this.inner.previewPluginEntry(entrySource, executionMode);
   }
 
-  /** 恢复全部已卸载的随应用分发插件（2026-09-02 插件外部化）。 */
-  restoreAllBundledPlugins(): Promise<void> {
-    return this.inner.restoreAllBundledPlugins();
+  /** 安装可执行插件（ADR-054）：委托 inner（注册 + 持久化）。 */
+  installPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>> {
+    return this.inner.installPluginEntry(entrySource, executionMode);
   }
 
   /** 当前会话（ADR-044 Phase F-2）：RTU 本地路径返回内部会话；TCP 在主进程 → null。 */
   getSession(): CommunicationSession | null {
     return this.activeProtocol === "tcp" ? null : this.inner.getSession();
-  }
-
-  /** 插件隔离运行时（ADR-044 Phase F-2）：Renderer 内 Web Worker（与浏览器一致）。 */
-  createPluginRemoteRuntime(entrySource: string) {
-    return this.inner.createPluginRemoteRuntime(entrySource);
   }
 
   getCommProperties(): CommProperties {

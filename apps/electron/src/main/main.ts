@@ -19,7 +19,10 @@ import { fileURLToPath } from "node:url";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
 import { NodeTcpPlatformHost } from "@mamep2026/platform-node/tcp";
-import { resolveAddressAdjustTransform } from "@mamep2026/address-adjust";
+import {
+  createHostPluginRuntime,
+  type HostPluginRuntime,
+} from "@mamep2026/platform-node/plugin";
 import {
   HOST_MESSAGE_PROTOCOL_VERSION,
   MAMEP_IPC_EVENT_CHANNEL,
@@ -95,6 +98,29 @@ function ensurePluginStore(): PluginFileStore {
   return pluginStore;
 }
 
+/**
+ * 宿主侧插件执行面（ADR-055，2026-09-12）：从同一份插件存储（plugins.json）加载
+ * 「已启用 + same-process」插件并执行，使其贡献的同步能力（codec / addressTransform）
+ * 在主进程 TCP 会话中真正生效 —— 取代此前对 `@mamep2026/address-adjust` 的静态 import。
+ */
+let hostPlugins: HostPluginRuntime | null = null;
+
+function ensureHostPlugins(): HostPluginRuntime {
+  if (hostPlugins === null) {
+    hostPlugins = createHostPluginRuntime({
+      store: ensurePluginStore(),
+      onIssue: (issue) => {
+        // 宿主插件问题不阻断启动：记录到主进程日志（渲染端能力矩阵不感知，
+        // 表现为该协议连接失败，见 ADR-055 决策 3）。
+        console.warn(
+          `[mamep] host plugin issue (${issue.code}${issue.pluginId ? `, ${issue.pluginId}` : ""}): ${issue.technicalMessage}`,
+        );
+      },
+    });
+  }
+  return hostPlugins;
+}
+
 /** 主进程会话事件 → 推送渲染进程（HostMessage v1 event Envelope；无窗口时静默丢弃）。 */
 function postSessionEvent(event: HostEventMessage): void {
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
@@ -107,8 +133,10 @@ function ensureSessionHost(): ElectronSessionHost {
   if (electronSessionHost === null) {
     electronSessionHost = new ElectronSessionHost({
       platform: new NodeTcpPlatformHost(),
-      // 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件（host 端直接引用其导出）。
-      resolveAddressTransform: resolveAddressAdjustTransform,
+      // 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055 改为宿主侧插件运行时）：
+      // 读当前插件注册表（安装/禁用/卸载后自动跟随，无需重启）。
+      resolveAddressTransform: (transformId) =>
+        ensureHostPlugins().resolveAddressTransform(transformId),
       events: {
         onLog: (event) =>
           postSessionEvent({
@@ -238,7 +266,14 @@ const ipcDeps: IpcDeps = {
   // 工作区文件仓储（workspace-load/save/clear，2026-08-30，ADR-036）：主进程 userData 目录版本化 JSON。
   workspace: ensureWorkspaceRepository(),
   // 插件存储（plugin-store-load/save，2026-08-30，ADR-038）：主进程 userData 目录 plugins.json。
+  // 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038）：
+  // 主进程 userData plugins.json，实现 PluginStorePort（原子保存 + 备份恢复）。
   pluginStore: ensurePluginStore(),
+  // 保存成功即同步宿主侧插件执行面（ADR-055，2026-09-12）：新增/卸载/启停插件后，
+  // 主进程会话内的插件同步能力（codec / addressTransform）随之更新。
+  onPluginStoreSaved: () => {
+    void ensureHostPlugins().sync();
+  },
 };
 
 async function handleInvokeEvent(
@@ -318,6 +353,11 @@ app.whenReady().then(() => {
   );
 
   ipcMain.handle(MAMEP_IPC_INVOKE_CHANNEL, handleInvokeEvent);
+
+  // 宿主侧插件执行面（ADR-055）：启动时同步一次（已安装的 same-process 插件立即生效）；
+  // 后续每次 plugin-store-save 由 ipcDeps.onPluginStoreSaved 再同步。
+  void ensureHostPlugins().sync();
+
   createWindow();
 
   app.on("activate", () => {
@@ -327,7 +367,8 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  // 窗口全部关闭：释放主进程 TCP 会话（断开连接/释放 socket）。
+  // 窗口全部关闭：释放主进程 TCP 会话（断开连接/释放 socket）与宿主插件。
   void electronSessionHost?.dispose();
+  ensureHostPlugins().dispose();
   if (process.platform !== "darwin") app.quit();
 });

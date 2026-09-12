@@ -134,7 +134,7 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
   await page
     .getByRole("tab", { name: "Comm Log" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.locator(".ant-tabs").last()).toContainText(
+  await expect(page.locator(".comm-log__list")).toContainText(
     "01 01 00 00 00 01",
     { timeout: 5000 },
   );
@@ -184,7 +184,7 @@ test("离散输入表（只读）：Write 禁用、FC02 读", async ({ page }) =
   await page
     .getByRole("tab", { name: "Comm Log" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.locator(".ant-tabs").last()).toContainText(
+  await expect(page.locator(".comm-log__list")).toContainText(
     "01 02 00 01 00 01",
     { timeout: 5000 },
   );
@@ -221,7 +221,7 @@ test("输入寄存器表（只读）：FC04 读 16 位值", async ({ page }) => 
   await page
     .getByRole("tab", { name: "Comm Log" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.locator(".ant-tabs").last()).toContainText(
+  await expect(page.locator(".comm-log__list")).toContainText(
     "01 04 00 02 00 01",
     { timeout: 5000 },
   );

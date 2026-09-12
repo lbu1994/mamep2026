@@ -23,7 +23,6 @@
     "@mamep2026/communication": "workspace:*",
     "@mamep2026/data-conversion": "workspace:*",
     "@mamep2026/domain": "workspace:*",
-    "@mamep2026/example-panel": "workspace:*",
     "@mamep2026/logging": "workspace:*",
     "@mamep2026/platform-api": "workspace:*",
     "@mamep2026/platform-android": "workspace:*",

@@ -29,20 +29,17 @@ export const androidCapabilities: PlatformCapabilities = Object.freeze({
   // 第三方脚本插件（Blob Worker）待 WebView 版本门控后另行确认（Phase 5）。
   executablePlugins: false,
   hostPlugins: false,
-  // 与共享 UI 同源（同一份 web 产物），协议扩展与表类型与浏览器/Electron 一致。
+  // 与共享 UI 同源（同一份 web 产物）：此处仅列**核心**协议扩展/表类型；插件贡献
+  // （安川 / 自定义功能码等）由 Host 读取注册表后经 deriveCapabilities 叠加（ADR-054）。
   protocolExtensions: [
-    "yaskawa-memobus-67h-010dh-010eh",
     "modbus-basic-tables:coil",
     "modbus-basic-tables:discrete-input",
     "modbus-basic-tables:input-register",
-    "custom-function-code",
   ],
   tableTypes: [
     "holding-register",
     "coil",
     "discrete-input",
     "input-register",
-    "yaskawa-memobus-67h-010dh-010eh:holding-register",
-    "custom-function-code:holding-register",
   ],
 });

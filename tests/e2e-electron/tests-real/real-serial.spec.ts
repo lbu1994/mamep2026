@@ -12,6 +12,11 @@
  *
  * 场景与浏览器 real-serial 一致：连接 Online → FC03 读 / FC10 写 + 读回 → 写值门控
  * → 异常区 → no-response 超时 → 边界 → 扩展（分片/延迟）→ 通信日志 → 断开 → 无 console 错误。
+ *
+ * 2026-09-12（ADR-054）：插件不再随包分发/首启安装，故本 spec 在基础表用例前**先经
+ * Settings → Plugins 安装** `custom-function-code` 插件（`pnpm build:plugins` 产物，
+ * 安装时授权「同进程执行」——codec / dataType 属同步注册面），否则侧边栏不会出现
+ * 自定义功能码分组。
  */
 import {
   _electron,
@@ -23,6 +28,7 @@ import {
 } from "@playwright/test";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { clearWorkspaceFile } from "../clear-workspace-file";
 
@@ -30,6 +36,16 @@ const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests-real/）。 */
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 const CONNECTED_TIMEOUT = 15_000;
+/** 自定义功能码示例插件（手动安装；贡献 codec / dataType / tableType）。 */
+const CUSTOM_FC_PLUGIN_ID = "custom-function-code";
+const CUSTOM_FC_ENTRY_PATH = path.resolve(
+  REPO_ROOT,
+  "release/plugins",
+  CUSTOM_FC_PLUGIN_ID,
+  `${CUSTOM_FC_PLUGIN_ID}.mjs`,
+);
+/** 侧边栏分组标题（插件 tableType 贡献的 i18n 文案，aria-label = 组标题）。 */
+const CUSTOM_FC_GROUP_LABEL = "Custom FC 65H/66H (example plugin)";
 
 // 门控：真实端口测试需显式开启（MAMEP_REAL=1，由 scripts/e2e-real.mjs 设置）。
 test.skip(
@@ -187,6 +203,54 @@ async function reconnectAsActiveSheet(p: Page): Promise<void> {
   await expect(p.locator(".ant-modal-container:visible")).toHaveCount(0);
 }
 
+/**
+ * 经 Settings → Plugins 安装 custom-function-code 插件产物（ADR-054：插件一律手动安装）。
+ * 生产构建下「Install Plugin」走主进程 `open-text-file` → `dialog.showOpenDialog`
+ * （系统对话框无法自动化），故与 `plugin-host-execution.spec.ts` 同法用 `app.evaluate`
+ * 桩替换对话框；该插件贡献 codec / dataType（同步纯函数），确认框中须选「同进程执行」。
+ */
+async function installCustomFunctionCodePlugin(): Promise<void> {
+  await app.evaluate(
+    async ({ dialog }, entryPath) => {
+      (dialog as unknown as { showOpenDialog: unknown }).showOpenDialog =
+        async () => ({ canceled: false, filePaths: [entryPath] });
+    },
+    CUSTOM_FC_ENTRY_PATH,
+  );
+
+  await page
+    .getByRole("button", { name: "Settings" })
+    .evaluate((el) => (el as HTMLElement).click());
+  await page.waitForSelector(".settings-drawer.ant-drawer-open", {
+    timeout: 5000,
+  });
+  await page
+    .locator(".settings-drawer")
+    .getByRole("tab", { name: "Plugins" })
+    .click();
+  const section = page.getByTestId("plugin-manager");
+  await expect(section).toBeVisible();
+  await section.getByRole("button", { name: "Install Plugin" }).click();
+
+  const confirm = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Install this plugin?" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByText("Same process", { exact: false }).click();
+  await confirm.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(confirm).toBeHidden();
+  await expect(section).toContainText("Custom Function Code");
+
+  // 关闭 Settings（离场动画期间点击会被遮罩吞掉：等 wrapper 隐藏）。
+  await page
+    .locator(".settings-drawer .ant-drawer-close")
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
+  await expect(
+    page.locator(".settings-drawer .ant-drawer-content-wrapper"),
+  ).toBeHidden();
+}
+
 test.beforeAll(async () => {
   app = await _electron.launch({
     executablePath: require("electron"),
@@ -209,6 +273,13 @@ test.beforeAll(async () => {
   // 工作区持久化已改为文件仓储（ADR-036，2026-08-30）：IndexedDB 清理不再清除工作区，
   // 一并删除 userData 下 workspace.json(.bak)，避免跨测试/跨运行污染。
   await clearWorkspaceFile(app);
+  // 插件存储同理（ADR-054）：删掉 plugins.json(.bak)，保证本 spec 从「未安装任何插件」基线
+  // 开始（否则上次运行安装的插件会让侧边栏多出分组、重复安装而注册失败）。
+  const userDataDir = await app.evaluate(async ({ app: electronApp }) =>
+    electronApp.getPath("userData"),
+  );
+  await rm(path.join(userDataDir, "plugins.json"), { force: true });
+  await rm(path.join(userDataDir, "plugins.json.bak"), { force: true });
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
   // 非 mock 启动自动弹出 Connection Settings。
@@ -448,6 +519,20 @@ test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成�
   });
 });
 
+test("安装 custom-function-code 插件（ADR-054：手动安装 + 同进程执行）", async () => {
+  // 基线：未安装插件时侧边栏无自定义功能码分组。
+  const groupButton = page.getByRole("button", {
+    name: CUSTOM_FC_GROUP_LABEL,
+    exact: true,
+  });
+  await expect(groupButton).toHaveCount(0);
+
+  await installCustomFunctionCodePlugin();
+
+  // 插件的 tableType 贡献生效 → 侧边栏出现分组（后续用例据此新建自定义功能码表）。
+  await expect(groupButton.first()).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+});
+
 test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + FC65/FC66", async () => {
   // 所有行断言限定到活动表（多 Sheet 时不得命中隐藏表）。
   const dataCell = () => activeTable(page).getByLabel("Data").first();
@@ -492,7 +577,8 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
 
   // 自定义功能码表（ADR-043 E-4）：FC65 读保持寄存器 1（此前 FC10 写 0x12AB）→ "12AB"；
   // FC66 写 3=0xABCD → 回执；并用通信日志断言帧字节（FC65/FC66 与 FC03/FC10 同构，须靠帧区分）。
-  await addBasicSheet(page, "Custom FC 65H/66H (example plugin)");
+  // 前置：custom-function-code 插件已在前一用例经 Settings → Plugins 安装（ADR-054）。
+  await addBasicSheet(page, CUSTOM_FC_GROUP_LABEL);
   await setRadixHex(page);
   await reconnectAsActiveSheet(page);
   await setRowAddress(page, "0001");

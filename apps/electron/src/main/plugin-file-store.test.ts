@@ -18,7 +18,7 @@ const manifest: PluginManifest = {
   id: "installed-a",
   name: "Installed A",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "A user-installed plugin",
   requiredCapabilities: [],
   platform: { web: true, node: false },
@@ -28,9 +28,8 @@ const manifest: PluginManifest = {
 
 function storeData(name: string): PluginStoreData {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     plugins: [{ manifest: { ...manifest, id: name, name }, enabled: true }],
-    seeded: false,
   };
 }
 

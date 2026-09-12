@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./tcp": "./src/tcp.ts"
+    "./tcp": "./src/tcp.ts",
+    "./plugin": "./src/plugin.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -14,6 +15,7 @@
   },
   "dependencies": {
     "@mamep2026/communication": "workspace:*",
+    "@mamep2026/data-conversion": "workspace:*",
     "@mamep2026/domain": "workspace:*",
     "@mamep2026/platform-api": "workspace:*",
     "@mamep2026/plugin-api": "workspace:*",

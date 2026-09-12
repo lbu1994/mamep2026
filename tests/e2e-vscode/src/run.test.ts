@@ -733,6 +733,138 @@ async function runReconnectLoop(): Promise<void> {
   );
 }
 
+/**
+ * 宿主侧插件执行面闭环（ADR-055，2026-09-12）：经真实 HostMessage RPC 路径验证
+ * Extension Host 从**同一份插件存储**（globalState）加载「已启用 + same-process」插件并执行，
+ * 使其贡献的同步能力（addressTransform）真正作用于宿主会话：
+ * 安装（plugin-store-save = 渲染端安装流程的等价载荷）→ 启用表级地址变换 →
+ * 读用户地址 1 实际发送地址 0（变换前读回地址 1 的值，变换后读回地址 0 的值）→
+ * 关闭变换回退 → 卸载（空存储）后变换不再生效（宿主注册表已清空，无残留）。
+ *
+ * 安装/卸载经 plugin-store-save（不弹文件对话框）：UI 安装流程由 tests/e2e-web
+ * plugin-install.spec.ts（浏览器）与 tests/e2e-electron plugin-host-execution.spec.ts 覆盖；
+ * 本用例专注**宿主侧执行与生效**这一唯一可在 Extension Host 观测的路径。
+ * 插件产物路径由 run-e2e.mjs 经环境变量注入（需先 `pnpm build:plugins`）。
+ */
+async function runPluginHostLoop(): Promise<void> {
+  const entryPath = process.env.MAMEP_PLUGIN_ENTRY_PATH ?? "";
+  const manifestPath = process.env.MAMEP_PLUGIN_MANIFEST_PATH ?? "";
+  assert.ok(
+    entryPath.length > 0 && manifestPath.length > 0,
+    "plugin artifact env paths should be set by run-e2e.mjs (pnpm build:plugins)",
+  );
+  const entrySource = await fs.readFile(entryPath, "utf8");
+  const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as unknown;
+  const TRANSFORM_ID = "builtin.address-adjust";
+
+  const readAt = async (address: number): Promise<unknown> => {
+    const read = await rpcEnvelope("session-read-row", {
+      row: registerRow(address, ""),
+    });
+    assert.strictEqual(read.type, "response", `session-read-row(${address})`);
+    return read.payload;
+  };
+  const writeAt = async (address: number, value: string): Promise<void> => {
+    const write = await rpcEnvelope("session-write-row", {
+      row: registerRow(address, value),
+    });
+    assert.strictEqual(write.type, "response", `session-write-row(${address})`);
+  };
+  const setTransform = async (enabled: boolean): Promise<void> => {
+    const result = await rpcEnvelope("session-set-address-transform", {
+      transformId: TRANSFORM_ID,
+      enabled,
+    });
+    assert.strictEqual(result.type, "response", "session-set-address-transform");
+  };
+
+  // 1. 安装同进程可执行插件（渲染端 plugin-store-save 的等价载荷）。
+  const saved = await rpcEnvelope("plugin-store-save", {
+    data: {
+      schemaVersion: 4,
+      plugins: [
+        {
+          manifest,
+          enabled: true,
+          entrySource,
+          executionMode: "same-process",
+        },
+      ],
+    },
+  });
+  assert.strictEqual(saved.type, "response", "plugin-store-save should succeed");
+  // 宿主侧插件执行面经 ipc 回调异步同步（onPluginStoreSaved → HostPluginRuntime.sync）。
+  await sleep(1500);
+
+  try {
+    // 2. 连接 RTU，种子寄存器：地址 0 = 0x1111、地址 1 = 0x2222。
+    const connect = await rpcEnvelope("session-connect", {
+      portId: "FAKE-1",
+      profile: rtuProfile(),
+      slaveAddress: 1,
+    });
+    assert.strictEqual(connect.type, "response", "session-connect");
+    await writeAt(0, "1111");
+    await writeAt(1, "2222");
+
+    // 3. 未启用变换：读用户地址 1 → 地址 1 的值。
+    assert.strictEqual(
+      await readAt(1),
+      0x2222,
+      "without transform the user address must be sent unchanged",
+    );
+
+    // 4. 启用插件变换（sent = user − 1）→ 读用户地址 1 实际发送 0（返回地址 0 的值）。
+    await setTransform(true);
+    assert.strictEqual(
+      await readAt(1),
+      0x1111,
+      "host plugin address transform should be applied (sent address 0)",
+    );
+
+    // 5. 关闭变换 → 读回退到地址 1 的值。
+    await setTransform(false);
+    assert.strictEqual(
+      await readAt(1),
+      0x2222,
+      "disabling the transform must restore the user address",
+    );
+
+    await rpcEnvelope("session-disconnect");
+
+    // 6. 卸载（空插件存储）→ 宿主注册表清空：即使表级配置仍开启也不再调整（无残留）。
+    const cleared = await rpcEnvelope("plugin-store-save", {
+      data: { schemaVersion: 4, plugins: [] },
+    });
+    assert.strictEqual(
+      cleared.type,
+      "response",
+      "plugin-store-save (uninstall) should succeed",
+    );
+    await sleep(1500);
+
+    const reconnect = await rpcEnvelope("session-connect", {
+      portId: "FAKE-1",
+      profile: rtuProfile(),
+      slaveAddress: 1,
+    });
+    assert.strictEqual(reconnect.type, "response", "session-connect (after uninstall)");
+    await setTransform(true);
+    assert.strictEqual(
+      await readAt(1),
+      0x2222,
+      "uninstalled plugin transform must no longer be resolvable in the host",
+    );
+    await setTransform(false);
+    await rpcEnvelope("session-disconnect");
+  } finally {
+    // 兜底清理：确保插件存储为空（避免影响后续/重复运行）。
+    await rpcEnvelope("plugin-store-save", {
+      data: { schemaVersion: 4, plugins: [] },
+    });
+  }
+}
+
 export async function run(): Promise<void> {
   await vscode.commands.executeCommand("mamep2026.openMainPanel");
   await sleep(500);
@@ -819,4 +951,8 @@ export async function run(): Promise<void> {
 
   // 7. 面板关闭释放：连接 → 关闭面板 → 会话释放 → 可重连。
   await runPanelCloseRelease();
+
+  // 8. 宿主侧插件执行面（ADR-055）：安装同进程插件 → 地址变换在 Extension Host 生效 → 卸载后不再生效。
+  //    置于最后：本用例会改写插件存储（已自行清理，避免影响其它用例）。
+  await runPluginHostLoop();
 }

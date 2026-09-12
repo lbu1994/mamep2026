@@ -25,7 +25,10 @@ import {
 } from "@mamep2026/domain";
 import { RtuSessionHost } from "@mamep2026/application";
 import { createPluginCommunicationApi } from "@mamep2026/application";
-import { createWebPluginRemoteRuntime } from "@mamep2026/platform-web";
+import {
+  createWebPluginRemoteRuntime,
+  loadWebPluginEntry,
+} from "@mamep2026/platform-web";
 import type {
   BatchReadHandle,
   BatchReadRow,
@@ -59,11 +62,17 @@ import {
   PLUGIN_RUNTIME_NOT_AVAILABLE,
   PluginPersistenceCoordinator,
   PluginRegistry,
+  pluginManifestSchema,
+  runtimeFromLocalEntry,
 } from "@mamep2026/plugin-api";
 import type {
+  PluginExecutionMode,
+  PluginLocalEntry,
   PluginManifest,
-  PluginRuntime,
+  PluginRemoteRuntime,
   PluginStorePort,
+  PluginSyncRegistries,
+  StoredPlugin,
 } from "@mamep2026/plugin-api";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { AutoSaveCoordinator } from "@mamep2026/workspace";
@@ -77,18 +86,6 @@ import {
   type CompatibilityEnv,
 } from "@mamep2026/platform-web";
 
-/**
- * 随应用分发的插件条目（2026-09-02 插件外部化）：manifest + 同进程 runtime 工厂。
- * 首次启动一次性安装（register + 持久化）；重启后经 hydrate 恢复注册后由装配层用
- * createRuntime() 重建同进程 runtime（同步能力如 codec/dataType/transform 随代码包恢复）。
- */
-export interface BundledPluginEntry {
-  pluginId: string;
-  manifest: PluginManifest;
-  /** 无 runtime 的纯清单插件返回 undefined（如 example-panel）。 */
-  createRuntime: () => PluginRuntime | undefined;
-}
-
 export interface AppHostOptions {
   capabilities?: PlatformCapabilities;
   /**
@@ -100,21 +97,21 @@ export interface AppHostOptions {
   repository: WorkspaceRepositoryPort;
   mockTransport: boolean;
   /**
-   * 插件存储端口（2026-08-30，ADR-038）：提供时装配 PluginPersistenceCoordinator，
-   * 启动 hydrate 已安装插件并在注册/启用变化时持久化。浏览器=IndexedDB、
-   * Electron/VSCode=主进程/扩展宿主持久化经桥。缺省不装配（无持久化，纯内存）。
+   * 插件存储端口（2026-08-30，ADR-038）：提供时启动时加载已安装插件并按 executionMode
+   * 装配执行面、在注册/启用变化时持久化。浏览器=IndexedDB、Electron/VSCode=主进程/扩展宿主
+   * 持久化经桥。缺省不装配（无持久化，则无手动安装能力）。
    */
   pluginStore?: PluginStorePort | undefined;
   /**
-   * codec 注册表（ADR-041 决策 A）：随包插件 activate 填充；connect 时按活动表类型
-   * 路由 codecId 会话（软件仅提供调用接口）。缺省不装配（纯 RTU/TCP）。
+   * codec 注册表（ADR-041 决策 A）：插件 activate 经 ctx.registries.codec 填充；connect 时按
+   * 活动表类型路由 codecId 会话（软件仅提供调用接口）。缺省不装配（纯 RTU/TCP）。
    */
   codecRegistry?: CodecRegistry | undefined;
   /**
-   * 随应用分发的插件（2026-09-02 插件外部化）：首次启动一次性安装，此后与用户安装
-   * 插件等同（可禁用/卸载/恢复，状态持久化）。缺省不装配（无随包插件）。
+   * 同步贡献注册面（ADR-054）：插件 `activate(ctx)` 经 `ctx.registries` 注册
+   * codec / dataType / addressTransform；由组合根（apps/web App.tsx）装配后注入注册表。
    */
-  bundledPlugins?: BundledPluginEntry[] | undefined;
+  syncRegistries?: PluginSyncRegistries | undefined;
   /**
    * 地址变换解析（2026-09-02 插件外部化）：经随包 address-adjust 插件的
    * AddressTransformRegistry 解析 transformId → 变换；缺省不调整（核心不再内置变换）。
@@ -123,8 +120,58 @@ export interface AppHostOptions {
     ((transformId: string) => AddressTransform | null) | undefined;
 }
 
+/** 插件清单校验失败（安装/启动加载路径，ADR-054）。 */
+function pluginManifestInvalidError(message: string) {
+  return createMamepError({
+    code: "PLUGIN_MANIFEST_INVALID",
+    category: "plugin",
+    severity: "error",
+    retryable: false,
+    userMessageKey: "errors.pluginManifestInvalid",
+    technicalMessage: message,
+  });
+}
+
+/**
+ * 能力矩阵派生（ADR-054）：协议扩展 / 表类型 = 平台基础值 + **已启用**插件贡献
+ * （平台不支持的能力仍不得由插件引入，基础值来自 platform-web / platform-node / platform-android）。
+ * `getContributions` 已按插件启用状态与激活失败过滤（ADR-039）。
+ */
+export function deriveCapabilities(
+  base: PlatformCapabilities,
+  registry: PluginRegistry,
+): PlatformCapabilities {
+  const protocolExtensions = new Set(base.protocolExtensions);
+  for (const contribution of registry.getContributions<{
+    protocolId: string;
+  }>("protocolExtension")) {
+    protocolExtensions.add(contribution.payload.protocolId);
+  }
+  const tableTypes = new Set(base.tableTypes);
+  for (const contribution of registry.getContributions<{
+    id: string;
+    protocolId: string;
+  }>("tableType")) {
+    tableTypes.add(`${contribution.pluginId}:${contribution.payload.id}`);
+  }
+  return {
+    ...base,
+    protocolExtensions: [...protocolExtensions],
+    tableTypes: [...tableTypes],
+  };
+}
+
 export class BrowserAppHost implements AppHost {
-  readonly capabilities: PlatformCapabilities;
+  /** 基础能力（ADR-054）：协议扩展 / 表类型由 `get capabilities()` 叠加插件贡献派生。 */
+  private readonly baseCapabilities: PlatformCapabilities;
+  /**
+   * 平台能力矩阵（docs/TECH_DESIGN.md §7）：基础能力 + 已启用插件贡献的协议扩展/表类型。
+   * 读取即派生（ADR-054）——UI 需在插件安装/启停后重新渲染才能看到新能力
+   * （app-store 的 pluginsVersion 承担响应式信号）。
+   */
+  get capabilities(): PlatformCapabilities {
+    return deriveCapabilities(this.baseCapabilities, this.pluginRegistry);
+  }
   readonly appVersion = __APP_VERSION__;
   readonly platform = "browser" as const;
   readonly pluginRegistry: PluginRegistry;
@@ -142,10 +189,10 @@ export class BrowserAppHost implements AppHost {
   private readonly autoSave: AutoSaveCoordinator;
   /** 插件持久化协调器（2026-08-30，ADR-038）：null = 未注入插件存储端口（纯内存）。 */
   private readonly pluginPersistence: PluginPersistenceCoordinator | null;
-  /** codec 注册表（ADR-041 决策 A）：随包插件 activate 填充；connect 按活动表协议路由。 */
+  /** 插件存储端口（ADR-038/054）：null = 无手动安装能力（纯内存 / 测试）。 */
+  private readonly pluginStore: PluginStorePort | null;
+  /** codec 注册表（ADR-041 决策 A）：插件 activate 填充；connect 按活动表协议路由。 */
   private readonly codecRegistry: CodecRegistry | null;
-  /** 随应用分发的插件清单（2026-09-02 插件外部化）。 */
-  private readonly bundledPlugins: BundledPluginEntry[];
   /** 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件注册表经装配注入。 */
   private readonly resolveAddressTransform:
     ((transformId: string) => AddressTransform | null) | null;
@@ -174,7 +221,7 @@ export class BrowserAppHost implements AppHost {
   >();
 
   constructor(options: AppHostOptions) {
-    this.capabilities = options.capabilities ?? browserCapabilities;
+    this.baseCapabilities = options.capabilities ?? browserCapabilities;
     this.platformHost = options.platform;
     this.repository = options.repository;
     this.isMockMode = options.mockTransport;
@@ -200,6 +247,10 @@ export class BrowserAppHost implements AppHost {
           getSession: () => this.rtu.getSession(),
           pluginId,
         }),
+      // 同步贡献注册面（ADR-054）：插件 activate 经 ctx.registries 注册同步能力。
+      ...(options.syncRegistries !== undefined
+        ? { syncRegistries: options.syncRegistries }
+        : {}),
     });
     this.mockTransportInstance = options.mockTransport
       ? new MockTransport()
@@ -224,7 +275,7 @@ export class BrowserAppHost implements AppHost {
       for (const listener of this.saveListeners) listener(status);
     });
     // 插件持久化（2026-08-30，ADR-038）：注入存储端口时装配协调器；启动由 startPlugins()
-    // 显式执行（先注册随包插件再 hydrate/持久化，2026-09-02 插件外部化时序保证）。
+    // 显式执行（先加载已安装插件的执行面再带 runtime 注册，ADR-054）。
     this.pluginPersistence =
       options.pluginStore !== undefined
         ? new PluginPersistenceCoordinator(
@@ -232,8 +283,7 @@ export class BrowserAppHost implements AppHost {
             options.pluginStore,
           )
         : null;
-    // 随应用分发插件清单（2026-09-02 插件外部化）。
-    this.bundledPlugins = options.bundledPlugins ?? [];
+    this.pluginStore = options.pluginStore ?? null;
     this.resolveAddressTransform = options.resolveAddressTransform ?? null;
     // codec 注册表（ADR-041 决策 A）：随包插件 activate 填充；connect 按活动表协议路由。
     this.codecRegistry = options.codecRegistry ?? null;
@@ -270,92 +320,160 @@ export class BrowserAppHost implements AppHost {
   }
 
   /**
-   * 启动插件系统（2026-09-02 插件外部化；App 装配后显式调用）：
-   * 1. 首次启动（store 未 seeded）：一次性安装随包插件（register + runtime），
-   *    持久化快照（manifest + enabled）并标记 seeded；
-   * 2. 重启（seeded）：hydrate 恢复全部 installed 插件（含随包条目，无 runtime），
-   *    装配层按代码清单重建同进程 runtime（attachRuntime → 恢复同步能力）；用户已卸载的
-   *    随包插件不在 store 中 → 不再注册（卸载持久生效）；
-   * 3. 恢复用户安装的可执行插件（远程运行时）。
+   * 启动插件系统（ADR-038 / ADR-054；App 装配后显式调用）：
+   * 1. 从插件存储加载已安装插件（无存储端口则跳过——无手动安装能力）；
+   * 2. 逐个按 `executionMode` 加载执行面（same-process = 用户授权同进程 import；
+   *    isolated = Web Worker 隔离线程）后带 runtime 注册为 installed 插件，并恢复启用状态；
+   *    纯清单插件直接注册（无执行面）；执行面加载失败 → 跳过该插件并记录错误（错误隔离）；
+   * 3. 启动持久化协调器（订阅后续注册/启停/卸载事件）。
    */
   async startPlugins(): Promise<void> {
-    if (this.pluginPersistence === null) {
-      // 无持久化端口：直接注册随包插件（纯内存，测试/无存储环境）。
-      for (const entry of this.bundledPlugins) {
-        if (this.pluginRegistry.getSource(entry.pluginId) !== null) continue;
-        const runtime = entry.createRuntime();
-        this.pluginRegistry.register(entry.manifest, {
-          source: "installed",
-          ...(runtime !== undefined ? { runtime } : {}),
-        });
-      }
+    if (this.pluginStore === null) return;
+    const loaded = await this.pluginStore.load();
+    if (!loaded.ok) {
+      this.appendPluginMessage("errors.pluginStoreError", loaded.error.code);
       return;
     }
-    const initResult = await this.pluginPersistence.init();
-    if (!initResult.ok) {
-      // 存储损坏/不可用：降级为内存注册随包插件（错误经协调器 onError 已上报）。
-      for (const entry of this.bundledPlugins) {
-        if (this.pluginRegistry.getSource(entry.pluginId) !== null) continue;
-        const runtime = entry.createRuntime();
-        this.pluginRegistry.register(entry.manifest, {
-          source: "installed",
-          ...(runtime !== undefined ? { runtime } : {}),
-        });
-      }
-      return;
+    for (const stored of loaded.value.plugins) {
+      await this.registerStoredPlugin(stored);
     }
-    if (!this.pluginPersistence.isSeeded()) {
-      // 首次启动：一次性安装随包插件。
-      for (const entry of this.bundledPlugins) {
-        if (this.pluginRegistry.getSource(entry.pluginId) !== null) continue;
-        const runtime = entry.createRuntime();
-        this.pluginRegistry.register(entry.manifest, {
-          source: "installed",
-          ...(runtime !== undefined ? { runtime } : {}),
-        });
-      }
-      this.pluginPersistence.markSeeded();
-      await this.pluginPersistence.flush();
-    } else {
-      // 重启：hydrate 已注册（store 中的随包条目，无 runtime）→ 按代码清单重建同进程 runtime。
-      for (const entry of this.bundledPlugins) {
-        if (this.pluginRegistry.getSource(entry.pluginId) !== "installed") {
-          continue;
-        }
-        const runtime = entry.createRuntime();
-        if (runtime === undefined) continue;
-        if (this.pluginRegistry.getRuntime(entry.pluginId) !== undefined) {
-          continue;
-        }
-        this.pluginRegistry.attachRuntime(entry.pluginId, runtime);
-      }
-    }
-    void this.restoreRemotePluginRuntimes();
+    this.pluginPersistence?.start();
   }
 
   /**
-   * 恢复随应用分发的插件（2026-09-02 插件外部化）：用户卸载后经 Plugin Manager
-   * 「恢复」重新安装（register + 持久化）。
+   * 预览可执行插件 entry（ADR-054）：按 executionMode 加载 entry 并校验 manifest（**不注册**）。
+   * 安装确认框据此展示插件信息；确认后再调 installPluginEntry（安装时会重新加载一次）。
    */
-  async restoreBundledPlugin(pluginId: string): Promise<void> {
-    const entry = this.bundledPlugins.find((p) => p.pluginId === pluginId);
-    if (entry === undefined) return;
-    if (this.pluginRegistry.getSource(pluginId) !== null) return;
-    const runtime = entry.createRuntime();
-    this.pluginRegistry.register(entry.manifest, {
+  async previewPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>> {
+    const loaded = await this.loadEntryExecutable(entrySource, executionMode);
+    if (!loaded.ok) return loaded;
+    return ok(loaded.value.manifest);
+  }
+
+  /**
+   * 安装可执行插件（ADR-054）：按 executionMode 装配执行面并注册为 installed 插件
+   * （持久化由 PluginPersistenceCoordinator 承担）。entry 内嵌的 manifest 为权威清单。
+   */
+  async installPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>> {
+    const loaded = await this.loadEntryExecutable(entrySource, executionMode);
+    if (!loaded.ok) return loaded;
+    const { manifest, localEntry, remoteRuntime } = loaded.value;
+    return this.pluginRegistry.register(manifest, {
       source: "installed",
-      ...(runtime !== undefined ? { runtime } : {}),
+      entrySource,
+      executionMode,
+      ...(localEntry !== undefined
+        ? { runtime: runtimeFromLocalEntry(localEntry) }
+        : {}),
+      ...(remoteRuntime !== undefined ? { remoteRuntime } : {}),
     });
-    if (this.pluginPersistence !== null) {
-      await this.pluginPersistence.flush();
+  }
+
+  /** 加载 entry 并装配执行面（不注册）；同进程 / 隔离按 executionMode 分支。 */
+  private async loadEntryExecutable(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<
+    Result<{
+      manifest: PluginManifest;
+      localEntry?: PluginLocalEntry;
+      remoteRuntime?: PluginRemoteRuntime;
+    }>
+  > {
+    if (executionMode === "same-process") {
+      const entryResult = await loadWebPluginEntry(entrySource);
+      if (!entryResult.ok) return entryResult;
+      const parsed = pluginManifestSchema.safeParse(entryResult.value.manifest);
+      if (!parsed.success) {
+        return fail(pluginManifestInvalidError(parsed.error.message));
+      }
+      return ok({ manifest: parsed.data, localEntry: entryResult.value });
+    }
+    const remoteRuntime = this.createRemoteRuntime(entrySource);
+    const loadResult = await remoteRuntime.load();
+    if (!loadResult.ok) {
+      void remoteRuntime.dispose();
+      return loadResult;
+    }
+    const parsed = pluginManifestSchema.safeParse(loadResult.value);
+    if (!parsed.success) {
+      void remoteRuntime.dispose();
+      return fail(pluginManifestInvalidError(parsed.error.message));
+    }
+    return ok({ manifest: parsed.data, remoteRuntime });
+  }
+
+  /**
+   * 注册存储中的插件（启动恢复，ADR-054）：可执行插件先加载执行面再注册
+   * （manifest 以 entry 为准，插件包升级随之生效）；纯清单插件按存储清单注册。
+   */
+  private async registerStoredPlugin(stored: StoredPlugin): Promise<void> {
+    const { entrySource, executionMode } = stored;
+    if (entrySource === undefined || executionMode === undefined) {
+      this.registerStoredManifest(stored.manifest, stored.enabled);
+      return;
+    }
+    const loaded = await this.loadEntryExecutable(entrySource, executionMode);
+    if (!loaded.ok) {
+      // 执行面加载失败（entry 损坏 / 不兼容 API）：插件不注册（不登记贡献点），仅记录错误。
+      this.appendPluginMessage("errors.pluginLoadFailed", loaded.error.code);
+      return;
+    }
+    const { manifest, localEntry, remoteRuntime } = loaded.value;
+    const result = this.pluginRegistry.register(manifest, {
+      source: "installed",
+      entrySource,
+      executionMode,
+      ...(localEntry !== undefined
+        ? { runtime: runtimeFromLocalEntry(localEntry) }
+        : {}),
+      ...(remoteRuntime !== undefined ? { remoteRuntime } : {}),
+    });
+    if (!result.ok) return;
+    if (stored.enabled !== this.pluginRegistry.isEnabled(manifest.id)) {
+      this.pluginRegistry.setEnabled(manifest.id, stored.enabled);
     }
   }
 
-  /** 恢复全部已卸载的随包插件（Plugin Manager「恢复全部」）。 */
-  async restoreAllBundledPlugins(): Promise<void> {
-    for (const entry of this.bundledPlugins) {
-      await this.restoreBundledPlugin(entry.pluginId);
+  /** 纯清单插件注册 + 恢复启用状态（无执行面，activate/deactivate 均不存在）。 */
+  private registerStoredManifest(
+    manifest: PluginManifest,
+    enabled: boolean,
+  ): void {
+    const result = this.pluginRegistry.register(manifest, {
+      source: "installed",
+    });
+    if (!result.ok) return;
+    if (enabled !== this.pluginRegistry.isEnabled(manifest.id)) {
+      this.pluginRegistry.setEnabled(manifest.id, enabled);
     }
+  }
+
+  /** 插件相关应用消息（启动期错误经 messageStore 上报，UI 顶部提示）。 */
+  private appendPluginMessage(messageKey: string, detail: string): void {
+    this.messageStore.append({
+      timestamp: this.clock.now(),
+      level: "error",
+      messageKey,
+      params: { detail },
+      detail,
+    });
+  }
+
+  /** 插件隔离运行时（ADR-044 Phase F-2）：Web Worker 加载 entry；通信面按插件 id 绑定。 */
+  private createRemoteRuntime(entrySource: string): PluginRemoteRuntime {
+    return createWebPluginRemoteRuntime(entrySource, (pluginId) =>
+      createPluginCommunicationApi({
+        getSession: () => this.rtu.getSession(),
+        pluginId,
+      }),
+    );
   }
 
   async loadWorkspace(): Promise<Result<Workspace>> {
@@ -707,38 +825,6 @@ export class BrowserAppHost implements AppHost {
   /** 当前会话（ADR-044 Phase F-2）：插件通信面经统一调度器访问；未连接返回 null。 */
   getSession(): CommunicationSession | null {
     return this.rtu.getSession();
-  }
-
-  /** 插件隔离运行时（ADR-044 Phase F-2）：Web Worker 加载 entry；通信面按插件 id 动态绑定。 */
-  createPluginRemoteRuntime(entrySource: string) {
-    return createWebPluginRemoteRuntime(entrySource, (pluginId) =>
-      createPluginCommunicationApi({
-        getSession: () => this.rtu.getSession(),
-        pluginId,
-      }),
-    );
-  }
-
-  /**
-   * 重启后恢复可执行插件（ADR-044 Phase F-2）：hydrate 已注册的 installed 插件
-   * （entrySource 持久化）重新创建隔离运行时（load 提取 manifest 后附加并激活）。
-   */
-  private async restoreRemotePluginRuntimes(): Promise<void> {
-    for (const manifest of this.pluginRegistry.list()) {
-      const id = manifest.id;
-      if (this.pluginRegistry.getSource(id) !== "installed") continue;
-      if (this.pluginRegistry.getLifecycleState(id) === "active") continue;
-      const entrySource = this.pluginRegistry.getEntrySource(id);
-      if (entrySource === null) continue;
-      const runtime = this.createPluginRemoteRuntime(entrySource);
-      const loadResult = await runtime.load();
-      if (!loadResult.ok) {
-        // 加载失败（entry 损坏/不兼容）：关闭线程，插件保持注册但不激活（错误隔离）。
-        void runtime.dispose();
-        continue;
-      }
-      this.pluginRegistry.attachRemoteRuntime(id, runtime);
-    }
   }
 
   subscribeConnectionState(

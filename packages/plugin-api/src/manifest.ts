@@ -11,8 +11,13 @@
 import { z } from "zod";
 import { PERMISSION_IDS } from "./permissions";
 
-/** 当前插件 API 版本（Manifest v2，ADR-039）。破坏性契约变更时递增 major。 */
-export const PLUGIN_API_VERSION = "1.0" as const;
+/**
+ * 当前插件 API 版本（Manifest v2，ADR-039）。破坏性契约变更时递增 major。
+ * 2.0（2026-09-12，ADR-054）：插件上下文新增同步贡献面 `ctx.registries`（codec/dataType/
+ * addressTransform 注册），且插件改为用户手动安装 —— 1.x 插件不同步贡献面，major 不同
+ * 即禁止加载（compatibility.checkCompatibility）。
+ */
+export const PLUGIN_API_VERSION = "2.0" as const;
 
 export const pluginManifestSchema = z.object({
   id: z.string().min(1),

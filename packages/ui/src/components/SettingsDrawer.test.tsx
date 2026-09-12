@@ -105,7 +105,7 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
       id: "example-panel",
       name: "Example Panel",
       version: "1.0.0",
-      apiVersion: "1.0",
+      apiVersion: "2.0",
       description: "A built-in UI-safe example plugin.",
       author: "Mamep2026 Team",
       platform: { web: true, node: false },
@@ -120,9 +120,6 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
     expect(
       screen.getByRole("button", { name: /Install Plugin/i }),
     ).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: /Restore bundled/i }),
-    ).toBeTruthy();
   });
 
   it("插件 settings 贡献分区渲染在 Plugins 页签", () => {
@@ -131,7 +128,7 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
       id: "with-settings",
       name: "With Settings",
       version: "1.0.0",
-      apiVersion: "1.0",
+      apiVersion: "2.0",
       description: "Contributes a settings section.",
       platform: { web: true, node: false },
       permissions: ["ui-contribution"],

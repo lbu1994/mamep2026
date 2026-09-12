@@ -47,10 +47,12 @@ import type {
   SerialPortOption,
 } from "@mamep2026/platform-api";
 import type {
+  PluginExecutionMode,
   PluginManifest,
   PluginRegistry,
   PluginRuntime,
   PluginStorePort,
+  PluginSyncRegistries,
 } from "@mamep2026/plugin-api";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
@@ -62,7 +64,7 @@ import {
   type AndroidAppLifecycleBridge,
   type MamepTransportBridge,
 } from "@mamep2026/platform-android";
-import { BrowserAppHost, type BundledPluginEntry } from "./AppHost";
+import { BrowserAppHost, deriveCapabilities } from "./AppHost";
 
 export interface AndroidAppHostOptions {
   /** 传输桥（生产 = `createCapacitorTransportBridge()`，由 composition root 注入；测试注入 fake）。 */
@@ -70,7 +72,8 @@ export interface AndroidAppHostOptions {
   repository: WorkspaceRepositoryPort;
   pluginStore?: PluginStorePort | undefined;
   codecRegistry?: CodecRegistry | undefined;
-  bundledPlugins?: BundledPluginEntry[] | undefined;
+  /** 同步贡献注册面（ADR-054）：透传 inner，供插件 activate 经 ctx.registries 注册。 */
+  syncRegistries?: PluginSyncRegistries | undefined;
   resolveAddressTransform?:
     ((transformId: string) => AddressTransform | null) | undefined;
   /** 平台宿主（默认用注入的 bridge 构造 `AndroidPlatformHost`；测试可注入）。 */
@@ -87,7 +90,10 @@ export interface AndroidAppHostOptions {
 }
 
 export class AndroidAppHost implements AppHost {
-  readonly capabilities: PlatformCapabilities;
+  /** 能力矩阵派生（ADR-054）：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
+  get capabilities(): PlatformCapabilities {
+    return deriveCapabilities(androidCapabilities, this.pluginRegistry);
+  }
   readonly isMockMode: boolean;
   /** Android 不走浏览器 Web Serial 兼容性提示（串口能力由能力矩阵如实声明）。 */
   readonly browserCompatibility = null;
@@ -126,7 +132,6 @@ export class AndroidAppHost implements AppHost {
     this.platformHost = platformHost;
     this.serialHost = hasSerialApi(platformHost) ? platformHost : null;
     this.appLifecycle = options.appLifecycle ?? null;
-    this.capabilities = androidCapabilities;
     this.isMockMode = options.mockTransport === true;
 
     this.inner = new BrowserAppHost({
@@ -139,8 +144,8 @@ export class AndroidAppHost implements AppHost {
       mockTransport: false,
       ...(options.pluginStore !== undefined ? { pluginStore: options.pluginStore } : {}),
       ...(options.codecRegistry !== undefined ? { codecRegistry: options.codecRegistry } : {}),
-      ...(options.bundledPlugins !== undefined
-        ? { bundledPlugins: options.bundledPlugins }
+      ...(options.syncRegistries !== undefined
+        ? { syncRegistries: options.syncRegistries }
         : {}),
       ...(options.resolveAddressTransform !== undefined
         ? { resolveAddressTransform: options.resolveAddressTransform }
@@ -197,17 +202,9 @@ export class AndroidAppHost implements AppHost {
     });
   }
 
-  // ---- 插件系统（委托 inner：随包插件一次性安装 / 恢复，ADR-045）----
+  // ---- 插件系统（委托 inner：加载已安装插件并装配执行面，ADR-054）----
   startPlugins(): Promise<void> {
     return this.inner.startPlugins();
-  }
-
-  restoreBundledPlugin(pluginId: string): Promise<void> {
-    return this.inner.restoreBundledPlugin(pluginId);
-  }
-
-  restoreAllBundledPlugins(): Promise<void> {
-    return this.inner.restoreAllBundledPlugins();
   }
 
   // ---- 工作区（委托 inner：IndexedDB 仓储 + 自动保存，与浏览器端同路径）----
@@ -438,8 +435,20 @@ export class AndroidAppHost implements AppHost {
     return this.activeProtocol === "tcp" ? null : this.inner.getSession();
   }
 
-  createPluginRemoteRuntime(entrySource: string) {
-    return this.inner.createPluginRemoteRuntime(entrySource);
+  /** 预览可执行插件 entry（ADR-054）。 */
+  previewPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>> {
+    return this.inner.previewPluginEntry(entrySource, executionMode);
+  }
+
+  /** 安装可执行插件（ADR-054）：委托 inner（注册 + 持久化）。 */
+  installPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>> {
+    return this.inner.installPluginEntry(entrySource, executionMode);
   }
 
   // ---- 读写（按协议路由）----

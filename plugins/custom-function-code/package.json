@@ -12,13 +12,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@mamep2026/communication": "workspace:*",
-    "@mamep2026/data-conversion": "workspace:*",
     "@mamep2026/domain": "workspace:*",
     "@mamep2026/plugin-api": "workspace:*",
     "@mamep2026/protocol-modbus": "workspace:*"
   },
   "devDependencies": {
+    "@mamep2026/communication": "workspace:*",
+    "@mamep2026/data-conversion": "workspace:*",
     "@mamep2026/test-kit": "workspace:*",
     "@mamep2026/typescript-config": "workspace:*",
     "typescript": "catalog:",

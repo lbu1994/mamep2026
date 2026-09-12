@@ -30,7 +30,10 @@ export interface ElectronSessionHostOptions {
   platform: NodeTcpPlatformHost;
   /** 会话事件（由 main.ts 转换为 HostMessage v1 event 推送 Renderer）。 */
   events: SessionHostEvents;
-  /** 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件提供（host 端直接引用插件导出）。 */
+  /**
+   * 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055）：由宿主侧插件运行时
+   * （HostPluginRuntime，随 application 装配）注入，渲染端不再传递变换函数。
+   */
   resolveAddressTransform?: (
     transformId: string,
   ) => AddressTransform | null;

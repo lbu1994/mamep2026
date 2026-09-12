@@ -186,7 +186,7 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
     .getByRole("tab", { name: "Comm Log" })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForTimeout(300);
-  await expect(page.locator(".ant-tabs").last()).toContainText(
+  await expect(page.locator(".comm-log__list")).toContainText(
     "01 03 00 01 00 01",
     { timeout: 5000 },
   );
@@ -407,7 +407,7 @@ test("sheets can be added and the workspace survives a reload", async ({
   await expect(page.locator(".ant-layout-header")).toContainText("Online");
 });
 
-test("plugins tab in Settings lists the built-in plugin with enable toggle", async ({
+test("plugins tab in Settings shows the (empty) plugin list with the install entry", async ({
   page,
 }) => {
   await openApp(page);
@@ -425,15 +425,11 @@ test("plugins tab in Settings lists the built-in plugin with enable toggle", asy
     .click();
   const modal = page.getByTestId("plugin-manager");
   await expect(modal).toBeVisible();
-  await expect(modal).toContainText("Example Panel");
-  await expect(modal).toContainText("1.0.0");
-  // 作者（示例插件已声明 author）。
-  await expect(modal).toContainText("Mamep2026 Team");
-  // 平台能力：Web/Node 双 Tag（web 支持着色，node 灰）。多个内置插件（示例 + 安川）各有平台 Tag。
-  await expect(modal.getByText("Web", { exact: true }).first()).toBeVisible();
-  await expect(modal.getByText("Node", { exact: true }).first()).toBeVisible();
-  // 权限：ui-contribution 的人类可读标签（2026-08-31，ADR-039 Manifest v2 权限枚举）。
-  await expect(modal).toContainText("UI Contribution");
+  // ADR-054：不再随包分发插件 → 初始为空态，安装入口保持可用。
+  await expect(modal).toContainText("No built-in plugins registered.");
+  await expect(
+    modal.getByRole("button", { name: "Install Plugin" }),
+  ).toBeVisible();
 });
 
 test("no console errors during a full interaction round", async ({ page }) => {

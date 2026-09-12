@@ -7,14 +7,16 @@
  */
 import { theme as antdTheme, type ThemeConfig } from "antd";
 import type { Contribution } from "@mamep2026/plugin-api";
+import { pluginLocalizedTitle, type PluginLocalizedTitle } from "./plugin-title";
 
 /** 插件注册的单条可选主题色（与 plugin-api THEME_COLOR_PRESET_SCHEMA 结构一致）。
- * 2026-09-03 方案 A：新增 `title` 插件自带翻译（en-US 必填 / zh-CN 可选），缺失语言回退英文。
+ * 2026-09-03 方案 A：新增 `title` 插件自带翻译（en-US 必填 / zh-CN 可选），缺失语言回退英文；
+ * 2026-09-12：`title` 类型改复用 `PluginLocalizedTitle`（theme / panels 共用一份解析）。
  * 2026-09-03：仅要求 `colorPrimary`（单一明亮主色），链接色跟随主色、暗色由 antd 算法派生。 */
 export interface ThemeColorPreset {
   id: string;
   titleKey: string;
-  title?: { "en-US": string; "zh-CN"?: string };
+  title?: PluginLocalizedTitle;
   colorPrimary: string;
 }
 
@@ -26,24 +28,18 @@ export interface ThemeContribution {
 export interface ThemeColorOption {
   id: string;
   titleKey: string;
-  title?: { "en-US": string; "zh-CN"?: string };
+  title?: PluginLocalizedTitle;
   colorPrimary: string;
 }
 
-/** 解析主题色显示名（方案 A）：插件自带 title → 英文 → 应用 i18n titleKey → titleKey。 */
+/** 解析主题色显示名（方案 A）：插件自带 title → 英文 → 应用 i18n titleKey → titleKey。
+ * 2026-09-12：解析实现抽到 `plugin-title`（与 panels 共用），本函数行为不变。 */
 export function themeColorTitle(
   option: ThemeColorOption,
   locale: string,
   t: (key: string) => string,
 ): string {
-  const title = option.title;
-  const localized =
-    locale === "zh-CN"
-      ? title?.["zh-CN"]
-      : locale === "en-US"
-        ? title?.["en-US"]
-        : undefined;
-  return localized ?? title?.["en-US"] ?? t(option.titleKey) ?? option.titleKey;
+  return pluginLocalizedTitle(option.title, option.titleKey, locale, t);
 }
 
 /** 内置默认蓝（Ant Design 默认）哨兵值：仅作 Select 选项值，不持久化（themePrimary=null 对应）。 */

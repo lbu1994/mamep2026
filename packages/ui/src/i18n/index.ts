@@ -299,6 +299,8 @@ export const en = {
     empty: "No built-in plugins registered.",
     exampleTitle: "Example Plugin",
     exampleThemeColor: "Indigo",
+    // panels 贡献示例插件（2026-09-12）：插件自带翻译优先（方案 A），本键作 i18n 兜底。
+    examplePanelTitle: "Example Panel",
     author: "Author",
     platform: "Platform",
     permissions: "Permissions",
@@ -357,15 +359,16 @@ export const en = {
       "This will remove the plugin and its contributions from this environment. This cannot be undone.",
     uninstallConfirmOk: "Uninstall",
     uninstallSuccess: "Plugin uninstalled.",
-    // 随应用分发插件（2026-09-02 插件外部化）：一次性安装，可卸载/恢复。
-    restoreBundled: "Restore bundled",
-    restoreBundledSuccess: "Bundled plugins restored.",
     actionSucceeded: "Plugin action completed.",
-    // 单文件 JS 可执行插件（2026-09-01，ADR-044 Phase F-2/3）。
+    // 单文件 JS 可执行插件（ADR-044 F-2/3；ADR-054：插件一律手动安装）。
     executableUnsupported:
       "Executable plugins are not supported in this environment.",
-    executableEntryNotice:
-      "This plugin executes in an isolated worker. It can only access the device through the communication API declared in its manifest.",
+    // 执行模式（ADR-054）：默认隔离线程；同进程需用户显式授权（插件与应用同权限）。
+    // ADR-055：桌面端同进程 = 在宿主进程（Electron 主进程 / 扩展宿主）内执行（完整 Node 环境）。
+    executionModeWarning:
+      "Same-process execution grants the plugin the application's own privileges: in the browser/webview it runs in the UI process, and on desktop hosts (Electron main process / VS Code extension host) it runs in the host process with full Node.js access (file system, network, subprocesses). Choose it only for plugins you fully trust.",
+    executionModeIsolated: "Isolated worker (recommended)",
+    executionModeSameProcess: "Same process (required for sync capabilities)",
     entryIsolated: "Isolated worker",
   },
   help: {
@@ -546,7 +549,7 @@ export const en = {
     pluginBuiltinNotRemovable:
       "Built-in plugins are bundled with the app and cannot be uninstalled.",
     pluginActionNotHandled: "This plugin does not handle the requested action.",
-    pluginLoadFailed: "Failed to load the plugin in the isolated worker.",
+    pluginLoadFailed: "Failed to load the plugin entry.",
     pluginStoreError: "Failed to persist the installed plugin.",
     pluginStoreSchemaInvalid: "The stored plugin data is invalid or corrupted.",
     clipboardUnavailable: "System clipboard is not available.",
@@ -841,6 +844,8 @@ export const zh: TranslationResources = {
     empty: "没有已注册的内置插件。",
     exampleTitle: "示例插件",
     exampleThemeColor: "靛蓝",
+    // panels 贡献示例插件（2026-09-12）：插件自带翻译优先（方案 A），本键作 i18n 兜底。
+    examplePanelTitle: "示例面板",
     author: "作者",
     platform: "平台能力",
     permissions: "权限",
@@ -894,14 +899,15 @@ export const zh: TranslationResources = {
       "这将从当前环境中移除该插件及其贡献。此操作不可撤销。",
     uninstallConfirmOk: "卸载",
     uninstallSuccess: "插件已卸载。",
-    // 随应用分发插件（2026-09-02 插件外部化）：一次性安装，可卸载/恢复。
-    restoreBundled: "恢复随包插件",
-    restoreBundledSuccess: "随包插件已恢复。",
     actionSucceeded: "插件动作执行完成。",
-    // 单文件 JS 可执行插件（2026-09-01，ADR-044 Phase F-2/3）。
+    // 单文件 JS 可执行插件（ADR-044 F-2/3；ADR-054：插件一律手动安装）。
     executableUnsupported: "当前环境不支持可执行插件。",
-    executableEntryNotice:
-      "该插件将在隔离线程中执行。它只能通过清单声明的通信接口访问设备。",
+    // 执行模式（ADR-054）：默认隔离线程；同进程需用户显式授权（插件与应用同权限）。
+    // ADR-055：桌面端同进程 = 在宿主进程（Electron 主进程 / 扩展宿主）内执行（完整 Node 环境）。
+    executionModeWarning:
+      "同进程执行意味着该插件拥有与应用相同的权限：浏览器/Webview 中在界面进程内执行，桌面端（Electron 主进程 / VSCode 扩展宿主）则在宿主进程内执行并拥有完整 Node 能力（文件系统、网络、子进程）。请仅对你完全信任的插件选择此项。",
+    executionModeIsolated: "隔离线程（推荐）",
+    executionModeSameProcess: "同进程执行（贡献同步能力时必需）",
     entryIsolated: "隔离线程",
   },
   help: {
@@ -1071,7 +1077,7 @@ export const zh: TranslationResources = {
     pluginNotFound: "该插件未注册。",
     pluginBuiltinNotRemovable: "内置插件随应用打包，无法卸载。",
     pluginActionNotHandled: "该插件不支持此操作。",
-    pluginLoadFailed: "在隔离线程中加载插件失败。",
+    pluginLoadFailed: "加载插件入口失败。",
     pluginStoreError: "已安装插件持久化失败。",
     pluginStoreSchemaInvalid: "已存储的插件数据无效或已损坏。",
     clipboardUnavailable: "系统剪贴板不可用。",

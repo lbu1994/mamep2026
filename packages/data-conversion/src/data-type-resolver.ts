@@ -40,6 +40,11 @@ export interface DataTypeResolver {
   isKnown(type: string): boolean;
   /** 注册插件类型处理函数；同 id 重复注册返回错误（不覆盖）。 */
   register(type: string, handlers: PluginDataTypeHandlers): Result<void>;
+  /**
+   * 取已注册插件类型处理函数（2026-09-12，ADR-054）：使本解析器结构上满足 plugin-api
+   * 的 DataTypeRegistry（插件 `ctx.registries.dataType` 直接以此为注册面）。
+   */
+  get(type: string): PluginDataTypeHandlers | undefined;
   /** 全部已注册插件类型 id。 */
   list(): string[];
 }
@@ -97,6 +102,9 @@ export function createDataTypeResolver(): DataTypeResolver {
       if (plugins.has(type)) return fail(alreadyRegisteredError(type));
       plugins.set(type, handlers);
       return ok(undefined);
+    },
+    get(type) {
+      return plugins.get(type);
     },
     list() {
       return Array.from(plugins.keys());

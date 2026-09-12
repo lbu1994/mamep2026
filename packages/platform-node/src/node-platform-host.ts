@@ -38,7 +38,8 @@ import { mapSerialError } from "./error-mapping";
 import { nodeClock } from "./real-clock";
 
 /** 默认能力声明（不写入生产能力矩阵；生产接线时翻转 electron/vscode 能力常量）。
- * modbusTcp:true——Node TCP Adapter 已落地（2026-08-23 两端 TCP 接线）。 */
+ * modbusTcp:true——Node TCP Adapter 已落地（2026-08-23 两端 TCP 接线）。
+ * hostPlugins:true——Node 侧宿主插件执行面已落地（`@mamep2026/platform-node/plugin`，ADR-055）。 */
 export const nodeHostCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: true,
   modbusTcp: true,
@@ -51,7 +52,7 @@ export const nodeHostCapabilities: PlatformCapabilities = Object.freeze({
   workspaceExport: "unsupported",
   pluginInstall: "unsupported",
   executablePlugins: false,
-  hostPlugins: false,
+  hostPlugins: true,
   protocolExtensions: [],
   tableTypes: ["holding-register"],
 });

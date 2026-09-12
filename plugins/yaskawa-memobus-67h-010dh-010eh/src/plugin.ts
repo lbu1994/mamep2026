@@ -1,20 +1,19 @@
 /**
- * 安川 MEMOBUS 插件（ADR-041 插件 Phase C，决策 ①1A / ⑤；2026-09-02 插件外部化）。
- * 随应用分发（installed 来源 + 同进程 runtime）：manifest 声明式贡献（protocolExtension /
- * tableType / toolbarAction / command / documentation），runtime.activate 时把 MemobusCodec
- * 注册进会话 CodecRegistry；ROM/RAM 确定指令（enter-rom/enter-ram）执行面一并移入插件
- * （handleToolbarAction 经 PluginCommunicationApi 写 0 到 0900H/0910H，走统一调度器，
- * 厂商地址不再硬编码核心——docs/AGENTS.md §24.4）。
+ * 安川 MEMOBUS 插件（ADR-041 插件 Phase C，决策 ①1A / ⑤；2026-09-12 ADR-054：改为**用户手动安装**
+ * 的单文件插件）。
+ * manifest 声明式贡献（protocolExtension / tableType / toolbarAction / command / documentation）；
+ * 单文件 entry 导出 `manifest` + `activate(ctx)` + `handleToolbarAction(actionId, ctx)`，由平台侧
+ * 同进程加载器加载（安装时用户需在确认框中显式授权「同进程执行」）：
+ * - `activate` 经 `ctx.registries.codec` 注册 MemobusCodec；
+ * - `handleToolbarAction` 提供 ROM/RAM 确定指令执行面（经 PluginCommunicationApi 写 0 到
+ *   0900H/0910H，走统一调度器，厂商地址不硬编码核心——docs/AGENTS.md §24.4）。
  * 厂商专用功能码（67/010D、67/010E）全部在本插件内，软件仅提供调用接口（决策 B）。
  */
-import type { CodecRegistry } from "@mamep2026/communication";
 import { ok, type Result } from "@mamep2026/domain";
 import {
   PLUGIN_API_VERSION,
   type PluginContext,
   type PluginManifest,
-  type PluginRegistry,
-  type PluginRuntime,
 } from "@mamep2026/plugin-api";
 import { MemobusCodec } from "./memobus-codec";
 
@@ -115,38 +114,23 @@ export const yaskawaMemobusManifest: PluginManifest = {
 };
 
 /**
- * 构造安川插件运行时（installed 来源同进程 runtime）：activate 时把 MemobusCodec 注册进
- * 会话 CodecRegistry（软件只提供调用接口）；handleToolbarAction 提供 ROM/RAM 确定指令执行
- * （2026-09-02 插件外部化：自 packages/ui plugin-toolbar-actions 移入，经通信面写 0900H/0910H）。
- * （装配层在首次安装与重启恢复时复用同一工厂。）
+ * 单文件 entry 导出（ADR-044 F-3 / ADR-054）：安装时同进程加载器 import 本模块，从 entry
+ * 提取 manifest 并调用 `activate`；工具栏动作由 entry 的 `handleToolbarAction` 处理。
  */
-export function createYaskawaRuntime(options: {
-  codecRegistry: CodecRegistry;
-}): PluginRuntime {
-  return {
-    activate() {
-      options.codecRegistry.register(new MemobusCodec());
-    },
-    handleToolbarAction(actionId: string, ctx: PluginContext) {
-      const address = YASKAWA_COMMAND_REGISTER[actionId];
-      if (address === undefined) {
-        return ok(undefined);
-      }
-      // 确定指令写：值 0、不回读不触发轮询刷新（Phase C 决策③④，语义由插件自身承担）。
-      return ctx.communication.writeRegisters({ address, values: [0] });
-    },
-  };
+export const manifest: PluginManifest = yaskawaMemobusManifest;
+
+export function activate(ctx: PluginContext): void {
+  ctx.registries.codec.register(new MemobusCodec());
 }
 
-/**
- * 注册安川插件（installed 来源 + 同进程 runtime，决策①1A）。
- */
-export function registerYaskawaPlugin(
-  registry: PluginRegistry,
-  options: { codecRegistry: CodecRegistry },
-): Result<PluginManifest> {
-  return registry.register(yaskawaMemobusManifest, {
-    source: "installed",
-    runtime: createYaskawaRuntime(options),
-  });
+/** ROM/RAM 确定指令（Phase C 决策③④：值 0、不回读、不触发轮询刷新）。 */
+export function handleToolbarAction(
+  actionId: string,
+  ctx: PluginContext,
+): Result<void> | Promise<Result<void>> | void {
+  const address = YASKAWA_COMMAND_REGISTER[actionId];
+  if (address === undefined) {
+    return ok(undefined);
+  }
+  return ctx.communication.writeRegisters({ address, values: [0] });
 }

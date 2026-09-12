@@ -310,7 +310,7 @@ test("禁用插件后选项消失、已选色回退默认（ADR-047）", async (
   await selectThemeColor(page, "Indigo");
   await closeSettings(page);
 
-  // 禁用 example-theme（按插件行定位，而非第一个 = example-panel）。
+  // 禁用 example-theme（按插件行定位，避免与其他已安装插件混淆）。
   const section = await openPluginManager(page);
   const row = section
     .locator(".ant-listy-item")

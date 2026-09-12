@@ -100,6 +100,12 @@ export interface IpcDeps {
    * 主进程 userData plugins.json，实现 PluginStorePort（原子保存 + 备份恢复）。
    */
   pluginStore: PluginStorePort;
+  /**
+   * 插件存储保存成功后触发宿主侧插件执行面同步（ADR-055，2026-09-12）：
+   * 主进程重新加载「已启用 + same-process」插件，使插件贡献的同步能力
+   * （codec / addressTransform）在主进程会话中生效。同步不阻塞保存响应。
+   */
+  onPluginStoreSaved?: (() => void) | undefined;
 }
 
 /** 会话 RPC 包装：run 返回 Result 并映射为 response/error Envelope。 */
@@ -376,9 +382,16 @@ export async function handleRequest(
     case "plugin-store-load":
       // 插件存储（2026-08-30，ADR-038）：返回已安装插件清单 + 启用状态（无文件 = 空数组）。
       return sessionResult(message, () => deps.pluginStore.load());
-    case "plugin-store-save":
+    case "plugin-store-save": {
       // 插件存储（2026-08-30，ADR-038）：载荷为结构化插件存储数据，主进程校验后原子落盘。
-      return sessionResult(message, () => deps.pluginStore.save(message.payload.data));
+      const saved = await sessionResult(message, () =>
+        deps.pluginStore.save(message.payload.data),
+      );
+      // 保存成功 → 同步宿主侧插件执行面（ADR-055）：宿主插件加载失败不影响保存结果
+      // （错误仅记录到宿主日志 / 应用消息）。
+      if (saved.type === "response") deps.onPluginStoreSaved?.();
+      return saved;
+    }
     case "plugin-runtime-load":
     case "plugin-runtime-unload":
     case "plugin-rpc":

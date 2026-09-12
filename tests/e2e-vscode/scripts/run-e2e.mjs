@@ -40,6 +40,19 @@ process.env.MAMEP_FAKE_DIALOG_SAVE_PATH = path.join(
   os.tmpdir(),
   "mamep-e2e-dialog-save.json",
 );
+// 宿主侧插件执行面 e2e（ADR-055）：插件产物路径经环境变量暴露给用例（需先 `pnpm build:plugins`，
+// 根 test:e2e:vscode 已自动执行）。测试宿主与扩展宿主为同一进程外的两个世界，用例不猜路径。
+const PLUGIN_DIR = path.join(
+  ROOT,
+  "release",
+  "plugins",
+  "builtin-address-adjust",
+);
+process.env.MAMEP_PLUGIN_ENTRY_PATH = path.join(
+  PLUGIN_DIR,
+  "builtin-address-adjust.mjs",
+);
+process.env.MAMEP_PLUGIN_MANIFEST_PATH = path.join(PLUGIN_DIR, "manifest.json");
 
 try {
   const code = await runTests({

@@ -13,6 +13,21 @@ import type {
 import { PluginRegistry } from "@mamep2026/plugin-api";
 import type { AppHost } from "../host";
 
+/** 插件入口加载失败的结构化错误（默认桩：测试不实际安装插件）。 */
+function pluginEntryUnavailable() {
+  return {
+    ok: false as const,
+    error: {
+      code: "PLUGIN_LOAD_FAILED",
+      category: "plugin" as const,
+      severity: "error" as const,
+      retryable: false,
+      userMessageKey: "errors.pluginLoadFailed",
+      technicalMessage: "test stub",
+    },
+  };
+}
+
 export function makeHost(
   caps: Partial<PlatformCapabilities> = {},
   overrides: {
@@ -48,8 +63,8 @@ export function makeHost(
     appVersion: "0.0.0-test",
     platform: overrides.platform ?? "browser",
     startPlugins: vi.fn(async () => undefined),
-    restoreBundledPlugin: vi.fn(async () => undefined),
-    restoreAllBundledPlugins: vi.fn(async () => undefined),
+    previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
+    installPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
     loadWorkspace: vi.fn(async () => ({
       ok: true as const,
       value: createEmptyWorkspace(),
@@ -76,7 +91,6 @@ export function makeHost(
     dispose: vi.fn(async () => undefined),
     getConnectionState: vi.fn(() => "disconnected" as const),
     getSession: vi.fn(() => null),
-    createPluginRemoteRuntime: vi.fn(),
     getCommProperties: vi.fn(),
     setSlaveAddress: vi.fn(),
     setAddressTransform: vi.fn(),

@@ -8,7 +8,11 @@
  * 缺失语言时消费方回退英文（title["en-US"]），再回退应用 i18n 的 titleKey。
  * 仅提供单一明亮模式主色（种子），暗色/链接/hover/active 由 antd 色彩算法自动派生（ADR-048）。
  */
-import type { PluginManifest, PluginRegistry } from "@mamep2026/plugin-api";
+import {
+  PLUGIN_API_VERSION,
+  type PluginManifest,
+  type PluginRegistry,
+} from "@mamep2026/plugin-api";
 
 export const SCHNEIDER_GREEN_THEME_PLUGIN_ID = "schneider-green-theme";
 
@@ -16,7 +20,7 @@ export const schneiderGreenThemeManifest: PluginManifest = {
   id: SCHNEIDER_GREEN_THEME_PLUGIN_ID,
   name: "Schneider Green Theme",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: PLUGIN_API_VERSION,
   description:
     "Contributes the Schneider brand green (#009E4D) as an optional theme color preset.",
   author: "Mamep2026 Team",

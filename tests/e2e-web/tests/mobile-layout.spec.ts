@@ -6,6 +6,7 @@
  * 桌面（≥1024）行为由既有用例（1600×900 视口）守住，本文件不重复。
  */
 import { expect, test, type Page } from "@playwright/test";
+import { installExecutablePlugin } from "./helpers/manual-plugins";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
@@ -18,6 +19,23 @@ async function openMobileApp(page: Page): Promise<void> {
   await expect(
     page.locator(".connection-cluster__button[data-conn-state='connected']"),
   ).toBeVisible({ timeout: 15000 });
+}
+
+/**
+ * 安装 Address Adjust 插件（ADR-054：地址变换由插件贡献，不再随包安装）。
+ * 在**桌面视口**下安装（Settings 入口在窄视口下可能收进「更多」菜单）：
+ * 先以默认视口进入应用 → 安装（同进程，同步能力必需）→ 再切到移动视口重载（已持久化）。
+ */
+async function installAddressAdjust(page: Page): Promise<void> {
+  await page.goto(BASE_URL);
+  await expect(
+    page.locator(".connection-cluster__button[data-conn-state='connected']"),
+  ).toBeVisible({ timeout: 15000 });
+  await installExecutablePlugin(page, {
+    pluginId: "builtin-address-adjust",
+    pluginName: "Address Adjust",
+    executionMode: "same-process",
+  });
 }
 
 test("移动布局：侧栏收起为左抽屉，选中表后自动关闭", async ({ page }) => {
@@ -90,6 +108,8 @@ test("移动表格：横向滚动 + 无固定列 + 行高 44", async ({ page }) 
 test("移动工具栏：次要控件收进「更多」面板，主操作仍在工具栏", async ({
   page,
 }) => {
+  // Address Adjust 现为插件贡献（ADR-054）：先安装（同进程）再切移动视口。
+  await installAddressAdjust(page);
   await openMobileApp(page);
 
   const toolbar = page.locator(".table-toolbar");

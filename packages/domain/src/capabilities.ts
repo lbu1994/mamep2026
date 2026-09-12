@@ -30,7 +30,9 @@ export interface PlatformCapabilities {
   readonly pluginInstall: PluginInstallCapability;
   /** 可执行插件（web 插件代码执行，ADR-039）：Phase A 为 false，Phase F 隔离机制落地后翻转。 */
   readonly executablePlugins: boolean;
-  /** Host 插件（Node 主进程 / Extension Host 执行，ADR-039）：Phase A 为 false，Phase F 翻转。 */
+  /** Host 插件（Node 主进程 / Extension Host 执行，ADR-039）：Phase A 为 false；
+   *  Phase F（ADR-044）isolated 执行面落地；**ADR-055（2026-09-12）** 宿主侧执行面（Electron
+   *  主进程 / VSCode Extension Host）落地并翻转 → Node 承载端为 true，浏览器/Android 维持 false。 */
   readonly hostPlugins: boolean;
   /** 已注册协议扩展 ID（如 ["yaskawa-memobus"]；Phase B 扩展）。 */
   readonly protocolExtensions: readonly string[];
@@ -43,9 +45,10 @@ export interface PlatformCapabilities {
  * 工作区导入走客户端文件选择（workspaceImport: "upload"）、导出走 Blob 下载（workspaceExport: "download"）；
  * 插件安装走客户端文件选择（pluginInstall: "upload"，2026-08-30，ADR-038）；
  * 可执行插件/表类型如实声明（Phase A：executablePlugins/hostPlugins=false，ADR-039；
- * Phase C：协议扩展与表类型翻转——内置安川插件 + 本地 RTU codec 会话已可用，ADR-041；
  * Phase F（2026-09-01，ADR-044）：Web Worker 隔离执行已落地 → executablePlugins=true；
- * hostPlugins 维持 false（浏览器不加载 Host 插件，TECH_DESIGN §23.2）。 */
+ * hostPlugins 维持 false（浏览器不加载 Host 插件，TECH_DESIGN §23.2）。
+ * **ADR-054（2026-09-12）**：插件一律由用户手动安装，故协议扩展 / 表类型此处仅列**核心**值；
+ * 插件贡献由各 Host 读取注册表后经 `deriveCapabilities` 叠加（能力矩阵仍如实声明）。 */
 export const browserCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: true,
   modbusTcp: false,
@@ -59,21 +62,17 @@ export const browserCapabilities: PlatformCapabilities = Object.freeze({
   pluginInstall: "upload",
   executablePlugins: true,
   hostPlugins: false,
+  // 协议扩展 / 表类型（ADR-054）：仅列核心能力；插件贡献由 Host 经 deriveCapabilities 叠加。
   protocolExtensions: [
-    "yaskawa-memobus-67h-010dh-010eh",
-    // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，RTU 承载。
+    // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，RTU 承载（核心能力）。
     "modbus-basic-tables:coil",
     "modbus-basic-tables:discrete-input",
     "modbus-basic-tables:input-register",
-    // 自定义功能码示例插件（ADR-043 E-4）。
-    "custom-function-code",
   ],
   tableTypes: [
     "holding-register",
     "coil",
     "discrete-input",
     "input-register",
-    "yaskawa-memobus-67h-010dh-010eh:holding-register",
-    "custom-function-code:holding-register",
   ],
 });

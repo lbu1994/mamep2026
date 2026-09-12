@@ -11,7 +11,7 @@ function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
     id: "installed-a",
     name: "Installed A",
     version: "1.0.0",
-    apiVersion: "1.0",
+    apiVersion: "2.0",
     description: "A user-installed plugin",
     requiredCapabilities: [],
     platform: { web: true, node: false },
@@ -37,45 +37,46 @@ function makeStore(initial: PluginStoreData | null = null) {
 }
 
 describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
-  it("init 时从 store 加载并 hydrate 已安装插件", async () => {
+  it("start 不自行加载/hydrate（ADR-054：加载与注册由装配方承担）", () => {
     const registry = new PluginRegistry();
     const { store } = makeStore({
-      schemaVersion: 3,
-      seeded: false,
+      schemaVersion: 4,
       plugins: [{ manifest: manifest(), enabled: false }],
     });
     const coordinator = new PluginPersistenceCoordinator(registry, store);
-
-    const result = await coordinator.init();
-    expect(result.ok).toBe(true);
-    expect(registry.getSource("installed-a")).toBe("installed");
-    expect(registry.isEnabled("installed-a")).toBe(false);
-    // v3：isSeeded 与 store 一致；未 markSeeded 时后续保存写回 false。
-    expect(coordinator.isSeeded()).toBe(false);
+    coordinator.start();
+    expect(store.load).not.toHaveBeenCalled();
+    expect(registry.getSource("installed-a")).toBeNull();
   });
 
-  it("hydrate 期间抑制持久化；随后的事件触发保存快照", async () => {
+  it("start 后注册事件触发保存快照", async () => {
     const registry = new PluginRegistry();
     const { store, saves } = makeStore();
     const coordinator = new PluginPersistenceCoordinator(registry, store);
-    await coordinator.init();
-
-    // init 的 hydrate 不触发保存（空 store，无插件）。
+    coordinator.start();
     expect(store.save).not.toHaveBeenCalled();
 
-    // 注册 installed 插件 → 事件 → 保存。
-    registry.register(manifest(), { source: "installed" });
+    // 装配方注册 installed 插件（带执行面）→ 事件 → 保存。
+    registry.register(manifest(), {
+      source: "installed",
+      runtime: { activate() {} },
+      entrySource: "export const manifest = {};",
+      executionMode: "same-process",
+    });
     await vi.waitFor(() => expect(store.save).toHaveBeenCalledTimes(1));
     expect(saves[0]?.plugins.map((p) => p.manifest.id)).toEqual([
       "installed-a",
     ]);
+    expect(saves[0]?.plugins[0]?.entrySource).toBe(
+      "export const manifest = {};",
+    );
   });
 
   it("启用状态变化触发保存", async () => {
     const registry = new PluginRegistry();
     const { store, saves } = makeStore();
     const coordinator = new PluginPersistenceCoordinator(registry, store);
-    await coordinator.init();
+    coordinator.start();
 
     registry.register(manifest(), { source: "installed" });
     registry.setEnabled("installed-a", false);
@@ -90,7 +91,7 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
     const registry = new PluginRegistry();
     const { store } = makeStore();
     const coordinator = new PluginPersistenceCoordinator(registry, store);
-    await coordinator.init();
+    coordinator.start();
 
     registry.register(manifest({ id: "builtin-x" })); // 默认 builtin
     await vi.waitFor(() => expect(store.save).toHaveBeenCalledTimes(1));
@@ -113,20 +114,19 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
     const coordinator = new PluginPersistenceCoordinator(registry, store, {
       onError,
     });
-    await coordinator.init();
+    coordinator.start();
 
     registry.register(manifest(), { source: "installed" });
     await vi.waitFor(() => expect(onError).toHaveBeenCalled());
   });
 
-  it("init 幂等：重复调用不重复订阅/加载；dispose 后不再保存", async () => {
+  it("start 幂等：重复调用不重复订阅；dispose 后不再保存", async () => {
     const registry = new PluginRegistry();
     const { store } = makeStore();
     const coordinator = new PluginPersistenceCoordinator(registry, store);
 
-    await coordinator.init();
-    await coordinator.init();
-    expect(store.load).toHaveBeenCalledTimes(1);
+    coordinator.start();
+    coordinator.start();
 
     coordinator.dispose();
     registry.register(manifest(), { source: "installed" });
@@ -134,22 +134,19 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
     expect(store.save).not.toHaveBeenCalled();
   });
 
-  it("seeded 标记（2026-09-02 插件外部化）：markSeeded 后保存写回 seeded:true", async () => {
+  it("执行模式随快照落盘（ADR-054）：同进程 / 隔离插件均记录 executionMode", async () => {
     const registry = new PluginRegistry();
     const { store, saves } = makeStore();
     const coordinator = new PluginPersistenceCoordinator(registry, store);
-    await coordinator.init();
-    expect(coordinator.isSeeded()).toBe(false);
+    coordinator.start();
 
-    // 首次安装随包插件：注册 → markSeeded → flush 保存快照（含 seeded:true，对齐 AppHost.startPlugins）。
     registry.register(
-      manifest({ id: "bundled-x", platform: { web: true, node: true } }),
-      { source: "installed" },
+      manifest({ id: "same-process-x", platform: { web: true, node: true } }),
+      { source: "installed", runtime: { activate() {} } },
     );
-    coordinator.markSeeded();
     await coordinator.flush();
     const last = saves[saves.length - 1];
-    expect(last?.seeded).toBe(true);
-    expect(last?.plugins.map((p) => p.manifest.id)).toEqual(["bundled-x"]);
+    expect(last?.schemaVersion).toBe(4);
+    expect(last?.plugins[0]?.executionMode).toBe("same-process");
   });
 });

@@ -18,7 +18,7 @@ export const manifest = {
   id: "e2e-exec",
   name: "E2E Exec",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "Runs in an isolated worker.",
   author: "E2E Team",
   platform: { web: true, node: false },
@@ -41,7 +41,7 @@ export const manifest = {
   id: "e2e-throw",
   name: "E2E Throw",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "Throws during activate.",
   author: "E2E Team",
   platform: { web: true, node: false },
@@ -109,13 +109,16 @@ test("安装单文件 JS 插件：隔离线程加载 manifest → 确认（Isola
   await modal.getByRole("button", { name: "Install Plugin" }).click();
   await pickPluginSource(page, "plugin.mjs", ENTRY_OK);
 
-  // 安全确认展示运行位置（隔离线程）。
+  // 安全确认展示执行模式选择（默认隔离线程；ADR-054）。
   const confirm = page
     .locator(".ant-modal-container")
     .filter({ hasText: "Install this plugin?" });
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText("E2E Exec");
-  await expect(confirm).toContainText("Isolated worker");
+  await expect(confirm).toContainText("Isolated worker (recommended)");
+  await expect(confirm).toContainText(
+    "Same process (required for sync capabilities)",
+  );
 
   // 确认安装 → 列表出现 + Installed 标签。
   await confirm.getByRole("button", { name: "Install", exact: true }).click();

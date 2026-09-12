@@ -4,6 +4,7 @@
  * - 轻量 markdown 渲染（标题/列表/代码块）
  */
 import { expect, test, type Page } from "@playwright/test";
+import { installExecutablePlugin } from "./helpers/manual-plugins";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
@@ -11,6 +12,12 @@ async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
+  });
+  // ADR-054：安川插件（寄存器手册贡献方）不再随包安装——先手动安装。
+  await installExecutablePlugin(page, {
+    pluginId: "yaskawa-memobus-67h-010dh-010eh",
+    pluginName: "Yaskawa MEMOBUS",
+    executionMode: "same-process",
   });
 }
 

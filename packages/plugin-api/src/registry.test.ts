@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ok } from "@mamep2026/domain";
 import { PluginRegistry } from "./registry";
 import {
   ContributionPointRegistry,
@@ -13,7 +14,7 @@ function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
     id: "example-panel",
     name: "Example Panel",
     version: "1.0.0",
-    apiVersion: "1.0",
+    apiVersion: "2.0",
     description: "A built-in example plugin",
     requiredCapabilities: [],
     platform: { web: true, node: false },
@@ -126,7 +127,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     registry.setEnabled("installed-b", false);
 
     const data = registry.snapshot();
-    expect(data.schemaVersion).toBe(3);
+    expect(data.schemaVersion).toBe(4);
     expect(data.plugins.map((p) => p.manifest.id)).toEqual([
       "installed-a",
       "installed-b",
@@ -144,8 +145,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     registry.register(manifest());
 
     registry.hydrate({
-      schemaVersion: 3,
-      seeded: false,
+      schemaVersion: 4,
       plugins: [
         // 与内置同 id：跳过（内置优先），不产生加载错误。
         { manifest: manifest({ name: "Duplicate" }), enabled: false },
@@ -165,7 +165,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     const registry = new PluginRegistry();
     registry.register(manifest({ id: "installed-a" }), { source: "installed" });
     const data = registry.snapshot();
-    registry.hydrate({ ...data, seeded: false });
+    registry.hydrate(data);
     expect(registry.list()).toHaveLength(1);
     expect(registry.getLoadErrors()).toHaveLength(0);
   });
@@ -284,53 +284,39 @@ describe("PluginRegistry 隔离线程运行时（2026-09-01，ADR-044 Phase F-2�
     );
 
     const restored = new PluginRegistry();
-    restored.hydrate({ ...data, seeded: false });
+    restored.hydrate(data);
     expect(restored.getSource("installed-exec")).toBe("installed");
     expect(restored.getEntrySource("installed-exec")).toBe(
       "export const manifest = { id: 'x' }",
     );
+    // 执行模式随快照持久化（ADR-054）：重启后装配方据此重建隔离运行时。
+    expect(restored.getExecutionMode("installed-exec")).toBe("isolated");
     // hydrate 不自动激活（装配方 attachRemoteRuntime 后激活）。
     expect(restored.getLifecycleState("installed-exec")).toBe("registered");
   });
 
-  it("attachRemoteRuntime 为 hydrate 恢复的插件附加运行时并激活", async () => {
+  it("隔离执行：注册时携带 remoteRuntime 即激活，并持久化 executionMode=isolated", async () => {
     const registry = new PluginRegistry();
-    registry.register(manifest({ id: "installed-exec" }), {
+    const remote = fakeRemoteRuntime();
+    const result = registry.register(manifest({ id: "installed-exec" }), {
       source: "installed",
+      remoteRuntime: remote,
       entrySource: "export const manifest = {}",
     });
-    expect(registry.getLifecycleState("installed-exec")).toBe("registered");
-
-    const remote = fakeRemoteRuntime();
-    const result = registry.attachRemoteRuntime("installed-exec", remote);
     expect(result.ok).toBe(true);
     await vi.waitFor(() => {
       expect(remote.activate).toHaveBeenCalledTimes(1);
     });
     expect(registry.getLifecycleState("installed-exec")).toBe("active");
-  });
-
-  it("attachRemoteRuntime 对 builtin / 未注册 / 已附加返回错误", () => {
-    const registry = new PluginRegistry();
-    expect(
-      registry.attachRemoteRuntime("unknown", fakeRemoteRuntime()).ok,
-    ).toBe(false);
-    registry.register(manifest());
-    expect(
-      registry.attachRemoteRuntime("example-panel", fakeRemoteRuntime()).ok,
-    ).toBe(false);
-    registry.register(manifest({ id: "installed-exec" }), {
-      source: "installed",
-      remoteRuntime: fakeRemoteRuntime(),
-    });
-    expect(
-      registry.attachRemoteRuntime("installed-exec", fakeRemoteRuntime()).ok,
-    ).toBe(false);
+    expect(registry.getExecutionMode("installed-exec")).toBe("isolated");
+    const stored = registry.snapshot().plugins[0];
+    expect(stored?.entrySource).toBe("export const manifest = {}");
+    expect(stored?.executionMode).toBe("isolated");
   });
 });
 
-describe("PluginRegistry 同进程运行时（2026-09-02 插件外部化）", () => {
-  it("installed 插件可携带同进程 runtime（放宽限制：随包受信插件）", () => {
+describe("PluginRegistry 同进程运行时（ADR-054：手动安装 + 用户授权）", () => {
+  it("installed 插件可携带同进程 runtime（用户在安装确认框中显式授权）", () => {
     const registry = new PluginRegistry();
     const activate = vi.fn();
     const result = registry.register(
@@ -440,33 +426,92 @@ describe("PluginRegistry 同进程运行时（2026-09-02 插件外部化）", ()
     if (!failed.ok) expect(failed.error.code).toBe("PLUGIN_HOOK_FAILED");
   });
 
-  it("attachRuntime：为 hydrate 恢复的 installed 插件附加同进程 runtime 并激活（重启恢复）", async () => {
+  it("同进程注册记录 executionMode=same-process 并随快照持久化（ADR-054）", () => {
     const registry = new PluginRegistry();
-    registry.register(
-      manifest({ id: "bundled-x", platform: { web: true, node: true } }),
-      { source: "installed" },
-    );
-    expect(registry.getRuntime("bundled-x")).toBeUndefined();
     const activate = vi.fn();
-    const result = registry.attachRuntime("bundled-x", { activate });
-    expect(result.ok).toBe(true);
+    registry.register(
+      manifest({ id: "same-process-x", platform: { web: true, node: true } }),
+      { source: "installed", runtime: { activate } },
+    );
     expect(activate).toHaveBeenCalledTimes(1);
-    expect(registry.getRuntime("bundled-x")).toBeDefined();
+    expect(registry.getExecutionMode("same-process-x")).toBe("same-process");
+    expect(registry.snapshot().plugins[0]?.executionMode).toBe("same-process");
+    // 无执行面的纯清单插件不写 executionMode。
+    registry.register(manifest({ id: "manifest-only" }), {
+      source: "installed",
+    });
+    expect(registry.getExecutionMode("manifest-only")).toBeNull();
+    expect(
+      registry.snapshot().plugins.find((p) => p.manifest.id === "manifest-only")
+        ?.executionMode,
+    ).toBeUndefined();
   });
 
-  it("attachRuntime 对 builtin / 未注册 / 已附加返回错误", () => {
+  it("ctx.registries 注入：activate 可经 ctx 注册 codec/dataType/addressTransform（ADR-054）", () => {
+    const codecRegister = vi.fn(() => ok(undefined));
+    const dataTypeRegister = vi.fn(() => ok(undefined));
+    const transformRegister = vi.fn(() => ok(undefined));
+    let captured: { pluginId: string; codecList: string[] } | null = null;
+    const registry = new PluginRegistry({
+      syncRegistries: {
+        codec: { register: codecRegister, list: () => ["custom"] },
+        dataType: {
+          register: dataTypeRegister,
+          get: () => undefined,
+          list: () => [],
+        },
+        addressTransform: {
+          register: transformRegister,
+          get: () => undefined,
+          list: () => [],
+        },
+      },
+    });
+    registry.register(manifest({ id: "sync-x", platform: { web: true, node: true } }), {
+      source: "installed",
+      runtime: {
+        activate(ctx) {
+          ctx.registries.codec.register({
+            protocolId: "custom",
+            encodeRead: () => new Uint8Array(),
+            encodeWrite: () => new Uint8Array(),
+            decodeResponse: () => ok({ kind: "write" }),
+            parserFactory: () => ({ push: () => ({ done: false }) }),
+            expectedLength: () => ({ normal: 1, exception: 5 }),
+          });
+          ctx.registries.addressTransform.register({
+            id: "t1",
+            protocol: "rtu",
+            apply: (address: number) => ok(address - 1),
+          });
+          captured = {
+            pluginId: ctx.pluginId,
+            codecList: ctx.registries.codec.list(),
+          };
+        },
+      },
+    });
+    expect(captured).toEqual({ pluginId: "sync-x", codecList: ["custom"] });
+    expect(codecRegister).toHaveBeenCalledTimes(1);
+    expect(transformRegister).toHaveBeenCalledTimes(1);
+  });
+
+  it("未注入同步注册面时 ctx.registries 返回能力错误兜底", () => {
     const registry = new PluginRegistry();
-    expect(registry.attachRuntime("unknown", { activate() {} }).ok).toBe(false);
-    registry.register(manifest());
-    expect(registry.attachRuntime("example-panel", { activate() {} }).ok).toBe(
-      false,
-    );
-    registry.register(
-      manifest({ id: "bundled-x", platform: { web: true, node: true } }),
-      { source: "installed", runtime: { activate() {} } },
-    );
-    expect(registry.attachRuntime("bundled-x", { activate() {} }).ok).toBe(
-      false,
-    );
+    let errorCode: string | null = null;
+    registry.register(manifest({ id: "sync-y", platform: { web: true, node: true } }), {
+      source: "installed",
+      runtime: {
+        activate(ctx) {
+          const result = ctx.registries.dataType.register("x", {
+            parse: () => ok(0),
+            format: () => "0",
+          });
+          if (!result.ok) errorCode = result.error.code;
+        },
+      },
+    });
+    expect(errorCode).toBe("PLUGIN_SYNC_REGISTRY_UNAVAILABLE");
+    expect(registry.getExecutionMode("sync-y")).toBe("same-process");
   });
 });

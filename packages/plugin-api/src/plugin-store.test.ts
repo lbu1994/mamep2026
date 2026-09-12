@@ -6,63 +6,74 @@ import {
   pluginStoreDataSchema,
 } from "./plugin-store";
 
-describe("plugin store v1→v2 迁移（ADR-039）", () => {
-  it("v1 老数据：补 apiVersion/requiredCapabilities、permissions 筛合法、contributes 保 panels", () => {
+describe("plugin store v4（ADR-054：删除随包插件机制）", () => {
+  it("当前版本（v4）严格校验：损坏数据 → PLUGIN_STORE_SCHEMA_INVALID", () => {
+    const bad = migratePluginStoreData({ schemaVersion: 4, plugins: "oops" });
+    expect(bad.ok).toBe(false);
+    const badManifest = migratePluginStoreData({
+      schemaVersion: 4,
+      plugins: [{ manifest: { id: "x" }, enabled: true }],
+    });
+    expect(badManifest.ok).toBe(false);
+    // 已删除的 seeded 字段（v3 遗留）不再参与校验：v4 数据带该键也不视为损坏。
+    const withSeeded = migratePluginStoreData({
+      schemaVersion: 4,
+      plugins: [],
+      seeded: true,
+    });
+    expect(withSeeded.ok).toBe(true);
+  });
+
+  it("v4 保留 entrySource 与 executionMode（重启重建执行面的依据）", () => {
     const result = migratePluginStoreData({
-      schemaVersion: 1,
+      schemaVersion: 4,
       plugins: [
         {
           manifest: {
-            id: "old-a",
-            name: "Old A",
+            id: "installed-a",
+            name: "A",
             version: "1.0.0",
-            description: "old",
-            platform: { web: true, node: false },
-            permissions: ["ui.panel", "theme"],
-            contributions: { panels: [{ id: "p", titleKey: "x" }] },
+            apiVersion: "2.0",
+            description: "",
+            platform: { web: true, node: true },
           },
           enabled: true,
+          entrySource: "export const manifest = {};",
+          executionMode: "same-process",
         },
       ],
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.schemaVersion).toBe(PLUGIN_STORE_SCHEMA_VERSION);
-    const manifest = result.value.plugins[0]?.manifest;
-    expect(manifest?.apiVersion).toBe("1.0");
-    expect(manifest?.requiredCapabilities).toEqual([]);
-    expect(manifest?.permissions).toEqual(["theme"]);
-    expect(manifest?.contributes).toEqual({
-      panels: [{ id: "p", titleKey: "x" }],
-    });
+    expect(result.value.plugins[0]?.entrySource).toBe(
+      "export const manifest = {};",
+    );
+    expect(result.value.plugins[0]?.executionMode).toBe("same-process");
   });
 
-  it("schemaVersion 3 严格校验：损坏数据 → PLUGIN_STORE_SCHEMA_INVALID", () => {
-    const bad = migratePluginStoreData({ schemaVersion: 3, plugins: "oops" });
-    expect(bad.ok).toBe(false);
-    const badManifest = migratePluginStoreData({
-      schemaVersion: 3,
-      plugins: [{ manifest: { id: "x" }, enabled: true }],
-      seeded: true,
-    });
-    expect(badManifest.ok).toBe(false);
-    // 缺 seeded（v3 必填）视为损坏（旧 v2 数据走迁移分支补齐）。
-    const missingSeeded = migratePluginStoreData({
-      schemaVersion: 3,
-      plugins: [],
-    });
-    expect(missingSeeded.ok).toBe(false);
-  });
-
-  it("v2 → v3 迁移：补 seeded:false（升级后首次启动触发随包插件一次性安装）", () => {
-    const result = migratePluginStoreData({
-      schemaVersion: 2,
-      plugins: [],
-    });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.schemaVersion).toBe(3);
-    expect(result.value.seeded).toBe(false);
+  it("v1/v2/v3 → v4：清空已安装插件（一律手动安装，需重新安装）", () => {
+    for (const schemaVersion of [1, 2, 3] as const) {
+      const result = migratePluginStoreData({
+        schemaVersion,
+        plugins: [
+          {
+            manifest: {
+              id: "old",
+              name: "Old",
+              version: "1.0.0",
+              apiVersion: "1.0",
+              description: "",
+              platform: { web: true, node: false },
+            },
+            enabled: true,
+          },
+        ],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      expect(result.value.schemaVersion).toBe(PLUGIN_STORE_SCHEMA_VERSION);
+      expect(result.value.plugins).toEqual([]);
+    }
   });
 
   it("v1 且 plugins 非数组 → 视为损坏（PLUGIN_STORE_SCHEMA_INVALID）", () => {
@@ -76,32 +87,10 @@ describe("plugin store v1→v2 迁移（ADR-039）", () => {
     expect(migratePluginStoreData("nope").ok).toBe(false);
   });
 
-  it("非法条目跳过、合法条目保留（迁移不阻断）", () => {
-    const result = migratePluginStoreData({
-      plugins: [
-        { manifest: { id: "x" }, enabled: true },
-        {
-          manifest: {
-            id: "ok",
-            name: "OK",
-            version: "1",
-            description: "",
-            platform: { web: true, node: false },
-          },
-          enabled: true,
-        },
-      ],
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.plugins).toHaveLength(1);
-  });
-
-  it("空 store 兜底 schemaVersion 2", () => {
-    expect(createEmptyPluginStoreData().schemaVersion).toBe(
-      PLUGIN_STORE_SCHEMA_VERSION,
-    );
-    expect(pluginStoreDataSchema.safeParse(createEmptyPluginStoreData()).success).toBe(
-      true,
-    );
+  it("空 store 兜底 schemaVersion 4", () => {
+    const empty = createEmptyPluginStoreData();
+    expect(empty.schemaVersion).toBe(PLUGIN_STORE_SCHEMA_VERSION);
+    expect(empty.plugins).toEqual([]);
+    expect(pluginStoreDataSchema.safeParse(empty).success).toBe(true);
   });
 });

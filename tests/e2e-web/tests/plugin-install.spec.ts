@@ -18,7 +18,7 @@ const manifest = {
   id: "e2e-installed",
   name: "E2E Installed",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "Installed via the plugin install e2e.",
   author: "E2E Team",
   platform: { web: true, node: false },
@@ -122,7 +122,7 @@ test("坏文件：非法 JSON 报错且不注册", async ({ page }) => {
 
   await pickManifestFile(page, "bad.json", "{ not-json");
   await expect(page.getByText("The plugin manifest is invalid.")).toBeVisible();
-  // 随包插件以 installed 来源注册（自带 Installed 标签），故断言按目标插件名。
+  // 断言按目标插件名（ADR-054：插件一律手动安装，不与任何随包插件混同）。
   await expect(modal).not.toContainText("E2E Installed");
   expect(errors).toEqual([]);
 });
@@ -193,7 +193,7 @@ test("重启持久化：安装 + 启停状态 reload 后仍在", async ({ page }
   expect(errors).toEqual([]);
 });
 
-test("卸载：确认后从列表移除并提示成功（随包插件可卸载）", async ({ page }) => {
+test("卸载：确认后从列表移除并提示成功", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
   page.on("console", (message) => {
@@ -203,13 +203,8 @@ test("卸载：确认后从列表移除并提示成功（随包插件可卸载�
   await openApp(page);
   const modal = await openPluginManager(page);
 
-  // 随应用分发插件（2026-09-02 插件外部化）：以 installed 来源注册，可卸载（显示卸载按钮）。
-  const bundledRow = modal
-    .locator(".ant-listy-item")
-    .filter({ hasText: "Example Panel" });
-  await expect(
-    bundledRow.locator('button[aria-label="Uninstall"]'),
-  ).toHaveCount(1);
+  // ADR-054：插件一律由用户手动安装（无随包插件）→ 初始为空态。
+  await expect(modal).toContainText("No built-in plugins registered.");
 
   // 安装一个插件。
   await modal.getByRole("button", { name: "Install Plugin" }).click();

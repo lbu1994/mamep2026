@@ -140,6 +140,12 @@ export interface IpcDeps {
    * Extension Host globalState 承载（应用级持久化，跨窗口共享）。
    */
   pluginStore: PluginStorePort;
+  /**
+   * 插件存储保存成功后触发宿主侧插件执行面同步（ADR-055，2026-09-12）：
+   * Extension Host 重新加载「已启用 + same-process」插件，使插件贡献的同步能力
+   * （codec / addressTransform）在宿主会话中生效。同步不阻塞保存响应。
+   */
+  onPluginStoreSaved?: (() => void) | undefined;
 }
 
 /** 尽力从无法解析的原始消息中提取 messageId（诊断用；解析失败时为空串）。 */
@@ -409,9 +415,15 @@ export async function handleVscodeRequest(
     case "plugin-store-load":
       // 插件存储（2026-08-30，ADR-038）：Extension Host globalState 承载（无数据 = 空数组）。
       return sessionResult(message, () => deps.pluginStore.load());
-    case "plugin-store-save":
+    case "plugin-store-save": {
       // 插件存储（2026-08-30，ADR-038）：载荷为结构化插件存储数据，宿主校验后写入 globalState。
-      return sessionResult(message, () => deps.pluginStore.save(message.payload.data));
+      const saved = await sessionResult(message, () =>
+        deps.pluginStore.save(message.payload.data),
+      );
+      // 保存成功 → 同步宿主侧插件执行面（ADR-055）：插件加载失败不影响保存结果。
+      if (saved.type === "response") deps.onPluginStoreSaved?.();
+      return saved;
+    }
     case "plugin-runtime-load":
     case "plugin-runtime-unload":
     case "plugin-rpc":

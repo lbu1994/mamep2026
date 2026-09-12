@@ -1,19 +1,17 @@
 /**
- * Address Adjust 插件（2026-09-02，插件外部化：自 apps/web/src/App.tsx 内联移出，
- * 变换原定义于 packages/register-table/src/address.ts，一并移入本包）。
+ * Address Adjust 插件（ADR-042 / ADR-054）：表级地址变换（sent address = user address − 1）。
+ *
+ * 2026-09-12（ADR-054）：删除「随包插件」机制后，本插件改为**用户手动安装**的单文件插件——
+ * 单文件 entry 导出 `manifest` + `activate(ctx)`，由平台侧同进程加载器加载（安装时用户需在
+ * 确认框中显式授权「同进程执行」）；`activate` 经 `ctx.registries.addressTransform` 注册变换
+ * （apply/validate 是函数，不能进 manifest 的 contributes payload）。
  * 保留现名（用户决策 2026-09-02）：插件 id "builtin-address-adjust" 与 transformId
- * "builtin.address-adjust" 不变（工作区数据零迁移，文档注明 builtin 仅为历史命名）。
- * 贡献点声明式数据（供工具栏/Plugin Manager 消费）；apply/validate 函数
- * 经 runtime.activate 注册进 AddressTransformRegistry（函数不可序列化，不能进 payload）。
- * 随应用分发，首次启动一次性安装（installed 来源 + 同进程 runtime）。
+ * "builtin.address-adjust" 不变（工作区数据零迁移，builtin 仅为历史命名）。
  */
-import type { Result } from "@mamep2026/domain";
 import {
   PLUGIN_API_VERSION,
-  type AddressTransformRegistry,
+  type PluginContext,
   type PluginManifest,
-  type PluginRegistry,
-  type PluginRuntime,
 } from "@mamep2026/plugin-api";
 import { ADDRESS_ADJUST_TRANSFORM } from "./address-adjust-transform";
 
@@ -41,29 +39,19 @@ export const addressAdjustManifest: PluginManifest = {
 };
 
 /**
- * 构造 Address Adjust 插件运行时（installed 来源同进程 runtime）：
- * activate 时把 Address Adjust 变换注册进 AddressTransformRegistry（经装配链生效）。
- * （2026-09-02 插件外部化：装配层在首次安装与重启恢复时复用同一工厂。）
+ * 单文件 entry 导出（ADR-044 F-3 / ADR-054）：安装时同进程加载器 import 本模块并调用
+ * `activate`（manifest 嵌入 entry，安装流程从 entry 提取）。
  */
-export function createAddressAdjustRuntime(options: {
-  transformRegistry: AddressTransformRegistry;
-}): PluginRuntime {
-  return {
-    activate() {
-      options.transformRegistry.register(ADDRESS_ADJUST_TRANSFORM);
-    },
-  };
-}
+export const manifest: PluginManifest = addressAdjustManifest;
 
-/**
- * 注册 Address Adjust 插件（installed 来源，同进程 runtime）。
- */
-export function registerAddressAdjustPlugin(
-  registry: PluginRegistry,
-  options: { transformRegistry: AddressTransformRegistry },
-): Result<PluginManifest> {
-  return registry.register(addressAdjustManifest, {
-    source: "installed",
-    runtime: createAddressAdjustRuntime(options),
-  });
+export function activate(ctx: PluginContext): void {
+  const result = ctx.registries.addressTransform.register(
+    ADDRESS_ADJUST_TRANSFORM,
+  );
+  if (!result.ok) {
+    // 注册失败（如重复注册）抛错 → 生命周期 failed + 贡献禁用（错误隔离，ADR-039）。
+    throw new Error(
+      `failed to register address transform: ${result.error.code}`,
+    );
+  }
 }

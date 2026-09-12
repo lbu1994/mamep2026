@@ -24,8 +24,9 @@ import type {
 } from "@mamep2026/communication";
 import type { SaveStatus } from "@mamep2026/workspace";
 import type {
+  PluginExecutionMode,
+  PluginManifest,
   PluginRegistry,
-  PluginRemoteRuntime,
 } from "@mamep2026/plugin-api";
 import type {
   PluginContributionQueryResponse,
@@ -76,15 +77,27 @@ export interface AppHost {
   readonly platform: "browser" | "electron" | "vscode" | "android";
 
   /**
-   * 启动插件系统（2026-09-02 插件外部化）：装配后显式调用——首次启动一次性安装随包插件
-   * （installed + 持久化），重启经 hydrate 恢复并重建同进程 runtime；随后恢复用户安装的
-   * 可执行插件（远程运行时）。无存储端口时降级为内存注册。
+   * 启动插件系统（ADR-038 / ADR-054）：装配后显式调用——加载已安装插件（用户手动安装），
+   * 按 executionMode 装配执行面（同进程 / 隔离）后注册，并启动持久化订阅。
+   * 无插件存储端口的宿主为 no-op（无手动安装能力）。
    */
   startPlugins(): Promise<void>;
-  /** 恢复已卸载的随应用分发插件（Plugin Manager「恢复」）。 */
-  restoreBundledPlugin(pluginId: string): Promise<void>;
-  /** 恢复全部已卸载的随应用分发插件（Plugin Manager「恢复全部」）。 */
-  restoreAllBundledPlugins(): Promise<void>;
+  /**
+   * 预览可执行插件 entry（ADR-054）：按 executionMode 加载 entry 并校验 manifest（不注册）。
+   * 安装确认框据此展示插件信息（名称/版本/权限/平台 + 运行位置）。
+   */
+  previewPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>>;
+  /**
+   * 安装可执行插件（ADR-054）：按 executionMode 装配执行面并注册为 installed 插件
+   * （持久化由持久化协调器承担）。same-process 需用户在安装确认框中显式授权。
+   */
+  installPluginEntry(
+    entrySource: string,
+    executionMode: PluginExecutionMode,
+  ): Promise<Result<PluginManifest>>;
 
   loadWorkspace(): Promise<Result<Workspace>>;
   /** 清除全部持久化数据并返回全新默认工作区（§16.5.5 用户重置损坏工作区）。 */
@@ -153,11 +166,6 @@ export interface AppHost {
    * 调度器访问会话；未连接 / 会话在远程宿主时返回 null（插件通信降级为能力错误）。
    */
   getSession(): CommunicationSession | null;
-  /**
-   * 创建插件隔离运行时（ADR-044 Phase F-2）：单文件 JS 插件 entry 在隔离线程
-   * （Web Worker）加载执行；通信面按插件 id 动态绑定到当前会话（统一调度器）。
-   */
-  createPluginRemoteRuntime(entrySource: string): PluginRemoteRuntime;
   /**
    * 释放全部资源（页面卸载 / Webview 销毁 / StrictMode 重复挂载清理）：
    * 断开会话、退订所有外部事件源（如 bridge.onEvent）并清空本地订阅集合，

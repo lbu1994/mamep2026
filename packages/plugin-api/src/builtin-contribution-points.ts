@@ -10,11 +10,21 @@
 import { z } from "zod";
 import type { ContributionPointId } from "./contributions";
 
-/** panels：面板贡献（Phase A 消费方 = 底部面板渲染，payload 为声明式描述）。 */
+/** 插件自带翻译的显示名（方案 A，2026-09-03）：`en-US` 必填 / `zh-CN` 可选。
+ * 缺失语言由消费方回退英文，再回退应用 i18n 的 `titleKey`（消费方解析见 ui 的 plugin-title）。 */
+const LOCALIZED_TITLE_SCHEMA = z.object({
+  "en-US": z.string().min(1),
+  "zh-CN": z.string().min(1).optional(),
+});
+
+/** panels：面板贡献（Phase A 消费方 = 底部面板渲染，payload 为声明式描述）。
+ * 2026-09-12：增可选 `title`（插件自带翻译，方案 A，与 theme 一致；缺失则回退 `titleKey`）。
+ * 交互式面板组件机制属 Phase F，当前消费方渲染标题 + 占位内容。 */
 export const PANELS_CONTRIBUTION_SCHEMA = z.array(
   z.object({
     id: z.string().min(1),
     titleKey: z.string().min(1),
+    title: LOCALIZED_TITLE_SCHEMA.optional(),
   }),
 );
 
@@ -66,12 +76,7 @@ export const THEME_COLOR_PRESET_SCHEMA = z.object({
   id: z.string().min(1),
   titleKey: z.string().min(1),
   /** 插件自带标题翻译（en-US 必填 / zh-CN 可选）；缺失语言时消费方回退英文。 */
-  title: z
-    .object({
-      "en-US": z.string().min(1),
-      "zh-CN": z.string().min(1).optional(),
-    })
-    .optional(),
+  title: LOCALIZED_TITLE_SCHEMA.optional(),
   /** 单一明亮模式主色（种子）。链接色默认跟随主色；暗色主色/hover/active 由 antd 算法自动派生。 */
   colorPrimary: z.string().min(1),
 });

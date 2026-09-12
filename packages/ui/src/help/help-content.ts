@@ -286,7 +286,7 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "- **Reset Workspace**: restore the default workspace and erase saved data.",
       "- **Import / Export Workspace**: exchange the workspace as a JSON file.",
       "",
-      "The **Plugins** tab of Settings manages installed plugins (install, enable/disable, uninstall, restore bundled).",
+      "The **Plugins** tab of Settings manages installed plugins (install, enable/disable, uninstall). Plugins are installed manually from a manifest JSON or a single-file `.mjs` entry (ADR-054).",
     ]),
     "zh-CN": md([
       "# 设置与主题",
@@ -303,7 +303,7 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "- **重置工作区**：恢复默认工作区并清除已保存数据。",
       "- **导入 / 导出工作区**：以 JSON 文件交换工作区。",
       "",
-      "Settings 的 **插件** 页签用于管理已安装插件（安装、启用/禁用、卸载、恢复随包插件）。",
+      "Settings 的 **插件** 页签用于管理已安装插件（安装、启用/禁用、卸载）。插件需手动安装：选择清单 JSON 或单文件 `.mjs` 入口（ADR-054）。",
     ]),
   },
   plugins: {

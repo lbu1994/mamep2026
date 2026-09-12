@@ -558,7 +558,7 @@ describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）
         id: "builtin-address-adjust",
         name: "Address Adjust",
         version: "1.0.0",
-        apiVersion: "1.0",
+        apiVersion: "2.0",
         description: "Built-in table-level Address Adjust.",
         platform: { web: true, node: true },
         permissions: [],

@@ -295,7 +295,7 @@ Address Adjust 已实现为随应用分发的插件（`plugins/address-adjust`�
 
 实际目录尚未创建或与上述结构存在合理差异时，应以当前已确认的工程结构和 ADR 为准，不得为了匹配示意结构进行无关的大规模移动。
 
-当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、ui-theme（2026-08-25，ADR-027：平台主题适配层，base 主题 + VSCode 完整令牌映射）、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 [ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）。`plugins/` 目录已就位（2026-09-02，ADR-045：随包插件外部化，`example-panel` / `example-theme` / `address-adjust` / `yaskawa-memobus-67h-010dh-010eh` / `custom-function-code`）。
+当前实际结构（2026-08）：已迁移为 monorepo（ADR-013）——`apps/web/`（Vite + React 网页端，兼作 Electron Renderer）、`apps/electron/`（2026-08-21 迁移，ADR-016：`src/main/main.ts` + `src/preload/preload.ts`，产物 `dist-electron/main.js` + `preload.js`）、`packages/`（domain、protocol-modbus、data-conversion、communication、workspace、logging、plugin-api、register-table、platform-api、platform-web、ui、ui-theme（2026-08-25，ADR-027：平台主题适配层，base 主题 + VSCode 完整令牌映射）、test-kit）、`tooling/typescript-config`、`tests/`（acceptance、e2e-web）；`apps/vscode-extension/`（2026-08-23 自仓库根迁入，VSCode 端骨架已落地：Webview + 生产资源打包 + HostMessage v1 类型化 RPC，见 [ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)）。`plugins/` 目录已就位（**均需用户手动安装**，2026-09-12 ADR-054：删除随包插件机制——`address-adjust` / `yaskawa-memobus-67h-010dh-010eh` / `custom-function-code` 为可执行插件（单文件 entry），`example-theme` 与各品牌主题色插件为纯清单插件；可安装产物经 `pnpm build:plugins` 生成到 `release/plugins/`）。
 
 Android 端（2026-09-10，ADR-050）：第四平台，**Phase 0（文档 + 验证）与 Phase 1（TCP 闭环）已落地**——已创建 `apps/android/`（Capacitor 8.5.1 工程 + app 内 Kotlin 插件 `MamepTransportPlugin.kt` + `README.md`，含 JDK ≤24 / 真机 e2e 前置）、`packages/platform-android/`（`androidCapabilities` + `bridge-contract.ts` + `CapacitorTcpTransport` + `AndroidPlatformHost` + `applyAndroidTcpDefaults`，桥实现经子路径 `@mamep2026/platform-android/capacitor` 隔离）、`tests/e2e-android/`（真机 CDP e2e）、`scripts/build-android.mjs`，`apps/web` 新增 `--mode android` 产物与 `AndroidAppHost`。
 **`packages/capacitor-modbus-transport/` 已由 Phase 1 决策否决（不创建）**——原生插件放 `apps/android` 内（app-local plugin），避免 pnpm 符号链接 + Capacitor 插件自动发现的摩擦；将来需要跨 app 复用/发布时再抽独立包。
@@ -1303,9 +1303,9 @@ Host 插件适用于：
 
 MVP 优先支持：
 
-- 随应用分发的插件（2026-09-02，ADR-045：插件位于 `plugins/` 目录，首次启动一次性安装，
-  与用户安装插件等同——可禁用/卸载/恢复，`source:"installed"`；无「内置插件」类别，
-  除非用户明确强调）
+- 用户手动安装的插件（2026-09-12，ADR-054：插件位于 `plugins/` 目录，经 Settings → Plugins
+  选择清单 JSON 或单文件 `.mjs` 安装；执行模式由安装确认框选择——默认隔离线程，
+  贡献同步能力时需用户显式授权同进程执行；`source:"installed"`，**无「内置/随包插件」类别**）
 - 开发模式下的受信任本地插件
 - Manifest 驱动的启用和禁用
 - 插件加载错误隔离
@@ -1359,7 +1359,7 @@ UI 必须：
 
 ### 25.3 连接配置
 
-连接配置使用 Modal（浏览器非 Mock 模式启动时自动弹出；dev Mock 传输模式 `?mockTransport=1` 下自动连接模拟设备、不弹出，见 [浏览器端自动化测试方法指南](浏览器端自动化测试方法指南.md)；浏览器端仅提供 Modbus RTU 配置）。Connection Settings、Plugin Manager、Settings 的入口统一放在顶部应用栏，不放在侧边栏。
+连接配置使用 Modal（浏览器非 Mock 模式启动时自动弹出；dev Mock 传输模式 `?mockTransport=1` 下自动连接模拟设备、不弹出，见 [浏览器端自动化测试方法指南](浏览器端自动化测试方法指南.md)；浏览器端仅提供 Modbus RTU 配置）。Connection Settings 与 Settings 的入口统一放在顶部应用栏，不放在侧边栏；**插件管理已并入 Settings**（2026-09-12：`General` / `Plugins` 两个页签，无独立 Plugin Manager 入口）。
 
 连接失败时必须：
 
@@ -1741,12 +1741,18 @@ AI 代理不得：
 32. 不通过工具、MCP、插件查阅库官方文档，直接翻阅库源码来实现第三方库用法
 33. 修改或补丁第三方库未公开（内部 / 私有）的属性或方法
 34. 新增内置插件（除非用户明确强调「内置插件」）：所有插件一律放在 `plugins/` 目录
-    作为随应用分发/外部插件（2026-09-02，ADR-045），核心代码与装配点不得再以内联
-    或者 `source:"builtin"` 方式加入新插件
-35. 在 Android 端直接调用 Capacitor 原生插件（必须经 `packages/platform-android` 封装）；
+    作为**用户手动安装**的外部插件（2026-09-12，ADR-054：删除随包插件机制），核心代码与装配点
+    不得再以内联或 `source:"builtin"` 方式加入新插件，也不得为插件提供「随包自动安装」路径
+35. 默认开启插件的**同进程执行**（same-process）：同进程 = 插件与应用同权限，必须由用户在
+    安装确认框中显式授权（默认必须为隔离线程，2026-09-12 ADR-054）
+36. 在 Android 端直接调用 Capacitor 原生插件（必须经 `packages/platform-android` 封装）；
     也不得为支持 Android 而把会话/调度/协议逻辑下沉到原生实现（ADR-050）
-36. 为平台适配而重命名或搬迁现有共享包/模块（如把 `application` 改为 `core`、把平台传输拆为 `adapters`）；
+37. 为平台适配而重命名或搬迁现有共享包/模块（如把 `application` 改为 `core`、把平台传输拆为 `adapters`）；
     平台适配一律以新增包 + 新增 Host 实现完成（ADR-050）
+38. 宿主侧（Electron 主进程 / VSCode Extension Host）**静态 import 插件包**提供 codec / 地址变换：
+    宿主插件必须经 `PluginStorePort` 由 `HostPluginRuntime`（`@mamep2026/platform-node/plugin`）加载，
+    且 `sync()` 在插件集合变化时**全量重建** dataType / addressTransform 注册表
+    （这两个注册表无注销 API，复用旧表会让已卸载 / 已禁用插件的变换在宿主侧继续生效，2026-09-12 ADR-055）
 
 ---
 

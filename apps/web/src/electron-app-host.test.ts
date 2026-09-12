@@ -208,7 +208,7 @@ function createFakeBridge(): {
     pluginStoreLoad: vi.fn(
       async (): Promise<Result<PluginStoreDataResponse>> => ({
         ok: true,
-        value: { schemaVersion: 3, plugins: [], seeded: false },
+        value: { schemaVersion: 4, plugins: [] },
       }),
     ),
     pluginStoreSave: vi.fn(async (): Promise<Result<null>> => ({

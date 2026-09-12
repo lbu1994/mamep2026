@@ -131,7 +131,7 @@ function createFakeBridge(): {
     pluginStoreLoad: vi.fn(
       async (): Promise<Result<PluginStoreDataResponse>> => ({
         ok: true,
-        value: { schemaVersion: 3, plugins: [], seeded: false },
+        value: { schemaVersion: 4, plugins: [] },
       }),
     ),
     pluginStoreSave: vi.fn(async (): Promise<Result<null>> => ({
@@ -296,7 +296,8 @@ describe("VscodeAppHost", () => {
   it("能力矩阵如实声明（RTU/TCP 已接线：modbusRtu/modbusTcp true、serialPorts enumerated）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
-    expect(host.capabilities).toBe(vscodeCapabilities);
+    // ADR-054：能力矩阵读取即派生（基础值 + 已启用插件贡献）；无插件时与基础值深等。
+    expect(host.capabilities).toEqual(vscodeCapabilities);
     expect(host.capabilities.modbusRtu).toBe(true);
     expect(host.capabilities.modbusTcp).toBe(true);
     expect(host.capabilities.serialPorts).toBe("enumerated");

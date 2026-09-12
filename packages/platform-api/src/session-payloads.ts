@@ -471,18 +471,20 @@ export type PluginManifestPayload = z.infer<typeof pluginManifestPayloadSchema>;
 export const storedPluginPayloadSchema = z.object({
   manifest: pluginManifestPayloadSchema,
   enabled: z.boolean(),
+  // 单文件 JS 插件源码（ADR-044）：跨边界往返必须无损，否则重启无法重建执行面（ADR-054）。
+  entrySource: z.string().optional(),
+  // 执行模式（ADR-054）：isolated=隔离线程；same-process=同进程（用户显式授权）。
+  executionMode: z.enum(["isolated", "same-process"]).optional(),
 });
 export type StoredPluginPayload = z.infer<typeof storedPluginPayloadSchema>;
 
 export const pluginStoreDataPayloadSchema = z.object({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(4),
   plugins: z.array(storedPluginPayloadSchema),
-  // 随包插件一次性安装标记（2026-09-02 插件外部化）：与 plugin-api PluginStoreData v3 对齐。
-  seeded: z.boolean(),
 });
 export type PluginStoreDataPayload = z.infer<typeof pluginStoreDataPayloadSchema>;
 
-/** plugin-store-load 响应载荷（结构同 PluginStoreData，空 store 返回 { schemaVersion:3, plugins:[], seeded:false }）。 */
+/** plugin-store-load 响应载荷（结构同 PluginStoreData v4，空 store 返回 { schemaVersion:4, plugins:[] }）。 */
 export const pluginStoreDataResponseSchema = pluginStoreDataPayloadSchema;
 export type PluginStoreDataResponse = z.infer<typeof pluginStoreDataResponseSchema>;
 

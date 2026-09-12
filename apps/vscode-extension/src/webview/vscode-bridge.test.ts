@@ -274,18 +274,18 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
       messageId: envelope.messageId,
       kind: "plugin-store-load",
       ok: true,
-      payload: { schemaVersion: 3, plugins: [], seeded: false },
+      payload: { schemaVersion: 4, plugins: [] },
     });
     const result = await promise;
     expect(result).toEqual({
       ok: true,
-      value: { schemaVersion: 3, plugins: [], seeded: false },
+      value: { schemaVersion: 4, plugins: [] },
     });
   });
 
   it("pluginStoreSave 携带 data payload 并映射 ok（2026-08-30）", async () => {
     const { posted, bridge, dispatch } = createHarness();
-    const data = { schemaVersion: 3 as const, plugins: [], seeded: false };
+    const data = { schemaVersion: 4 as const, plugins: [] };
     const promise = bridge.pluginStoreSave(data);
     expect(posted).toHaveLength(1);
     expect(posted[0]).toMatchObject({

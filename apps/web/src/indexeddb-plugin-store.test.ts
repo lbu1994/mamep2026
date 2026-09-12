@@ -12,7 +12,7 @@ const manifest = {
   id: "installed-a",
   name: "Installed A",
   version: "1.0.0",
-  apiVersion: "1.0",
+  apiVersion: "2.0",
   description: "A user-installed plugin",
   requiredCapabilities: [],
   platform: { web: true, node: false },
@@ -21,7 +21,7 @@ const manifest = {
 };
 
 function storeData(): PluginStoreData {
-  return { schemaVersion: 3, plugins: [{ manifest, enabled: true }], seeded: false };
+  return { schemaVersion: 4, plugins: [{ manifest, enabled: true }] };
 }
 
 function makeKv(initial?: unknown): {
@@ -51,9 +51,8 @@ describe("IndexedDBPluginStore", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).toEqual({
-        schemaVersion: 3,
+        schemaVersion: 4,
         plugins: [],
-        seeded: false,
       });
     }
   });

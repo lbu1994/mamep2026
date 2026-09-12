@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "pretest": "pnpm --filter @mamep2026/web build:electron",
+    "pretest": "pnpm -w build:plugins && pnpm --filter @mamep2026/web build:electron",
     "test": "playwright test",
-    "pretest:real": "pnpm --filter @mamep2026/web build:electron",
+    "pretest:real": "pnpm -w build:plugins && pnpm --filter @mamep2026/web build:electron",
     "test:real": "playwright test -c playwright.real.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."

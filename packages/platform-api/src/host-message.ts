@@ -885,26 +885,24 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   // 插件安装入口（2026-08-30，ADR-038）：主进程 userData plugins.json 持久化，manifest 经 open-text-file 对话框读取。
   pluginInstall: "file",
   // 可执行插件（ADR-039）：Phase A 不执行第三方代码，如实声明 false；Phase F（ADR-044）
-  // Web Worker 隔离执行在 Renderer 已落地 → executablePlugins: true；主进程 host 插件
-  // 执行面未装配 → hostPlugins 维持 false（如实声明，ADR-044 已知限制）。
+  // Web Worker 隔离执行在 Renderer 已落地 → executablePlugins: true；
+  // **ADR-055（2026-09-12）**：主进程装配宿主侧插件执行面（HostPluginRuntime）——
+  // 从 plugins.json 加载「已启用 + same-process」插件，插件 codec/addressTransform 真正生效
+  // → hostPlugins: true。
   executablePlugins: true,
-  hostPlugins: false,
-  // 协议扩展/表类型（ADR-041 Phase C）：随应用分发插件（yaskawa/自定义，ADR-045）+ 本地 RTU codec 会话已可用，如实声明。
-  // ADR-043 E-2：基础表 codec（coil/discrete-input/input-register，RTU 承载）追加。
+  hostPlugins: true,
+  // 协议扩展/表类型（ADR-054）：仅列**核心**能力（基础表 codec）；插件贡献（安川 / 自定义
+  // 功能码等，现已改为用户手动安装）由 Renderer 侧 Host 读取注册表后经 deriveCapabilities 叠加。
   protocolExtensions: [
-    "yaskawa-memobus-67h-010dh-010eh",
     "modbus-basic-tables:coil",
     "modbus-basic-tables:discrete-input",
     "modbus-basic-tables:input-register",
-    "custom-function-code",
   ],
   tableTypes: [
     "holding-register",
     "coil",
     "discrete-input",
     "input-register",
-    "yaskawa-memobus-67h-010dh-010eh:holding-register",
-    "custom-function-code:holding-register",
   ],
 });
 
@@ -926,25 +924,23 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   // 插件安装入口（2026-08-30，ADR-038）：Extension Host globalState 持久化，manifest 经 open-text-file 对话框读取。
   pluginInstall: "file",
   // 可执行插件（ADR-039）：Phase A 不执行第三方代码，如实声明 false；Phase F（ADR-044）
-  // Web Worker 隔离执行在 Webview 已落地 → executablePlugins: true；Extension Host host 插件
-  // 执行面未装配 → hostPlugins 维持 false（如实声明，ADR-044 已知限制）。
+  // Web Worker 隔离执行在 Webview 已落地 → executablePlugins: true；
+  // **ADR-055（2026-09-12）**：Extension Host 装配宿主侧插件执行面（HostPluginRuntime）——
+  // 从 globalState 加载「已启用 + same-process」插件，插件 codec/addressTransform 真正生效
+  // → hostPlugins: true。
   executablePlugins: true,
-  hostPlugins: false,
-  // 协议扩展/表类型（ADR-041 Phase C / ADR-043 E-6）：Extension Host 已注入 codecRegistry
-  // （基础表 + 随包安川 codec），session-connect 经 protocol 字段路由，如实声明。
+  hostPlugins: true,
+  // 协议扩展/表类型（ADR-054）：仅列**核心**能力（基础表 codec）；插件贡献由 Renderer 侧 Host
+  // 读取注册表后经 deriveCapabilities 叠加，宿主侧 codec 由 HostPluginRuntime 按插件存储注册。
   protocolExtensions: [
-    "yaskawa-memobus-67h-010dh-010eh",
     "modbus-basic-tables:coil",
     "modbus-basic-tables:discrete-input",
     "modbus-basic-tables:input-register",
-    "custom-function-code",
   ],
   tableTypes: [
     "holding-register",
     "coil",
     "discrete-input",
     "input-register",
-    "yaskawa-memobus-67h-010dh-010eh:holding-register",
-    "custom-function-code:holding-register",
   ],
 });
