@@ -33,7 +33,9 @@ async function fillRow(
   const nameInput = row(page, index).getByLabel("Name");
   await nameInput.click();
   await nameInput.fill(data.name);
-  const addressInput = row(page, index).getByLabel("Register");
+  const addressInput = row(page, index).getByLabel("Address", {
+    exact: true,
+  });
   await addressInput.click();
   await addressInput.fill(data.address);
   await addressInput.press("Enter");
@@ -103,7 +105,9 @@ test("row context menu inserts an empty row below the target", async ({
     base + 2,
   );
   await expect(row(page, 1).getByLabel("Name")).toHaveText("");
-  await expect(row(page, 1).getByLabel("Register")).toHaveText("");
+  await expect(
+    row(page, 1).getByLabel("Address", { exact: true }),
+  ).toHaveText("");
 });
 
 test("checkbox multi-select, shift range and select-all update the toolbar", async ({
@@ -155,7 +159,9 @@ test("copy and paste via keyboard preserves row data", async ({ page }) => {
   await expect(row(page, base + 2).getByLabel("Name")).toHaveText("R1");
   await expect(row(page, base + 3).getByLabel("Name")).toHaveText("R2");
   // 粘贴行的地址按目标表进制重新格式化。
-  await expect(row(page, base + 2).getByLabel("Register")).toHaveText("100");
+  await expect(
+    row(page, base + 2).getByLabel("Address", { exact: true }),
+  ).toHaveText("100");
 });
 
 test("keyboard Delete removes selected rows and clears selection", async ({
@@ -203,7 +209,7 @@ test("Data column validation: invalid input shows red error and keeps input; val
   ).toHaveCount(0);
 });
 
-test("Register column keeps showing validation error after a valid address exists", async ({
+test("Address column keeps showing validation error after a valid address exists", async ({
   page,
 }) => {
   await openApp(page);
@@ -211,12 +217,14 @@ test("Register column keeps showing validation error after a valid address exist
   await addRows(page, 1);
   // 新表默认 radix=dec：先提交合法地址。
   const target = row(page, base);
-  const regCell = target.getByLabel("Register").first();
+  const regCell = target.getByLabel("Address", { exact: true }).first();
   await regCell.click();
-  const regInput = target.getByRole("textbox", { name: "Register" });
+  const regInput = target.getByRole("textbox", { name: "Address" });
   await regInput.fill("100");
   await regInput.press("Enter");
-  await expect(target.getByLabel("Register").first()).toHaveText("100");
+  await expect(
+    target.getByLabel("Address", { exact: true }).first(),
+  ).toHaveText("100");
   // 已有合法地址后输入非法值（dec 含非法字符）：回归 addressValue 非空时校验红字丢失。
   await regCell.click();
   await regInput.fill("xyz");
@@ -224,7 +232,9 @@ test("Register column keeps showing validation error after a valid address exist
   await expect(
     target.locator(".register-table__editable-cell-value-wrap--error"),
   ).toBeVisible();
-  await expect(target.getByLabel("Register").first()).toHaveText("xyz");
+  await expect(
+    target.getByLabel("Address", { exact: true }).first(),
+  ).toHaveText("xyz");
 });
 
 test("单元格提交后按类型规范化（ADR-051）", async ({ page }) => {
@@ -234,7 +244,7 @@ test("单元格提交后按类型规范化（ADR-051）", async ({ page }) => {
 
   // DEC 地址：去掉前导零。
   const decTarget = row(page, base);
-  const decAddress = decTarget.getByLabel("Register").first();
+  const decAddress = decTarget.getByLabel("Address", { exact: true }).first();
   await decAddress.click();
   await decAddress.fill("0031");
   await decAddress.press("Enter");
@@ -266,7 +276,7 @@ test("粘贴时按行类型规范化 Data 文本（ADR-051）", async ({ page })
   await openApp(page);
   // 注入未规范化的 CSV：hex 小写、unsigned 前导零、binary 未分组、非法值保留。
   const csv = [
-    "Name,Register,Data,Type,Comment",
+    "Name,Address,Data,Type,Comment",
     "A,16,1f,hex,",
     "B,17,0005,unsigned,",
     "C,18,101,binary,",

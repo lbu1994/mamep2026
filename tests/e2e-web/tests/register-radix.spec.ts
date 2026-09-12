@@ -34,8 +34,8 @@ function tableHeader(page: Page) {
   );
 }
 
-function registerInput(page: Page) {
-  return page.getByLabel("Register", { exact: true }).first();
+function addressInput(page: Page) {
+  return page.getByLabel("Address", { exact: true }).first();
 }
 
 /** 进入可编辑单元格编辑态并填充（非编辑态是 div[role=button]，需先点击，2026-08-15 编辑模式设计）。 */
@@ -50,21 +50,21 @@ async function addFirstRow(page: Page): Promise<void> {
     .evaluate((el) => (el as HTMLElement).click());
 }
 
-test("Register address defaults to DEC and the header reflects it", async ({
+test("Address column defaults to DEC and the header reflects it", async ({
   page,
 }) => {
   await openApp(page);
-  await expect(tableHeader(page)).toContainText("Register[DEC]");
-  await expect(tableHeader(page)).not.toContainText("Register[HEX]");
+  await expect(tableHeader(page)).toContainText("Address[DEC]");
+  await expect(tableHeader(page)).not.toContainText("Address[HEX]");
   // 工具栏切换控件存在，且 DEC 为当前选中项。
   await expect(radixGroup(page)).toContainText("DEC");
   await expect(radixGroup(page)).toContainText("HEX");
   await expect(
     radixGroup(page).locator(".ant-segmented-item-selected"),
   ).toContainText("DEC");
-  // 标签说明该控件作用于 Register 地址列（ADR-014 工具栏提示）。
+  // 标签说明该控件作用于地址列（ADR-014 工具栏提示）。
   await expect(page.locator(".table-toolbar__radix-label")).toContainText(
-    "Register:",
+    "Address:",
   );
 });
 
@@ -73,11 +73,11 @@ test("switching to HEX updates the header and pads committed addresses", async (
 }) => {
   await openApp(page);
   await clickRadix(page, "HEX");
-  await expect(tableHeader(page)).toContainText("Register[HEX]");
-  await expect(tableHeader(page)).not.toContainText("Register[DEC]");
+  await expect(tableHeader(page)).toContainText("Address[HEX]");
+  await expect(tableHeader(page)).not.toContainText("Address[DEC]");
 
   await addFirstRow(page);
-  const input = registerInput(page);
+  const input = addressInput(page);
   await clickAndFill(input, "1f");
   await input.press("Enter");
   await expect(input).toHaveText("001F");
@@ -87,7 +87,7 @@ test("HEX mode rejects the 0x prefix and keeps the draft", async ({ page }) => {
   await openApp(page);
   await clickRadix(page, "HEX");
   await addFirstRow(page);
-  const input = registerInput(page);
+  const input = addressInput(page);
   await clickAndFill(input, "0x12");
   await input.press("Enter");
   await expect(input).toHaveText("0x12");
@@ -101,7 +101,7 @@ test("DEC mode rejects hex letters and out-of-range values", async ({
 }) => {
   await openApp(page);
   await addFirstRow(page);
-  const input = registerInput(page);
+  const input = addressInput(page);
   await clickAndFill(input, "1F");
   await input.press("Enter");
   await expect(input).toHaveText("1F");
@@ -131,14 +131,14 @@ test("switching mode does not reformat already committed addresses", async ({
   await openApp(page);
   await clickRadix(page, "HEX");
   await addFirstRow(page);
-  const input = registerInput(page);
+  const input = addressInput(page);
   await clickAndFill(input, "1f");
   await input.press("Enter");
   await expect(input).toHaveText("001F");
 
   // 切回 DEC：已提交文本保持 "001F"，不做重排（仅影响后续解析与表头）。
   await clickRadix(page, "DEC");
-  await expect(tableHeader(page)).toContainText("Register[DEC]");
+  await expect(tableHeader(page)).toContainText("Address[DEC]");
   await expect(input).toHaveText("001F");
 });
 
@@ -147,23 +147,23 @@ test("radix is per-sheet and survives a reload", async ({ page }) => {
 
   // Sheet 1 设为 HEX。
   await clickRadix(page, "HEX");
-  await expect(tableHeader(page)).toContainText("Register[HEX]");
+  await expect(tableHeader(page)).toContainText("Address[HEX]");
 
   // 新建 Sheet 2：默认仍为 DEC，不受 Sheet 1 影响。
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
-  await expect(tableHeader(page)).toContainText("Register[DEC]");
-  await expect(tableHeader(page)).not.toContainText("Register[HEX]");
+  await expect(tableHeader(page)).toContainText("Address[DEC]");
+  await expect(tableHeader(page)).not.toContainText("Address[HEX]");
 
   // 切回 Sheet 1：保持 HEX。
   await page
     .locator(".ant-layout-sider li.sheet-item")
     .filter({ hasText: "Sheet 1" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(tableHeader(page)).toContainText("Register[HEX]");
+  await expect(tableHeader(page)).toContainText("Address[HEX]");
 
   // 等待自动保存后刷新，验证每表进制独立持久化。
   await page.waitForTimeout(1200);
@@ -172,12 +172,12 @@ test("radix is per-sheet and survives a reload", async ({ page }) => {
     timeout: 15000,
   });
   // 刷新后活动表为 Sheet 1，仍为 HEX。
-  await expect(tableHeader(page)).toContainText("Register[HEX]");
+  await expect(tableHeader(page)).toContainText("Address[HEX]");
   // Sheet 2 仍为 DEC。
   await page
     .locator(".ant-layout-sider li.sheet-item")
     .filter({ hasText: "Sheet 2" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(tableHeader(page)).toContainText("Register[DEC]");
-  await expect(tableHeader(page)).not.toContainText("Register[HEX]");
+  await expect(tableHeader(page)).toContainText("Address[DEC]");
+  await expect(tableHeader(page)).not.toContainText("Address[HEX]");
 });

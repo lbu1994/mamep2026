@@ -61,7 +61,7 @@ test("Address Adjust ON：用户地址 1 发送到 0（comm log 帧地址 00 00�
 }) => {
   const errors = await openApp(page);
   // 给首行填地址 1（dec 默认）。
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("1");
   await addressInput.press("Enter");
@@ -101,7 +101,7 @@ test("Address Adjust 每表独立且刷新后恢复", async ({ page }) => {
 
   // 新建 Sheet 2：默认 OFF（每表独立）。
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(

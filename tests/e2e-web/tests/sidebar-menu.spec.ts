@@ -18,7 +18,7 @@ function sidebarItem(page: Page, name: string) {
 
 async function addSheet(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 }
@@ -30,7 +30,7 @@ test("sidebar shows workspace and register-table sections plus footer", async ({
 
   const sider = page.locator(".ant-layout-sider");
   await expect(sider).toContainText("Workspace");
-  await expect(sider).toContainText("Register Tables");
+  await expect(sider).toContainText("Tables");
   await expect(sider).toContainText("Sheet 1");
   // 版本信息（跟随根 package.json 版本，不断言具体版本号）。
   await expect(sider).toContainText(/Browser v\d+\.\d+\.\d+/);
@@ -40,8 +40,8 @@ test("top bar shows status chip, MOCK badge and Help", async ({ page }) => {
   await openApp(page);
 
   const header = page.locator(".ant-layout-header");
-  // 新建入口只在侧栏 REGISTER TABLES 分区，顶栏不放。
-  await expect(header).not.toContainText("New Register Table");
+  // 新建入口只在侧栏 TABLES 分区，顶栏不放。
+  await expect(header).not.toContainText("New Table");
   // 从站地址已迁移为每表独立设置（2026-08-19），Header 不再显示 Slave。
   await expect(header).toContainText("Online");
   await expect(header).not.toContainText("Slave");
@@ -401,7 +401,7 @@ test("tabs add, switch and close register table sheets", async ({ page }) => {
 
   // 侧边栏 "+" 新建 Sheet 2 并自动激活。
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByRole("tab", { name: "Sheet 2" })).toHaveAttribute(

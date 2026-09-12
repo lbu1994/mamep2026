@@ -192,7 +192,7 @@ test("TCP 连接 → 工具栏改 Unit ID → FC03 读断言请求帧 unitId 变
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
 
   // 4. 首行填入地址 0001。
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");

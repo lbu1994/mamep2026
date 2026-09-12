@@ -7,7 +7,7 @@ const DEFAULT_ORDER = [
   "No",
   "TM",
   "Name",
-  "Register[DEC]",
+  "Address[DEC]",
   "WP",
   "Read",
   "Data",
@@ -31,7 +31,7 @@ const HEADER_TO_KEY: Record<string, string> = {
   No: "no",
   TM: "tm",
   Name: "name",
-  "Register[DEC]": "address",
+  "Address[DEC]": "address",
   WP: "wp",
   Read: "read",
   Data: "data",
@@ -46,7 +46,7 @@ const BODY_LABEL_BY_COLUMN: Record<string, string> = {
   no: "1",
   tm: "TM",
   name: "Name",
-  address: "Register",
+  address: "Address",
   wp: "WP",
   read: "Read",
   data: "Data",
@@ -62,7 +62,7 @@ const DRAG_SEQUENCE: ReadonlyArray<readonly [string, string]> = [
   ["Name", "No"],
   ["Comment", "Data"],
   ["Type", "Write"],
-  ["Register[DEC]", "TM"],
+  ["Address[DEC]", "TM"],
   ["Data", "WP"],
   ["Write", "Read"],
   ["Comment", "No"],
@@ -71,7 +71,7 @@ const DRAG_SEQUENCE: ReadonlyArray<readonly [string, string]> = [
   ["WP", "Type"],
   ["Name", "Comment"],
   ["Data", "No"],
-  ["Write", "Register[DEC]"],
+  ["Write", "Address[DEC]"],
   ["Comment", "TM"],
   ["Type", "Read"],
 ];
@@ -176,7 +176,7 @@ test("dragging a column header reorders the columns", async ({ page }) => {
       "Name",
       "No",
       "TM",
-      "Register[DEC]",
+      "Address[DEC]",
       "WP",
       "Read",
       "Data",
@@ -189,7 +189,7 @@ test("dragging a column header reorders the columns", async ({ page }) => {
   const labels = await firstRowCellLabels(page);
   expect(labels.indexOf("Name")).toBe(1);
   expect(labels.indexOf("1")).toBe(2);
-  expect(labels.indexOf("Register")).toBe(4);
+  expect(labels.indexOf("Address")).toBe(4);
   // 拖拽不产生 console 错误。
   expect(errors).toEqual([]);
 });
@@ -234,7 +234,7 @@ test("column order persists across a page reload", async ({ page }) => {
       "Name",
       "No",
       "TM",
-      "Register[DEC]",
+      "Address[DEC]",
       "WP",
       "Read",
       "Data",
@@ -254,7 +254,7 @@ test("column order persists across a page reload", async ({ page }) => {
     "Name",
     "No",
     "TM",
-    "Register[DEC]",
+    "Address[DEC]",
     "WP",
     "Read",
     "Data",
@@ -275,7 +275,7 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
       "Name",
       "No",
       "TM",
-      "Register[DEC]",
+      "Address[DEC]",
       "WP",
       "Read",
       "Data",
@@ -286,7 +286,7 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
     ]);
   // 新建表 2（侧边栏添加入口，自动激活）。
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(
@@ -306,7 +306,7 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
     "Name",
     "No",
     "TM",
-    "Register[DEC]",
+    "Address[DEC]",
     "WP",
     "Read",
     "Data",

@@ -248,11 +248,12 @@ export function MamepApp(): React.ReactNode {
       sheetType: SheetType;
       titleKey: string;
     }> = [
-      // 核心组：标准 Modbus 03H/10H 保持寄存器，恒存在。
+      // 核心组：标准 Modbus 保持寄存器，恒存在。分组标题统一取核心表类型元数据
+      // （2026-09-13 列语义泛化：不再使用侧边栏专属的 03H/10H 文案键）。
       {
         key: "holding-register",
         sheetType: "holding-register",
-        titleKey: "sidebar.groupModbus",
+        titleKey: "table.tableType.holdingRegister",
       },
     ];
     // 核心基础表组（ADR-043 E-2）：coil/discrete-input/input-register，
@@ -732,7 +733,7 @@ export function MamepApp(): React.ReactNode {
                 type="text"
                 size="small"
                 className="sheet-sidebar__group-action"
-                // 核心组保持「New Register Table」（既有 e2e 定位依赖）；
+                // 核心组保持「New Table」（既有 e2e 定位依赖）；
                 // 插件组用组标题作 aria-label（语义 = 在该组新建对应类型表）。
                 aria-label={
                   group.sheetType === "holding-register"

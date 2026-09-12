@@ -72,12 +72,12 @@ async function setRtuTimeoutSelect(
 
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(p: Page, addressHex: string): Promise<void> {
-  const cell = p.getByLabel("Register", { exact: true }).first();
+  const cell = p.getByLabel("Address", { exact: true }).first();
   await cell.click();
   // 等待进入编辑态：click 触发 React 重渲染渲染出 input（生产构建高负载下可能延迟，
   // 且前序读/写操作的行重渲染尚未 settle 时点击可能命中旧节点）。toBeEditable 自动
   // 重试直到 input 出现，比裸 waitForTimeout 可靠（2026-08-26 real e2e 竞态）。
-  const input = p.getByLabel("Register", { exact: true }).first();
+  const input = p.getByLabel("Address", { exact: true }).first();
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
   // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而

@@ -163,10 +163,10 @@ async function fillNumber(
 
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
-  const cell = frame.getByLabel("Register", { exact: true }).first();
+  const cell = frame.getByLabel("Address", { exact: true }).first();
   await cell.click();
   // 等待进入编辑态（click 触发 React 重渲染渲染出 input；高负载下可能延迟）。
-  const input = frame.getByLabel("Register", { exact: true }).first();
+  const input = frame.getByLabel("Address", { exact: true }).first();
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
   // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而

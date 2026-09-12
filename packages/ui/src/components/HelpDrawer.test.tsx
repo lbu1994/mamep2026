@@ -39,8 +39,8 @@ describe("HelpDrawer（PRD §8.3 完整用户帮助）", () => {
 
   it("点击页签切换正文", () => {
     render(<HelpDrawer open onClose={() => {}} documentationContributions={[]} />);
-    clickTab("Register Table");
-    expect(screen.getByRole("heading", { name: "Register Table" })).toBeTruthy();
+    clickTab("Table");
+    expect(screen.getByRole("heading", { name: "Table" })).toBeTruthy();
     clickTab("About");
     expect(screen.getByRole("heading", { name: "About" })).toBeTruthy();
   });

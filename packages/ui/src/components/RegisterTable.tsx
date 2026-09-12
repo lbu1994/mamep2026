@@ -381,7 +381,7 @@ const RegisterCell = memo(function RegisterCell({
   return (
     <EditableCellValue
       value={addressDraft}
-      ariaLabel="Register"
+      ariaLabel="Address"
       error={error !== undefined}
       {...(errorTip !== undefined ? { errorTip } : {})}
       onCommit={(value) => {
@@ -758,11 +758,11 @@ const CommentCell = memo(function CommentCell({
 });
 
 // ---- 范围行虚拟子行（ADR-030 + 2026-08-27 子行可编辑化）----
-// 子行=每寄存器一行：Register 列只读展示实际地址；Name/Data/Type/Scale/Comment 五列
+// 子行=每寄存器一行：Address 列只读展示实际地址；Name/Data/Type/Scale/Comment 五列
 // 可编辑，经 app-store 的 commitChildCellText / setChildMeta 路由回父行（registers[i] +
 // registerValues[i] 落盘）；其余列（No/TM/WP/Read/Write/拖拽/多选/右键菜单）维持不可用。
 
-/** 子行 Register 列：实际地址（按表进制格式化），只读。 */
+/** 子行 Address 列：实际地址（按表进制格式化），只读。 */
 const ChildAddressCell = memo(function ChildAddressCell({
   row,
   radix,
@@ -910,7 +910,7 @@ const ChildCommentCell = memo(function ChildCommentCell({
 
 // ---- 位明细虚拟行（ADR-052，2026-09-11）----
 // 位行 = 一个 16 位寄存器展开出的 16 行之一（bit15 → bit0）：Name 列只读展示位号，
-// Register 列只读展示位掩码 `0x8000`，Data 列可输入 0/1 + 右侧独立「切换」控件
+// Address 列只读展示位掩码 `0x8000`，Data 列可输入 0/1 + 右侧独立「切换」控件
 // （两者只改当前值、**不写设备**），Comment 列可编辑位注释（入撤销栈）。
 // 其余列（No/TM/WP/Read/Write/Type/Scale/拖拽/多选/右键菜单）维持不可用；
 // 只读表（discrete-input/input-register）可展开查看但切换与注释编辑禁用。
@@ -943,7 +943,7 @@ const BitNameCell = memo(function BitNameCell({
 });
 
 /**
- * 位行 Register 列：寄存器地址 + Bit 序号（如 `2000 Bit 15`，只读）；
+ * 位行 Address 列：寄存器地址 + Bit 序号（如 `2000 Bit 15`，只读）；
  * 位掩码（如 `0x8000`）作为 hover 提示保留（ADR-052 需求追加）。
  */
 const BitRegisterCell = memo(function BitRegisterCell({
@@ -2011,10 +2011,10 @@ export const RegisterTable = memo(function RegisterTable({
       {
         title:
           registerRadix === "hex"
-            ? t("table.registerHex")
-            : t("table.registerDec"),
+            ? t("table.addressHex")
+            : t("table.addressDec"),
         key: "address",
-        // 默认宽 144：等宽字体下表头 "Register[DEC]" 单行完整显示，且与 Name(150) 视觉协调。
+        // 默认宽 144：等宽字体下表头 "Address[DEC]" 单行完整显示，且与 Name(150) 视觉协调。
         // 拖拽仍可自由调整（minWidth 80），此值仅默认宽度。
         width: 144,
         align: "center",
@@ -2461,7 +2461,7 @@ export const RegisterTable = memo(function RegisterTable({
           <Tooltip title={t("table.addressFormatHint")}>
             <span className="table-toolbar__radix">
               <span className="table-toolbar__radix-label">
-                {t("table.registerRadixLabel")}
+                {t("table.addressRadixLabel")}
               </span>
               <Segmented
                 size="small"

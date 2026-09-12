@@ -76,7 +76,7 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
     (window as unknown as { __mamepMock: { setRegister(a: number, v: number): void } }).__mamepMock.setRegister(1, 0x1234);
   });
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Register", { exact: true });
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("1");
   await address.press("Enter");

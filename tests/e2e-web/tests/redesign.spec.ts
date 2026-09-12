@@ -40,7 +40,7 @@ test("empty sheet shows a guided empty state with an Add Row CTA", async ({
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(
-    page.getByLabel("Register", { exact: true }).first(),
+    page.getByLabel("Address", { exact: true }).first(),
   ).toBeVisible();
 });
 

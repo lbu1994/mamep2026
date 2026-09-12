@@ -59,8 +59,8 @@ test("resizable columns expose a resize handle; fixed-width and flexible columns
   page,
 }) => {
   await openApp(page);
-  // 可拖拽列（有默认宽且非固定宽）应有拖拽手柄：Name/Register/Data/Type。
-  for (const label of ["Name", "Register", "Data", "Type"]) {
+  // 可拖拽列（有默认宽且非固定宽）应有拖拽手柄：Name/Address/Data/Type。
+  for (const label of ["Name", "Address", "Data", "Type"]) {
     await expect(
       headerCell(page, label).locator(".react-resizable-handle"),
     ).toHaveCount(1);
@@ -137,7 +137,7 @@ test("column widths are independent per tab (不共享)", async ({ page }) => {
   expect(tab1Width).toBeGreaterThan(170);
   // 新建表 2（侧边栏添加入口，自动激活）。
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(

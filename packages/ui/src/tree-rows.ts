@@ -41,7 +41,7 @@ export interface VirtualBitInfo {
   parentRowId: RowId;
   /** 位掩码文本（如 `0x8000`）。 */
   maskText: string;
-  /** 该位所在寄存器的实际地址（父行起始地址 + registerIndex）；Register 列展示用。 */
+  /** 该位所在寄存器的实际地址（父行起始地址 + registerIndex）；Address 列展示用。 */
   address: number;
   /** 该位当前值；null=该寄存器尚未读取。 */
   value: 0 | 1 | null;

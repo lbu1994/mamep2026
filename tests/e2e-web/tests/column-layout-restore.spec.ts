@@ -7,7 +7,7 @@ const DEFAULT_ORDER = [
   "No",
   "TM",
   "Name",
-  "Register[DEC]",
+  "Address[DEC]",
   "WP",
   "Read",
   "Data",
@@ -22,7 +22,7 @@ const HEADER_TO_KEY: Record<string, string> = {
   No: "no",
   TM: "tm",
   Name: "name",
-  "Register[DEC]": "address",
+  "Address[DEC]": "address",
   WP: "wp",
   Read: "read",
   Data: "data",
@@ -37,7 +37,7 @@ const BODY_LABEL_BY_COLUMN: Record<string, string> = {
   no: "1",
   tm: "TM",
   name: "Name",
-  address: "Register",
+  address: "Address",
   wp: "WP",
   read: "Read",
   data: "Data",
@@ -192,7 +192,7 @@ test("clicking restore resets column order and widths for the current sheet", as
       "Name",
       "No",
       "TM",
-      "Register[DEC]",
+      "Address[DEC]",
       "WP",
       "Read",
       "Data",
@@ -256,7 +256,7 @@ test("restore only affects the current sheet (不共享)", async ({ page }) => {
   await dragHeaderHandle(page, "Name", 60);
   // 新建表 2（侧边栏添加入口，自动激活）并自定义另一种布局（Data 移到 Write 后 + Type 加宽）。
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(

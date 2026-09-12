@@ -23,7 +23,7 @@ async function addEligibleRow(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("1");
   await addressInput.press("Enter");

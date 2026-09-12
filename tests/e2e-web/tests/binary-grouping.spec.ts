@@ -65,7 +65,7 @@ async function setAddress(
   target: ReturnType<typeof parentRow>,
   address: string,
 ): Promise<void> {
-  const input = target.getByLabel("Register", { exact: true });
+  const input = target.getByLabel("Address", { exact: true });
   await input.click();
   await input.fill(address);
   await input.press("Enter");

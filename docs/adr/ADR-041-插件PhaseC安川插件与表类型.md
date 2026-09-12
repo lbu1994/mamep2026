@@ -39,7 +39,7 @@
 ### 5. 新建表 + Workspace 分组父级菜单（决策②）
 
 - 侧边栏 Workspace 按协议分组为父级菜单（antd `Collapse`，可折叠；分组头**只读**——不可拖拽/删除）：
-  - 「用 03H/10H 读写寄存器」——核心 `holding-register` 表；
+  - 「多个保持寄存器（读/写）」/「HOLDING REGISTERS (R/W)」——核心 `holding-register` 表；
   - 「用 67H 010DH/010EH 读写寄存器」——安川表（`protocolExtension` 插件安装/启用后**动态加载**该组，未启用不出现）。
 - 「新建表」入口放**分组头右侧 `+`**（antd Dropdown 选表类型，按当前选中分组新建）。
 

@@ -95,7 +95,7 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await openApp(page);
   // 用第一行（Normal_01，默认 0x0000）改为范围 "0-1"。
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Register");
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");
@@ -151,7 +151,7 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
 test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", async ({ page }) => {
   await openApp(page);
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Register");
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");
@@ -199,7 +199,7 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
   await openApp(page);
   const first = parentRow(page, 0);
   // 首行改为范围 "0-1" 并展开。
-  const address = first.getByLabel("Register");
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");
@@ -290,7 +290,7 @@ test("must-multi 区：单读/单写异常，多读/多写正常", async ({ page
   ).toHaveCount(0);
 
   // 把 MustMulti_01 改为范围 "2048-2049"（0x0800-0x0801）→ 多读正常。
-  const address = mustRow.getByLabel("Register");
+  const address = mustRow.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("2048-2049");
   await address.press("Enter");
@@ -330,7 +330,7 @@ test("范围长度 × 类型合法集校验：unsigned 非法数量在类型列�
   await openApp(page);
   const first = parentRow(page, 0);
   // 范围 "0-2"（3 寄存器）+ unsigned（仅 1/2/4 合法）→ 类型列红框 + Read/Write 禁用。
-  const address = first.getByLabel("Register");
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("0-2");
   await address.press("Enter");
@@ -349,7 +349,7 @@ test("范围长度 × 类型合法集校验：unsigned 非法数量在类型列�
   ).toBeDisabled();
 
   // 改回合法数量（2 寄存器）：错误消失，读写恢复。
-  const address2 = first.getByLabel("Register");
+  const address2 = first.getByLabel("Address", { exact: true });
   await address2.click();
   await address2.fill("0-1");
   await address2.press("Enter");
@@ -366,7 +366,7 @@ test("剪贴板范围编解码往返：复制范围行粘贴恢复 registerCount
   await openApp(page);
   // 第一行改为范围 "0-1"，然后复制 → 粘贴到末尾 → 新行仍是范围行（可展开）。
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Register");
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");
@@ -387,5 +387,7 @@ test("剪贴板范围编解码往返：复制范围行粘贴恢复 registerCount
   await page.keyboard.press("Control+v");
   const pasted = parentRow(page, 1);
   await expect(pasted.locator('button[aria-label="Expand row"]')).toBeVisible();
-  await expect(pasted.getByLabel("Register")).toHaveText(/^\d+-\d+$/);
+  await expect(pasted.getByLabel("Address", { exact: true })).toHaveText(
+    /^\d+-\d+$/,
+  );
 });

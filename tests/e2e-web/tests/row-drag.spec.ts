@@ -7,7 +7,7 @@ const DEFAULT_ORDER = [
   "No",
   "TM",
   "Name",
-  "Register[DEC]",
+  "Address[DEC]",
   "WP",
   "Read",
   "Data",

@@ -295,7 +295,7 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
 
   // 首行填入地址 0001。
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
@@ -338,7 +338,7 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
   });
 
   // 首行地址改为范围 "0001-0002"（DEC 表），展开箭头出现。
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("0001-0002");
   await addressInput.press("Enter");

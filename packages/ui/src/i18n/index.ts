@@ -8,8 +8,6 @@ export const en = {
     loading: "Starting…",
   },
   topbar: {
-    newSheet: "New Sheet",
-    newTable: "New Register Table",
     connectionSettings: "Connection",
     connect: "Connect",
     disconnect: "Disconnect",
@@ -25,12 +23,10 @@ export const en = {
   },
   sidebar: {
     workspace: "Workspace",
-    registerTables: "Register Tables",
-    newTable: "New Register Table",
+    registerTables: "Tables",
+    newTable: "New Table",
     toggleGroup: "Click to expand/collapse",
-    // 分组父级菜单（ADR-041 决策②）：按协议分组，组头只读、可折叠。
-    groupModbus: "Read/write via 03H/10H",
-    groupMemobus: "Read/write via 67H 010DH/010EH",
+    // 分组标题统一由 table.tableType.* 提供（2026-09-13 列语义泛化）：侧边栏不再持有分组文案。
     footerBrowser: "Browser v{{version}}",
     footerClient: "Client v{{version}}",
     footerExtension: "Extension v{{version}}",
@@ -115,7 +111,6 @@ export const en = {
     no: "No",
     tm: "TM",
     name: "Name",
-    register: "Register",
     // ROM/RAM Enter（ADR-041 Phase C，安川插件工具栏动作）。
     enterRom: "Enter ROM (EEPROM)",
     enterRam: "Enter RAM",
@@ -124,12 +119,12 @@ export const en = {
       "Write parameter data to EEPROM (persists after power off) via register 0900H? EEPROM endurance is limited to ~100,000 writes.",
     enterRamConfirm:
       "Update parameters in RAM only (lost after power off) via register 0910H?",
-    registerDec: "Register[DEC]",
-    registerHex: "Register[HEX]",
-    addressFormat: "Register address format",
-    registerRadixLabel: "Register:",
-    registerRadixHint:
-      "Set how register addresses are shown and entered for this table.",
+    // 列头/工具栏「地址」文案（2026-09-13）：对线圈 / 离散输入 / 输入寄存器等表类型，
+    // 「Register」不再准确，统一泛化为 Address。进制后缀沿用 ADR-014。
+    addressDec: "Address[DEC]",
+    addressHex: "Address[HEX]",
+    addressFormat: "Address format",
+    addressRadixLabel: "Address:",
     wp: "WP",
     wpHint: "Poll this register continuously while online.",
     pollingActive: "Polling continuously",
@@ -148,7 +143,7 @@ export const en = {
     emptyAddressTooltip:
       "Set a valid register address first to enable this control.",
     addressFormatHint:
-      "Register address display format only; does not affect the Data value format.",
+      "Address display format only; does not affect the Data value format.",
     addRow: "Add Row",
     dragHandle: "Drag to reorder",
     deleteRow: "Delete Row",
@@ -172,12 +167,13 @@ export const en = {
     bool: "Bool",
     readOnlyTable:
       "This table is read-only (discrete inputs / input registers)",
-    // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）。
+    // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）：2026-09-13 起明确读/写属性、
+    // 不再显示功能码（功能码在帮助/表类型说明中仍可查）。
     tableType: {
-      holdingRegister: "Read/write via 03H/10H",
-      coil: "Coils (01H/0FH)",
-      discreteInput: "Discrete Inputs (02H)",
-      inputRegister: "Input Registers (04H)",
+      holdingRegister: "HOLDING REGISTERS (R/W)",
+      coil: "COILS (R/W)",
+      discreteInput: "DISCRETE INPUTS (R)",
+      inputRegister: "INPUT REGISTERS (R)",
     },
     // 自定义功能码示例插件（ADR-043 E-4）。
     customZero: "Zero All (example)",
@@ -377,7 +373,7 @@ export const en = {
     title: "Help / About",
     tabGettingStarted: "Getting Started",
     tabConnection: "Connection",
-    tabRegisterTable: "Register Table",
+    tabRegisterTable: "Table",
     tabReadWrite: "Read / Write / Polling",
     tabWorkspace: "Workspace",
     tabSettings: "Settings & Theme",
@@ -390,7 +386,7 @@ export const en = {
   keyboard: {
     title: "Keyboard Shortcuts",
     groupApp: "Global",
-    groupTable: "Register Table",
+    groupTable: "Table",
     shortcut: "Shortcut",
     action: "Action",
     hint: "Press ? or Ctrl+/ to show this dialog.",
@@ -400,7 +396,7 @@ export const en = {
     openHelpQuestion: "Show keyboard shortcuts",
     prevSheet: "Previous table",
     nextSheet: "Next table",
-    newSheet: "New register table",
+    newSheet: "New table",
     closeSheet: "Close current table",
     exportWorkspace: "Export workspace",
     importWorkspace: "Import workspace",
@@ -567,8 +563,6 @@ export type TranslationResources = typeof en;
 export const zh: TranslationResources = {
   app: { title: "Mamep2026", loading: "正在启动…" },
   topbar: {
-    newSheet: "新建标签页",
-    newTable: "新建寄存器表",
     connectionSettings: "连接设置",
     connect: "连接",
     disconnect: "断开",
@@ -584,12 +578,10 @@ export const zh: TranslationResources = {
   },
   sidebar: {
     workspace: "工作区",
-    registerTables: "寄存器表",
-    newTable: "新建寄存器表",
+    registerTables: "表格",
+    newTable: "新建表格",
     toggleGroup: "点击展开/折叠",
-    // 分组父级菜单（ADR-041 决策②）。
-    groupModbus: "用 03H/10H 读写寄存器",
-    groupMemobus: "用 67H 010DH/010EH 读写寄存器",
+    // 分组标题统一由 table.tableType.* 提供（2026-09-13 列语义泛化）。
     footerBrowser: "浏览器 v{{version}}",
     footerClient: "客户端 v{{version}}",
     footerExtension: "插件 v{{version}}",
@@ -670,7 +662,6 @@ export const zh: TranslationResources = {
     no: "No",
     tm: "TM",
     name: "名称",
-    register: "寄存器",
     // ROM/RAM Enter（ADR-041 Phase C，安川插件工具栏动作）。
     enterRom: "Enter ROM（EEPROM）",
     enterRam: "Enter RAM",
@@ -678,11 +669,11 @@ export const zh: TranslationResources = {
     enterRomConfirm:
       "将参数数据写入 EEPROM（断电后仍保留，寄存器 0900H）？EEPROM 写入寿命约 10 万次，请勿频繁执行。",
     enterRamConfirm: "仅更新 RAM 中的参数（断电后失效，寄存器 0910H）？",
-    registerDec: "寄存器[DEC]",
-    registerHex: "寄存器[HEX]",
-    addressFormat: "寄存器地址格式",
-    registerRadixLabel: "寄存器:",
-    registerRadixHint: "设置本表 Register 地址的显示与输入进制。",
+    // 列头/工具栏「地址」文案（2026-09-13，与 en 同步）。
+    addressDec: "地址[DEC]",
+    addressHex: "地址[HEX]",
+    addressFormat: "地址格式",
+    addressRadixLabel: "地址:",
     wp: "WP",
     wpHint: "在线时持续周期读取该寄存器。",
     pollingActive: "正在持续轮询",
@@ -698,7 +689,7 @@ export const zh: TranslationResources = {
     bitValueAria: "位 {{bit}} 数值",
     bitValueInvalid: "请输入 0 或 1。",
     emptyAddressTooltip: "请先填写合法寄存器地址以启用该控件。",
-    addressFormatHint: "仅影响寄存器地址的显示与输入进制，不影响 Data 值格式。",
+    addressFormatHint: "仅影响地址的显示与输入进制，不影响 Data 值格式。",
     addRow: "新增行",
     dragHandle: "拖拽排序",
     deleteRow: "删除行",
@@ -721,12 +712,12 @@ export const zh: TranslationResources = {
     string: "字符串",
     bool: "BOOL",
     readOnlyTable: "该表为只读（离散输入 / 输入寄存器）",
-    // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）。
+    // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）：2026-09-13 起明确读/写属性。
     tableType: {
-      holdingRegister: "用 03H/10H 读写寄存器",
-      coil: "线圈（01H/0FH）",
-      discreteInput: "离散输入（02H）",
-      inputRegister: "输入寄存器（04H）",
+      holdingRegister: "多个保持寄存器（读/写）",
+      coil: "多个线圈（读/写）",
+      discreteInput: "离散输入（只读）",
+      inputRegister: "输入寄存器（只读）",
     },
     // 自定义功能码示例插件（ADR-043 E-4）。
     customZero: "全部清零（示例）",
@@ -917,7 +908,7 @@ export const zh: TranslationResources = {
     title: "帮助 / 关于",
     tabGettingStarted: "快速上手",
     tabConnection: "连接",
-    tabRegisterTable: "寄存器表",
+    tabRegisterTable: "表格",
     tabReadWrite: "读写与轮询",
     tabWorkspace: "工作区",
     tabSettings: "设置与主题",
@@ -930,7 +921,7 @@ export const zh: TranslationResources = {
   keyboard: {
     title: "键盘快捷键",
     groupApp: "全局",
-    groupTable: "寄存器表",
+    groupTable: "表格",
     shortcut: "快捷键",
     action: "操作",
     hint: "按 ? 或 Ctrl+/ 可随时打开本对话框。",
@@ -940,7 +931,7 @@ export const zh: TranslationResources = {
     openHelpQuestion: "显示键盘快捷键",
     prevSheet: "上一个表",
     nextSheet: "下一个表",
-    newSheet: "新建寄存器表",
+    newSheet: "新建表格",
     closeSheet: "关闭当前表",
     exportWorkspace: "导出工作区",
     importWorkspace: "导入工作区",

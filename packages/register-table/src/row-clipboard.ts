@@ -3,7 +3,7 @@
  * - 复制/剪切只携带可粘贴字段，运行时状态（轮询/追踪/结果值）一律清零；
  * - 地址以内部十进制数值传递，粘贴时按目标表进制重新格式化（ADR-051：与提交路径同源规范化），
  *   避免跨表进制歧义；
- * - 系统剪贴板 CSV：表头 Name,Register,Data,Type,Comment，Register 为十进制数值；
+ * - 系统剪贴板 CSV：表头 Name,Address,Data,Type,Comment，Address 为十进制数值；
  *   多寄存器范围行（ADR-030）编码为 "start-end"（十进制），解码时恢复 registerCount；
  * - Data 文本粘贴时按行自身 Type 规范化（ADR-051）：解析成功写回规范显示文本，失败保留原文；
  * - 非法数据不得静默丢弃：粘贴返回结构化 issue 汇总（docs/AGENTS.md §32-26）。
@@ -43,7 +43,7 @@ export interface ClipboardIssue {
   code: ClipboardIssueCode;
 }
 
-const CSV_HEADER = ["Name", "Register", "Data", "Type", "Comment"];
+const CSV_HEADER = ["Name", "Address", "Data", "Type", "Comment"];
 
 /** 提取可粘贴字段；运行时状态（轮询/追踪/结果值）不入剪贴板。 */
 export function toClipboardData(row: RegisterRow): RowClipboardData {
@@ -156,7 +156,7 @@ export function encodeClipboardCsv(
 ): string {
   const lines = [CSV_HEADER.join(",")];
   for (const row of payload) {
-    // Register 字段：范围行（registerCount>1）编码为 "start-end"（十进制）。
+    // Address 字段：范围行（registerCount>1）编码为 "start-end"（十进制）。
     const registerField =
       row.addressValue === null
         ? ""

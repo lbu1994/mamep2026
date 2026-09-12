@@ -48,10 +48,10 @@ interface FakeSlave {
 
 /** 首行填地址（默认表行地址为空，不填则读请求不会生成：RegisterTableService 会直接报地址为空）。 */
 async function setRowAddress(target: Page, address: string): Promise<void> {
-  // 注意：不能用 /^Register/ 正则——会匹配到工具栏「Register address format」进制切换控件。
-  const cell = target.getByLabel("Register", { exact: true }).first();
+  // 注意：不能用 /^Address/ 正则——会匹配到工具栏「Address format」进制切换控件与「Address Adjust」控件。
+  const cell = target.getByLabel("Address", { exact: true }).first();
   await cell.click();
-  const input = target.getByLabel("Register", { exact: true }).first();
+  const input = target.getByLabel("Address", { exact: true }).first();
   await expect(input).toBeEditable({ timeout: 10_000 });
   // fill() 用原生 value setter 设置 DOM 值，React onChange 可能不触发（仓库既有踩坑）：
   // 用 pressSequentially 逐字符输入（真实键盘事件），确认受控值同步后再 Enter 提交。

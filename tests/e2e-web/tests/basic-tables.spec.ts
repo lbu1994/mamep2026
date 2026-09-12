@@ -1,6 +1,6 @@
 /**
  * 基础表类型（ADR-043 E-2）E2E（mock 传输）：
- * - 侧边栏基础表分组（Coils / Discrete Inputs / Input Registers）新建表
+ * - 侧边栏基础表分组（COILS (R/W) / DISCRETE INPUTS (R) / INPUT REGISTERS (R)）新建表
  * - 线圈表：默认 Type=BOOL；FC01 读（位值）、FC0F 写、写后回读
  * - 离散输入表：只读（Write 禁用）；FC02 读
  * - 输入寄存器表：只读；FC04 读
@@ -97,11 +97,11 @@ async function reconnectAsActiveSheet(page: Page): Promise<void> {
 test("侧边栏显示基础表分组并可新建线圈表", async ({ page }) => {
   await openApp(page);
   const sider = page.locator(".ant-layout-sider");
-  await expect(sider).toContainText("Coils (01H/0FH)");
-  await expect(sider).toContainText("Discrete Inputs (02H)");
-  await expect(sider).toContainText("Input Registers (04H)");
+  await expect(sider).toContainText("COILS (R/W)");
+  await expect(sider).toContainText("DISCRETE INPUTS (R)");
+  await expect(sider).toContainText("INPUT REGISTERS (R)");
 
-  await addBasicSheet(page, "Coils (01H/0FH)");
+  await addBasicSheet(page, "COILS (R/W)");
   // 新建线圈表成为活动表；其行默认 Type=BOOL（antd Select 标签渲染在 selection-item，非 combobox 输入框）。
   const first = parentRow(page, 0);
   await expect(first.getByLabel("Type")).toBeVisible();
@@ -111,14 +111,14 @@ test("侧边栏显示基础表分组并可新建线圈表", async ({ page }) => 
 
 test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) => {
   await openApp(page);
-  await addBasicSheet(page, "Coils (01H/0FH)");
+  await addBasicSheet(page, "COILS (R/W)");
   // 以线圈表协议重连（mock 自动连接恒 rtu）。
   await reconnectAsActiveSheet(page);
 
   // 第一行地址 0，预置线圈 0 = 1。
   await setCoil(page, 0, 1);
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Register", { exact: true });
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("0");
   await address.press("Enter");
@@ -156,7 +156,7 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
 
 test("离散输入表（只读）：Write 禁用、FC02 读", async ({ page }) => {
   await openApp(page);
-  await addBasicSheet(page, "Discrete Inputs (02H)");
+  await addBasicSheet(page, "DISCRETE INPUTS (R)");
   await reconnectAsActiveSheet(page);
 
   // 预置离散输入 1 = 1。
@@ -164,7 +164,7 @@ test("离散输入表（只读）：Write 禁用、FC02 读", async ({ page }) =
     (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.setInput(1, 1);
   });
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Register", { exact: true });
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("1");
   await address.press("Enter");
@@ -192,7 +192,7 @@ test("离散输入表（只读）：Write 禁用、FC02 读", async ({ page }) =
 
 test("输入寄存器表（只读）：FC04 读 16 位值", async ({ page }) => {
   await openApp(page);
-  await addBasicSheet(page, "Input Registers (04H)");
+  await addBasicSheet(page, "INPUT REGISTERS (R)");
   await reconnectAsActiveSheet(page);
 
   // 预置输入寄存器 2 = 0x1234。
@@ -203,7 +203,7 @@ test("输入寄存器表（只读）：FC04 读 16 位值", async ({ page }) => 
     );
   });
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Register", { exact: true });
+  const address = first.getByLabel("Address", { exact: true });
   await address.click();
   await address.fill("2");
   await address.press("Enter");

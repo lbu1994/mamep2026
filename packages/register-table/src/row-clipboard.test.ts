@@ -2,7 +2,7 @@
  * 行剪贴板模型（纯函数，docs/AGENTS.md §9.2/§32-26）：
  * - 复制/剪切只携带可粘贴字段（name/addressValue/dataType/cellText/comment），运行时状态清零；
  * - 地址以内部十进制数值传递，粘贴时按目标表进制重新格式化，避免跨表进制歧义；
- * - 系统剪贴板 CSV：表头 Name,Register,Data,Type,Comment；Register 为十进制数值；
+ * - 系统剪贴板 CSV：表头 Name,Address,Data,Type,Comment；Address 为十进制数值；
  * - 粘贴非法数据不得静默丢弃：行级 issue 汇总返回，可保留部分可恢复字段。
  */
 import { describe, expect, it } from "vitest";
@@ -227,7 +227,7 @@ describe("clipboard CSV encode/decode", () => {
     ];
     const csv = encodeClipboardCsv(payload);
     const lines = csv.split("\n");
-    expect(lines[0]).toBe("Name,Register,Data,Type,Comment");
+    expect(lines[0]).toBe("Name,Address,Data,Type,Comment");
     expect(csv).toContain('"A, ""quoted"""');
     expect(csv).toContain("line1\nline2");
     expect(csv).toContain("31");
@@ -259,7 +259,7 @@ describe("clipboard CSV encode/decode", () => {
 
   it("reports issues for out-of-range address and unknown type without dropping rows", () => {
     const csv = [
-      "Name,Register,Data,Type,Comment",
+      "Name,Address,Data,Type,Comment",
       "BadAddr,70000,001F,hex,",
       "BadType,1,001F,not-a-type,",
       "Ok,2,00FF,hex,",
@@ -300,7 +300,7 @@ describe("clipboard CSV encode/decode", () => {
   });
 
   it("decodes single register from CSV as registerCount 1", () => {
-    const csv = "Name,Register,Data,Type,Comment\nSingle,50,00FF,hex,";
+    const csv = "Name,Address,Data,Type,Comment\nSingle,50,00FF,hex,";
     const decoded = decodeClipboardCsv(csv);
     expect(decoded.rows[0]?.addressValue).toBe(50);
     expect(decoded.rows[0]?.registerCount).toBe(1);
@@ -308,7 +308,7 @@ describe("clipboard CSV encode/decode", () => {
 
   it("reports INVALID_ADDRESS for reversed or non-numeric ranges", () => {
     const csv = [
-      "Name,Register,Data,Type,Comment",
+      "Name,Address,Data,Type,Comment",
       "Rev,10-5,00FF,hex,",
       "Garbage,a-b,00FF,hex,",
       "Ok,5-6,00FF,hex,",

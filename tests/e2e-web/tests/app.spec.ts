@@ -91,7 +91,7 @@ test("register table has the fixed column set and full READ/WRITE labels", async
     "No",
     "TM",
     "Name",
-    "Register[DEC]",
+    "Address[DEC]",
     "WP",
     "Read",
     "Data",
@@ -137,7 +137,7 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("1");
   await addressInput.press("Enter");
@@ -211,7 +211,7 @@ test("read all updates eligible rows and reports a summary message", async ({
       .getByRole("button", { name: "Add Row" })
       .evaluate((el) => (el as HTMLElement).click());
   }
-  const addressInputs = page.getByLabel("Register", { exact: true });
+  const addressInputs = page.getByLabel("Address", { exact: true });
   await addressInputs.nth(0).click();
   await addressInputs.nth(0).fill("0001");
   await addressInputs.nth(0).press("Enter");
@@ -235,7 +235,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("0003");
   await addressInput.press("Enter");
@@ -282,7 +282,7 @@ test("TM opens a Memory Trace window and collects samples", async ({
     await page
       .getByRole("button", { name: "Add Row" })
       .evaluate((el) => (el as HTMLElement).click());
-    const addressInput = page.getByLabel("Register", { exact: true }).first();
+    const addressInput = page.getByLabel("Address", { exact: true }).first();
     await addressInput.click();
     await addressInput.fill("0004");
     await addressInput.press("Enter");
@@ -369,7 +369,7 @@ test("sheets can be added and the workspace survives a reload", async ({
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("10");
   await addressInput.press("Enter");
@@ -379,7 +379,7 @@ test("sheets can be added and the workspace survives a reload", async ({
 
   // Add a second sheet.
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
@@ -399,7 +399,7 @@ test("sheets can be added and the workspace survives a reload", async ({
     .locator(".ant-layout-sider li.sheet-item")
     .filter({ hasText: "Sheet 1" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByLabel("Register", { exact: true }).first()).toHaveText(
+  await expect(page.getByLabel("Address", { exact: true }).first()).toHaveText(
     "10",
   );
   await expect(page.getByLabel("Name").first()).toHaveText("SpeedRef");

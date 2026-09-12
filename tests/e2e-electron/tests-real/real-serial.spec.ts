@@ -115,12 +115,12 @@ const activeTable = (p: Page) =>
 
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(p: Page, addressHex: string): Promise<void> {
-  const cell = activeTable(p).getByLabel("Register", { exact: true }).first();
+  const cell = activeTable(p).getByLabel("Address", { exact: true }).first();
   await cell.click();
   // 等待进入编辑态：click 触发 React 重渲染渲染出 input（生产构建高负载下可能延迟，
   // 且前序读/写操作的行重渲染尚未 settle 时点击可能命中旧节点）。toBeEditable 自动
   // 重试直到 input 出现，比裸 waitForTimeout 可靠（2026-08-26 real e2e 竞态）。
-  const input = activeTable(p).getByLabel("Register", { exact: true }).first();
+  const input = activeTable(p).getByLabel("Address", { exact: true }).first();
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
   // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
@@ -540,7 +540,7 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
     activeTable(page).locator(".register-table__status-dot--success").first();
 
   // 线圈表：FC01 读 coil0（配置预置 1）→ 位值 "1"；FC0F 写 0 → 读回 "0"。
-  await addBasicSheet(page, "Coils (01H/0FH)");
+  await addBasicSheet(page, "COILS (R/W)");
   await setRadixHex(page);
   await reconnectAsActiveSheet(page);
   await setRowAddress(page, "0000");
@@ -556,7 +556,7 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
   });
 
   // 离散输入表（只读）：FC02 读 input1（配置预置 1）→ "0001"。
-  await addBasicSheet(page, "Discrete Inputs (02H)");
+  await addBasicSheet(page, "DISCRETE INPUTS (R)");
   await setRadixHex(page);
   await reconnectAsActiveSheet(page);
   await setRowAddress(page, "0001");
@@ -566,7 +566,7 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
   });
 
   // 输入寄存器表（只读）：FC04 读 inputReg2（配置预置 0x1234）→ "1234"。
-  await addBasicSheet(page, "Input Registers (04H)");
+  await addBasicSheet(page, "INPUT REGISTERS (R)");
   await setRadixHex(page);
   await reconnectAsActiveSheet(page);
   await setRowAddress(page, "0002");

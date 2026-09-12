@@ -12,7 +12,7 @@ async function openApp(page: Page): Promise<void> {
 
 async function addSheet(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "New Register Table", exact: true })
+    .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 }

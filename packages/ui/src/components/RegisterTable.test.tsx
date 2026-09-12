@@ -262,10 +262,10 @@ describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）
     // 先给第一行提交合法地址（默认表 radix=dec，"100" 合法）。
     useAppStore.getState().commitRowAddress(firstRowId(), "100");
     render(<RegisterTable sheetId={sheetId()} />);
-    const cell = screen.getAllByLabelText("Register")[0];
+    const cell = screen.getAllByLabelText("Address")[0];
     if (cell === undefined) throw new Error("missing register cell");
     fireEvent.click(cell);
-    const input = screen.getAllByLabelText("Register")[0];
+    const input = screen.getAllByLabelText("Address")[0];
     if (input === undefined) throw new Error("missing register input");
     fireEvent.change(input, { target: { value: "xyz" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -277,7 +277,7 @@ describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）
       ).toBeTruthy();
     });
     // 非法输入被保留。
-    expect(screen.getAllByLabelText("Register")[0]?.textContent).toBe("xyz");
+    expect(screen.getAllByLabelText("Address")[0]?.textContent).toBe("xyz");
   });
 });
 
@@ -910,7 +910,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     fireEvent.click(expandIcon);
   }
 
-  it("Register 列按「寄存器地址 + Bit 序号」渲染（bit15 → bit0），掩码作为 hover 提示", () => {
+  it("Address 列按「寄存器地址 + Bit 序号」渲染（bit15 → bit0），掩码作为 hover 提示", () => {
     setupBinaryRow();
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();

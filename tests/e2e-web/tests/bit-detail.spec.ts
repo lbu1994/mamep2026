@@ -1,6 +1,6 @@
 /**
  * 寄存器位明细展开（ADR-052，2026-09-11）E2E：
- * - 单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）：Register 列「寄存器地址 + Bit 序号」、
+ * - 单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）：Address 列「寄存器地址 + Bit 序号」、
  *   位掩码 hover 提示、0/1、位名称（Name 列，可编辑）、位注释（Comment 列，可编辑）；
  * - 点击切换控件改位值 → 父行 Data 立即更新（只改当前值，不写设备）；
  * - 位行 Data 文本可输入 0/1；
@@ -74,7 +74,7 @@ async function setAddress(
   target: ReturnType<typeof parentRow>,
   address: string,
 ): Promise<void> {
-  const input = target.getByLabel("Register", { exact: true });
+  const input = target.getByLabel("Address", { exact: true });
   await input.click();
   await input.fill(address);
   await input.press("Enter");
@@ -102,7 +102,7 @@ test("单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）", asy
   await first.locator('button[aria-label="Expand row"]').click();
   await expect(bitRows(page)).toHaveCount(16);
 
-  // 位号 + 寄存器地址（Register 列 = 地址 + Bit 序号；掩码作为 hover 提示）。
+  // 位号 + 寄存器地址（Address 列 = 地址 + Bit 序号；掩码作为 hover 提示）。
   const bit15 = bitRows(page).nth(0);
   await expect(bit15).toContainText("0 Bit 15");
   await expect(bit15.locator("span[title='0x8000']")).toHaveCount(1);
@@ -169,7 +169,7 @@ test("范围行寄存器子行可再展开位明细（两层嵌套）", async ({
   await child0.locator('button[aria-label="Expand row"]').click();
   await expect(bitRows(page)).toHaveCount(16);
   const bit15 = bitRows(page).nth(0);
-  // 范围行：Register 列显示该寄存器实际地址（第 1 个寄存器 = 0）+ Bit 序号。
+  // 范围行：Address 列显示该寄存器实际地址（第 1 个寄存器 = 0）+ Bit 序号。
   await expect(bit15).toContainText("0 Bit 15");
   await expect(bit15.getByLabel("Bit 15 value")).toHaveText("1");
   await expect(bitRows(page).nth(15).getByLabel("Bit 0 value")).toHaveText("1");

@@ -234,7 +234,7 @@ async function connectViaUi(autoReconnect: boolean): Promise<void> {
 
 /** 首行填入地址 0001 并 FC03 单行读，断言 Data = ABCD。 */
 async function readFirstRegister(): Promise<void> {
-  const addressInput = page.getByLabel("Register", { exact: true }).first();
+  const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
