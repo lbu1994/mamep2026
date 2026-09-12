@@ -121,10 +121,22 @@ export interface WorkspaceImportDraft {
   preview: WorkspaceImportPreview;
 }
 
+/**
+ * Host 装配状态（2026-09-13 启动骨架）：宿主实现按运行时平台动态加载（composition root
+ * 在渲染前置 `"assembling"`），MamepApp 据此显示启动占位；装配失败以 `"failed"` 保持
+ * 「无 Host 可操作」（能力入口依 host 为空自然禁用），不阻断应用。
+ */
+export type HostStatus = "assembling" | "ready" | "failed";
+
 export interface AppStoreState {
   host: AppHost | null;
   workspace: Workspace;
   loaded: boolean;
+  /**
+   * Host 装配状态：**默认 `"ready"`**（非应用运行时——单测/组件隔离渲染不经动态装配）；
+   * 真实启动由 `apps/web/src/main.tsx` 在渲染前置 `"assembling"`，由装配编排改写终态。
+   */
+  hostStatus: HostStatus;
   connectionState: ConnectionState;
   activeSheetId: SheetId | null;
   connectionModalOpen: boolean;
@@ -170,6 +182,8 @@ export interface AppStoreState {
   workspaceImportDraft: WorkspaceImportDraft | null;
 
   setHost: (host: AppHost) => void;
+  /** 设置 Host 装配状态（2026-09-13 启动骨架；由装配编排调用）。 */
+  setHostStatus: (status: HostStatus) => void;
   /** 注入数据类型解析器（ADR-043 E-3）：App.tsx 装配插件 dataType 运行时后调用。 */
   setDataTypeResolver: (resolver: DataTypeResolver) => void;
   setWorkspace: (workspace: Workspace) => void;
@@ -521,6 +535,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   host: null,
   workspace: createEmptyWorkspace(),
   loaded: false,
+  hostStatus: "ready",
   connectionState: "disconnected",
   activeSheetId: null,
   connectionModalOpen: false,
@@ -551,6 +566,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   ...createEmptyRowStatusState(),
 
   setHost: (host) => set({ host }),
+  setHostStatus: (hostStatus) => set({ hostStatus }),
   setDataTypeResolver: (dataTypeResolver) => set({ dataTypeResolver }),
   setWorkspaceImportDraft: (workspaceImportDraft) =>
     set({ workspaceImportDraft }),

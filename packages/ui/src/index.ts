@@ -3,6 +3,7 @@ export {
   useAppStore,
   type AppStoreState,
   type BufferSizeOption,
+  type HostStatus,
   type TraceWindowModel,
 } from "./app-store";
 export type { AppHost, CommProperties, TraceSampleEvent } from "./host";

@@ -61,6 +61,13 @@ function injectCspMeta(): Plugin {
  *
  * 因此：任何分包调整都必须用**产物级**手段验证（`pnpm build:electron` + Electron 启动看
  * 是否挂载 / `pnpm test:e2e:electron`、`pnpm test:e2e:vscode`），不能只看构建体积。
+ *
+ * 平台宿主懒加载（2026-09-13）：`src/App.tsx` 只负责「探测平台 → 交由 `host-assembly.ts`」，
+ * 后者按平台**动态 `import()`** 平台宿主（`src/host-factories/{electron,vscode,android}.ts`；
+ * 浏览器分支静态返回 `createBrowserHost`）。实测（浏览器构建）：入口 384.54 → 7.78 kB，
+ * 首屏（入口 + `modulepreload`）1663.21 → 1630.45 kB（−2.0%）/ gzip −0.8%，
+ * `@capacitor/core` 从「首屏预加载」变为「仅 Android 按需」。注意口径：**入口 chunk 变小
+ * 不等于首屏变小**（应用代码会重分入共享 chunk），评估首屏必须算「入口 + modulepreload 合计」。
  */
 
 export default defineConfig(({ mode }) => {

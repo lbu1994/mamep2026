@@ -4,6 +4,8 @@ import { initReactI18next } from "react-i18next";
 export const en = {
   app: {
     title: "Mamep2026",
+    /** 启动骨架文案（2026-09-13）：Host 按运行时平台动态加载期间显示。 */
+    loading: "Starting…",
   },
   topbar: {
     newSheet: "New Sheet",
@@ -487,6 +489,7 @@ export const en = {
     workspaceReset: "Workspace reset.",
     resetFailed: "Workspace reset failed: {{detail}}",
     loadFailed: "Workspace restore failed: {{detail}}",
+    hostLoadFailed: "Application host failed to load: {{detail}}",
     pluginLoadFailed: "Plugin load error: {{detail}}",
   },
   rowStatus: {
@@ -562,7 +565,7 @@ export const en = {
 export type TranslationResources = typeof en;
 
 export const zh: TranslationResources = {
-  app: { title: "Mamep2026" },
+  app: { title: "Mamep2026", loading: "正在启动…" },
   topbar: {
     newSheet: "新建标签页",
     newTable: "新建寄存器表",
@@ -1022,6 +1025,7 @@ export const zh: TranslationResources = {
     workspaceReset: "工作区已重置。",
     resetFailed: "工作区重置失败：{{detail}}",
     loadFailed: "工作区恢复失败：{{detail}}",
+    hostLoadFailed: "应用宿主加载失败：{{detail}}",
     pluginLoadFailed: "插件加载错误：{{detail}}",
   },
   rowStatus: {

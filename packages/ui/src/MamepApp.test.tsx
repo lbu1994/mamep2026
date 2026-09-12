@@ -58,6 +58,8 @@ beforeEach(() => {
     host: null,
     workspace: createEmptyWorkspace(),
     loaded: true,
+    // 启动骨架默认不显示（真实启动由 apps/web main.tsx 在渲染前置 "assembling"）。
+    hostStatus: "ready",
     connectionState: "disconnected",
     activeSheetId: null,
   });
@@ -283,5 +285,23 @@ describe("侧边栏 footer 按平台显示（bug 修复）", () => {
   it("VSCode 端显示 Extension", () => {
     renderWithPlatform("vscode");
     expect(footerText()).toBe("Extension v0.0.0-test");
+  });
+});
+
+describe("启动骨架（hostStatus，2026-09-13 装配按平台动态 import）", () => {
+  it("assembling：显示骨架且不渲染主外壳", () => {
+    useAppStore.setState({ host: null, hostStatus: "assembling" });
+    render(<MamepApp />);
+
+    expect(screen.getByTestId("app-startup")).toBeTruthy();
+    expect(document.querySelector(".mamep-header")).toBeNull();
+  });
+
+  it("failed：不占位——应用以「无 Host」保持可操作", () => {
+    useAppStore.setState({ host: null, hostStatus: "failed" });
+    render(<MamepApp />);
+
+    expect(screen.queryByTestId("app-startup")).toBeNull();
+    expect(document.querySelector(".mamep-header")).not.toBeNull();
   });
 });

@@ -120,6 +120,31 @@ body {
 
 /* ---------------- 布局骨架 ---------------- */
 
+/* 启动骨架屏（2026-09-13）：Host 按运行时平台动态加载期间的占位（见 AppStartupPlaceholder）。
+   100dvh 优先（移动端地址栏收起/展开时视口高度稳定），不支持时回退 100vh。 */
+.app-startup {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 24px
+    calc(24px + env(safe-area-inset-bottom, 0px));
+  background: var(--mamep-bg-app);
+}
+
+.app-startup__brand-icon {
+  display: inline-flex;
+}
+
+.app-startup__title.ant-typography {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 .mamep-main {
   /* 主区域现为水平 Splitter（2026-09-08 侧边栏可拖宽）：作为外层 Layout 列的方向弹性项，
      Splitter 自身负责 display:flex；flex:1 填满 Header 以下剩余高度。 */

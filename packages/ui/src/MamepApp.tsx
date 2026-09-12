@@ -79,6 +79,7 @@ import { useAppStore } from "./app-store";
 import { canDirectConnect, runConnect } from "./connection-actions";
 import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
+import { AppStartupPlaceholder } from "./components/AppStartupPlaceholder";
 import { BrowserCompatibilityBanner } from "./components/BrowserCompatibilityBanner";
 import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
 import { RecoveryBanner } from "./components/RecoveryBanner";
@@ -152,6 +153,8 @@ function sidebarGroupIcon(sheetType: SheetType): ReactNode {
 export function MamepApp(): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
+  // Host 装配状态（2026-09-13 启动骨架）：宿主实现按运行时平台动态加载期间显示占位。
+  const hostStatus = useAppStore((s) => s.hostStatus);
   // 工作区加载恢复元数据（ADR-049 恢复提示）：加载后写入，用于主体顶部横幅。
   const workspaceRecovery = useAppStore((s) => s.workspaceRecovery);
   // 仅订阅表元数据（id/name）与从站地址：行数据变化不触发本组件重渲染，
@@ -751,6 +754,20 @@ export function MamepApp(): React.ReactNode {
       };
     },
   );
+
+  // 启动骨架（2026-09-13）：Host 按运行时平台动态加载（含失败兜底）完成前显示占位——
+  // 仍包 ConfigProvider/AntApp，保证主题（含 VSCode 完整令牌/暗色）与 antd 上下文一致，
+  // 避免深色主题下白屏闪烁。`failed` 状态不占位：应用以「无 Host」保持可操作。
+  // 注意：必须位于全部 hook 调用之后（上方 hook 均无条件执行）。
+  if (hostStatus === "assembling") {
+    return (
+      <ConfigProvider theme={effectiveThemeConfig}>
+        <AntApp>
+          <AppStartupPlaceholder />
+        </AntApp>
+      </ConfigProvider>
+    );
+  }
 
   return (
     <ConfigProvider theme={effectiveThemeConfig}>
