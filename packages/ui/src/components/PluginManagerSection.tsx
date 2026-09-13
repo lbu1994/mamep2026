@@ -351,7 +351,10 @@ export function PluginManagerSection(): React.ReactNode {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json,.mjs,application/json,text/javascript"
+            // 仅按扩展名过滤（ADR-056）：部分 ROM 的文件选择器按 MIME 过滤，把
+            // `.mjs` 归为 application/octet-stream 而不可选；放宽为扩展名可规避，
+            // 文件内容仍经清单 schema 校验（选错文件有结构化错误提示）。
+            accept=".json,.mjs,.js"
             style={{ display: "none" }}
             onChange={handleFileInput}
             data-testid="plugin-manifest-file-input"

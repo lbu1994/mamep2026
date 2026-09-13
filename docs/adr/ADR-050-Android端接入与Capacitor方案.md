@@ -127,9 +127,9 @@ VSCode 之所以把通信下沉 Extension Host，是因为 Webview 的 `navigato
 | `modbusTcp` | `true` | 原生 socket 插件 |
 | `filesystem` | `"limited"` | IndexedDB 直接可用（WebView 支持） |
 | `nodePlugins` / `hostPlugins` | `false` | Android 无 Node 侧插件执行面 |
-| `webPlugins` | `true` | 随包插件同步贡献（codec / dataType / transform）可用 |
-| `executablePlugins` | `false` | 第三方脚本插件（Blob Worker）待 CSP 与 WebView 版本门控落地后翻转（Phase 5） |
-| `pluginInstall` | `"unsupported"` | 文件选择入口未接 |
+| `webPlugins` | `true` | 插件同步贡献（codec / dataType / transform）可用 |
+| `executablePlugins` | **运行时探测**（Phase 5，ADR-056） | 静态基线 `false`（**fail-closed**）：装配期由 `probePluginExecutionSupport()` 实测「Blob Worker + Worker 内 blob entry 动态 import」，再经 `resolveAndroidCapabilities({ blobWorkerSupported })` 覆盖（真机 WebView 151 实测可用 → `true`） |
+| `pluginInstall` | **`"upload"`**（Phase 5，ADR-056） | WebView `<input type="file">` + 客户端读文件文本（Capacitor `BridgeWebChromeClient.onShowFileChooser` 已实现），无需 Capacitor Filesystem |
 | `logExport` / `workspaceImport` / `workspaceExport` | Phase 1 声明 `"unsupported"` | Phase 4 接 Capacitor Filesystem + 系统分享/SAF 后按实翻转 |
 
 同时：`packages/ui/src/host.ts` 的 `AppHost.platform` 联合类型新增 `"android"`；i18n 增侧边栏 footer 文案；
@@ -392,7 +392,7 @@ apps/android/.../MamepTransportPlugin.kt    # setKeepScreenOn（FLAG_KEEP_SCREEN
 | Phase 2 | USB-RS485 插件（枚举 / 授权 / detach / 错误映射）+ 真机 RTU 闭环 ——**实现已完成（2026-09-10）**；真机 UI 面 e2e 全绿，**USB 读写闭环待硬件** | 1–1.5 周 |
 | Phase 3 | 响应式布局 + 触摸交互 + 移动端生命周期 ——**落地（2026-09-10）**：移动布局（1023 断点 / 侧栏→Drawer / 底部面板→底部抽屉）+ 后台挂起恢复 + KeepAwake + 工具栏「更多」面板 + `@capacitor/app` 返回键/前后台；余项：真机 e2e 执行与长按确认（见 §14.4） | 1–2 周 |
 | Phase 4（另行确认） | BLE（BLE UART 优先）+ profile schema v9 + 文件导入导出/分享 | 1–2 周 |
-| Phase 5（另行确认） | 第三方脚本插件门控 + APK/AAB 打包签名 | 0.5–1 周 |
+| Phase 5 | 第三方脚本插件（运行时探测 + 安装入口）+ APK/AAB 打包签名 ——**已完成（2026-09-13，ADR-056）**：`pluginInstall: "upload"`、`executablePlugins` 运行时探测翻转、`build:android:release`（APK + AAB，签名材料缺失则产出 unsigned）；真机插件 e2e **7/7 全绿** | 0.5–1 周 |
 
 ## 不做什么
 

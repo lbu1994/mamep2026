@@ -53,9 +53,11 @@ captures/
 .idea/navEditor.xml
 
 # Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+# 发布签名材料一律不入库（ADR-056）：本机发布用的 keystore 与口令配置。
+*.jks
+*.keystore
+keystore.properties
+app/keystore.properties
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild

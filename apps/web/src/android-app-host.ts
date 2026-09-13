@@ -87,12 +87,20 @@ export interface AndroidAppHostOptions {
    * 生产 = `createCapacitorAppLifecycleBridge()`（composition root 注入）；测试注入 fake。
    */
   appLifecycle?: AndroidAppLifecycleBridge | null | undefined;
+  /**
+   * 基础能力矩阵（ADR-056）：`executablePlugins` 由装配期运行时探测决定，故由 composition root
+   * 经 `resolveAndroidHostCapabilities()` 注入；缺省为静态 `androidCapabilities`
+   * （fail-closed，不误报可执行插件）。
+   */
+  capabilities?: PlatformCapabilities | undefined;
 }
 
 export class AndroidAppHost implements AppHost {
+  /** 基础能力（ADR-056）：装配期由 composition root 注入（含运行时探测结果）。 */
+  private readonly baseCapabilities: PlatformCapabilities;
   /** 能力矩阵派生（ADR-054）：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
   get capabilities(): PlatformCapabilities {
-    return deriveCapabilities(androidCapabilities, this.pluginRegistry);
+    return deriveCapabilities(this.baseCapabilities, this.pluginRegistry);
   }
   readonly isMockMode: boolean;
   /** Android 不走浏览器 Web Serial 兼容性提示（串口能力由能力矩阵如实声明）。 */
@@ -133,10 +141,11 @@ export class AndroidAppHost implements AppHost {
     this.serialHost = hasSerialApi(platformHost) ? platformHost : null;
     this.appLifecycle = options.appLifecycle ?? null;
     this.isMockMode = options.mockTransport === true;
+    this.baseCapabilities = options.capabilities ?? androidCapabilities;
 
     this.inner = new BrowserAppHost({
-      // 能力矩阵如实传递给 inner（UI 依据 `host.capabilities` 门控 RTU/TCP 入口）。
-      capabilities: androidCapabilities,
+      // 能力矩阵如实传递给 inner（UI 依据 `host.capabilities` 门控 RTU/TCP 入口/插件安装）。
+      capabilities: this.baseCapabilities,
       // Android 无 Web Serial：inner 的兼容性检测结果不使用（本类 browserCompatibility 恒 null）。
       compatibilityEnv: { serial: undefined, isSecureContext: true },
       platform: this.platformHost,

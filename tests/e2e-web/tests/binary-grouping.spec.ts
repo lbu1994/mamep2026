@@ -51,13 +51,33 @@ async function mockSet(
   );
 }
 
-/** 把行 Type（进制列）切到 Binary。 */
+/**
+ * 把行 Type（进制列）切到 Binary。
+ *
+ * 必须**等切换真正落到行上**再返回：高负载下（全量套件串行跑时）antd Select 的选项点击可能丢失，
+ * 随后立刻填范围会让子行继承旧类型（HEX）——2026-09-13 全量套件实测到该偶发失败
+ * （父行显示 `1111 2222` 而非二进制分组），单跑该 spec 复现不到。
+ *
+ * 确认用「行内**可见**的 Binary 文本」：表格里存在隐藏的克隆/测量节点，故必须带 `:visible`
+ * （否则会命中隐藏元素而误判）。首轮未确认到则关掉下拉重试一次。
+ */
 async function setBinaryType(
   page: Page,
   target: ReturnType<typeof parentRow>,
 ): Promise<void> {
-  await target.getByLabel("Type").click();
-  await page.locator(".ant-select-dropdown:visible [title='Binary']").click();
+  const marker = target.locator(":text-is('Binary'):visible").first();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await target.getByLabel("Type").click();
+    await page.locator(".ant-select-dropdown:visible [title='Binary']").click();
+    try {
+      await expect(marker).toBeVisible({ timeout: 1500 });
+      return;
+    } catch {
+      // 选项点击丢失：关掉下拉，重试一次。
+      await page.keyboard.press("Escape");
+    }
+  }
+  await expect(marker).toBeVisible({ timeout: 5000 });
 }
 
 /** 填入地址（点击进入编辑态后填写）。 */

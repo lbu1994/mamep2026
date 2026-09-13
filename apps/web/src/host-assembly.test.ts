@@ -274,6 +274,41 @@ describe("startAppHost", () => {
     expect(host.startPlugins).not.toHaveBeenCalled();
   });
 
+  it("异步工厂（Android：构造前 await 能力探测，ADR-056）：await 完成后正常接线", async () => {
+    const { host } = makeFakeHost();
+    const deps = makeDeps({
+      loadHostFactory: async () => async () => {
+        await Promise.resolve();
+        return asHost(host);
+      },
+    });
+
+    await expect(
+      startAppHost(deps, new AbortController().signal),
+    ).resolves.toBe(asHost(host));
+    expect(deps.sinks.setHost).toHaveBeenCalledWith(asHost(host));
+    expect(host.startPlugins).toHaveBeenCalledTimes(1);
+  });
+
+  it("异步工厂在 await 期间被取消：仍释放且不接线", async () => {
+    const { host } = makeFakeHost();
+    const controller = new AbortController();
+    const deps = makeDeps({
+      loadHostFactory: async () => async () => {
+        // 模拟探测耗时：await 后宿主才构造出来，此时取消已发生。
+        await Promise.resolve();
+        controller.abort();
+        return asHost(host);
+      },
+    });
+
+    await expect(startAppHost(deps, controller.signal)).resolves.toBeNull();
+
+    expect(host.dispose).toHaveBeenCalledTimes(1);
+    expect(deps.sinks.setHost).not.toHaveBeenCalled();
+    expect(host.startPlugins).not.toHaveBeenCalled();
+  });
+
   it("visibilitychange：隐藏时挂起后台并 flush；abort 时退订并释放 host", async () => {
     const { host } = makeFakeHost();
     const listeners = new Set<() => void>();

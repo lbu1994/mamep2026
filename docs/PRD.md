@@ -1164,7 +1164,8 @@ VSCode 端不得简单嵌入一个无法适配主题和尺寸的桌面页面。
 明确不支持（首期）：
 
 - 浏览器 Web Serial 路径（Android WebView 不提供 `navigator.serial`）；
-- 第三方脚本插件执行（能力矩阵如实声明 `executablePlugins: false`，待 WebView 版本门控落地后另行确认）；
+- 第三方脚本插件执行（**已支持**：`executablePlugins` 由运行时探测决定，安装入口 `pluginInstall: "upload"`；真机 WebView 实测可用，见 [ADR-056](adr/ADR-056-Android插件安装与可执行插件.md)）；
+- 本地文件导出/导入（`logExport` / `workspaceImport` / `workspaceExport` 仍为 `"unsupported"`，属 Phase 4 文件通道）；
 - 经典蓝牙 SPP 与 BLE（Phase 4 另行确认）；
 - iOS 端（不在本 ADR 范围）。
 

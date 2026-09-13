@@ -16,6 +16,38 @@ def parseVersionCode = { String version ->
         matcher.group(3).toInteger()
 }
 
+// 发布签名材料（ADR-050 Phase 5 / ADR-056）：**密钥与口令不入库**——按序从
+//   1) app/keystore.properties（本机发布用，已 gitignore；storeFile 可为绝对路径或相对 app/）；
+//   2) MAMEP_ANDROID_KEYSTORE_PATH / _STORE_PASSWORD / _KEY_ALIAS / _KEY_PASSWORD 环境变量
+// 读取；两者都没有（或不完整）时 release **不签名**（产出 app-release-unsigned.apk）——
+// 绝不静默复用 debug key 冒充发布签名。
+//
+// 注意：**不使用 java.util.Properties.load**——它把 `\` 当转义符，会吃掉 Windows 绝对路径的
+// 反斜杠（实测 `C:\Users\...` 被解析成 `C:Users...`，报 keystore not found）。此处按行读取、
+// 仅在首个 `=` 处切分且不做任何转义，Windows 路径可直接书写。
+def loadKeystoreProperties = { File file ->
+    def result = [:]
+    if (file.exists()) {
+        file.eachLine { line ->
+            def trimmed = line.trim()
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) return
+            def separator = trimmed.indexOf("=")
+            if (separator <= 0) return
+            def key = trimmed.substring(0, separator).trim()
+            def value = trimmed.substring(separator + 1).trim()
+            if (!key.isEmpty() && !value.isEmpty()) result[key] = value
+        }
+    }
+    return result
+}
+def keystoreProperties = loadKeystoreProperties(rootProject.file("app/keystore.properties"))
+def releaseKeystorePath = keystoreProperties["storeFile"] ?: System.getenv("MAMEP_ANDROID_KEYSTORE_PATH")
+def releaseStorePassword = keystoreProperties["storePassword"] ?: System.getenv("MAMEP_ANDROID_KEYSTORE_PASSWORD")
+def releaseKeyAlias = keystoreProperties["keyAlias"] ?: System.getenv("MAMEP_ANDROID_KEY_ALIAS")
+def releaseKeyPassword = keystoreProperties["keyPassword"] ?: System.getenv("MAMEP_ANDROID_KEY_PASSWORD")
+def hasReleaseSigning =
+    releaseKeystorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace = "com.mamep2026.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -32,10 +64,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // 仅在提供了完整签名材料时定义（Groovy DSL：块内 if 在 android.signingConfigs 委托上执行）。
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

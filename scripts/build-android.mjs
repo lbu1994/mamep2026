@@ -1,15 +1,22 @@
 /**
- * Android 端构建（ADR-050）：web 产物（--mode android）→ Capacitor 同步 → Gradle assembleDebug。
+ * Android 端构建（ADR-050）：web 产物（--mode android）→ Capacitor 同步 → Gradle 打包。
  *
  * **JDK 约束（必读）**：Capacitor 8 模板固定 Gradle 8.14.3 + AGP 8.13，其最高只支持 Java 24；
  * Android Studio 自带的 JBR 25 会报 `Unsupported class file major version 69`
  * （Java 25 需 Gradle ≥9.1，而 AGP 8.x 只配 Gradle 8.x）。故本脚本按序探测可用 JDK，
  * 都不可用时**明确报错并给出指引**（不静默降级、不尝试自行安装）。
  *
- * 用法：node scripts/build-android.mjs [--skip-web]
+ * 用法：
+ *   node scripts/build-android.mjs [--skip-web]             # debug APK（默认；真机 e2e 用）
+ *   node scripts/build-android.mjs --release                # release APK + AAB（ADR-050 Phase 5）
+ *   node scripts/build-android.mjs --release --aab-only     # 仅 AAB
+ *
+ * 发布签名（ADR-056）：密钥与口令**不入库**，由 app/keystore.properties（已 gitignore）
+ * 或 MAMEP_ANDROID_KEYSTORE_* 环境变量提供；未提供时 release 产出 **unsigned** APK
+ * （绝不静默用 debug key 冒充）。*本脚本不接收也不打印任何口令。*
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -24,6 +31,24 @@ const APK_PATH = path.join(
   "debug",
   "app-debug.apk",
 );
+const RELEASE_APK_DIR = path.join(
+  ANDROID_NATIVE,
+  "app",
+  "build",
+  "outputs",
+  "apk",
+  "release",
+);
+const RELEASE_AAB_PATH = path.join(
+  ANDROID_NATIVE,
+  "app",
+  "build",
+  "outputs",
+  "bundle",
+  "release",
+  "app-release.aab",
+);
+const KEYSTORE_PROPERTIES_PATH = path.join(ANDROID_NATIVE, "app", "keystore.properties");
 
 /** Android 上可用的 JDK 上限（Gradle 8.14 支持到 Java 24）。 */
 const MAX_SUPPORTED_JAVA_MAJOR = 24;
@@ -104,10 +129,33 @@ function run(command, args, options = {}) {
 }
 
 const skipWeb = process.argv.includes("--skip-web");
+const release = process.argv.includes("--release");
+const aabOnly = process.argv.includes("--aab-only");
+/** 是否具备发布签名材料（与 app/build.gradle 的判定口径一致，仅用于提示）。 */
+const hasSigningMaterial =
+  existsSync(KEYSTORE_PROPERTIES_PATH) ||
+  Boolean(
+    process.env.MAMEP_ANDROID_KEYSTORE_PATH &&
+      process.env.MAMEP_ANDROID_KEYSTORE_PASSWORD &&
+      process.env.MAMEP_ANDROID_KEY_ALIAS &&
+      process.env.MAMEP_ANDROID_KEY_PASSWORD,
+  );
 const jdk = resolveJdk();
 const sdk = resolveAndroidSdk();
 console.log(`[build:android] JDK: ${jdk.home}（Java ${jdk.major}）`);
 console.log(`[build:android] Android SDK: ${sdk}`);
+console.log(
+  `[build:android] 变体: ${release ? "release" : "debug"}${aabOnly ? "（仅 AAB）" : ""}`,
+);
+if (release) {
+  console.log(
+    `[build:android] 签名: ${
+      hasSigningMaterial
+        ? "已配置（keystore.properties / 环境变量）"
+        : "未配置 → 产出 unsigned APK（不静默使用 debug key）"
+    }`,
+  );
+}
 
 // 图标随构建同步（2026-09-11）：mipmap 各密度由 scripts/generate-icons.mjs 从
 // build/AppIcon.svg 生成（白底 + 黑色线条），避免改了源 SVG 却忘记重跑 pnpm icons
@@ -120,8 +168,24 @@ if (!skipWeb) {
 
 run("npx", ["cap", "sync", "android"], { cwd: ANDROID_APP });
 
+/** Gradle 任务：默认 debug APK；--release 产出 APK + AAB；--aab-only 仅 AAB。 */
+const gradleTasks = aabOnly
+  ? ["bundleRelease"]
+  : release
+    ? ["assembleRelease", "bundleRelease"]
+    : ["assembleDebug"];
+
+// 清掉上一次同名产物：使「构建后存在」成为本次构建的可靠证据（避免陈旧文件造成假通过）。
+for (const stale of [
+  path.join(RELEASE_APK_DIR, "app-release.apk"),
+  path.join(RELEASE_APK_DIR, "app-release-unsigned.apk"),
+  RELEASE_AAB_PATH,
+]) {
+  rmSync(stale, { force: true });
+}
+
 const gradlew = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
-run(gradlew, ["assembleDebug"], {
+run(gradlew, gradleTasks, {
   cwd: ANDROID_NATIVE,
   env: {
     ...process.env,
@@ -131,11 +195,56 @@ run(gradlew, ["assembleDebug"], {
   },
 });
 
-if (!existsSync(APK_PATH)) {
-  const outputsDir = path.dirname(APK_PATH);
-  const found = existsSync(outputsDir) ? readdirSync(outputsDir) : [];
-  throw new Error(`构建产物缺失：${APK_PATH}（目录内容：${found.join(", ") || "空"}）`);
-}
+if (release || aabOnly) {
+  // 期望产物名由「是否提供签名材料」决定：有 → app-release.apk（签名），无 → unsigned。
+  const expectedApk = path.join(
+    RELEASE_APK_DIR,
+    hasSigningMaterial ? "app-release.apk" : "app-release-unsigned.apk",
+  );
+  const expectedApkName = path.basename(expectedApk);
+  const artifacts = [];
+  if (release && !aabOnly) {
+    if (!existsSync(expectedApk)) {
+      const found = existsSync(RELEASE_APK_DIR)
+        ? readdirSync(RELEASE_APK_DIR).join(", ")
+        : "目录不存在";
+      throw new Error(
+        `构建产物缺失：期望 ${expectedApkName}（签名材料${
+          hasSigningMaterial ? "已配置" : "未配置"
+        }）。apk/release 目录内容：${found}`,
+      );
+    }
+    artifacts.push(expectedApk);
+  }
+  if (aabOnly || release) {
+    if (!existsSync(RELEASE_AAB_PATH)) {
+      throw new Error(`构建产物缺失：${RELEASE_AAB_PATH}`);
+    }
+    artifacts.push(RELEASE_AAB_PATH);
+  }
+  console.log("");
+  for (const artifact of artifacts) {
+    console.log(`[build:android] 产物: ${artifact}`);
+  }
+  if (expectedApkName === "app-release-unsigned.apk") {
+    console.log(
+      "[build:android] 注意：release APK 未签名。发布前请提供 keystore（见 apps/android/README.md「发布打包与签名」）。",
+    );
+  }
+  console.log(
+    "[build:android] 安装（仅 APK）：adb install -r <APK>；AAB 用于上架/由 Play 生成签名 APK",
+  );
+} else {
+  if (!existsSync(APK_PATH)) {
+    const outputsDir = path.dirname(APK_PATH);
+    const found = existsSync(outputsDir) ? readdirSync(outputsDir) : [];
+    throw new Error(
+      `构建产物缺失：${APK_PATH}（目录内容：${found.join(", ") || "空"}）`,
+    );
+  }
 
-console.log(`\n[build:android] APK: ${APK_PATH}`);
-console.log("[build:android] 安装：adb install -r <APK>；TCP e2e 需 adb reverse（见 tests/e2e-android）");
+  console.log(`\n[build:android] APK: ${APK_PATH}`);
+  console.log(
+    "[build:android] 安装：adb install -r <APK>；TCP e2e 需 adb reverse（见 tests/e2e-android）",
+  );
+}

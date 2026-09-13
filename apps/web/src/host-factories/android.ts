@@ -8,24 +8,35 @@
  * 会话仍在 JS 内（`AndroidAppHost` 委托 `BrowserAppHost` + 本地 `TcpSessionHost`），传输桥由本
  * 工厂注入 —— 红线：Capacitor 插件调用只允许出现在 `packages/platform-android` 与 `apps/android`
  * （docs/AGENTS.md §32），故本文件只**调用** `platform-android` 的桥工厂。
+ *
+ * **异步装配（ADR-056）**：Android 的 `executablePlugins` 由**运行时探测**（Blob Worker +
+ * Worker 内 blob entry 动态 import）决定，故本工厂先 await `resolveAndroidHostCapabilities()`
+ * 再构造宿主——能力在 UI 首次读取前即定型，无需额外响应式信号。
  */
 import type { AndroidAppLifecycleBridge } from "@mamep2026/platform-android";
 import { createCapacitorTransportBridge } from "@mamep2026/platform-android/capacitor";
 import { createCapacitorAppLifecycleBridge } from "@mamep2026/platform-android/capacitor-app";
 import { IndexedDBWorkspaceRepository } from "@mamep2026/platform-web";
 import { AndroidAppHost } from "../android-app-host";
+import { resolveAndroidHostCapabilities } from "../android-capabilities-probe";
 import type { AppHost } from "@mamep2026/ui";
 import type { PlatformHostFactory } from "../host-assembly";
 import { IndexedDBPluginStore } from "../indexeddb-plugin-store";
 
-export const createAndroidHost: PlatformHostFactory = ({ context, signal }) => {
+export const createAndroidHost: PlatformHostFactory = async ({
+  context,
+  signal,
+}) => {
   // 应用生命周期桥（ADR-050 Phase 3）：返回键（宿主）与前后台（下方订阅）共用同一实例。
   const appLifecycle = createCapacitorAppLifecycleBridge();
+  // 插件执行能力探测（ADR-056）：Blob Worker 可用性随系统 WebView 版本变化，必须实测。
+  const capabilities = await resolveAndroidHostCapabilities();
   // 工作区与插件存储复用浏览器 IndexedDB 路径（WebView 原生支持）。
   const kv = context.createIdbKeyValueStore();
   const host = new AndroidAppHost({
     bridge: createCapacitorTransportBridge(),
     appLifecycle,
+    capabilities,
     repository: new IndexedDBWorkspaceRepository(kv),
     pluginStore: new IndexedDBPluginStore(kv),
     codecRegistry: context.codecRegistry,

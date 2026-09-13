@@ -41,15 +41,69 @@
 - 拔线：发 `closed(USB_DETACHED)` → 会话置 failed + 提示；**不做 USB 自动重连**（自动重连仅 TCP，ADR-035）。
 - 未插设备时枚举为空列表（UI 显示空态，不是错误）。
 
+## 插件（Phase 5，ADR-056）
+
+插件**一律手动安装**（不随包分发，ADR-054），入口在 **Settings → Plugins → Install Plugin**：
+
+| 项 | Android 实现 |
+| --- | --- |
+| 安装入口 | `pluginInstall: "upload"`：隐藏 `<input type="file">` + 客户端读文件文本（Capacitor `BridgeWebChromeClient.onShowFileChooser` 走系统文件选择器，**不需要 Capacitor Filesystem**）。点击 Install 会拉起系统选择器——这是原生 Activity，e2e 无法驱动，故用例改为 `setInputFiles` 直投隐藏 input |
+| 文件过滤 | `accept=".json,.mjs,.js"`（**仅扩展名**：部分 ROM 按 MIME 过滤会把 `.mjs` 判为 `application/octet-stream` 而不可选） |
+| 执行能力 | `executablePlugins` 由**运行时探测**决定（`probePluginExecutionSupport()` 实测「Blob Worker + Worker 内 blob entry 动态 import」），静态值为 **fail-closed 基线 `false`**。本机（WebView 151）实测可用 → `true` |
+| 执行模式 | 与桌面端一致：默认**隔离线程**；「Same process」需在安装确认框中显式授权（同步能力 codec / dataType / tableType 需要它） |
+| 持久化 | IndexedDB（与工作区共用库 `mamep2026` → `kv` → 键 `plugins`），reload / 重启后按存储重建执行面 |
+
+> 探测只覆盖隔离路径（Worker）；若某 ROM 拦下**文档内**的 blob `import()`（同进程模式），安装会以
+> `errors.pluginLoadFailed` 报错——无法像 Worker 那样预先探测。
+
 ## 构建
 
 ```bash
 pnpm build:android        # web 产物 → cap sync → gradlew assembleDebug
 # 产物：apps/android/android/app/build/outputs/apk/debug/app-debug.apk
+
+pnpm build:android:release   # 发布产物：assembleRelease + bundleRelease → APK + AAB（ADR-056）
+# 产物：.../outputs/apk/release/app-release.apk（有签名材料）/ app-release-unsigned.apk（无）
+#       .../outputs/bundle/release/app-release.aab
 ```
 
 脚本 `scripts/build-android.mjs` 会依次探测可用 JDK（`JAVA_HOME` → Android Studio JBR（仅当 ≤24）→
 `%LOCALAPPDATA%\MamepJdk\jdk-21`），都不可用时给出明确指引。
+
+### 发布打包与签名（ADR-056）
+
+构建脚本**不接收也不打印任何口令**；签名材料按下面二选一提供，两者都没有时 release 产出
+**未签名** APK（`app-release-unsigned.apk` 并打印提示）——**不会静默复用 debug key 冒充发布签名**：
+
+1. `apps/android/android/app/keystore.properties`（**已 gitignore，不入库**）：
+
+```properties
+storeFile=C:/keys/mamep-release.jks     # 可为绝对路径或相对 app/ 的路径（按字面读取，不处理 \ 转义）
+storePassword=<你的口令>
+keyAlias=mamep
+keyPassword=<你的口令>
+```
+
+2. 环境变量：`MAMEP_ANDROID_KEYSTORE_PATH` / `MAMEP_ANDROID_KEYSTORE_STORE_PASSWORD` /
+   `MAMEP_ANDROID_KEYSTORE_KEY_ALIAS` / `MAMEP_ANDROID_KEYSTORE_KEY_PASSWORD`。
+
+首次创建密钥库（**口令请直接在自己的终端输入，不要写进命令历史或交给 AI**）：
+
+```bash
+keytool -genkeypair -keystore C:/keys/mamep-release.jks -alias mamep \
+  -keyalg RSA -keysize 2048 -validity 9125
+```
+
+校验产物是否已签名：
+
+```bash
+"$ANDROID_HOME/build-tools/<ver>/apksigner" verify --print-certs \
+  apps/android/android/app/build/outputs/apk/release/app-release.apk
+```
+
+- 版本号来自根 `package.json`（`versionName` = 其 version，`versionCode` = major*10000+minor*100+patch）。
+- AAB 用于上架（由 Play 生成签名 APK）；`--aab-only` 只产 AAB。
+- 本机发布用的临时验证（ADR-056 实施时做过）用**临时密钥库 + 本地随机口令、验证后即删**，不留任何密钥文件。
 
 ### JDK 约束（必读）
 

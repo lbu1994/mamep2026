@@ -251,6 +251,15 @@ describe("PluginManagerSection", () => {
       ).toBeTruthy();
     });
 
+    it("browser (upload): 文件选择仅按扩展名过滤（ADR-056：规避 ROM 的 MIME 过滤）", () => {
+      setHostWithPlugin(new PluginRegistry());
+      renderSection();
+
+      const input = screen.getByTestId("plugin-manifest-file-input");
+      // MIME 列表会让部分 ROM 的文件选择器把 .mjs 判为 octet-stream 而不可选。
+      expect(input.getAttribute("accept")).toBe(".json,.mjs,.js");
+    });
+
     it("browser (upload): file pick → security confirm → confirm registers installed plugin", async () => {
       const registry = new PluginRegistry();
       setHostWithPlugin(registry);

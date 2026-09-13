@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultRtuProfile, createTcpConnectionProfile } from "@mamep2026/domain";
 import { AndroidPlatformHost } from "./android-platform-host";
-import { androidCapabilities } from "./android-capabilities";
+import {
+  androidCapabilities,
+  resolveAndroidCapabilities,
+} from "./android-capabilities";
 import { FakeTransportBridge } from "./testing/fake-transport-bridge";
 import { isAndroidPlatform } from "./detect-android";
 
@@ -13,16 +16,18 @@ function createHost(bridge = new FakeTransportBridge()): {
 }
 
 describe("androidCapabilities（如实声明，docs/AGENTS.md §8.4）", () => {
-  it("Phase 2：TCP 与 USB 串口均支持，文件通道仍如实声明未实现", () => {
+  it("Phase 2/5：TCP 与 USB 串口均支持，插件安装入口可用，文件通道仍如实声明未实现", () => {
     expect(androidCapabilities.modbusTcp).toBe(true);
     // Phase 2（2026-09-10）已实现 USB-RS485 → 如实翻转为支持。
     expect(androidCapabilities.modbusRtu).toBe(true);
     expect(androidCapabilities.serialPorts).toBe("enumerated");
     // WebView 原生支持 IndexedDB（与浏览器端同路径）。
     expect(androidCapabilities.filesystem).toBe("limited");
+    // 插件执行能力由运行时探测覆盖，基础常量是 fail-closed 基线（ADR-056）。
     expect(androidCapabilities.executablePlugins).toBe(false);
     expect(androidCapabilities.hostPlugins).toBe(false);
-    expect(androidCapabilities.pluginInstall).toBe("unsupported");
+    // Phase 5（ADR-056）：WebView 文件选择器可用。
+    expect(androidCapabilities.pluginInstall).toBe("upload");
     expect(androidCapabilities.logExport).toBe("unsupported");
     expect(androidCapabilities.workspaceImport).toBe("unsupported");
     expect(androidCapabilities.workspaceExport).toBe("unsupported");
@@ -44,6 +49,32 @@ describe("androidCapabilities（如实声明，docs/AGENTS.md §8.4）", () => {
 
   it("能力对象只读（防止运行时被改写）", () => {
     expect(Object.isFrozen(androidCapabilities)).toBe(true);
+  });
+});
+
+describe("resolveAndroidCapabilities（运行时探测覆盖，ADR-056）", () => {
+  it("探测可用 → executablePlugins 翻转为 true，其余能力不变", () => {
+    const resolved = resolveAndroidCapabilities({ blobWorkerSupported: true });
+    expect(resolved.executablePlugins).toBe(true);
+    // 只覆盖该字段：其余能力与基础常量逐项一致。
+    expect({ ...resolved, executablePlugins: false }).toEqual({
+      ...androidCapabilities,
+    });
+    expect(resolved.pluginInstall).toBe("upload");
+    expect(resolved.modbusTcp).toBe(true);
+    expect(resolved.modbusRtu).toBe(true);
+    expect(resolved.hostPlugins).toBe(false);
+  });
+
+  it("探测不可用 → 如实保持 false（不乐观翻转）", () => {
+    const resolved = resolveAndroidCapabilities({ blobWorkerSupported: false });
+    expect(resolved.executablePlugins).toBe(false);
+  });
+
+  it("返回新对象，基础常量不被改写", () => {
+    const resolved = resolveAndroidCapabilities({ blobWorkerSupported: true });
+    expect(resolved).not.toBe(androidCapabilities);
+    expect(androidCapabilities.executablePlugins).toBe(false);
   });
 });
 

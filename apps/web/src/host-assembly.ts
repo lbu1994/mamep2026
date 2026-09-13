@@ -47,14 +47,18 @@ import { createBrowserHost } from "./host-factories/browser";
 import type { AppPlatformName } from "./platform-detect";
 import type { PlatformHostContext } from "./platform-context";
 
-/** 平台 Host 工厂：用组合根上下文构造宿主实现（同步；加载已由 loader 完成）。 */
+/**
+ * 平台 Host 工厂：用组合根上下文构造宿主实现。
+ * 加载已由 loader 完成；**允许返回 Promise**（Android 端在构造前需 await 插件执行能力探测，
+ * ADR-056），`startAppHost` 统一 await 并保留取消语义。
+ */
 export type PlatformHostFactory = (input: {
   context: PlatformHostContext;
   /** 宿主白名单桥（非浏览器平台必有；浏览器/Android 为 undefined）。 */
   bridge: MamepHostApi | VscodeHostApi | undefined;
   /** 本平台装配的取消信号（Android 前后台订阅据此退订）。 */
   signal: AbortSignal;
-}) => AppHost;
+}) => AppHost | Promise<AppHost>;
 
 /** 工厂加载器：平台 → 工厂（默认实现按平台动态 `import()`；测试注入假工厂）。 */
 export type PlatformHostFactoryLoader = (
@@ -152,7 +156,8 @@ export async function startAppHost(
     const load = deps.loadHostFactory ?? loadPlatformHostFactory;
     const factory = await load(deps.platform);
     if (signal.aborted) return null;
-    host = factory({ context, bridge: deps.bridge, signal });
+    // 工厂可异步（Android：构造前 await 能力探测，ADR-056）；await 后重新校验取消。
+    host = await factory({ context, bridge: deps.bridge, signal });
     if (signal.aborted) {
       // 装配期间被取消（StrictMode 双挂载 / 卸载）：立即释放且不接线。
       void host.dispose();
