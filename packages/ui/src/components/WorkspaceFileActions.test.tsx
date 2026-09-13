@@ -178,6 +178,39 @@ describe("WorkspaceFileActions 导入（file 能力，桌面端）", () => {
   });
 });
 
+describe("WorkspaceFileActions 能力不支持（如 Android Phase 4 接入文件选择前）", () => {
+  it("导入能力 unsupported：给出能力提示，不调 openTextFile、不置草稿（不静默无操作）", async () => {
+    const host = makeHost({ workspaceImport: "unsupported" });
+    useAppStore.setState({ host });
+    renderActions();
+    fireEvent.click(screen.getByRole("button", { name: "Import Workspace" }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Importing a workspace file is not supported in this environment.",
+        ),
+      ).toBeTruthy();
+    });
+    expect(host.openTextFile).not.toHaveBeenCalled();
+    expect(useAppStore.getState().workspaceImportDraft).toBeNull();
+  });
+
+  it("导出能力 unsupported：给出能力提示，不调 saveTextFile", async () => {
+    const host = makeHost({ workspaceExport: "unsupported" });
+    useAppStore.setState({ host });
+    renderActions();
+    fireEvent.click(screen.getByRole("button", { name: "Export Workspace" }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Exporting a workspace file is not supported in this environment.",
+        ),
+      ).toBeTruthy();
+    });
+    expect(host.saveTextFile).not.toHaveBeenCalled();
+  });
+});
+
 describe("WorkspaceFileActions 导入（upload 能力，浏览器端）", () => {
   function selectFile(file: File): void {
     const input = document.querySelector<HTMLInputElement>(

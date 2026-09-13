@@ -75,6 +75,24 @@ export async function openAppSession(): Promise<AppSession> {
   };
 }
 
+/** 收起启动时自动弹出的 Connection Settings（不连接，只关弹窗，供后续用例交互）。 */
+export async function dismissConnectionSettings(page: Page): Promise<void> {
+  const modal = page.locator(".ant-modal-container:visible");
+  if ((await modal.count()) === 0) return;
+  try {
+    // 语言无关：连接弹窗 footer 为 [Cancel, CONNECT]（ConnectionSettingsModal），
+    // 故取 footer 第一个按钮，不用英文按钮名（界面语言随工作区偏好会变）。
+    await modal
+      .locator(".ant-modal-footer button")
+      .first()
+      .click({ timeout: 15_000 });
+  } catch {
+    // 兜底：antd Modal 默认可 Esc 关闭。
+    await page.keyboard.press("Escape");
+  }
+  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+}
+
 /** 首行填地址（默认表行地址为空，不填则读请求不会生成：RegisterTableService 直接报地址为空）。 */
 export async function setRowAddress(page: Page, address: string): Promise<void> {
   // 注意：不能用 /^Address/ 正则——会匹配到工具栏「Address format」进制切换控件与「Address Adjust」控件。

@@ -13,6 +13,14 @@ import path from "node:path";
 export const APP_ID = "com.mamep2026.app";
 /** 手机侧调试端口（adb forward 到 WebView devtools socket）。 */
 export const CDP_PORT = 9222;
+/**
+ * 可选：无线调试目标（形如 `192.168.71.35:37429`，取自设备「开发者选项 → 无线调试」）。
+ *
+ * Android 11+ 的「无线调试」使用随机端口且 adb 不会自动连接，设置本变量后
+ * `requireDevice()` 会先 `adb connect` 并等待设备就绪。**未设置时不改变任何既有行为**
+ * （USB 调试路径与之前完全一致）。
+ */
+export const ADB_TARGET = process.env.MAMEP_ANDROID_ADB_TARGET ?? "";
 /** 仓库根（本文件位于 tests/e2e-android/helpers/）。 */
 export const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 /** debug APK 产物路径（scripts/build-android.mjs 产出）。 */
@@ -57,24 +65,95 @@ export function adb(args: string[]): string {
   return execFileSync(adbBinary(), args, { encoding: "utf8" }).trim();
 }
 
-/** 要求至少一台已授权设备；否则给出明确指引（不跳过）。 */
-export function requireDevice(): string {
-  const output = adb(["devices"]);
-  const devices = output
+/** 同步等待（Node 主线程可用；避免为一次性轮询引入异步签名）。 */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** 当前 `adb devices` 中处于 `device`（已授权）状态的序列号列表。 */
+export function listDeviceSerials(): string[] {
+  return adb(["devices"])
     .split(/\r?\n/)
     .slice(1)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0 && line.endsWith("device"));
+    .filter((line) => line.length > 0 && /\sdevice$/.test(line))
+    .map((line) => line.split(/\s+/)[0] ?? "")
+    .filter((serial) => serial.length > 0);
+}
+
+/**
+ * 无线调试链路：设置 `MAMEP_ANDROID_ADB_TARGET` 且设备未就绪时先 `adb connect` 再轮询等待。
+ * 未设置该环境变量时为空操作（USB 调试路径零行为变化）。
+ */
+export function ensureDeviceConnected(timeoutMs = 20_000): void {
+  if (ADB_TARGET === "") return;
+  if (!listDeviceSerials().includes(ADB_TARGET)) {
+    try {
+      adb(["connect", ADB_TARGET]);
+    } catch {
+      // 已连接等场景 adb connect 可能返回非 0：以随后的 devices 轮询结果为准。
+    }
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline && !listDeviceSerials().includes(ADB_TARGET)) {
+      sleepSync(300);
+    }
+    if (!listDeviceSerials().includes(ADB_TARGET)) {
+      throw new Error(
+        [
+          `无线调试目标未就绪：${ADB_TARGET}（等待 ${timeoutMs}ms）`,
+          `adb devices 输出：\n${adb(["devices"])}`,
+          "处理：设备与电脑接同一 Wi-Fi → 打开「开发者选项 → 无线调试」并保持开启；",
+          "首次使用需先配对：设备「使用配对码配对设备」→ `adb pair <ip:配对端口>`（配对码显示在设备屏幕上，约 1 分钟内有效）；",
+          "配对成功后连接 `_adb-tls-connect` 端口：`adb connect <ip:连接端口>`（与配对端口不同）；",
+          "**不确定设备 IP 时不要靠眼看**：`adb mdns services` 会直接列出该设备的 `_adb-tls-pairing` / `_adb-tls-connect` 的 IP:端口。",
+          "最后把 IP:连接端口 设为 MAMEP_ANDROID_ADB_TARGET。",
+        ].join("\n"),
+      );
+    }
+  }
+  // 无线调试下同一设备常有多个 transport（mDNS 自动连接别名 + `ip:端口`）→ 裸 adb 会报
+  // 「more than one device/emulator」。用官方 `ANDROID_SERIAL` 环境变量固定目标设备
+  // （adb 文档：`-s` 优先级高于该变量；`devices` / `connect` 不受其影响）。
+  process.env.ANDROID_SERIAL = ADB_TARGET;
+}
+
+/** 要求至少一台已授权设备；否则给出明确指引（不跳过）。 */
+export function requireDevice(): string {
+  // 无线调试：先按 MAMEP_ANDROID_ADB_TARGET 建立链路（未设置时为空操作）。
+  ensureDeviceConnected();
+  const devices = listDeviceSerials();
   if (devices.length === 0) {
     throw new Error(
       [
-        "未检测到 Android 设备：Android e2e 需要真机 + USB 调试。",
-        `adb devices 输出：\n${output}`,
-        "处理：连接设备 → 打开「开发者选项 → USB 调试」→ 在设备上同意调试授权。",
+        "未检测到 Android 设备：Android e2e 需要真机 + USB 调试 或 无线调试。",
+        `adb devices 输出：\n${adb(["devices"])}`,
+        "处理（USB）：连接设备 → 打开「开发者选项 → USB 调试」→ 在设备上同意调试授权。",
+        "处理（无线）：打开「开发者选项 → 无线调试」→ 首次先 adb pair → 设 MAMEP_ANDROID_ADB_TARGET=<ip:端口> 后重试。",
       ].join("\n"),
     );
   }
-  return devices[0]?.split(/\s+/)[0] ?? "";
+  // 同时接了 USB 与无线时，显式指定的无线目标优先（避免选中错误设备）。
+  if (ADB_TARGET !== "" && devices.includes(ADB_TARGET)) return ADB_TARGET;
+  return devices[0] ?? "";
+}
+
+/**
+ * 唤醒屏幕并解除非安全锁屏。
+ *
+ * 为何必须：**息屏时 Activity 无法获得前台焦点**（`mCurrentFocus` 会变成 keyguard / SystemUI），
+ * 此时 `am start` 也不能把应用拉回前台，前台/输入相关断言会全部失真（2026-09-13 实测）。
+ */
+export function ensureScreenAwake(): void {
+  for (const args of [
+    ["shell", "input", "keyevent", "KEYCODE_WAKEUP"],
+    ["shell", "wm", "dismiss-keyguard"],
+  ]) {
+    try {
+      adb(args);
+    } catch {
+      // 唤醒/关锁屏失败不阻塞调用方（无安全锁屏或不支持该命令的设备）。
+    }
+  }
 }
 
 /** 安装（或覆盖安装）debug APK。
@@ -92,16 +171,7 @@ export function installApk(apkPath: string = APK_PATH): void {
   // 唤醒 + 关闭非安全锁屏：部分 OEM（vivo）在锁屏时无法展示安装确认框，会直接
   // INSTALL_FAILED_ABORTED。屏幕常亮（adb shell svc power stayon true）属设备级设置，
   // 不在此隐式修改，见 apps/android/README.md「真机 e2e 前置」。
-  for (const args of [
-    ["shell", "input", "keyevent", "KEYCODE_WAKEUP"],
-    ["shell", "wm", "dismiss-keyguard"],
-  ]) {
-    try {
-      adb(args);
-    } catch {
-      // 唤醒/关锁屏失败不阻塞安装尝试（无安全锁屏的设备本就不需要）。
-    }
-  }
+  ensureScreenAwake();
 
   // 安装通道（2026-09-10 实测）：vivo（V2303A / Android 16）会**静默拒绝流式安装**
   // （`adb install -r` → INSTALL_FAILED_ABORTED: User rejected permissions，且手机无任何弹窗），

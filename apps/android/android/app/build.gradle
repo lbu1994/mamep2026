@@ -1,6 +1,21 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// 应用版本号统一取自仓库根 package.json（ADR-050 决策 7：appId / appName / 版本以根 package.json 为准），
+// 不再使用 Capacitor 模板的占位值 "1.0"——安装器显示的即 versionName。
+def rootPackageJson = new groovy.json.JsonSlurper().parse(file("$rootDir/../../../package.json"))
+def appVersionName = rootPackageJson.version.toString()
+
+// Android 要求 versionCode 为单调递增正整数：semver → major*10000 + minor*100 + patch
+// （0.4.2 → 402；带预发布后缀时取前三段数字，解析失败兜底 1）。
+def parseVersionCode = { String version ->
+    def matcher = (version =~ /^(\d+)\.(\d+)\.(\d+)/)
+    if (!matcher.find()) return 1
+    return matcher.group(1).toInteger() * 10000 +
+        matcher.group(2).toInteger() * 100 +
+        matcher.group(3).toInteger()
+}
+
 android {
     namespace = "com.mamep2026.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,8 +23,8 @@ android {
         applicationId "com.mamep2026.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode parseVersionCode(appVersionName)
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

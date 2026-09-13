@@ -16,4 +16,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
+  // 动作/导航超时必须显式设置：Playwright 默认**无动作超时**，一旦定位器匹配不到
+  // （如界面语言变化导致按钮名不匹配），用例会一直等到 test timeout——表象就是「卡住」。
+  // 2026-09-13：真机无线调试下两度出现该情况，改为固定上限以便快速失败并定位。
+  use: {
+    actionTimeout: 30_000,
+    navigationTimeout: 60_000,
+  },
 });

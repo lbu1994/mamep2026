@@ -114,11 +114,26 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
     } else if (host.capabilities.workspaceImport === "upload") {
       // 浏览器端：客户端文件选择读取（浏览器原生能力，不走 HostMessage）。
       importFileInputRef.current?.click();
+    } else {
+      // 能力不支持（如 Android 在 Phase 4 接入 SAF / 文件选择前）：**必须给出反馈**，
+      // 否则用户点了按钮毫无反应（静默无操作会被当成 bug，2026-09-13 实测）。
+      void message.open({
+        type: "warning",
+        content: t("errors.workspaceImportUnsupported"),
+      });
     }
   };
 
   const handleExportWorkspace = (): void => {
     if (host === null || host === undefined) return;
+    if (host.capabilities.workspaceExport === "unsupported") {
+      // 同上：能力不支持时给提示，不做静默无操作。
+      void message.open({
+        type: "warning",
+        content: t("errors.workspaceExportUnsupported"),
+      });
+      return;
+    }
     // 导出使用当前最新工作区（点击时读取，不订阅以避免行数据更新触发级联重渲染）。
     const workspace = useAppStore.getState().workspace;
     const content = serializeWorkspace(workspace);

@@ -540,6 +540,8 @@ export const en = {
     workspaceSchemaInvalid: "The workspace file is invalid or corrupted.",
     workspaceImportUnsupported:
       "Importing a workspace file is not supported in this environment.",
+    workspaceExportUnsupported:
+      "Exporting a workspace file is not supported in this environment.",
     pluginManifestInvalid: "The plugin manifest is invalid.",
     pluginPlatformUnsupported:
       "This plugin requires a platform not supported in this environment.",
@@ -1066,6 +1068,7 @@ export const zh: TranslationResources = {
     tcpUnitIdOutOfRange: "TCP 单元标识超出范围（0..255）。",
     workspaceSchemaInvalid: "工作区文件无效或已损坏。",
     workspaceImportUnsupported: "当前环境不支持导入工作区文件。",
+    workspaceExportUnsupported: "当前环境不支持导出工作区文件。",
     pluginManifestInvalid: "插件清单无效。",
     pluginPlatformUnsupported: "该插件要求的平台能力当前环境不支持。",
     pluginAlreadyRegistered: "该插件已注册。",

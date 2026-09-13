@@ -7,11 +7,24 @@
  *   主操作（撤销/重做、新建行、Read All）仍在工具栏；
  * - 硬件返回键（`@capacitor/app`）：有覆盖层时关抽屉且不离开应用，无覆盖层时最小化到后台。
  *
+ * **为何不用 `document.visibilityState` 判定后台**（2026-09-13 真机实测）：Playwright 经 CDP
+ *（DevTools）附着页面时，Chromium 会把页面**强制视为 visible**，故最小化后 `visibilityState`
+ * 仍为 `visible`（应用实际已退到 launcher）。改用**系统层面前台窗口**判定。
+ *
  * 真机 e2e 为独立命令 `pnpm test:e2e:android`（不进 `test:all`），需 USB 调试 + 解锁屏幕。
+ *
+ * 约束：**本文件的用例必须放在「硬件返回键」用例之前**。该用例会把应用退到后台且不再唤回
+ *（该 vivo ROM 上应用退后台后 `am start` 会回「intent has been delivered to currently running
+ * top-most instance」而不重排任务、前台焦点不回归；属环境行为，非产品缺陷，故不做唤回脚手架），
+ * 而每个 spec 的 `beforeAll` 会重装/清数据/重启应用、`afterAll` 会 force-stop，故不影响其他 spec。
  */
 import { expect, test } from "@playwright/test";
-import { adb } from "../helpers/adb";
-import { openAppSession, type AppSession } from "../helpers/app";
+import { APP_ID, adb, ensureScreenAwake } from "../helpers/adb";
+import {
+  dismissConnectionSettings,
+  openAppSession,
+  type AppSession,
+} from "../helpers/app";
 
 let session: AppSession;
 
@@ -28,28 +41,17 @@ function pressBack(): void {
   adb(["shell", "input", "keyevent", "KEYCODE_BACK"]);
 }
 
-/** 把应用重新拉回前台（返回键最小化用例之后调用，保持后续用例可交互）。 */
-function bringToForeground(): void {
-  adb([
-    "shell",
-    "monkey",
-    "-p",
-    "com.mamep2026.app",
-    "-c",
-    "android.intent.category.LAUNCHER",
-    "1",
-  ]);
-}
-
-/** 关掉启动时自动弹出的 Connection Settings（工作区仍可查看，只是不连接）。 */
-async function dismissConnectionSettings(page: AppSession["page"]): Promise<void> {
-  const modal = page.locator(".ant-modal-container:visible");
-  if ((await modal.count()) === 0) return;
-  await modal
-    .getByRole("button", { name: "Cancel", exact: true })
-    .first()
-    .click();
-  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+/**
+ * 当前系统前台窗口（`mCurrentFocus` 的实际值；同一输出里可能有一行为 null，故取最后一个非 null）。
+ * 用于判定「返回键是否把应用退到后台」——比 `document.visibilityState` 可靠（CDP 会把页面强制视为 visible）。
+ */
+function foregroundWindow(): string {
+  const lines = adb(["shell", "dumpsys", "window"]).split(/\r?\n/);
+  const focuses = lines
+    .filter((line) => line.includes("mCurrentFocus"))
+    .map((line) => line.trim())
+    .filter((line) => !line.endsWith("null"));
+  return focuses.at(-1) ?? "";
 }
 
 test("移动布局：侧栏/底部面板改为抽屉，工具栏次要控件进「更多」面板", async () => {
@@ -103,6 +105,9 @@ test("移动布局：侧栏/底部面板改为抽屉，工具栏次要控件进�
 test("硬件返回键：先关抽屉（不离开应用），无覆盖层时才最小化到后台", async () => {
   const { page } = session;
 
+  // 息屏会让焦点落在 keyguard、使前台断言失真，故交互前先唤醒。
+  ensureScreenAwake();
+
   // 打开抽屉 → 返回键应只关抽屉，应用仍在前台。
   await page.getByRole("button", { name: "Open table list" }).click();
   const sidebarDrawer = page.locator(
@@ -114,24 +119,16 @@ test("硬件返回键：先关抽屉（不离开应用），无覆盖层时才�
   await expect(sidebarDrawer).not.toHaveClass(/ant-drawer-open/, {
     timeout: 15_000,
   });
-  expect(await page.evaluate(() => document.visibilityState)).toBe("visible");
+  // 「不离开应用」：返回键只关抽屉，前台窗口仍是本应用。
+  await expect
+    .poll(() => foregroundWindow(), { timeout: 15_000 })
+    .toContain(APP_ID);
 
   // 无覆盖层 → 返回键最小化应用（Android 惯例：退到后台，不退出进程）。
   pressBack();
   await expect
-    .poll(async () => page.evaluate(() => document.visibilityState), {
-      timeout: 15_000,
-    })
-    .toBe("hidden");
-
-  // 回前台，避免影响后续用例（e2e 运行顺序无关性）。
-  bringToForeground();
-  await expect
-    .poll(async () => page.evaluate(() => document.visibilityState), {
-      timeout: 20_000,
-    })
-    .toBe("visible");
-  await expect(page.locator(".mamep-header")).toBeVisible();
+    .poll(() => foregroundWindow(), { timeout: 20_000 })
+    .not.toContain(APP_ID);
 
   expect(session.consoleErrors).toEqual([]);
 });

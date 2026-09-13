@@ -6,6 +6,9 @@
 - 页面来源：`apps/web` 的 `--mode android` 产物（`apps/web/dist-android/`，Capacitor `webDir` 指向它）
 - 应用标识：`appId = com.mamep2026.app`、`appName = Mamep2026`
 - 页面 URL：`https://localhost/`（Capacitor `androidScheme: "https"` → 安全上下文）
+- **版本号**：`versionName` / `versionCode` 由 `android/app/build.gradle` 从**仓库根 `package.json`** 读取
+  （ADR-050 决策 7；`versionCode = major*10000 + minor*100 + patch`，如 `0.4.2` → `402`），
+  不再使用 Capacitor 模板的占位值 `1.0`。改版本只需改根 `package.json`。
 - **启动图标**：由 `scripts/generate-icons.mjs` 从 `build/AppIcon.svg` 生成（全白底 + 黑色线条；
   legacy 白底方形/圆形 + 自适应图标透明底前景，背景色 `res/values/ic_launcher_background.xml` = `#FFFFFF`）。
   `pnpm build:android` 会自动同步生成，**不要手改 mipmap PNG**（改图形请改源 SVG）。
@@ -70,15 +73,54 @@ adb shell am start -n com.mamep2026.app/.MainActivity
 
 ## 真机 E2E（`pnpm test:e2e:android`）
 
-前提：**真机 + USB 调试**（本套件不静默跳过，无设备即失败），且：
+前提：**真机 + USB 调试 或 无线调试**（本套件不静默跳过，无设备即失败），且：
 
 | 前置 | 原因 |
 | --- | --- |
-| 屏幕解锁并建议 `adb shell svc power stayon true` | 设备休眠时 OEM（vivo 等）无法弹出安装确认框 → `INSTALL_FAILED_ABORTED`；休眠还会节流 WebView |
+| 屏幕解锁 + **不熄屏**（USB 调试：`adb shell svc power stayon true`；**无线调试见下方专节**） | 设备休眠时 OEM（vivo 等）无法弹出安装确认框 → `INSTALL_FAILED_ABORTED`；**休眠还会冻结 WebView** → CDP 上的定位/点击会永久挂起（表象像「卡住」，实为等待到用例超时） |
 | 允许「USB 安装」/ 首次安装时在手机上点确认 | 同上 |
-| 宿主机可达（`adb reverse` 由用例负责） | TCP 用例把宿主回环端口反向转发给设备，真实字节往返经原生 socket |
+| 宿主机可达（`adb reverse` 由用例负责） | TCP 用例把宿主回环端口反向转发给设备，真实字节往返经原生 socket。**无线调试下 `adb reverse` 同样可用**（2026-09-13 实测） |
 | **USB-RS485 闭环用例额外前置** | ① USB 转接器插在**手机**上（OTG）；另一端接 PC 侧从站（或另一只 USB-TTL，TX↔RX 交叉 + 共地）；② PC 侧先启动 RTU 从站：`pnpm slave`（端口/波特率取 `config/connections.json`）；③ 显式开启：设 `MAMEP_ANDROID_USB_SERIAL=1`；④ 首次连接需在手机上确认 USB 授权（用例等待最长 30s）。**无硬件时该用例自动跳过**，`rtu-ui.spec.ts` 无需硬件即可跑 |
 | **vivo/iQOO：安装被静默拒绝** | `adb install -r` 可能报 `INSTALL_FAILED_ABORTED: User rejected permissions` 而**手机无任何弹窗**——这是 ROM 拒绝**流式安装**。`helpers/adb.ts` 已优先用 `adb install -r --no-streaming`（push 安装）并在失败时回退；若两者都失败，检查开发者选项的「USB 安装」开关 |
+
+### 无线调试（2026-09-13 实测可用）
+
+Android 11+ 的「无线调试」是**两个不同的随机端口**，且都需要先配对：
+
+| 端口 | 出处 | 用途 |
+| --- | --- | --- |
+| `_adb-tls-pairing` | 弹窗「使用配对码配对设备」 | `adb pair <ip:配对端口>`（随后输入设备上 6 位配对码；**弹窗与配对码约 1 分钟失效**） |
+| `_adb-tls-connect` | 「无线调试」主界面显示的「IP 地址和端口」 | `adb connect <ip:连接端口>`（配对成功后才可连） |
+
+```bash
+# 1) 设备与电脑同一 Wi-Fi；设备开启「开发者选项 → 无线调试」并保持在该页面
+adb mdns services          # 直接用 mDNS 找到两个端口（不要只靠眼看 IP）
+# 2) 弹窗「使用配对码配对设备」打开时（快！）
+adb pair <ip:配对端口>     # 提示 Enter pairing code 后输入设备上 6 位码
+# 3) 连接（端口取 _adb-tls-connect 那条）
+adb connect <ip:连接端口>
+```
+
+跑用例时把**连接端口**交给辅助即可自动建链（幂等；未设置则完全走 USB 老路径）：
+
+```bash
+MAMEP_ANDROID_ADB_TARGET=192.168.x.x:39019 pnpm test:e2e:android
+```
+
+实测踩坑（都会让失败看起来像「莫名卡住」）：
+
+1. **不要用 USB 时代的 IP/端口**：同一手机换网络后 IP 会变（本次用户给的 IP 与 mDNS 广播的 IP 不同，连错地址表现为 `10061 拒绝` / `10060 超时`）。用 `adb mdns services` 拿准确 IP:端口。
+2. **配对码用时方恨短**：配对弹窗/配对码约 1 分钟后失效，迟输入会得到 `error: protocol fault (couldn't read status message)`；重试需重新打开弹窗（端口也会变）。
+3. **同一设备会有两个 transport**（`ip:端口` + mDNS 自动连接别名 `adb-<serial>._adb-tls-connect._tcp`）→ 裸 `adb` 命令报 `more than one device/emulator`。辅助已在建链后用官方 `ANDROID_SERIAL` 环境变量固定目标设备。
+4. **没有插入 USB 时 `svc power stayon true` 不生效**（该开关只在「充电时」保持亮屏），无线调试下请改用长息屏超时，否则屏幕一熄 WebView 就被冻结、e2e 挂到超时：
+
+```bash
+adb -s <ip:端口> shell settings put system screen_off_timeout 1800000   # 30 分钟（跑完记得改回）
+adb -s <ip:端口> shell input keyevent KEYCODE_WAKEUP
+adb -s <ip:端口> shell wm dismiss-keyguard
+```
+
+> 设备耗电更快：跑完建议把息屏超时改回（系统设置 → 显示 → 休眠）。
 
 实现要点（均来自实测）：
 
