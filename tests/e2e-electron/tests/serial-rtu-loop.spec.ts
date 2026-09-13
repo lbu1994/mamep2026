@@ -207,7 +207,10 @@ test("取消/无可用端口：下拉框空态、无端口标签、无错误", a
   const portSelect = portField.locator(".ant-select");
   const portRefresh = portField.locator('button[title="Refresh"]');
   // 触发刷新重新枚举，并拒绝请求（模拟无可用端口 / 用户取消）。
-  await portRefresh.click();
+  // `force: true`：`click()` 的稳定性检查要求元素连续两帧包围盒一致，高负载（`pnpm test:all`
+  // 串行跑完全量套件后）会因重排/重渲染判定 not stable 并重试到超时（2026-09-13 实测）；
+  // force 仍派发完整鼠标事件，仅跳过行动性检查。
+  await portRefresh.click({ force: true });
   await page.waitForFunction(() => {
     const fake = (window as unknown as { __mamepFakeSerial: FakeSerialApi })
       .__mamepFakeSerial;
@@ -220,8 +223,9 @@ test("取消/无可用端口：下拉框空态、无端口标签、无错误", a
 
   // 打开端口下拉框：空态提示、无端口选项、
   // 弹窗内无端口标签与「先选择设备」类错误。
-  // 注：antd v6 Select 无 .ant-select-selector 类，点击根元素 .ant-select 打开下拉。
-  await portSelect.click();
+  // 注：antd v6 Select 无 .ant-select-selector 类，点击根元素 .ant-select 打开下拉；
+  // 不能用 DOM `.click()`（不触发 mousedown → 下拉框不开），故用 `force: true` 跳过稳定性检查。
+  await portSelect.click({ force: true });
   const dropdown = page.locator(".ant-select-dropdown:visible");
   await expect(dropdown).toContainText("No serial ports found");
   await expect(
@@ -252,8 +256,8 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
     .filter({ hasText: "Port" });
   const portSelect = portField.locator(".ant-select");
   const portRefresh = portField.locator('button[title="Refresh"]');
-  // 触发刷新重新枚举并解析为可用端口（下拉框出现选项）。
-  await portRefresh.click();
+  // 触发刷新重新枚举并解析为可用端口（下拉框出现选项）；`force: true` 见上。
+  await portRefresh.click({ force: true });
   await page.waitForFunction(() => {
     const fake = (window as unknown as { __mamepFakeSerial: FakeSerialApi })
       .__mamepFakeSerial;
@@ -270,7 +274,7 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   // 注：antd v6 Select 无 .ant-select-selector 类，点击根元素 .ant-select 打开下拉；
   // 虚拟列表下可见选项类为 .ant-select-item-option（role="option" 仅存在于隐藏的无障碍列表）。
   // 点开下拉框会再次触发枚举（requestPort 挂起）：先解析它，确保选择走已授权快照路径。
-  await portSelect.click();
+  await portSelect.click({ force: true });
   await page.waitForFunction(() => {
     const fake = (window as unknown as { __mamepFakeSerial: FakeSerialApi })
       .__mamepFakeSerial;
