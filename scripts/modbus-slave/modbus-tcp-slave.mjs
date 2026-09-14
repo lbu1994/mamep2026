@@ -27,6 +27,7 @@ import * as net from "node:net";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  ASCII_STRING_REGION,
   CUSTOM_READ_FUNCTION,
   CUSTOM_WRITE_FUNCTION,
   DEFAULT_RULES,
@@ -44,6 +45,8 @@ import {
   TABLE_TYPE_COIL,
   TABLE_TYPE_DISCRETE_INPUT,
   TABLE_TYPE_INPUT_REGISTER,
+  asciiStringReadPduHex,
+  asciiToRegisters,
   createLogger,
   matchRule,
   normalizeRules,
@@ -725,13 +728,13 @@ class ModbusTcpSlave {
 // ---------------------------------------------------------------------------
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function encodeReadPdu(address) {
+function encodeReadPdu(address, quantity = 1) {
   return Uint8Array.from([
     FUNCTION_READ_HOLDING,
     (address >> 8) & 0xff,
     address & 0xff,
-    0x00,
-    0x01,
+    (quantity >> 8) & 0xff,
+    quantity & 0xff,
   ]);
 }
 
@@ -860,8 +863,9 @@ function assertFrame(actual, expectedHex) {
 }
 
 async function runSelfTest() {
-  // 自测使用内建默认配置（registers 空）+ 临时端口，保证断言确定性。
-  // 规则 = 默认 7 区 + 扩展 2 区（延迟/分片，见配置说明）。
+  // 自测使用内建默认配置 + 临时端口，保证断言确定性。
+  // 规则 = 默认 7 区 + 扩展 2 区（延迟/分片，见配置说明）；
+  // 保持寄存器预置 ASCII 字符串区（0x0010–0x001F，16 寄存器 = 32 字符）供字符串断言。
   const SELF_TEST_RULES = [
     // 扩展规则（延迟/分片）置于 DEFAULT_RULES 之前：分片区 0x0800 与 DEFAULT_RULES
     // 的 must-multi 区（0x0800）地址重叠，须让 split 规则优先命中，否则 mustMulti 抢先。
@@ -879,13 +883,19 @@ async function runSelfTest() {
     },
     ...DEFAULT_RULES,
   ];
+  // ASCII 字符串区种子（0x0010 起 16 个寄存器 = 32 字符）。
+  const stringRegisters = asciiToRegisters(ASCII_STRING_REGION.text);
+  const registers = new Map();
+  stringRegisters.forEach((value, index) => {
+    registers.set(ASCII_STRING_REGION.start + index, value);
+  });
   const config = {
     ...DEFAULT_CONFIG,
     host: "127.0.0.1",
     port: 0,
     unitId: 1,
     responseDelayMs: 0,
-    registers: new Map(),
+    registers,
     coils: new Map([[0x0000, 1]]),
     inputs: new Map([[0x0001, 1]]),
     inputRegisters: new Map([[0x0002, 0x1234]]),
@@ -1016,6 +1026,22 @@ async function runSelfTest() {
     "FC03 重读 0x0003 → 0xABCD",
     encodeReadPdu(0x0003),
     "03 02 AB CD",
+  );
+  // ⑳ ASCII 字符串区（0x0010–0x001F，16 寄存器 = 32 字符）：一次连续读回正常 ASCII 字符串
+  //    该区间未命中任何规则 → 回退正常行为（无需新增规则）。
+  await run(
+    `FC03 读 0x0010 连续 ${ASCII_STRING_REGION.registerCount} 寄存器 → ASCII 字符串 "${ASCII_STRING_REGION.text}"`,
+    encodeReadPdu(
+      ASCII_STRING_REGION.start,
+      ASCII_STRING_REGION.registerCount,
+    ),
+    asciiStringReadPduHex(),
+  );
+  // ㉑ ASCII 字符串区部分读（前 4 个寄存器 = 前 8 字符）
+  await run(
+    "FC03 读 0x0010 前 4 寄存器 → 返回前 8 字符",
+    encodeReadPdu(ASCII_STRING_REGION.start, 4),
+    asciiStringReadPduHex(stringRegisters.slice(0, 4)),
   );
 
   master.destroy();

@@ -346,6 +346,69 @@ export function parseRegisters(registers) {
   return map;
 }
 
+// ---------------------------------------------------------------------------
+// ASCII 字符串区（2026-09-14）
+// ---------------------------------------------------------------------------
+/**
+ * 从站内置 ASCII 字符串样例区（保持寄存器）：
+ * - 地址 0x0010–0x001F 共 16 个连续寄存器 = 32 个字符；
+ * - 该区间**不命中任何规则** → 按「规则外回退正常行为」读写均正常（无需新增规则）；
+ * - 编码语义与应用的 String 数据类型完全一致（ADR-030）：ASCII、每寄存器 2 字符、
+ *   高字节在前、不足补空格（权威：packages/data-conversion/src/multi-register.ts 的
+ *   decodeAscii / parseCompositeString）；
+ * - 用途：验证「连续寄存器可读出正常 ASCII 字符串」。真实端口 e2e 经 UI（范围行 + Type=String）
+ *   断言；两份从站配置（modbus-slave.config.json / modbus-tcp-slave.config.json）的 registers
+ *   初值须与本常量保持一致（JSON 无法引用常量，改动须同步，见 scripts/modbus-slave/README.md）。
+ */
+export const ASCII_STRING_REGION = {
+  start: 0x0010,
+  registerCount: 16,
+  text: "MAMEP2026 MODBUS ASCII STRING OK",
+};
+
+/** ASCII 文本 → 寄存器值数组（高字节在前；奇数长度补空格；非 ASCII 抛错）。 */
+export function asciiToRegisters(text) {
+  for (const ch of text) {
+    if (ch.charCodeAt(0) > 0xff) {
+      throw new Error(
+        `ASCII 字符串区不支持非 ASCII 字符: ${JSON.stringify(ch)}`,
+      );
+    }
+  }
+  const values = [];
+  for (let i = 0; i < text.length; i += 2) {
+    const hi = text.charCodeAt(i);
+    const lo = i + 1 < text.length ? text.charCodeAt(i + 1) : 0x20;
+    values.push(((hi & 0xff) << 8) | (lo & 0xff));
+  }
+  return values;
+}
+
+/** 寄存器值数组 → ASCII 文本（与 data-conversion 的 decodeAscii 同语义）。 */
+export function registersToAscii(values) {
+  let out = "";
+  for (const value of values) {
+    out += String.fromCharCode((value >> 8) & 0xff, value & 0xff);
+  }
+  return out;
+}
+
+/** 字符串区寄存器值数组（配置校验 / 自测种子用）。 */
+export function asciiStringRegisters() {
+  return asciiToRegisters(ASCII_STRING_REGION.text);
+}
+
+/**
+ * 字符串区「读响应」的 PDU 部分 hex（`<fc> <byteCount> <data…>`，不含从站地址/unitId）——
+ * 自测断言用；RTU 侧调用方在结果前拼从站地址。
+ */
+export function asciiStringReadPduHex(values = asciiStringRegisters()) {
+  const data = values.flatMap((v) => [(v >> 8) & 0xff, v & 0xff]);
+  return [FUNCTION_READ_HOLDING, data.length, ...data]
+    .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+    .join(" ");
+}
+
 /**
  * 位打包读辅助（FC01/FC02，ADR-043 E-1）：逐位取 map 值（非 0 视为 1），LSB 在前。
  * @param {Map<number, number>} map 位值存储（coil/离散输入）

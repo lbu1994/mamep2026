@@ -20,7 +20,7 @@
       "id": "tcp-local-slave",
       "name": "本地 TCP 从站（127.0.0.1:1502）",
       "protocol": "tcp",
-      "host": "127.0.0.1",
+      "host": "192.168.71.105",
       "port": 1502,
       "unitId": 1,
       "connectTimeoutMs": 5000,

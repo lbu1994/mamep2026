@@ -39,6 +39,7 @@ import { SerialPort, InterByteTimeoutParser } from "serialport";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  ASCII_STRING_REGION,
   CUSTOM_READ_FUNCTION,
   CUSTOM_WRITE_FUNCTION,
   DEFAULT_RULES,
@@ -57,6 +58,8 @@ import {
   TABLE_TYPE_DISCRETE_INPUT,
   TABLE_TYPE_INPUT_REGISTER,
   appendCrc,
+  asciiStringReadPduHex,
+  asciiToRegisters,
   createLogger,
   crc16Modbus,
   matchRule,
@@ -718,15 +721,15 @@ function createMasterRequest(port) {
     });
 }
 
-function encodeReadRequest(slave, address) {
+function encodeReadRequest(slave, address, quantity = 1) {
   return appendCrc(
     Uint8Array.from([
       slave,
       FUNCTION_READ_HOLDING,
       (address >> 8) & 0xff,
       address & 0xff,
-      0x00,
-      0x01,
+      (quantity >> 8) & 0xff,
+      quantity & 0xff,
     ]),
   );
 }
@@ -821,11 +824,17 @@ function assertFrame(actual, expectedHex) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function runSelfTest(masterPort) {
-  // 自测使用内建默认配置（registers/基础表为空、默认规则），保证断言确定性；
-  // 不读取 --config 指定的文件。基础表预置初始值供 FC01/FC02/FC04 断言。
+  // 自测使用内建默认配置（基础表为空、默认规则），保证断言确定性；
+  // 不读取 --config 指定的文件。基础表预置初始值供 FC01/FC02/FC04 断言；
+  // 保持寄存器预置 ASCII 字符串区（0x0010–0x001F，16 寄存器 = 32 字符）供字符串断言。
+  const stringRegisters = asciiToRegisters(ASCII_STRING_REGION.text);
+  const registers = new Map();
+  stringRegisters.forEach((value, index) => {
+    registers.set(ASCII_STRING_REGION.start + index, value);
+  });
   const config = {
     ...DEFAULT_CONFIG,
-    registers: new Map(),
+    registers,
     coils: new Map([[0x0000, 1]]),
     inputs: new Map([[0x0001, 1]]),
     inputRegisters: new Map([[0x0002, 0x1234]]),
@@ -1020,6 +1029,23 @@ async function runSelfTest(masterPort) {
     "FC03 重读 0x0003 → 0xABCD",
     encodeReadRequest(slaveAddr, 0x0003),
     "01 03 02 AB CD",
+  );
+  // ⑲ ASCII 字符串区（0x0010–0x001F，16 寄存器 = 32 字符）：一次连续读回正常 ASCII 字符串
+  //    该区间未命中任何规则 → 回退正常行为（无需新增规则）。
+  await run(
+    `FC03 读 0x0010 连续 ${ASCII_STRING_REGION.registerCount} 寄存器 → ASCII 字符串 "${ASCII_STRING_REGION.text}"`,
+    encodeReadRequest(
+      slaveAddr,
+      ASCII_STRING_REGION.start,
+      ASCII_STRING_REGION.registerCount,
+    ),
+    `01 ${asciiStringReadPduHex()}`,
+  );
+  // ⑳ ASCII 字符串区部分读（前 4 个寄存器 = 前 8 字符）
+  await run(
+    "FC03 读 0x0010 前 4 寄存器 → 返回前 8 字符",
+    encodeReadRequest(slaveAddr, ASCII_STRING_REGION.start, 4),
+    `01 ${asciiStringReadPduHex(stringRegisters.slice(0, 4))}`,
   );
 
   await master.close();

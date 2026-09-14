@@ -38,6 +38,36 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 const CONNECTED_TIMEOUT = 15_000;
 /** 自定义功能码示例插件（手动安装；贡献 codec / dataType / tableType）。 */
 const CUSTOM_FC_PLUGIN_ID = "custom-function-code";
+/**
+ * ASCII 字符串区（从站保持寄存器 0x0010–0x001F，16 寄存器 = 32 字符）。
+ * 期望文本直接由从站配置解码得出（`scripts/modbus-slave/modbus-slave.config.json`
+ * 为唯一事实源，与从站自测 / README 一致，测试内不硬编码字符串）。
+ */
+function asciiStringRegion(): {
+  start: number;
+  registerCount: number;
+  text: string;
+} {
+  const start = 0x0010;
+  const registerCount = 16;
+  const config = JSON.parse(
+    readFileSync(
+      path.join(
+        REPO_ROOT,
+        "scripts",
+        "modbus-slave",
+        "modbus-slave.config.json",
+      ),
+      "utf8",
+    ),
+  ) as { registers: Record<string, number> };
+  let text = "";
+  for (let i = 0; i < registerCount; i += 1) {
+    const value = Number(config.registers[String(start + i)] ?? 0) & 0xffff;
+    text += String.fromCharCode((value >> 8) & 0xff, value & 0xff);
+  }
+  return { start, registerCount, text };
+}
 const CUSTOM_FC_ENTRY_PATH = path.resolve(
   REPO_ROOT,
   "release/plugins",
@@ -138,6 +168,14 @@ async function readRow(p: Page): Promise<void> {
     .getByRole("button", { name: "Read", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
+}
+
+/** 把活动表首行 Type（进制列）切到指定选项（antd Select 选项按 title 定位）。 */
+async function setRowType(p: Page, optionTitle: string): Promise<void> {
+  await activeTable(p).getByLabel("Type").first().click();
+  await p
+    .locator(`.ant-select-dropdown:visible [title='${optionTitle}']`)
+    .click();
 }
 
 /** 首行填 Data（HEX）并点击 Write。 */
@@ -517,6 +555,23 @@ test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成�
   await expect(page.getByLabel("Data").first()).toHaveText("0000", {
     timeout: CONNECTED_TIMEOUT,
   });
+});
+
+test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Type=String → Data 显示字符串", async () => {
+  // 从站保持寄存器 0x0010–0x001F 预置 32 字符 ASCII（16 寄存器 × 2 字符，高字节在前）；
+  // 该区间未命中任何规则 → 回退正常行为。应用侧用范围行 + Type=String 一次 FC03 读回，
+  // Data 列直接显示可读 ASCII 字符串（ADR-030 字符串语义）。
+  const ascii = asciiStringRegion();
+  await setRowAddress(page, "0010-001F");
+  await setRowType(page, "String");
+  await readRow(page);
+  await expect(activeTable(page).getByLabel("Data").first()).toHaveText(
+    ascii.text,
+    { timeout: CONNECTED_TIMEOUT },
+  );
+  await expect(
+    activeTable(page).locator(".register-table__status-dot--success").first(),
+  ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 });
 
 test("安装 custom-function-code 插件（ADR-054：手动安装 + 同进程执行）", async () => {

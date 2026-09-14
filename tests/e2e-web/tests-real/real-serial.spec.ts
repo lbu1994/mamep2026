@@ -21,10 +21,44 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 const BASE_URL = "http://localhost:5173/";
 const LOCAL_STORAGE_KEY = "mamep:real-serial-port";
 const CONNECTED_TIMEOUT = 15_000;
+/** 仓库根目录（本文件位于 tests/e2e-web/tests-real/）。 */
+const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
+/**
+ * ASCII 字符串区（从站保持寄存器 0x0010–0x001F，16 寄存器 = 32 字符）。
+ * 期望文本直接由从站配置解码得出（`scripts/modbus-slave/modbus-slave.config.json`
+ * 为唯一事实源，与从站自测 / README 一致，测试内不硬编码字符串）。
+ */
+function asciiStringRegion(): {
+  start: number;
+  registerCount: number;
+  text: string;
+} {
+  const start = 0x0010;
+  const registerCount = 16;
+  const config = JSON.parse(
+    readFileSync(
+      path.join(
+        REPO_ROOT,
+        "scripts",
+        "modbus-slave",
+        "modbus-slave.config.json",
+      ),
+      "utf8",
+    ),
+  ) as { registers: Record<string, number> };
+  let text = "";
+  for (let i = 0; i < registerCount; i += 1) {
+    const value = Number(config.registers[String(start + i)] ?? 0) & 0xffff;
+    text += String.fromCharCode((value >> 8) & 0xff, value & 0xff);
+  }
+  return { start, registerCount, text };
+}
 
 // 门控：真实端口测试需显式开启（MAMEP_REAL=1，由 scripts/e2e-real.mjs 设置）。
 test.skip(
@@ -95,6 +129,14 @@ async function readRow(p: Page): Promise<void> {
     .getByRole("button", { name: "Read", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
+}
+
+/** 把首行 Type（进制列）切到指定选项（antd Select 选项按 title 定位）。 */
+async function setRowType(p: Page, optionTitle: string): Promise<void> {
+  await p.getByLabel("Type").first().click();
+  await p
+    .locator(`.ant-select-dropdown:visible [title='${optionTitle}']`)
+    .click();
 }
 
 /** 切换工具栏「写后回读」配置选项（OFF / ON / ON 100 ms / …，2026-08-26）。 */
@@ -433,6 +475,22 @@ test("写后回读 Verify=OFF：写忽略区 0x0900 写入后 Data 保持写入�
   });
   // 恢复默认 ON（后续测试按默认行为执行）。
   await setWriteVerify(page, "ON");
+});
+
+test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Type=String → Data 显示字符串", async () => {
+  // 从站保持寄存器 0x0010–0x001F 预置 32 字符 ASCII（16 寄存器 × 2 字符，高字节在前）；
+  // 该区间未命中任何规则 → 回退正常行为。应用侧用范围行 + Type=String 一次 FC03 读回，
+  // Data 列直接显示可读 ASCII 字符串（ADR-030 字符串语义）。
+  const ascii = asciiStringRegion();
+  await setRowAddress(page, "0010-001F");
+  await setRowType(page, "String");
+  await readRow(page);
+  await expect(page.getByLabel("Data").first()).toHaveText(ascii.text, {
+    timeout: CONNECTED_TIMEOUT,
+  });
+  await expect(
+    page.locator(".register-table__status-dot--success").first(),
+  ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 });
 
 test("断开连接 → 状态复位为断开（连接按钮恢复 Connect 态）", async () => {
