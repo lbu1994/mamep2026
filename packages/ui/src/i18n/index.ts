@@ -1093,10 +1093,14 @@ export const i18nResources = {
 /** 界面支持的语言（与 workspace.preferences.language 保持一致）。 */
 export type AppLanguage = "en-US" | "zh-CN";
 
-export function initI18n(): void {
+/**
+ * 初始化 i18n。`language` 供组合根在**首屏渲染前**用持久化偏好初始化（2026-09-16：刷新后
+ * 语言闪烁修复——见 `apps/web/src/boot-preferences.ts`）；缺省 `en-US`（既有调用不变）。
+ */
+export function initI18n(language: AppLanguage = "en-US"): void {
   void i18next.use(initReactI18next).init({
     resources: i18nResources,
-    lng: "en-US",
+    lng: language,
     fallbackLng: "en-US",
     interpolation: { escapeValue: false },
   });

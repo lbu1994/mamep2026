@@ -82,12 +82,39 @@ export function findThemeColorOption(
 export function themeConfigForColorOption(
   option: ThemeColorOption,
 ): ThemeConfig {
+  return themeConfigForColorSeed(option.colorPrimary);
+}
+
+/** 色种子 → antd token 覆盖（与 `themeConfigForColorOption` 同一形态）。
+ * 供「插件贡献尚未就绪」时用启动缓存里上次解析出的种子直接着色（2026-09-16）。 */
+export function themeConfigForColorSeed(seed: string): ThemeConfig {
   return {
     token: {
-      colorPrimary: option.colorPrimary,
-      colorLink: option.colorPrimary,
+      colorPrimary: seed,
+      colorLink: seed,
     },
   };
+}
+
+/**
+ * 首帧主色种子解析（2026-09-16，修复「插件主题色首帧默认蓝」）：
+ * - 已解析到预设（插件贡献已就绪）→ 用预设色；
+ * - 选了预设但**插件贡献尚未就绪**（插件存储读取 / activate 未完成）→ 用启动缓存里上次解析出的种子；
+ * - 未选预设，或插件已就绪却解析不到（插件被禁用 / 卸载）→ null（回退默认 Ant Design 蓝）。
+ *
+ * `pluginsReady` 是区分「尚未加载」与「确实不存在」的唯一依据 —— 否则卸载插件后品牌色会永远停在插件色。
+ */
+export function resolveThemeColorSeed(
+  resolvedSeed: string | null,
+  options: {
+    themePrimary: string | null;
+    pluginsReady: boolean;
+    cachedSeed: string | null;
+  },
+): string | null {
+  if (resolvedSeed !== null) return resolvedSeed;
+  if (options.themePrimary === null || options.pluginsReady) return null;
+  return options.cachedSeed;
 }
 
 /** 计算当前主题模式下「派生后」的真实主色：把单一主色作为种子交给 antd 算法只读计算。

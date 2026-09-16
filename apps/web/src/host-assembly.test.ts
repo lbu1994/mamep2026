@@ -67,6 +67,7 @@ function asHost(host: FakeHost): AppHost {
 function makeSinks(): HostAssemblySinks {
   return {
     setHostStatus: vi.fn(),
+    setPluginsReady: vi.fn(),
     setHost: vi.fn(),
     setActiveHost: vi.fn(),
     setDataTypeResolver: vi.fn(),
@@ -139,6 +140,10 @@ describe("startAppHost", () => {
     await startAppHost(deps, controller.signal);
 
     expect(host.startPlugins).toHaveBeenCalledTimes(1);
+    // 插件就绪：`startPlugins()` 落定后置位（2026-09-16 插件主题色首帧修复）。
+    await vi.waitFor(() => {
+      expect(deps.sinks.setPluginsReady).toHaveBeenCalledWith(true);
+    });
     expect(deps.sinks.setDataTypeResolver).toHaveBeenCalledWith(
       deps.context.dataTypeResolver,
     );
@@ -160,6 +165,24 @@ describe("startAppHost", () => {
     // 非 mock：启动自动弹出 Connection Settings。
     expect(deps.sinks.setConnectionModalOpen).toHaveBeenCalledWith(true);
     expect(host.connect).not.toHaveBeenCalled();
+  });
+
+  it("插件启动失败也置「插件就绪」（fail-open：以注册表为准，避免陈旧色种子长期生效）", async () => {
+    const { host } = makeFakeHost();
+    host.startPlugins = vi.fn(async () => {
+      throw new Error("plugin store failed");
+    });
+    const deps = makeDeps({
+      loadHostFactory: async () => () => asHost(host),
+    });
+    const controller = new AbortController();
+
+    await startAppHost(deps, controller.signal);
+
+    await vi.waitFor(() => {
+      expect(deps.sinks.setPluginsReady).toHaveBeenCalledWith(true);
+    });
+    expect(deps.sinks.setHost).toHaveBeenCalledWith(asHost(host));
   });
 
   it("mock 模式：跳过连接弹窗，直接连接默认 RTU 配置", async () => {

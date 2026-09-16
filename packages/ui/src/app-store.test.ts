@@ -500,6 +500,25 @@ describe("setSheetAddressTransform（ADR-042）/ setThemePrimary（2026-09-02，
       useAppStore.getState().workspace.preferences.themePrimary,
     ).toBeNull();
   });
+
+  it("setThemeColorSeed / setPluginsReady：首帧主色过渡状态（2026-09-16），不入工作区持久化", () => {
+    // 初始：无缓存种子、插件未就绪（首帧一律按注册表 + 默认蓝）。
+    expect(useAppStore.getState().themeColorSeed).toBeNull();
+    expect(useAppStore.getState().pluginsReady).toBe(false);
+
+    const before = useAppStore.getState().workspace;
+    useAppStore.getState().setThemeColorSeed("#4f46e5");
+    useAppStore.getState().setPluginsReady(true);
+    expect(useAppStore.getState().themeColorSeed).toBe("#4f46e5");
+    expect(useAppStore.getState().pluginsReady).toBe(true);
+    // 纯运行时状态：不触碰工作区（缓存由组合根的启动缓存订阅另行写回）。
+    expect(useAppStore.getState().workspace).toBe(before);
+
+    useAppStore.getState().setThemeColorSeed(null);
+    useAppStore.getState().setPluginsReady(false);
+    expect(useAppStore.getState().themeColorSeed).toBeNull();
+    expect(useAppStore.getState().pluginsReady).toBe(false);
+  });
 });
 
 describe("commitRowAddress radix", () => {

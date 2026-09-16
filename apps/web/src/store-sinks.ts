@@ -19,6 +19,7 @@ export function createStoreSinks(deps: StoreSinksDeps): HostAssemblySinks {
   const store = () => useAppStore.getState();
   return {
     setHostStatus: (status) => store().setHostStatus(status),
+    setPluginsReady: (ready) => store().setPluginsReady(ready),
     setHost: (host) => store().setHost(host),
     setActiveHost: deps.setActiveHost,
     setDataTypeResolver: (resolver) => store().setDataTypeResolver(resolver),

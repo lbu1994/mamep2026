@@ -69,6 +69,11 @@ export type PlatformHostFactoryLoader = (
 export interface HostAssemblySinks {
   /** 置 Host 装配状态（`"ready"` / `"failed"`；启动骨架据此切换）。 */
   setHostStatus(status: HostStatus): void;
+  /**
+   * 置插件注册表就绪（`host.startPlugins()` 落定后调用，2026-09-16）。
+   * 主题装配链据此区分「插件尚未加载」与「插件已禁用/卸载」（见 `resolveThemeColorSeed`）。
+   */
+  setPluginsReady(ready: boolean): void;
   /** 注册 host 到 store（UI 经 `host` 读取能力/会话）。 */
   setHost(host: AppHost): void;
   /** 登记活动 host（工作区变更订阅据其调用 `scheduleSave` / `updatePollingTargets`）。 */
@@ -180,7 +185,10 @@ function wireHost(
 ): void {
   const { context, sinks } = deps;
   // 插件系统启动（ADR-054）：加载用户手动安装的插件并装配执行面。
-  void host.startPlugins();
+  // 落定后置「插件就绪」（2026-09-16 插件主题色首帧修复）：就绪前主题装配链用启动缓存里的色种子
+  // 过渡（避免一帧默认蓝），就绪后以注册表为准。**fail-open**：失败也置位，否则陈旧种子会长期生效。
+  const markPluginsReady = (): void => sinks.setPluginsReady(true);
+  void host.startPlugins().then(markPluginsReady, markPluginsReady);
   // 数据类型解析器注入 store，单元格解析/读取格式化/CSV 白名单经它转发。
   sinks.setDataTypeResolver(context.dataTypeResolver);
   sinks.setHost(host);

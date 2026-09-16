@@ -6,6 +6,8 @@ import {
   findThemeColorOption,
   themeColorTitle,
   themeConfigForColorOption,
+  themeConfigForColorSeed,
+  resolveThemeColorSeed,
   type ThemeContribution,
 } from "./theme-contributions";
 import type { Contribution } from "@mamep2026/plugin-api";
@@ -97,6 +99,72 @@ describe("theme 贡献消费方（ADR-047：注册可选主题色）", () => {
     expect(themeConfigForColorOption(option)).toEqual({
       token: { colorPrimary: "#4f46e5", colorLink: "#4f46e5" },
     });
+    // 色种子版本（插件未就绪时的过渡着色）与预设版本同形。
+    expect(themeConfigForColorSeed("#4f46e5")).toEqual(
+      themeConfigForColorOption(option),
+    );
+  });
+
+  it("resolveThemeColorSeed：就绪前用缓存种子，就绪后 / 未选预设一律回退默认蓝（2026-09-16）", () => {
+    const cases: Array<{
+      name: string;
+      resolvedSeed: string | null;
+      themePrimary: string | null;
+      pluginsReady: boolean;
+      cachedSeed: string | null;
+      expected: string | null;
+    }> = [
+      {
+        name: "已解析到预设（插件已就绪）→ 用预设色",
+        resolvedSeed: "#4f46e5",
+        themePrimary: "p1:indigo",
+        pluginsReady: true,
+        cachedSeed: "#111111",
+        expected: "#4f46e5",
+      },
+      {
+        name: "选了预设但插件尚未就绪 → 用启动缓存种子（首帧不闪默认蓝）",
+        resolvedSeed: null,
+        themePrimary: "p1:indigo",
+        pluginsReady: false,
+        cachedSeed: "#4f46e5",
+        expected: "#4f46e5",
+      },
+      {
+        name: "选了预设、插件就绪却解析不到（禁用/卸载）→ 回退默认蓝",
+        resolvedSeed: null,
+        themePrimary: "p1:indigo",
+        pluginsReady: true,
+        cachedSeed: "#4f46e5",
+        expected: null,
+      },
+      {
+        name: "未选预设（默认蓝）→ 即使有缓存种子也不着色",
+        resolvedSeed: null,
+        themePrimary: null,
+        pluginsReady: false,
+        cachedSeed: "#4f46e5",
+        expected: null,
+      },
+      {
+        name: "选了预设、插件未就绪但无缓存种子 → 回退默认蓝（不劣化）",
+        resolvedSeed: null,
+        themePrimary: "p1:indigo",
+        pluginsReady: false,
+        cachedSeed: null,
+        expected: null,
+      },
+    ];
+    for (const testCase of cases) {
+      expect(
+        resolveThemeColorSeed(testCase.resolvedSeed, {
+          themePrimary: testCase.themePrimary,
+          pluginsReady: testCase.pluginsReady,
+          cachedSeed: testCase.cachedSeed,
+        }),
+        testCase.name,
+      ).toBe(testCase.expected);
+    }
   });
 
   it("deriveAppliedPrimary：浅色返回种子，暗色返回 antd 算法派生值（只读，不喂回 ConfigProvider）", () => {

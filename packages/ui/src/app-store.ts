@@ -156,6 +156,17 @@ export interface AppStoreState {
   /** 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。 */
   themePrimary: string | null;
   /**
+   * 首帧主色种子（2026-09-16，修复「插件主题色首帧默认蓝」）：所选插件主题色**上次解析出**的
+   * `colorPrimary`（启动缓存恢复写入，插件就绪后由 `MamepApp` 回写）。仅用于「插件贡献尚未就绪」的
+   * 过渡着色 —— 主题色的唯一事实源仍是工作区 `preferences.themePrimary`。
+   */
+  themeColorSeed: string | null;
+  /**
+   * 插件注册表就绪（`host.startPlugins()` 落定，2026-09-16）：就绪后主色以注册表为准
+   * （解析不到 = 插件已禁用/卸载 → 回退默认蓝）；装配编排经 sinks 置位。
+   */
+  pluginsReady: boolean;
+  /**
    * 宿主提供的完整 antd 主题（VSCode 完整令牌映射，ui-theme buildVscodeTheme 产出，ADR-027）；
    * null=回退 buildTheme 两态。运行时派生（随宿主主题事件更新），不持久化。
    */
@@ -211,6 +222,10 @@ export interface AppStoreState {
    * 持久化到 workspace.preferences.themePrimary（随自动保存）。
    */
   setThemePrimary: (primary: string | null) => void;
+  /** 回写「上次解析出的主色种子」（仅插件就绪后调用；用于首帧过渡与启动缓存）。 */
+  setThemeColorSeed: (seed: string | null) => void;
+  /** 置插件注册表就绪（装配编排在 `host.startPlugins()` 落定后调用，fail-open）。 */
+  setPluginsReady: (ready: boolean) => void;
   /** 撤销上一步工作区编辑（TECH_DESIGN §24.4）；无可撤销项时 no-op。 */
   undo: () => void;
   /** 重做被撤销的编辑；无重做项时 no-op。 */
@@ -548,6 +563,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   pendingBulkClose: null,
   theme: "light",
   themePrimary: null,
+  themeColorSeed: null,
+  pluginsReady: false,
   themeConfig: null,
   // 缺省仅内置（ADR-043 E-3）；App.tsx 装配插件 dataType 运行时后 setDataTypeResolver 替换。
   dataTypeResolver: createDataTypeResolver(),
@@ -622,6 +639,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
       },
     })),
+  setThemeColorSeed: (themeColorSeed) => set({ themeColorSeed }),
+  setPluginsReady: (pluginsReady) => set({ pluginsReady }),
   undo: () => {
     const state = get();
     const popped = popUndo({

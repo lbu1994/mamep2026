@@ -32,7 +32,8 @@ import { usePluginContributions } from "./plugin/use-contributions";
 import {
   deriveAppliedPrimary,
   findThemeColorOption,
-  themeConfigForColorOption,
+  resolveThemeColorSeed,
+  themeConfigForColorSeed,
   type ThemeContribution,
 } from "./plugin/theme-contributions";
 import {
@@ -208,6 +209,8 @@ export function MamepApp(): React.ReactNode {
   const settingsOpen = useAppStore((s) => s.settingsModalOpen);
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
+  // 界面语言（持久化在 workspace.preferences.language）：同步到 <html lang>，见下方 effect。
+  const language = useAppStore((s) => s.workspace.preferences.language);
   // 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。
   const themePrimary = useAppStore((s) => s.themePrimary);
   // 宿主完整主题（VSCode ui-theme 装配，ADR-027）；null=回退 buildTheme 两态。
@@ -218,20 +221,26 @@ export function MamepApp(): React.ReactNode {
     host,
     "theme",
   );
+  // 首帧主色过渡（2026-09-16）：插件贡献晚于首帧到达，就绪前用启动缓存里上次解析出的色种子，
+  // 避免「先默认蓝再变插件色」（解析规则见 resolveThemeColorSeed）。
+  const pluginsReady = useAppStore((s) => s.pluginsReady);
+  const themeColorSeed = useAppStore((s) => s.themeColorSeed);
+  const setThemeColorSeed = useAppStore((s) => s.setThemeColorSeed);
   // 装配链（ADR-047）：base = VSCode 完整主题或 buildTheme 两态（ADR-027）→
-  // 用户所选预设（themePrimary 预设 ID；解析不到 = 插件禁用/卸载 → 回退默认蓝）merge 覆盖。
+  // 用户所选预设（themePrimary 预设 ID；解析不到且插件已就绪 = 插件禁用/卸载 → 回退默认蓝）merge 覆盖。
   const baseThemeConfig = themeConfig ?? buildTheme(theme === "dark");
   const selectedThemeColor =
     themePrimary === null
       ? null
       : findThemeColorOption(themeContributions, themePrimary);
+  const colorSeed = resolveThemeColorSeed(
+    selectedThemeColor?.colorPrimary ?? null,
+    { themePrimary, pluginsReady, cachedSeed: themeColorSeed },
+  );
   const effectiveThemeConfig =
-    selectedThemeColor === null
+    colorSeed === null
       ? baseThemeConfig
-      : mergeThemeConfig(
-          baseThemeConfig,
-          themeConfigForColorOption(selectedThemeColor),
-        );
+      : mergeThemeConfig(baseThemeConfig, themeConfigForColorSeed(colorSeed));
   // 文档贡献（ADR-043 E-5）：Help 弹窗渲染插件寄存器手册等。
   // （settings 贡献消费方已随 Settings 抽出到 SettingsDrawer，2026-09-11 代码分割。）
   const documentationContributions =
@@ -403,6 +412,22 @@ export function MamepApp(): React.ReactNode {
       delete document.documentElement.dataset.mamepTheme;
     };
   }, [theme]);
+
+  // 界面语言同步到 <html lang>（无障碍：屏幕阅读器据此选择发音；同时是「首屏偏好」的可观测
+  // 标记——首帧渲染前由组合根 hydrate，见 apps/web/src/boot-preferences.ts，2026-09-16）。
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+
+  // 主色种子回写（2026-09-16）：插件就绪后才把解析结果（或 null）写入 store → 启动缓存持久化，
+  // 供下次刷新首帧直接着色。就绪前**不写**，否则会覆盖缓存种子（过渡着色依赖它）；
+  // 值未变化则不写（避免 set → 重渲染 → effect 重复触发的循环）。
+  useEffect(() => {
+    if (!pluginsReady) return;
+    const resolvedSeed = selectedThemeColor?.colorPrimary ?? null;
+    if (resolvedSeed === themeColorSeed) return;
+    setThemeColorSeed(resolvedSeed);
+  }, [pluginsReady, selectedThemeColor, themeColorSeed, setThemeColorSeed]);
 
   // 主题主色同步到 --mamep-brand-primary / --mamep-focus-ring（ADR-042）：
   // 消除 index.css 的第二份硬编码品牌色副本——CSS 变量经 document root 内联覆盖

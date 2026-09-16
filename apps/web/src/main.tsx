@@ -1,13 +1,23 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { initI18n, useAppStore } from "@mamep2026/ui";
+import { useAppStore } from "@mamep2026/ui";
 import "./index.css";
 // 移动布局（< 1024px，ADR-050 Phase 3）：桌面媒体查询内不生效。
 import "./mobile.css";
 import App from "./App.tsx";
+import {
+  hydrateBootPreferences,
+  installPreferencesCache,
+} from "./boot-preferences";
 import { installVscodeDevBridgeIfNeeded } from "./vscode-dev-bridge";
 
-initI18n();
+// 首屏偏好（2026-09-16，修复刷新后主题 / 语言闪烁）：偏好的事实源（工作区）由宿主仓储**异步**
+// 加载，若等到 `setWorkspace` 才应用，首帧必是「明亮 + 默认语言」。这里用可同步读取的启动缓存
+// 先把主题 / 主题色预设 / 语言落到 store、i18n 与 `<html>` 上——**必须早于首次渲染**，
+// 故内联在此而非 App 内 effect（缓存缺席 / 损坏时退回默认值，见 boot-preferences.ts）。
+hydrateBootPreferences();
+// 偏好变化（主题 / 主题色 / 语言，含工作区加载、导入、重置）→ 写回首屏缓存（best-effort）。
+installPreferencesCache();
 // dev（MAMEP_DEV_URL）：webview iframe 内先建立 window.mamepHost（postMessage 桥），
 // 保证 App 装配时读到 VscodeAppHost。生产/浏览器/Electron 无副作用。
 installVscodeDevBridgeIfNeeded();
