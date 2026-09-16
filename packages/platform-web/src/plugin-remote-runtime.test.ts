@@ -37,10 +37,7 @@ function fakeWorkerFactory(
 }
 
 /** 触发 fake worker 的 onmessage（把消息从「主线程侧」注入 runtime）。 */
-function emit(
-  fake: FakeWorker,
-  event: Record<string, unknown>,
-): void {
+function emit(fake: FakeWorker, event: Record<string, unknown>): void {
   fake.onmessage?.({ data: event } as MessageEvent);
 }
 
@@ -51,7 +48,15 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
       if (msg.type === "init") {
         emit(workerRef.current!, {
           type: "ready",
-          manifest: { id: "exec", name: "Exec", version: "1.0.0", apiVersion: "2.0", platform: { web: true, node: false }, permissions: [], contributes: {} },
+          manifest: {
+            id: "exec",
+            name: "Exec",
+            version: "1.0.0",
+            apiVersion: "2.0",
+            platform: { web: true, node: false },
+            permissions: [],
+            contributes: {},
+          },
         });
       }
     }, workerRef);
@@ -100,9 +105,22 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
     const factory = fakeWorkerFactory((msg) => {
       const fake = workerRef.current!;
       if (msg.type === "init") {
-        emit(fake, { type: "ready", manifest: { id: "x", platform: { web: true, node: false }, permissions: [], contributes: {} } });
+        emit(fake, {
+          type: "ready",
+          manifest: {
+            id: "x",
+            platform: { web: true, node: false },
+            permissions: [],
+            contributes: {},
+          },
+        });
       } else if (msg.type === "activate") {
-        emit(fake, mode === "ok" ? { type: "activated" } : { type: "error", message: "boom" });
+        emit(
+          fake,
+          mode === "ok"
+            ? { type: "activated" }
+            : { type: "error", message: "boom" },
+        );
       }
     }, workerRef);
 
@@ -112,7 +130,10 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
       { workerFactory: factory },
     );
     expect((await runtime.load()).ok).toBe(true);
-    await runtime.activate({ pluginId: "x", communication: { readRegisters: vi.fn(), writeRegisters: vi.fn() } });
+    await runtime.activate({
+      pluginId: "x",
+      communication: { readRegisters: vi.fn(), writeRegisters: vi.fn() },
+    });
 
     mode = "fail";
     const runtime2 = new WebPluginRemoteRuntime(
@@ -122,7 +143,10 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
     );
     expect((await runtime2.load()).ok).toBe(true);
     await expect(
-      runtime2.activate({ pluginId: "x", communication: { readRegisters: vi.fn(), writeRegisters: vi.fn() } }),
+      runtime2.activate({
+        pluginId: "x",
+        communication: { readRegisters: vi.fn(), writeRegisters: vi.fn() },
+      }),
     ).rejects.toThrow("boom");
   });
 
@@ -131,10 +155,23 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
     const factory = fakeWorkerFactory((msg) => {
       const fake = workerRef.current!;
       if (msg.type === "init") {
-        emit(fake, { type: "ready", manifest: { id: "x", platform: { web: true, node: false }, permissions: [], contributes: {} } });
+        emit(fake, {
+          type: "ready",
+          manifest: {
+            id: "x",
+            platform: { web: true, node: false },
+            permissions: [],
+            contributes: {},
+          },
+        });
       } else if (msg.type === "activate") {
         // 插件 activate 期间发起读请求 → 主线程桥执行 → 回发响应。
-        emit(fake, { type: "communication-request", id: 1, op: "read", payload: { pluginId: "x", req: { address: 0x100, quantity: 2 } } });
+        emit(fake, {
+          type: "communication-request",
+          id: 1,
+          op: "read",
+          payload: { pluginId: "x", req: { address: 0x100, quantity: 2 } },
+        });
         emit(fake, { type: "activated" });
       }
     }, workerRef);
@@ -149,12 +186,16 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
       { workerFactory: factory },
     );
     expect((await runtime.load()).ok).toBe(true);
-    await runtime.activate({ pluginId: "x", communication: { readRegisters: vi.fn(), writeRegisters: vi.fn() } });
+    await runtime.activate({
+      pluginId: "x",
+      communication: { readRegisters: vi.fn(), writeRegisters: vi.fn() },
+    });
 
     expect(readRegisters).toHaveBeenCalledWith({ address: 0x100, quantity: 2 });
     // 响应回发 Worker（含 read 结果）。
     const response = workerRef.current!.postMessage.mock.calls.find(
-      (c: unknown[]) => (c[0] as { type?: string }).type === "communication-response",
+      (c: unknown[]) =>
+        (c[0] as { type?: string }).type === "communication-response",
     );
     expect(response?.[0]).toEqual({
       type: "communication-response",
@@ -167,7 +208,15 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
     const workerRef: { current: FakeWorker | null } = { current: null };
     const factory = fakeWorkerFactory((msg) => {
       if (msg.type === "init") {
-        emit(workerRef.current!, { type: "ready", manifest: { id: "x", platform: { web: true, node: false }, permissions: [], contributes: {} } });
+        emit(workerRef.current!, {
+          type: "ready",
+          manifest: {
+            id: "x",
+            platform: { web: true, node: false },
+            permissions: [],
+            contributes: {},
+          },
+        });
       }
     }, workerRef);
 
@@ -190,7 +239,9 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
     const factory = fakeWorkerFactory(() => {
       // 不响应 init：等待 load 挂起，然后触发 onerror。
       queueMicrotask(() => {
-        workerRef.current?.onerror?.({ message: "worker crashed" } as ErrorEvent);
+        workerRef.current?.onerror?.({
+          message: "worker crashed",
+        } as ErrorEvent);
       });
     }, workerRef);
 

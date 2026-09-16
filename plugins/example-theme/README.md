@@ -21,15 +21,15 @@
 
 ## 文件用途一览
 
-| 文件 | 运行时 | 用途 |
-|---|---|---|
-| `manifest.json` | ✅ 唯一需要 | 插件「名片」：安装时被读取、校验、注册。交付所用。 |
-| `src/plugin.ts` | ❌ | 用 TS 写带类型的 manifest（`exampleThemeManifest`）+ `registerExampleThemePlugin`（供单测）；`tsc` 能查错。 |
-| `src/index.ts` | ❌ | 包出口（`exports` 指向），`export * from "./plugin"`。 |
-| `src/plugin.test.ts` | ❌ | 单元测试：模拟注册表验证 manifest 合法、可注册。 |
-| `package.json` | ❌ | 声明为 pnpm workspace 包（`@mamep2026/example-theme`），提供 `typecheck/test/lint` 脚本。 |
-| `tsconfig.json` | ❌ | 让本包可被独立 `tsc` 类型检查。 |
-| `README.md` | ❌ | 使用/开发说明。 |
+| 文件                 | 运行时      | 用途                                                                                                        |
+| -------------------- | ----------- | ----------------------------------------------------------------------------------------------------------- |
+| `manifest.json`      | ✅ 唯一需要 | 插件「名片」：安装时被读取、校验、注册。交付所用。                                                          |
+| `src/plugin.ts`      | ❌          | 用 TS 写带类型的 manifest（`exampleThemeManifest`）+ `registerExampleThemePlugin`（供单测）；`tsc` 能查错。 |
+| `src/index.ts`       | ❌          | 包出口（`exports` 指向），`export * from "./plugin"`。                                                      |
+| `src/plugin.test.ts` | ❌          | 单元测试：模拟注册表验证 manifest 合法、可注册。                                                            |
+| `package.json`       | ❌          | 声明为 pnpm workspace 包（`@mamep2026/example-theme`），提供 `typecheck/test/lint` 脚本。                   |
+| `tsconfig.json`      | ❌          | 让本包可被独立 `tsc` 类型检查。                                                                             |
+| `README.md`          | ❌          | 使用/开发说明。                                                                                             |
 
 ## 纯数据 vs 可执行插件
 
@@ -106,7 +106,8 @@ export const exampleThemeManifest: PluginManifest = {
   name: "Example Theme",
   version: "1.0.0",
   apiVersion: "2.0",
-  description: "An example plugin that demonstrates contributing an optional theme color preset.",
+  description:
+    "An example plugin that demonstrates contributing an optional theme color preset.",
   author: "Mamep2026 Team",
   platform: { web: true, node: false },
   requiredCapabilities: [],
@@ -168,13 +169,13 @@ export function registerExampleThemePlugin(registry: PluginRegistry) {
 ```ts
 theme: {
   colors: Array<{
-    id: string;                       // 色板内唯一（同一插件内不重复）
-    titleKey: string;                 // 显示名 i18n 键（应用回退用）
+    id: string; // 色板内唯一（同一插件内不重复）
+    titleKey: string; // 显示名 i18n 键（应用回退用）
     title?: {
-      "en-US": string;                // 英文显示名（必填）
-      "zh-CN"?: string;               // 简体中文（选填；缺失回退英文）
+      "en-US": string; // 英文显示名（必填）
+      "zh-CN"?: string; // 简体中文（选填；缺失回退英文）
     };
-    colorPrimary: string;  // 单一明亮模式主色（种子）；链接色默认跟随主色，暗色/hover/active 由 antd 算法派生
+    colorPrimary: string; // 单一明亮模式主色（种子）；链接色默认跟随主色，暗色/hover/active 由 antd 算法派生
   }>;
 }
 ```
@@ -204,13 +205,13 @@ base = themeConfig ?? buildTheme(dark)   // themeConfig：VSCode 完整主题（
 
 ### 关键函数
 
-| 函数 | 位置 | 作用 |
-|---|---|---|
-| `buildThemeColorOptions(contributions)` | `packages/ui/src/plugin/theme-contributions.ts` | 汇总各启用插件注册色为选项（含完整预设 ID） |
-| `findThemeColorOption(contributions, id)` | 同上 | 按预设 ID 查找；找不到（禁用/卸载）返回 `null` |
-| `themeConfigForColorOption(option)` | 同上 | 预设 → antd token 覆盖（`colorPrimary` + `colorLink: colorPrimary`） |
-| `deriveAppliedPrimary(seed, dark)` | 同上 | 只读计算当前模式派生后的真实主色（供 CSS 变量） |
-| `themeColorTitle(option, locale, t)` | 同上 | 解析显示名（插件 title → 英文 → titleKey） |
+| 函数                                      | 位置                                            | 作用                                                                 |
+| ----------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------- |
+| `buildThemeColorOptions(contributions)`   | `packages/ui/src/plugin/theme-contributions.ts` | 汇总各启用插件注册色为选项（含完整预设 ID）                          |
+| `findThemeColorOption(contributions, id)` | 同上                                            | 按预设 ID 查找；找不到（禁用/卸载）返回 `null`                       |
+| `themeConfigForColorOption(option)`       | 同上                                            | 预设 → antd token 覆盖（`colorPrimary` + `colorLink: colorPrimary`） |
+| `deriveAppliedPrimary(seed, dark)`        | 同上                                            | 只读计算当前模式派生后的真实主色（供 CSS 变量）                      |
+| `themeColorTitle(option, locale, t)`      | 同上                                            | 解析显示名（插件 title → 英文 → titleKey）                           |
 
 ### 权限
 

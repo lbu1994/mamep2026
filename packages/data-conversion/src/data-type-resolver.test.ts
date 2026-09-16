@@ -31,7 +31,17 @@ describe("DataTypeResolver (ADR-043 E-3)", () => {
       parse: (text) => {
         const value = Number(text);
         return Number.isNaN(value)
-          ? { ok: false as const, error: { code: "BAD", category: "validation" as const, severity: "error" as const, retryable: false, userMessageKey: "errors.internal", technicalMessage: "bad" } }
+          ? {
+              ok: false as const,
+              error: {
+                code: "BAD",
+                category: "validation" as const,
+                severity: "error" as const,
+                retryable: false,
+                userMessageKey: "errors.internal",
+                technicalMessage: "bad",
+              },
+            }
           : { ok: true as const, value };
       },
       format: (raw) => `${raw} rpm`,
@@ -55,6 +65,7 @@ describe("DataTypeResolver (ADR-043 E-3)", () => {
     expect(resolver.register("dup", handlers).ok).toBe(true);
     const second = resolver.register("dup", handlers);
     expect(second.ok).toBe(false);
-    if (!second.ok) expect(second.error.code).toBe("PLUGIN_DATA_TYPE_ALREADY_REGISTERED");
+    if (!second.ok)
+      expect(second.error.code).toBe("PLUGIN_DATA_TYPE_ALREADY_REGISTERED");
   });
 });

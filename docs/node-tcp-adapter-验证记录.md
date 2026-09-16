@@ -23,23 +23,23 @@
 
 ## 新增 / 修改文件
 
-| 文件 | 说明 |
-| --- | --- |
-| `packages/domain/src/tcp-profile.ts`（新增） | `TcpConnectionProfile` + `createTcpConnectionProfile` 校验（host 非空、port 1~65535、unitId 0~255） |
-| `packages/domain/src/tcp-profile.test.ts`（新增） | 校验用例 |
-| `packages/protocol-modbus/src/tcp-frame.ts`（新增） | MBAP 头编解码（事务标识 / 协议标识=0 / 长度 / 单元标识），无 CRC；`encodeTcpReadHoldingRegistersRequest` / `encodeTcpWriteSingleRegisterRequest` / `decodeTcpResponse` |
-| `packages/protocol-modbus/src/tcp-frame.test.ts`（新增） | 编解码 + 错误分支用例 |
-| `packages/platform-node/src/socket-like.ts`（新增） | `SocketLike` / `NetFactoryLike` / `TcpConnectLike` 注入面（与 `SerialPortLike` 同构） |
-| `packages/platform-node/src/real-socket.ts`（新增） | Node `net` 真实封装（本包唯一直接 import node:net 的模块）；error→close 时序用一次性监听 + 常驻监听分离 |
-| `packages/platform-node/src/node-tcp-transport.ts`（新增） | `NodeTcpTransport implements TransportPort`，`kind="node-tcp" as const`，镜像 `NodeSerialTransport` |
-| `packages/platform-node/src/tcp-capabilities.ts`（新增） | `NodeTcpCapabilities` + `describeNodeTcpCapabilities`（§34.3.18 模式） |
-| `packages/platform-node/src/testing/fake-socket.ts`（新增） | `FakeSocket` / `FakeNetFactory`（Layer 1 注入） |
-| `packages/platform-node/src/error-mapping.ts`（扩展） | `mapTcpError` / `mapTcpOpenError`（§34.3.17 模式） |
-| `packages/platform-node/src/node-platform-host.ts`（扩展） | `NodePlatformHost.openTcpTransport` + `netFactory` / `tcpCapabilities` 构造选项 |
-| `packages/platform-api/src/host.ts`（扩展） | `PlatformHost` 新增 `openTcpTransport` |
-| `packages/platform-web/src/web-serial-host.ts`（扩展） | `BrowserPlatformHost.openTcpTransport` 返回 capability 错误（`TCP_UNSUPPORTED`） |
-| `packages/communication/src/transport-port.ts`（扩展） | `kind` 联合新增 `"node-tcp"` |
-| `packages/ui/src/i18n/index.ts`（扩展） | 新增 7 个 TCP 错误码文案（en-US / zh-CN） |
+| 文件                                                        | 说明                                                                                                                                                                   |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/domain/src/tcp-profile.ts`（新增）                | `TcpConnectionProfile` + `createTcpConnectionProfile` 校验（host 非空、port 1~~65535、unitId 0~~255）                                                                  |
+| `packages/domain/src/tcp-profile.test.ts`（新增）           | 校验用例                                                                                                                                                               |
+| `packages/protocol-modbus/src/tcp-frame.ts`（新增）         | MBAP 头编解码（事务标识 / 协议标识=0 / 长度 / 单元标识），无 CRC；`encodeTcpReadHoldingRegistersRequest` / `encodeTcpWriteSingleRegisterRequest` / `decodeTcpResponse` |
+| `packages/protocol-modbus/src/tcp-frame.test.ts`（新增）    | 编解码 + 错误分支用例                                                                                                                                                  |
+| `packages/platform-node/src/socket-like.ts`（新增）         | `SocketLike` / `NetFactoryLike` / `TcpConnectLike` 注入面（与 `SerialPortLike` 同构）                                                                                  |
+| `packages/platform-node/src/real-socket.ts`（新增）         | Node `net` 真实封装（本包唯一直接 import node:net 的模块）；error→close 时序用一次性监听 + 常驻监听分离                                                                |
+| `packages/platform-node/src/node-tcp-transport.ts`（新增）  | `NodeTcpTransport implements TransportPort`，`kind="node-tcp" as const`，镜像 `NodeSerialTransport`                                                                    |
+| `packages/platform-node/src/tcp-capabilities.ts`（新增）    | `NodeTcpCapabilities` + `describeNodeTcpCapabilities`（§34.3.18 模式）                                                                                                 |
+| `packages/platform-node/src/testing/fake-socket.ts`（新增） | `FakeSocket` / `FakeNetFactory`（Layer 1 注入）                                                                                                                        |
+| `packages/platform-node/src/error-mapping.ts`（扩展）       | `mapTcpError` / `mapTcpOpenError`（§34.3.17 模式）                                                                                                                     |
+| `packages/platform-node/src/node-platform-host.ts`（扩展）  | `NodePlatformHost.openTcpTransport` + `netFactory` / `tcpCapabilities` 构造选项                                                                                        |
+| `packages/platform-api/src/host.ts`（扩展）                 | `PlatformHost` 新增 `openTcpTransport`                                                                                                                                 |
+| `packages/platform-web/src/web-serial-host.ts`（扩展）      | `BrowserPlatformHost.openTcpTransport` 返回 capability 错误（`TCP_UNSUPPORTED`）                                                                                       |
+| `packages/communication/src/transport-port.ts`（扩展）      | `kind` 联合新增 `"node-tcp"`                                                                                                                                           |
+| `packages/ui/src/i18n/index.ts`（扩展）                     | 新增 7 个 TCP 错误码文案（en-US / zh-CN）                                                                                                                              |
 
 ## Layer 1 Fake 用例（vitest，默认执行）
 
@@ -52,7 +52,7 @@
   （permission, 不重试）；受控字符串兜底；未知 io 错误 → `TCP_CONNECTION_FAILED` 保留原始信息；
   未知打开错误 → `TCP_OPEN_FAILED`。
 - `tcp-capabilities.test.ts`：host="node"、library="node:net"、ipv4/ipv6、tls=false、
-  unitId 0~255、port 1~65535。
+  unitId 0~~255、port 1~~65535。
 - `node-platform-host.test.ts`（TCP 分支）：`openTcpTransport` 透传 host/port 且 kind="node-tcp"；
   非法 profile 在创建连接前拒绝；默认能力描述。
 
@@ -66,19 +66,19 @@
 
 ## 错误映射表（§34.3.17）
 
-| 底层信号 | 错误码 | category | retryable | userMessageKey |
-| --- | --- | --- | --- | --- |
-| ECONNREFUSED / EHOSTUNREACH / ENETUNREACH / ENOTFOUND / EAI_AGAIN / ETIMEDOUT / ECONNRESET / EPIPE | `TCP_CONNECTION_FAILED` | connection | true | errors.tcpConnectionFailed |
-| EADDRINUSE / "address already in use" | `TCP_PORT_IN_USE` | permission | false | errors.tcpPortInUse |
-| 未知打开错误（兜底） | `TCP_OPEN_FAILED` | transport | true | errors.tcpOpenFailed |
-| 未知 io 错误（兜底） | `TCP_CONNECTION_FAILED` | connection | true | errors.tcpConnectionFailed |
-| 未打开即写入 | `TRANSPORT_NOT_OPEN` | transport | false | errors.transportNotOpen |
-| 浏览器平台 TCP 能力缺失 | `TCP_UNSUPPORTED` | capability | false | errors.tcpUnsupported |
+| 底层信号                                                                                           | 错误码                  | category   | retryable | userMessageKey             |
+| -------------------------------------------------------------------------------------------------- | ----------------------- | ---------- | --------- | -------------------------- |
+| ECONNREFUSED / EHOSTUNREACH / ENETUNREACH / ENOTFOUND / EAI_AGAIN / ETIMEDOUT / ECONNRESET / EPIPE | `TCP_CONNECTION_FAILED` | connection | true      | errors.tcpConnectionFailed |
+| EADDRINUSE / "address already in use"                                                              | `TCP_PORT_IN_USE`       | permission | false     | errors.tcpPortInUse        |
+| 未知打开错误（兜底）                                                                               | `TCP_OPEN_FAILED`       | transport  | true      | errors.tcpOpenFailed       |
+| 未知 io 错误（兜底）                                                                               | `TCP_CONNECTION_FAILED` | connection | true      | errors.tcpConnectionFailed |
+| 未打开即写入                                                                                       | `TRANSPORT_NOT_OPEN`    | transport  | false     | errors.transportNotOpen    |
+| 浏览器平台 TCP 能力缺失                                                                            | `TCP_UNSUPPORTED`       | capability | false     | errors.tcpUnsupported      |
 
 ## 能力描述（§34.3.18，`describeNodeTcpCapabilities`）
 
 host=`"node"`、library=`"node:net"`、libraryVersion=注入（默认 `process.versions.node`）、
-ipv4/ipv6=true、tls=false、unitId 0~255、port 1~65535。只用于 UI 展示与配置校验，不得绕过真实打开结果。
+ipv4/ipv6=true、tls=false、unitId 0~~255、port 1~~65535。只用于 UI 展示与配置校验，不得绕过真实打开结果。
 
 ## 已知限制与后续接线项
 
@@ -88,7 +88,7 @@ ipv4/ipv6=true、tls=false、unitId 0~255、port 1~65535。只用于 UI 展示�
 > 重试换新 tid）；Electron / VSCode 能力矩阵 `modbusTcp:true`，UI TCP 配置入口（Connection
 > Settings TCP 分组）就绪。剩余项如下：
 
-- **unitId 语义**：0~255 为 MBAP 全范围；0 为广播（MVP 不实现广播写入）、248~255 保留，后续会话层再约束。
+- **unitId 语义**：0~~255 为 MBAP 全范围；0 为广播（MVP 不实现广播写入）、248~~255 保留，后续会话层再约束。
 - **真实设备**：IPv6 / 真实设备 / 大报文 / 长时间轮询 / 打包后运行待接线阶段补验。
 - **i18n**：新增错误码文案已同步 en-US/zh-CN；协议层错误码（TCP_*_MISMATCH 等）沿用
   `errors.<lowercase>` 回退模式，无需显式条目。

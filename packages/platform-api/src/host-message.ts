@@ -742,9 +742,9 @@ export interface MamepHostApi {
     payload: PluginRuntimeUnloadPayload,
   ): Promise<Result<null>>;
   pluginRpc(payload: PluginRpcPayload): Promise<Result<unknown>>;
-  pluginContributionQuery(
-    payload?: { pointId?: string },
-  ): Promise<Result<PluginContributionQueryResponse>>;
+  pluginContributionQuery(payload?: {
+    pointId?: string;
+  }): Promise<Result<PluginContributionQueryResponse>>;
 
   // ---- 远程会话 RPC（2026-08-23 两端 TCP 接线：Electron TCP 会话在主进程，Renderer 远程代理）----
 
@@ -805,8 +805,10 @@ export interface VscodeHostDebugState {
  * （window.mamepHost: MamepHostApi | VscodeHostApi，App.tsx 按 platform 分支装配）。
  * selectSerialPort 仍保留契约，但骨架阶段由扩展宿主返回 capability 错误（能力矩阵如实声明）。
  */
-export interface VscodeHostApi
-  extends Omit<MamepHostApi, "platform" | "getDebugState"> {
+export interface VscodeHostApi extends Omit<
+  MamepHostApi,
+  "platform" | "getDebugState"
+> {
   readonly platform: "vscode";
   /** 查询当前颜色主题（get-color-theme request kind）。 */
   getColorTheme(): Promise<Result<ColorThemeKind>>;
@@ -898,12 +900,7 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
     "modbus-basic-tables:discrete-input",
     "modbus-basic-tables:input-register",
   ],
-  tableTypes: [
-    "holding-register",
-    "coil",
-    "discrete-input",
-    "input-register",
-  ],
+  tableTypes: ["holding-register", "coil", "discrete-input", "input-register"],
 });
 
 /**
@@ -937,10 +934,5 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
     "modbus-basic-tables:discrete-input",
     "modbus-basic-tables:input-register",
   ],
-  tableTypes: [
-    "holding-register",
-    "coil",
-    "discrete-input",
-    "input-register",
-  ],
+  tableTypes: ["holding-register", "coil", "discrete-input", "input-register"],
 });

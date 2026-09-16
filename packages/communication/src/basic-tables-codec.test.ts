@@ -13,7 +13,10 @@ function withCrc(payload: number[]): Uint8Array {
   return appendCrc(body);
 }
 
-function readExpect(tableType: "coil" | "discrete-input" | "input-register", addresses: number[]): CodecExpect {
+function readExpect(
+  tableType: "coil" | "discrete-input" | "input-register",
+  addresses: number[],
+): CodecExpect {
   return {
     protocolId: `modbus-basic-tables:${tableType}`,
     kind: "read",
@@ -21,7 +24,9 @@ function readExpect(tableType: "coil" | "discrete-input" | "input-register", add
   };
 }
 
-function writeExpect(entries: { address: number; value: number }[]): CodecExpect {
+function writeExpect(
+  entries: { address: number; value: number }[],
+): CodecExpect {
   return {
     protocolId: "modbus-basic-tables:coil",
     kind: "write",
@@ -31,7 +36,9 @@ function writeExpect(entries: { address: number; value: number }[]): CodecExpect
 
 describe("BasicTablesRtuCodec (ADR-043 E-2)", () => {
   it("暴露基础表协议 ID（每表类型独立 codec）", () => {
-    expect(new BasicTablesRtuCodec("coil").protocolId).toBe("modbus-basic-tables:coil");
+    expect(new BasicTablesRtuCodec("coil").protocolId).toBe(
+      "modbus-basic-tables:coil",
+    );
     expect(new BasicTablesRtuCodec("discrete-input").protocolId).toBe(
       "modbus-basic-tables:discrete-input",
     );
@@ -42,20 +49,29 @@ describe("BasicTablesRtuCodec (ADR-043 E-2)", () => {
 
   it("编码 FC01 读线圈（coil）", () => {
     const codec = new BasicTablesRtuCodec("coil");
-    const frame = codec.encodeRead({ slaveAddress: 1, addresses: [0, 1, 2, 3] });
-    expect(Array.from(frame.slice(0, 6))).toEqual([0x01, 0x01, 0x00, 0x00, 0x00, 0x04]);
+    const frame = codec.encodeRead({
+      slaveAddress: 1,
+      addresses: [0, 1, 2, 3],
+    });
+    expect(Array.from(frame.slice(0, 6))).toEqual([
+      0x01, 0x01, 0x00, 0x00, 0x00, 0x04,
+    ]);
   });
 
   it("编码 FC02 读离散输入", () => {
     const codec = new BasicTablesRtuCodec("discrete-input");
     const frame = codec.encodeRead({ slaveAddress: 1, addresses: [0] });
-    expect(Array.from(frame.slice(0, 6))).toEqual([0x01, 0x02, 0x00, 0x00, 0x00, 0x01]);
+    expect(Array.from(frame.slice(0, 6))).toEqual([
+      0x01, 0x02, 0x00, 0x00, 0x00, 0x01,
+    ]);
   });
 
   it("编码 FC04 读输入寄存器", () => {
     const codec = new BasicTablesRtuCodec("input-register");
     const frame = codec.encodeRead({ slaveAddress: 1, addresses: [0, 1] });
-    expect(Array.from(frame.slice(0, 6))).toEqual([0x01, 0x04, 0x00, 0x00, 0x00, 0x02]);
+    expect(Array.from(frame.slice(0, 6))).toEqual([
+      0x01, 0x04, 0x00, 0x00, 0x00, 0x02,
+    ]);
   });
 
   it("编码 FC0F 写多线圈（coil，位打包）", () => {
@@ -69,7 +85,9 @@ describe("BasicTablesRtuCodec (ADR-043 E-2)", () => {
         { address: 3, value: 1 },
       ],
     });
-    expect(Array.from(frame.slice(0, 7))).toEqual([0x01, 0x0f, 0x00, 0x00, 0x00, 0x04, 0x01]);
+    expect(Array.from(frame.slice(0, 7))).toEqual([
+      0x01, 0x0f, 0x00, 0x00, 0x00, 0x04, 0x01,
+    ]);
     expect(frame[7]).toBe(0x0d);
   });
 
@@ -90,25 +108,40 @@ describe("BasicTablesRtuCodec (ADR-043 E-2)", () => {
   it("解码 FC01 位打包响应（coil）", () => {
     const codec = new BasicTablesRtuCodec("coil");
     const frame = withCrc([0x01, 0x01, 0x01, 0x8d]);
-    const result = codec.decodeResponse(frame, readExpect("coil", [0, 1, 2, 3, 4, 5, 6, 7]));
+    const result = codec.decodeResponse(
+      frame,
+      readExpect("coil", [0, 1, 2, 3, 4, 5, 6, 7]),
+    );
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ kind: "read", values: [1, 0, 1, 1, 0, 0, 0, 1] });
+    if (result.ok)
+      expect(result.value).toEqual({
+        kind: "read",
+        values: [1, 0, 1, 1, 0, 0, 0, 1],
+      });
   });
 
   it("解码 FC02 位打包响应（discrete-input）", () => {
     const codec = new BasicTablesRtuCodec("discrete-input");
     const frame = withCrc([0x01, 0x02, 0x01, 0x0a]);
-    const result = codec.decodeResponse(frame, readExpect("discrete-input", [0, 1, 2, 3]));
+    const result = codec.decodeResponse(
+      frame,
+      readExpect("discrete-input", [0, 1, 2, 3]),
+    );
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ kind: "read", values: [0, 1, 0, 1] });
+    if (result.ok)
+      expect(result.value).toEqual({ kind: "read", values: [0, 1, 0, 1] });
   });
 
   it("解码 FC04 16 位响应（input-register）", () => {
     const codec = new BasicTablesRtuCodec("input-register");
     const frame = withCrc([0x01, 0x04, 0x04, 0x12, 0x34, 0xab, 0xcd]);
-    const result = codec.decodeResponse(frame, readExpect("input-register", [0, 1]));
+    const result = codec.decodeResponse(
+      frame,
+      readExpect("input-register", [0, 1]),
+    );
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ kind: "read", values: [0x1234, 0xabcd] });
+    if (result.ok)
+      expect(result.value).toEqual({ kind: "read", values: [0x1234, 0xabcd] });
   });
 
   it("解码 FC0F 写回执（coil）", () => {
@@ -132,29 +165,42 @@ describe("BasicTablesRtuCodec (ADR-043 E-2)", () => {
     const frame = withCrc([0x01, 0x81, 0x02]);
     const result = codec.decodeResponse(frame, readExpect("coil", [0]));
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ kind: "exception", exceptionCode: 0x02 });
+    if (result.ok)
+      expect(result.value).toEqual({ kind: "exception", exceptionCode: 0x02 });
   });
 
   it("CRC 损坏返回失败（供 parser 重同步）", () => {
     const codec = new BasicTablesRtuCodec("coil");
     const bad = Uint8Array.from([0x01, 0x01, 0x01, 0x8d, 0x00, 0x00]);
-    const result = codec.decodeResponse(bad, readExpect("coil", [0, 1, 2, 3, 4, 5, 6, 7]));
+    const result = codec.decodeResponse(
+      bad,
+      readExpect("coil", [0, 1, 2, 3, 4, 5, 6, 7]),
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("RTU_CRC_MISMATCH");
   });
 
   it("期望长度：读按表类型位打包/16 位，写固定 8", () => {
     const coil = new BasicTablesRtuCodec("coil");
-    expect(coil.expectedLength("read", readExpect("coil", [0, 1, 2, 3, 4, 5, 6, 7, 8]))).toEqual({
+    expect(
+      coil.expectedLength(
+        "read",
+        readExpect("coil", [0, 1, 2, 3, 4, 5, 6, 7, 8]),
+      ),
+    ).toEqual({
       normal: 3 + 2 + 2,
       exception: 5,
     });
     const input = new BasicTablesRtuCodec("input-register");
-    expect(input.expectedLength("read", readExpect("input-register", [0, 1]))).toEqual({
+    expect(
+      input.expectedLength("read", readExpect("input-register", [0, 1])),
+    ).toEqual({
       normal: 9,
       exception: 5,
     });
-    expect(coil.expectedLength("write", writeExpect([{ address: 0, value: 1 }]))).toEqual({
+    expect(
+      coil.expectedLength("write", writeExpect([{ address: 0, value: 1 }])),
+    ).toEqual({
       normal: 8,
       exception: 5,
     });

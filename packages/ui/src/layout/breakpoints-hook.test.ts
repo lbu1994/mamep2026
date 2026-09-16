@@ -37,7 +37,9 @@ describe("useIsMobileLayout", () => {
     unmount();
 
     // 变化后不应抛错（监听器已清理）。
-    expect(() => setMatchMediaMatches(MOBILE_LAYOUT_MEDIA_QUERY, false)).not.toThrow();
+    expect(() =>
+      setMatchMediaMatches(MOBILE_LAYOUT_MEDIA_QUERY, false),
+    ).not.toThrow();
   });
 
   it("无 matchMedia 的环境退回桌面布局（SSR 安全）", () => {
@@ -45,7 +47,9 @@ describe("useIsMobileLayout", () => {
     // @ts-expect-error 故意移除以覆盖降级分支
     delete window.matchMedia;
     try {
-      const warn = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const warn = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
       const { result } = renderHook(() => useIsMobileLayout());
       expect(result.current).toBe(false);
       warn.mockRestore();

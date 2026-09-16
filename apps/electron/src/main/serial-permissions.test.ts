@@ -20,9 +20,7 @@ type PermissionCheckHandler = NonNullable<
 type DevicePermissionHandler = NonNullable<
   Parameters<SerialPermissionSession["setDevicePermissionHandler"]>[0]
 >;
-type SelectSerialPortListener = Parameters<
-  SerialPermissionSession["on"]
->[1];
+type SelectSerialPortListener = Parameters<SerialPermissionSession["on"]>[1];
 
 function createFakeSession() {
   let permissionCheck: PermissionCheckHandler | null = null;
@@ -63,7 +61,9 @@ function createFakeSession() {
      * 触发 select-serial-port 事件，返回是否 preventDefault、是否立即 callback 选端口、
      * 事件携带的 sender（供 resolvePendingSelection 归属校验）与 callback 记录。
      */
-    select(portList: { portId: string; portName?: string; displayName?: string }[]): {
+    select(
+      portList: { portId: string; portName?: string; displayName?: string }[],
+    ): {
       prevented: boolean;
       autoSelected: boolean;
       sender: unknown;
@@ -96,9 +96,9 @@ function createFakeSession() {
 
 describe("deriveAllowedOrigins", () => {
   it("开发模式返回 dev server origin", () => {
-    expect(
-      deriveAllowedOrigins(false, "http://localhost:5173"),
-    ).toEqual(["http://localhost:5173"]);
+    expect(deriveAllowedOrigins(false, "http://localhost:5173")).toEqual([
+      "http://localhost:5173",
+    ]);
   });
 
   it("生产（打包）返回 file:// 两个变体", () => {
@@ -132,7 +132,9 @@ describe("normalizeOrigin", () => {
   it("file:// 保持原样（allowlist 已含两个变体；URL API 对 file origin 归一为 null）", () => {
     expect(normalizeOrigin("file:///")).toBe("file:///");
     expect(normalizeOrigin("file://")).toBe("file://");
-    expect(normalizeOrigin("https://evil.example")).toBe("https://evil.example");
+    expect(normalizeOrigin("https://evil.example")).toBe(
+      "https://evil.example",
+    );
     expect(normalizeOrigin(undefined)).toBeUndefined();
   });
 });

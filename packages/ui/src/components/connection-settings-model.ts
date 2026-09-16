@@ -5,11 +5,28 @@ import {
 } from "@mamep2026/domain";
 import { z } from "zod";
 
-/** RTU 超时固定档位（步进 5ms，5..100 共 20 项；2026-09-06 与旧软件一致，无自定义输入）。 */
-export const RTU_TIMEOUT_OPTIONS = Array.from(
-  { length: 20 },
-  (_, i) => 5 * (i + 1),
-);
+/** RTU 超时固定档位（2026-09-06 与旧软件一致，无自定义输入；2026-09-16 增补长超时档位）。
+ *
+ * 档位 = 5..100（步进 5，共 20 项）+ 150/200/…/1000 阶梯（13 项），共 33 项。
+ * 100 与 150 之间有意留空隙（不提供 105–145），长线/慢设备按阶梯取值；
+ * Select 仅可选列表内档位，schema 上限 1000 与列表上限保持一致。
+ */
+export const RTU_TIMEOUT_OPTIONS = [
+  ...Array.from({ length: 20 }, (_, i) => 5 * (i + 1)),
+  150,
+  200,
+  250,
+  300,
+  350,
+  400,
+  450,
+  500,
+  600,
+  700,
+  800,
+  900,
+  1000,
+];
 
 /** 连接设置表单（RTU 与 TCP 字段共存；UI 按 protocol 互斥展示）。
  * host 为默认空串、经 superRefine 仅 TCP 协议下要求非空——避免 RTU 提交被空的
@@ -23,7 +40,8 @@ export const settingsSchema = z
     stopBits: z.union([z.literal(1), z.literal(2)]),
     parity: z.enum(["none", "even", "odd"]),
     flowControl: z.enum(["off", "rts-cts"]),
-    rtuTimeout: z.number().int().min(5).max(100),
+    // RTU 超时：数值区间 5–1000ms（2026-09-16 由 5–100 放宽，与 RTU_TIMEOUT_OPTIONS 上限对齐）。
+    rtuTimeout: z.number().int().min(5).max(1000),
     retry: z.number().int().min(0).max(10),
     // ---- TCP（保持必填类型；非空校验仅 TCP 协议下经 superRefine 生效；超时字段独立）----
     host: z.string(),
@@ -44,7 +62,8 @@ export const settingsSchema = z
 
 export type ConnectionSettingsValues = z.infer<typeof settingsSchema>;
 
-/** RTU 随工作区持久化的连接设置子集（2026-08-17 确认，2026-08-23 加 protocol 判别）。 */
+/** RTU 随工作区持久化的连接设置子集（2026-08-17 确认，2026-08-23 加 protocol 判别；
+ * 2026-09-16 超时上限随 RTU_TIMEOUT_OPTIONS 由 100 放宽至 1000）。 */
 export const rtuPersistedSettingsSchema = z.object({
   protocol: z.literal("rtu"),
   baudRate: z.number().int().positive(),
@@ -52,7 +71,7 @@ export const rtuPersistedSettingsSchema = z.object({
   stopBits: z.union([z.literal(1), z.literal(2)]),
   parity: z.enum(["none", "even", "odd"]),
   flowControl: z.enum(["off", "rts-cts"]),
-  requestTimeoutMs: z.number().int().min(5).max(100),
+  requestTimeoutMs: z.number().int().min(5).max(1000),
   retryCount: z.number().int().min(0).max(10),
 });
 

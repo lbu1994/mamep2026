@@ -6,13 +6,13 @@
 
 ## 变更摘要（相对 ADR-047）
 
-| 文件 | 变更 |
-|---|---|
-| `packages/ui-theme/src/base.ts` | 删除品牌色（colorPrimary/colorLink/colorLinkHover/colorLinkActive）硬编码字面量；`buildTheme` **不覆盖**品牌 token（antd 默认种子直接生效）；新增 `getAntdDefaultBrandColors(dark)`（antd 公开 API `theme.getDesignToken({ algorithm })` 取值），供测试/校验/文档消费 |
-| `apps/web/src/index.css` | 删除 `:root`/`[data-mamep-theme="dark"]` 中 `--mamep-brand-primary`/`--mamep-status-info`/`--mamep-focus-ring` 字面量；改为 `.ant-app { --mamep-brand-primary: var(--ant-color-primary); --mamep-focus-ring: var(--ant-color-primary); --mamep-status-info: var(--ant-color-info); }` |
-| `scripts/check-contrast.mjs` | 品牌/链接/选中态色改由 antd 运行时令牌计算 |
-| `MamepApp.tsx` | 零改动（注入 effect 保留；默认路径 token 无主色 → 跳过，插件色路径照常注入） |
-| 测试 | ui-theme 新增 `base.test.ts`（5 用例）；`theme-color-presets.spec.ts` / `plugin-contributions.spec.ts` 去默认色字面量、改为与页面 `--ant-*` 运行时值对比，并新增「浅/深同步」用例 |
+| 文件                            | 变更                                                                                                                                                                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/ui-theme/src/base.ts` | 删除品牌色（colorPrimary/colorLink/colorLinkHover/colorLinkActive）硬编码字面量；`buildTheme` **不覆盖**品牌 token（antd 默认种子直接生效）；新增 `getAntdDefaultBrandColors(dark)`（antd 公开 API `theme.getDesignToken({ algorithm })` 取值），供测试/校验/文档消费                 |
+| `apps/web/src/index.css`        | 删除 `:root`/`[data-mamep-theme="dark"]` 中 `--mamep-brand-primary`/`--mamep-status-info`/`--mamep-focus-ring` 字面量；改为 `.ant-app { --mamep-brand-primary: var(--ant-color-primary); --mamep-focus-ring: var(--ant-color-primary); --mamep-status-info: var(--ant-color-info); }` |
+| `scripts/check-contrast.mjs`    | 品牌/链接/选中态色改由 antd 运行时令牌计算                                                                                                                                                                                                                                            |
+| `MamepApp.tsx`                  | 零改动（注入 effect 保留；默认路径 token 无主色 → 跳过，插件色路径照常注入）                                                                                                                                                                                                          |
+| 测试                            | ui-theme 新增 `base.test.ts`（5 用例）；`theme-color-presets.spec.ts` / `plugin-contributions.spec.ts` 去默认色字面量、改为与页面 `--ant-*` 运行时值对比，并新增「浅/深同步」用例                                                                                                     |
 
 ## 关键设计事实（antd 6.6.0 实测）
 
@@ -26,10 +26,10 @@
 
 ### 1. 令牌与 CSS 变量同步（浏览器内实测取值）
 
-| 主题 | `.ant-app` 计算值 | 结果 |
-|---|---|---|
+| 主题  | `.ant-app` 计算值                                                                                                                   | 结果    |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | Light | `--ant-color-primary = #1677ff`；`--mamep-brand-primary = #1677ff`；`--mamep-focus-ring = #1677ff`；`--mamep-status-info = #1677ff` | ✅ 一致 |
-| Dark | `--ant-color-primary = #1668dc`；`--mamep-brand-primary = #1668dc`；`--mamep-focus-ring = #1668dc`；`--mamep-status-info = #1668dc` | ✅ 一致 |
+| Dark  | `--ant-color-primary = #1668dc`；`--mamep-brand-primary = #1668dc`；`--mamep-focus-ring = #1668dc`；`--mamep-status-info = #1668dc` | ✅ 一致 |
 
 - 消费点（`--mamep-brand-primary` 用于 `.sheet-item--active::before`、WP 指示点、trace 状态点、
   滑块手柄、页签等）均在 `.ant-app` 子树内，解析正常；
@@ -46,13 +46,13 @@
 
 ## 自动化验证
 
-| 项 | 命令 | 结果 |
-|---|---|---|
-| ui-theme 单测 | `pnpm --filter @mamep2026/ui-theme test` | 5 文件 32 用例全绿（含新增 base 5 用例：与 getDesignToken 一致×2、模拟 antd 改色跟随、buildTheme 不覆盖品牌 token、算法跟随） |
-| 受影响包 typecheck | `pnpm --filter @mamep2026/ui-theme --filter @mamep2026/ui --filter @mamep2026/web typecheck` | 通过 |
-| 受影响包 lint | 同上 drei 包 | 通过 |
-| e2e-web typecheck/lint | `@mamep2026/e2e-web` | 通过 |
-| 主题相关 e2e | `@mamep2026/e2e-web exec playwright test tests/theme-color-presets.spec.ts tests/plugin-contributions.spec.ts` | **7/7 全绿**（含新增「默认蓝跟随 antd 令牌：--mamep-brand-primary 与 --ant-color-primary 浅/深同步（ADR-048，无字面量）」；全程无 console 错误） |
+| 项                     | 命令                                                                                                           | 结果                                                                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ui-theme 单测          | `pnpm --filter @mamep2026/ui-theme test`                                                                       | 5 文件 32 用例全绿（含新增 base 5 用例：与 getDesignToken 一致×2、模拟 antd 改色跟随、buildTheme 不覆盖品牌 token、算法跟随）                    |
+| 受影响包 typecheck     | `pnpm --filter @mamep2026/ui-theme --filter @mamep2026/ui --filter @mamep2026/web typecheck`                   | 通过                                                                                                                                             |
+| 受影响包 lint          | 同上 drei 包                                                                                                   | 通过                                                                                                                                             |
+| e2e-web typecheck/lint | `@mamep2026/e2e-web`                                                                                           | 通过                                                                                                                                             |
+| 主题相关 e2e           | `@mamep2026/e2e-web exec playwright test tests/theme-color-presets.spec.ts tests/plugin-contributions.spec.ts` | **7/7 全绿**（含新增「默认蓝跟随 antd 令牌：--mamep-brand-primary 与 --ant-color-primary 浅/深同步（ADR-048，无字面量）」；全程无 console 错误） |
 
 ## 结论
 

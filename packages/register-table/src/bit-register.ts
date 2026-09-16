@@ -227,9 +227,7 @@ function ensureBitComments(
   for (let i = 0; i < registerCount; i += 1) {
     const group = base[i];
     next.push(
-      group === undefined || group === null
-        ? null
-        : normalizeBitSlots(group),
+      group === undefined || group === null ? null : normalizeBitSlots(group),
     );
   }
   return next;
@@ -270,9 +268,7 @@ function ensureBitNames(
   for (let i = 0; i < registerCount; i += 1) {
     const group = base[i];
     next.push(
-      group === undefined || group === null
-        ? null
-        : normalizeBitSlots(group),
+      group === undefined || group === null ? null : normalizeBitSlots(group),
     );
   }
   return next;
@@ -294,9 +290,7 @@ export function setBitComment(
   const groups = ensureBitComments(row.bitComments, row.registerCount);
   const slots = groups[registerIndex] ?? normalizeBitSlots([]);
   slots[bit] = comment;
-  groups[registerIndex] = slots.every((slot) => slot === "")
-    ? null
-    : slots;
+  groups[registerIndex] = slots.every((slot) => slot === "") ? null : slots;
   const allEmpty = groups.every((group) => group === null);
   return ok({
     ...row,

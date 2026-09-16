@@ -50,7 +50,13 @@ function makeHarness() {
     entrySource: "export const manifest = {};",
     executionMode: "same-process",
   });
-  return { registry, contributionRegistry, codecRegistry, dataTypeResolver, result };
+  return {
+    registry,
+    contributionRegistry,
+    codecRegistry,
+    dataTypeResolver,
+    result,
+  };
 }
 
 describe("custom-function-code 插件（ADR-054：用户手动安装的单文件插件）", () => {
@@ -66,7 +72,9 @@ describe("custom-function-code 插件（ADR-054：用户手动安装的单文件
     expect(registry.getExecutionMode(CUSTOM_FUNCTION_PLUGIN_ID)).toBe(
       "same-process",
     );
-    expect(registry.getLifecycleState(CUSTOM_FUNCTION_PLUGIN_ID)).toBe("active");
+    expect(registry.getLifecycleState(CUSTOM_FUNCTION_PLUGIN_ID)).toBe(
+      "active",
+    );
 
     // activate 已执行：codec 可解析。
     expect(codecRegistry.get(CUSTOM_FUNCTION_PROTOCOL_ID)).toBeDefined();
@@ -97,9 +105,8 @@ describe("custom-function-code 插件（ADR-054：用户手动安装的单文件
     );
     expect(tableTypes[0]?.payload.id).toBe("holding-register");
 
-    const actions = contributionRegistry.getContributions<{ id: string }[]>(
-      "toolbarAction",
-    );
+    const actions =
+      contributionRegistry.getContributions<{ id: string }[]>("toolbarAction");
     expect(actions).toHaveLength(1);
     expect(actions[0]?.payload[0]?.id).toBe("custom-function.zero");
 

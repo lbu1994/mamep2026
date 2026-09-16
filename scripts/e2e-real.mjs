@@ -39,7 +39,10 @@ function masterPort() {
 /** RTU 从站口（scripts/modbus-slave/modbus-slave.config.json 的 port，如 COM5）。 */
 function slavePort() {
   const raw = JSON.parse(
-    readFileSync(join(ROOT, "scripts", "modbus-slave", "modbus-slave.config.json"), "utf8"),
+    readFileSync(
+      join(ROOT, "scripts", "modbus-slave", "modbus-slave.config.json"),
+      "utf8",
+    ),
   );
   return raw.port;
 }
@@ -61,7 +64,9 @@ async function checkRtuPorts() {
   );
   const missing = [];
   if (!names.has(String(masterPort()).toUpperCase())) {
-    missing.push(`${masterPort()}（主站，来自 config/connections.json rtu-com4-master）`);
+    missing.push(
+      `${masterPort()}（主站，来自 config/connections.json rtu-com4-master）`,
+    );
   }
   if (!names.has(String(slavePort()).toUpperCase())) {
     missing.push(`${slavePort()}（从站，来自 modbus-slave.config.json）`);
@@ -171,7 +176,9 @@ function spawnSlave(name, args, readyRegex, timeoutMs = 15000) {
         resolve(child);
       }
     });
-    child.stderr.on("data", (d) => process.stderr.write(`[${name}] ${String(d)}`));
+    child.stderr.on("data", (d) =>
+      process.stderr.write(`[${name}] ${String(d)}`),
+    );
     child.on("exit", (code) => {
       if (!settled) {
         settled = true;
@@ -219,16 +226,34 @@ function stopSlave(child, name) {
 // 目标执行
 // ---------------------------------------------------------------------------
 const TARGET_COMMAND = {
-  web: { command: "pnpm", args: ["--filter", "@mamep2026/e2e-web", "test:real"], needsRtu: true, needsTcp: false },
-  electron: { command: "pnpm", args: ["--filter", "@mamep2026/e2e-electron", "test:real"], needsRtu: true, needsTcp: true },
-  vscode: { command: "pnpm", args: ["--filter", "@mamep2026/e2e-vscode", "test:real"], needsRtu: true, needsTcp: true, preBuild: ["pnpm", ["build:vscode"]] },
+  web: {
+    command: "pnpm",
+    args: ["--filter", "@mamep2026/e2e-web", "test:real"],
+    needsRtu: true,
+    needsTcp: false,
+  },
+  electron: {
+    command: "pnpm",
+    args: ["--filter", "@mamep2026/e2e-electron", "test:real"],
+    needsRtu: true,
+    needsTcp: true,
+  },
+  vscode: {
+    command: "pnpm",
+    args: ["--filter", "@mamep2026/e2e-vscode", "test:real"],
+    needsRtu: true,
+    needsTcp: true,
+    preBuild: ["pnpm", ["build:vscode"]],
+  },
 };
 
 /** 执行单个目标；返回退出码（环境缺失 → SKIP 提示并返回 0）。 */
 async function runTarget(target) {
   const spec = TARGET_COMMAND[target];
   if (spec === undefined) {
-    console.error(`[e2e-real] 未知目标 "${target}"（应为 web/electron/vscode/all）`);
+    console.error(
+      `[e2e-real] 未知目标 "${target}"（应为 web/electron/vscode/all）`,
+    );
     return 1;
   }
   console.log(`\n===== [e2e-real] 目标: ${target} =====`);
@@ -247,7 +272,9 @@ async function runTarget(target) {
     const tcp = tcpTarget();
     const check = await checkTcpTarget(tcp);
     if (!check.ready) {
-      skipReasons.push(`TCP 真实端口不可用：${check.note}（${tcp.host}:${tcp.port}）。请释放端口或启动 Modbus TCP 从站。`);
+      skipReasons.push(
+        `TCP 真实端口不可用：${check.note}（${tcp.host}:${tcp.port}）。请释放端口或启动 Modbus TCP 从站。`,
+      );
     }
   }
   if (skipReasons.length > 0) {
@@ -287,7 +314,9 @@ async function runTarget(target) {
       const [cmd, args] = spec.preBuild;
       const buildCode = await run(cmd, args, { MAMEP_REAL: "1" });
       if (buildCode !== 0) {
-        console.error(`[e2e-real] 前置构建失败（${cmd} ${args.join(" ")}，code ${buildCode}）`);
+        console.error(
+          `[e2e-real] 前置构建失败（${cmd} ${args.join(" ")}，code ${buildCode}）`,
+        );
         return buildCode;
       }
     }

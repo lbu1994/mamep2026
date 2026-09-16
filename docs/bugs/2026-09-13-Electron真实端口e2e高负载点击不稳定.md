@@ -11,10 +11,10 @@
 
 失败用例与报错（均为 `locator.click` 超时 30s）：
 
-| 用例 | 目标控件 | 报错 |
-| --- | --- | --- |
-| 取消/无可用端口：下拉框空态… | `Port` 表单项内的 `.ant-select` | `element is not stable` → 重试 → `element was detached from the DOM` |
-| 串口下拉选择 + FC03 读 + FC10 写闭环 | `Port` 表单项内的 `button[title="Refresh"]` | 同上 |
+| 用例                                 | 目标控件                                    | 报错                                                                 |
+| ------------------------------------ | ------------------------------------------- | -------------------------------------------------------------------- |
+| 取消/无可用端口：下拉框空态…         | `Port` 表单项内的 `.ant-select`             | `element is not stable` → 重试 → `element was detached from the DOM` |
+| 串口下拉选择 + FC03 读 + FC10 写闭环 | `Port` 表单项内的 `button[title="Refresh"]` | 同上                                                                 |
 
 ## 根因
 
@@ -28,6 +28,7 @@ Playwright 的 `click()` 含**行动性检查**：要求元素在**连续两帧*
 保留 Playwright 的完整鼠标事件序列（antd Select 依赖 **mousedown** 才展开下拉），仅跳过包括稳定性在内的行动性检查。
 
 > 中途试过、**不可行**的方案（已回退，记录以免再踩）：
+>
 > - `element.click()`（DOM click / `evaluate`）：**不派发 mousedown → antd Select 打不开**，反而让 5 个用例失败；
 > - 纯 `click()`：即本次缺陷本身。
 

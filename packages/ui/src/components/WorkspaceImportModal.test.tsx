@@ -60,9 +60,7 @@ describe("WorkspaceImportModal", () => {
     expect(screen.getByText("2")).toBeTruthy();
     expect(screen.getByText("4")).toBeTruthy();
     // 覆盖风险提示。
-    expect(
-      screen.getByText(/replace the current workspace/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/replace the current workspace/i)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Import" }));
     expect(useAppStore.getState().workspaceImportDraft).toBeNull();
@@ -88,6 +86,8 @@ describe("WorkspaceImportModal", () => {
     renderModal();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(useAppStore.getState().workspaceImportDraft).toBeNull();
-    expect(useAppStore.getState().workspace.name).not.toBe("Imported Workspace");
+    expect(useAppStore.getState().workspace.name).not.toBe(
+      "Imported Workspace",
+    );
   });
 });

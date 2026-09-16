@@ -125,13 +125,21 @@ export class AndroidAppHost implements AppHost {
   /** 已选串口标签（enumerated 路径由本 Host 记录，供通信属性与 bottom panel 展示）。 */
   private portLabel: string | null = null;
 
-  private readonly connectionListeners = new Set<(state: ConnectionState) => void>();
-  private readonly commLogListeners = new Set<(event: CommunicationLogEvent) => void>();
-  private readonly messageListeners = new Set<(message: ApplicationMessage) => void>();
+  private readonly connectionListeners = new Set<
+    (state: ConnectionState) => void
+  >();
+  private readonly commLogListeners = new Set<
+    (event: CommunicationLogEvent) => void
+  >();
+  private readonly messageListeners = new Set<
+    (message: ApplicationMessage) => void
+  >();
   private readonly pollResultListeners = new Set<
     (key: string, address: number, result: Result<number | number[]>) => void
   >();
-  private readonly traceListeners = new Set<(sample: TraceSampleEvent) => void>();
+  private readonly traceListeners = new Set<
+    (sample: TraceSampleEvent) => void
+  >();
 
   constructor(options: AndroidAppHostOptions) {
     const platformHost =
@@ -151,8 +159,12 @@ export class AndroidAppHost implements AppHost {
       platform: this.platformHost,
       repository: options.repository,
       mockTransport: false,
-      ...(options.pluginStore !== undefined ? { pluginStore: options.pluginStore } : {}),
-      ...(options.codecRegistry !== undefined ? { codecRegistry: options.codecRegistry } : {}),
+      ...(options.pluginStore !== undefined
+        ? { pluginStore: options.pluginStore }
+        : {}),
+      ...(options.codecRegistry !== undefined
+        ? { codecRegistry: options.codecRegistry }
+        : {}),
       ...(options.syncRegistries !== undefined
         ? { syncRegistries: options.syncRegistries }
         : {}),
@@ -402,14 +414,19 @@ export class AndroidAppHost implements AppHost {
         stopBits: 1,
         parity: "none",
         flowControl: "off",
-        timeoutMs: profile?.requestTimeoutMs ?? defaultConfig.tcp.requestTimeoutMs,
+        timeoutMs:
+          profile?.requestTimeoutMs ?? defaultConfig.tcp.requestTimeoutMs,
         retryCount: profile?.retryCount ?? 1,
         connectionState: this.tcpConnectionState,
       };
     }
     const props = this.inner.getCommProperties();
     // 枚举路径的已选端口标签由本 Host 记录（inner 仅在浏览器路径自行记录）；与 ElectronAppHost 同因。
-    return { ...props, protocol: "rtu", portLabel: this.portLabel ?? props.portLabel };
+    return {
+      ...props,
+      protocol: "rtu",
+      portLabel: this.portLabel ?? props.portLabel,
+    };
   }
 
   setSlaveAddress(slave: number): void {
@@ -510,7 +527,11 @@ export class AndroidAppHost implements AppHost {
   }
 
   subscribePollResult(
-    listener: (key: string, address: number, result: Result<number | number[]>) => void,
+    listener: (
+      key: string,
+      address: number,
+      result: Result<number | number[]>,
+    ) => void,
   ): () => void {
     this.pollResultListeners.add(listener);
     return () => {
@@ -559,7 +580,9 @@ export class AndroidAppHost implements AppHost {
     };
   }
 
-  subscribeMessage(listener: (message: ApplicationMessage) => void): () => void {
+  subscribeMessage(
+    listener: (message: ApplicationMessage) => void,
+  ): () => void {
     this.messageListeners.add(listener);
     return () => {
       this.messageListeners.delete(listener);

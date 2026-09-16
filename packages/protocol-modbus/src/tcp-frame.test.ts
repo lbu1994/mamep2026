@@ -33,13 +33,18 @@ describe("encodeTcpReadHoldingRegistersRequest", () => {
     });
     // 6(MBAP 前 6 字节) + length(6) = 12。
     expect(Array.from(frame)).toEqual([
-      0x12, 0x34, // transaction id
-      0x00, 0x00, // protocol id
-      0x00, 0x06, // length = unitId(1) + pdu(5)
+      0x12,
+      0x34, // transaction id
+      0x00,
+      0x00, // protocol id
+      0x00,
+      0x06, // length = unitId(1) + pdu(5)
       0x01, // unit id
       0x03, // function read
-      0x00, 0x00, // start address
-      0x00, 0x01, // quantity
+      0x00,
+      0x00, // start address
+      0x00,
+      0x01, // quantity
     ]);
   });
 });
@@ -53,15 +58,21 @@ describe("encodeTcpWriteSingleRegisterRequest", () => {
       rawValue: 0x1234,
     });
     expect(Array.from(frame)).toEqual([
-      0x00, 0x01, // transaction id
-      0x00, 0x00, // protocol id
-      0x00, 0x09, // length = unitId(1) + pdu(8)
+      0x00,
+      0x01, // transaction id
+      0x00,
+      0x00, // protocol id
+      0x00,
+      0x09, // length = unitId(1) + pdu(8)
       0x02, // unit id
       0x10, // function write multiple
-      0x00, 0x01, // address
-      0x00, 0x01, // quantity = 1
+      0x00,
+      0x01, // address
+      0x00,
+      0x01, // quantity = 1
       0x02, // byte count
-      0x12, 0x34, // value
+      0x12,
+      0x34, // value
     ]);
   });
 });
@@ -75,16 +86,23 @@ describe("encodeTcpWriteMultipleRegistersRequest (ADR-030)", () => {
       values: [0x1234, 0xabcd],
     });
     expect(Array.from(frame)).toEqual([
-      0x00, 0x01, // transaction id
-      0x00, 0x00, // protocol id
-      0x00, 0x0b, // length = unitId(1) + pdu(10)
+      0x00,
+      0x01, // transaction id
+      0x00,
+      0x00, // protocol id
+      0x00,
+      0x0b, // length = unitId(1) + pdu(10)
       0x02, // unit id
       0x10, // function write multiple
-      0x00, 0x01, // start address
-      0x00, 0x02, // quantity = 2
+      0x00,
+      0x01, // start address
+      0x00,
+      0x02, // quantity = 2
       0x04, // byte count
-      0x12, 0x34, // value 1
-      0xab, 0xcd, // value 2
+      0x12,
+      0x34, // value 1
+      0xab,
+      0xcd, // value 2
     ]);
   });
 });
@@ -242,7 +260,17 @@ describe("decodeTcpResponse", () => {
       const requestFrame = encodeTcpReadHoldingRegistersRequest(request);
       expect(requestFrame[6]).toBe(unitId);
       const response = Uint8Array.from([
-        0x01, 0x02, 0x00, 0x00, 0x00, 0x05, unitId, 0x03, 0x02, 0x12, 0x34,
+        0x01,
+        0x02,
+        0x00,
+        0x00,
+        0x00,
+        0x05,
+        unitId,
+        0x03,
+        0x02,
+        0x12,
+        0x34,
       ]);
       const result = decodeTcpResponse(response, {
         ...READ_EXPECT,

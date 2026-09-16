@@ -89,11 +89,7 @@ function createFakeTcpServer(): Promise<{
           );
         } else {
           socket.write(
-            buildTcpFrame(
-              tid,
-              unitId,
-              Uint8Array.from([fc | 0x80, 0x01]),
-            ),
+            buildTcpFrame(tid, unitId, Uint8Array.from([fc | 0x80, 0x01])),
           );
         }
       }

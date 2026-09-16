@@ -72,17 +72,15 @@ function readResponse(tid: number, unitId: number, value: number): Uint8Array {
   );
 }
 
-function writeResponse(tid: number, unitId: number, address: number): Uint8Array {
+function writeResponse(
+  tid: number,
+  unitId: number,
+  address: number,
+): Uint8Array {
   return tcpFrame(
     tid,
     unitId,
-    Uint8Array.from([
-      0x10,
-      (address >> 8) & 0xff,
-      address & 0xff,
-      0x00,
-      0x01,
-    ]),
+    Uint8Array.from([0x10, (address >> 8) & 0xff, address & 0xff, 0x00, 0x01]),
   );
 }
 
@@ -92,9 +90,8 @@ function createHarness(unitId = 0): Harness {
   const events: Record<keyof SessionHostEvents, MockedEvent> = {
     onLog: vi.fn<(event: CommunicationLogEvent) => void>(),
     onStateChange: vi.fn<(state: ConnectionState) => void>(),
-    onPollResult: vi.fn<
-      (key: string, address: number, result: Result<number>) => void
-    >(),
+    onPollResult:
+      vi.fn<(key: string, address: number, result: Result<number>) => void>(),
     onTraceSample: vi.fn<(sample: TraceSample) => void>(),
     onMessage: vi.fn<(message: ApplicationMessage) => void>(),
   };
@@ -235,22 +232,19 @@ describe("TcpSessionHost 自动重连（ReconnectCoordinator 集成）", () => {
     const events: Record<keyof SessionHostEvents, MockedEvent> = {
       onLog: vi.fn<(event: CommunicationLogEvent) => void>(),
       onStateChange: vi.fn<(state: ConnectionState) => void>(),
-      onPollResult: vi.fn<
-        (key: string, address: number, result: Result<number>) => void
-      >(),
+      onPollResult:
+        vi.fn<(key: string, address: number, result: Result<number>) => void>(),
       onTraceSample: vi.fn<(sample: TraceSample) => void>(),
       onMessage: vi.fn<(message: ApplicationMessage) => void>(),
     };
     const profile = createDefaultTcpProfile("PLC-502");
     profile.autoReconnect = true;
     const opened: FakeTransport[] = [];
-    const openTransport = vi.fn(
-      async (): Promise<Result<TransportPort>> => {
-        const transport = new FakeTransport();
-        opened.push(transport);
-        return ok(transport);
-      },
-    );
+    const openTransport = vi.fn(async (): Promise<Result<TransportPort>> => {
+      const transport = new FakeTransport();
+      opened.push(transport);
+      return ok(transport);
+    });
     const host = new TcpSessionHost({
       clock,
       events: events as SessionHostEvents,
@@ -259,9 +253,7 @@ describe("TcpSessionHost 自动重连（ReconnectCoordinator 集成）", () => {
     return { host, clock, events, opened, openTransport, profile };
   }
 
-  async function connectReconnect(
-    h: ReconnectHarness,
-  ): Promise<FakeTransport> {
+  async function connectReconnect(h: ReconnectHarness): Promise<FakeTransport> {
     const first = new FakeTransport();
     const result = await h.host.connect({
       profile: h.profile,

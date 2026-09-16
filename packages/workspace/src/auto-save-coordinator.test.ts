@@ -60,7 +60,10 @@ class InMemoryRepository implements WorkspaceRepositoryPort {
   }
 
   async export(): Promise<Result<string>> {
-    return { ok: true, value: JSON.stringify(this.saved[0] ?? createEmptyWorkspace()) };
+    return {
+      ok: true,
+      value: JSON.stringify(this.saved[0] ?? createEmptyWorkspace()),
+    };
   }
 
   async import(): Promise<Result<void>> {

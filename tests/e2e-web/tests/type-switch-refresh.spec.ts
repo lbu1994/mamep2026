@@ -119,9 +119,9 @@ test("读回后切换 Type 立即刷新显示，且写入仍是原值（ADR-053�
 
   // 切换后未重新读取直接写：设备收到的仍是 0x00AB（不得按新进制解析为 0x171）。
   await first.getByRole("button", { name: "Write", exact: true }).click();
-  await expect(first.locator(".register-table__status-dot--success")).toBeVisible(
-    { timeout: 8000 },
-  );
+  await expect(
+    first.locator(".register-table__status-dot--success"),
+  ).toBeVisible({ timeout: 8000 });
   expect(await mockGet(page, 0)).toBe(0x00ab);
 
   // 切回 HEX：按原值重新显示。

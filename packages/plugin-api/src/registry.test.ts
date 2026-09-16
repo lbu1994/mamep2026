@@ -467,30 +467,33 @@ describe("PluginRegistry 同进程运行时（ADR-054：手动安装 + 用户授
         },
       },
     });
-    registry.register(manifest({ id: "sync-x", platform: { web: true, node: true } }), {
-      source: "installed",
-      runtime: {
-        activate(ctx) {
-          ctx.registries.codec.register({
-            protocolId: "custom",
-            encodeRead: () => new Uint8Array(),
-            encodeWrite: () => new Uint8Array(),
-            decodeResponse: () => ok({ kind: "write" }),
-            parserFactory: () => ({ push: () => ({ done: false }) }),
-            expectedLength: () => ({ normal: 1, exception: 5 }),
-          });
-          ctx.registries.addressTransform.register({
-            id: "t1",
-            protocol: "rtu",
-            apply: (address: number) => ok(address - 1),
-          });
-          captured = {
-            pluginId: ctx.pluginId,
-            codecList: ctx.registries.codec.list(),
-          };
+    registry.register(
+      manifest({ id: "sync-x", platform: { web: true, node: true } }),
+      {
+        source: "installed",
+        runtime: {
+          activate(ctx) {
+            ctx.registries.codec.register({
+              protocolId: "custom",
+              encodeRead: () => new Uint8Array(),
+              encodeWrite: () => new Uint8Array(),
+              decodeResponse: () => ok({ kind: "write" }),
+              parserFactory: () => ({ push: () => ({ done: false }) }),
+              expectedLength: () => ({ normal: 1, exception: 5 }),
+            });
+            ctx.registries.addressTransform.register({
+              id: "t1",
+              protocol: "rtu",
+              apply: (address: number) => ok(address - 1),
+            });
+            captured = {
+              pluginId: ctx.pluginId,
+              codecList: ctx.registries.codec.list(),
+            };
+          },
         },
       },
-    });
+    );
     expect(captured).toEqual({ pluginId: "sync-x", codecList: ["custom"] });
     expect(codecRegister).toHaveBeenCalledTimes(1);
     expect(transformRegister).toHaveBeenCalledTimes(1);
@@ -499,18 +502,21 @@ describe("PluginRegistry 同进程运行时（ADR-054：手动安装 + 用户授
   it("未注入同步注册面时 ctx.registries 返回能力错误兜底", () => {
     const registry = new PluginRegistry();
     let errorCode: string | null = null;
-    registry.register(manifest({ id: "sync-y", platform: { web: true, node: true } }), {
-      source: "installed",
-      runtime: {
-        activate(ctx) {
-          const result = ctx.registries.dataType.register("x", {
-            parse: () => ok(0),
-            format: () => "0",
-          });
-          if (!result.ok) errorCode = result.error.code;
+    registry.register(
+      manifest({ id: "sync-y", platform: { web: true, node: true } }),
+      {
+        source: "installed",
+        runtime: {
+          activate(ctx) {
+            const result = ctx.registries.dataType.register("x", {
+              parse: () => ok(0),
+              format: () => "0",
+            });
+            if (!result.ok) errorCode = result.error.code;
+          },
         },
       },
-    });
+    );
     expect(errorCode).toBe("PLUGIN_SYNC_REGISTRY_UNAVAILABLE");
     expect(registry.getExecutionMode("sync-y")).toBe("same-process");
   });

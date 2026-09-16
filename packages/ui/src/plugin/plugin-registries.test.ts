@@ -2,7 +2,10 @@
  * plugin-registries 消费方单测：protocolForSheetType（ADR-041/043 E-2）。
  */
 import { describe, expect, it } from "vitest";
-import { protocolForSheetType, type TableTypeContribution } from "./plugin-registries";
+import {
+  protocolForSheetType,
+  type TableTypeContribution,
+} from "./plugin-registries";
 import type { Contribution } from "@mamep2026/plugin-api";
 
 const noContributions: readonly Contribution<TableTypeContribution>[] = [];

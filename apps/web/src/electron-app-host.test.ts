@@ -80,28 +80,25 @@ function createFakeBridge(): {
       copyCalls.push(text);
       return { ok: true, value: undefined };
     }),
-    readTextFromClipboard: vi.fn(
-      async (): Promise<Result<string | null>> => ({ ok: true, value: null }),
-    ),
-    selectSerialPort: vi.fn(
-      async (portId: string): Promise<Result<null>> => {
-        serialSelectCalls.push(portId);
-        // 默认视为成功解析（测试按场景 resolve/reject 挂起的 requestPort）。
-        return { ok: true, value: null };
-      },
-    ),
+    readTextFromClipboard: vi.fn(async (): Promise<Result<string | null>> => ({
+      ok: true,
+      value: null,
+    })),
+    selectSerialPort: vi.fn(async (portId: string): Promise<Result<null>> => {
+      serialSelectCalls.push(portId);
+      // 默认视为成功解析（测试按场景 resolve/reject 挂起的 requestPort）。
+      return { ok: true, value: null };
+    }),
     onEvent: vi.fn((listener: (event: MamepHostEvent) => void) => {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     }),
-    getDebugState: vi.fn(
-      async (): Promise<Result<HostDebugState | null>> => ({
-        ok: true,
-        value: null,
-      }),
-    ),
+    getDebugState: vi.fn(async (): Promise<Result<HostDebugState | null>> => ({
+      ok: true,
+      value: null,
+    })),
     // ---- 主进程 TCP 会话 RPC（2026-08-23 两端 TCP 接线）----
     sessionTcpConnect: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
@@ -111,29 +108,26 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
-    sessionGetState: vi.fn(
-      async (): Promise<Result<SessionStateResponse>> => ({
-        ok: true,
-        value: { connectionState: "connected" },
-      }),
-    ),
+    sessionGetState: vi.fn(async (): Promise<Result<SessionStateResponse>> => ({
+      ok: true,
+      value: { connectionState: "connected" },
+    })),
     sessionSetUnitId: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
     })),
-    sessionSetAddressTransform: vi.fn(
-      async (): Promise<Result<null>> => ({ ok: true, value: null }),
-    ),
+    sessionSetAddressTransform: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
     sessionReadRow: vi.fn(async (): Promise<Result<number>> => ({
       ok: true,
       value: 0xabcd,
     })),
-    sessionWriteRow: vi.fn(
-      async (): Promise<Result<WriteOutcomePayload>> => ({
-        ok: true,
-        value: { kind: "write-succeeded-no-verify" },
-      }),
-    ),
+    sessionWriteRow: vi.fn(async (): Promise<Result<WriteOutcomePayload>> => ({
+      ok: true,
+      value: { kind: "write-succeeded-no-verify" },
+    })),
     sessionBatchRead: vi.fn(
       async (batchId: string): Promise<Result<SessionBatchReadResponse>> => ({
         ok: true,
@@ -186,12 +180,10 @@ function createFakeBridge(): {
       value: { content: '{"schemaVersion":4}' },
     })),
     // ---- 工作区文件仓储桥（2026-08-30，ADR-036：主进程文件持久化；ADR-049 增 recoveryInfo）----
-    workspaceLoad: vi.fn(
-      async (): Promise<Result<WorkspaceLoadResponse>> => ({
-        ok: true,
-        value: { content: '{"schemaVersion":4}', recoveryInfo: null },
-      }),
-    ),
+    workspaceLoad: vi.fn(async (): Promise<Result<WorkspaceLoadResponse>> => ({
+      ok: true,
+      value: { content: '{"schemaVersion":4}', recoveryInfo: null },
+    })),
     workspaceSave: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
@@ -373,7 +365,7 @@ describe("ElectronAppHost（ADR-017 扩展：enumerated 下拉框选择）", () 
     expect(host.appVersion).toBe(__APP_VERSION__);
   });
 
-  it("enumerateSerialPorts 返回已授权快照选项，selectSerialPort(\"0\") 返回句柄并保留端口标签", async () => {
+  it('enumerateSerialPorts 返回已授权快照选项，selectSerialPort("0") 返回句柄并保留端口标签', async () => {
     const { bridge } = createFakeBridge();
     const device = new ScriptedModbusRtuDevice();
     const { serial } = createFakeWebSerial(device);
@@ -650,7 +642,8 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     expect(write.ok).toBe(true);
     expect(bridge.sessionWriteRow).toHaveBeenCalled();
 
-    host.updatePollingTargets([{ key: "row-a", address: 1 }]);    host.startPolling();
+    host.updatePollingTargets([{ key: "row-a", address: 1 }]);
+    host.startPolling();
     host.traceStart("row-a", 1, 100);
     host.traceStop("row-a");
     expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalled();
@@ -797,4 +790,3 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     expect(host.getConnectionState()).toBe("disconnected");
   });
 });
-

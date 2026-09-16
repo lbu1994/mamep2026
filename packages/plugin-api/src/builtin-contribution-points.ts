@@ -120,18 +120,19 @@ export interface BuiltinContributionPoint {
   schema: z.ZodType<unknown>;
 }
 
-export const BUILTIN_CONTRIBUTION_POINTS: readonly BuiltinContributionPoint[] = [
-  { id: "panels", schema: PANELS_CONTRIBUTION_SCHEMA },
-  { id: "toolbarAction", schema: TOOLBAR_ACTION_CONTRIBUTION_SCHEMA },
-  { id: "tableType", schema: TABLE_TYPE_CONTRIBUTION_SCHEMA },
-  { id: "protocolExtension", schema: PROTOCOL_EXTENSION_CONTRIBUTION_SCHEMA },
-  { id: "addressTransform", schema: ADDRESS_TRANSFORM_CONTRIBUTION_SCHEMA },
-  { id: "theme", schema: THEME_CONTRIBUTION_SCHEMA },
-  { id: "settings", schema: SETTINGS_CONTRIBUTION_SCHEMA },
-  { id: "dataType", schema: DATA_TYPE_CONTRIBUTION_SCHEMA },
-  { id: "command", schema: COMMAND_CONTRIBUTION_SCHEMA },
-  { id: "documentation", schema: DOCUMENTATION_CONTRIBUTION_SCHEMA },
-];
+export const BUILTIN_CONTRIBUTION_POINTS: readonly BuiltinContributionPoint[] =
+  [
+    { id: "panels", schema: PANELS_CONTRIBUTION_SCHEMA },
+    { id: "toolbarAction", schema: TOOLBAR_ACTION_CONTRIBUTION_SCHEMA },
+    { id: "tableType", schema: TABLE_TYPE_CONTRIBUTION_SCHEMA },
+    { id: "protocolExtension", schema: PROTOCOL_EXTENSION_CONTRIBUTION_SCHEMA },
+    { id: "addressTransform", schema: ADDRESS_TRANSFORM_CONTRIBUTION_SCHEMA },
+    { id: "theme", schema: THEME_CONTRIBUTION_SCHEMA },
+    { id: "settings", schema: SETTINGS_CONTRIBUTION_SCHEMA },
+    { id: "dataType", schema: DATA_TYPE_CONTRIBUTION_SCHEMA },
+    { id: "command", schema: COMMAND_CONTRIBUTION_SCHEMA },
+    { id: "documentation", schema: DOCUMENTATION_CONTRIBUTION_SCHEMA },
+  ];
 
 export const BUILTIN_CONTRIBUTION_POINT_IDS: readonly ContributionPointId[] =
   BUILTIN_CONTRIBUTION_POINTS.map((p) => p.id);

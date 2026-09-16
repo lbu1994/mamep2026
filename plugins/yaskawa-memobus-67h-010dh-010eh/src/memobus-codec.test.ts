@@ -44,9 +44,9 @@ describe("crc16（标准 CRC-16/MODBUS）", () => {
     expect(appendCrc(hex("01 67 01 0D 00 02 00 24 00 28"))).toEqual(READ_REQ);
     expect(appendCrc(hex("01 67 01 0D 00 04 17 70 03 E8"))).toEqual(READ_RES);
     expect(appendCrc(hex("01 E7 02"))).toEqual(EXCEPTION);
-    expect(appendCrc(hex("01 67 01 0E 00 02 00 04 00 02 17 70 00 04 05 DC"))).toEqual(
-      WRITE_REQ,
-    );
+    expect(
+      appendCrc(hex("01 67 01 0E 00 02 00 04 00 02 17 70 00 04 05 DC")),
+    ).toEqual(WRITE_REQ);
     expect(appendCrc(hex("01 67 01 0E 00 02"))).toEqual(WRITE_RES);
   });
 });
@@ -77,10 +77,7 @@ describe("MemobusCodec encode", () => {
       try {
         codec.encodeRead({
           slaveAddress: 1,
-          addresses: Array.from(
-            { length: MEMOBUS_MAX_READ + 1 },
-            (_, i) => i,
-          ),
+          addresses: Array.from({ length: MEMOBUS_MAX_READ + 1 }, (_, i) => i),
         });
         return null;
       } catch (error) {
@@ -108,10 +105,10 @@ describe("MemobusCodec encode", () => {
       try {
         codec.encodeWrite({
           slaveAddress: 1,
-          entries: Array.from(
-            { length: MEMOBUS_MAX_WRITE + 1 },
-            (_, i) => ({ address: i, value: 0 }),
-          ),
+          entries: Array.from({ length: MEMOBUS_MAX_WRITE + 1 }, (_, i) => ({
+            address: i,
+            value: 0,
+          })),
         });
         return null;
       } catch (error) {
@@ -183,8 +180,7 @@ describe("MemobusCodec decodeResponse", () => {
       readExpect([0x0024, 0x0028]),
     );
     expect(result.ok).toBe(false);
-    if (!result.ok)
-      expect(result.error.code).toBe("MEMOBUS_FUNCTION_MISMATCH");
+    if (!result.ok) expect(result.error.code).toBe("MEMOBUS_FUNCTION_MISMATCH");
   });
 
   it("rejects a sub-function mismatch", () => {
@@ -243,7 +239,9 @@ describe("MemobusCodec parserFactory", () => {
 
   it("parses coalesced frames across pushes", () => {
     const parser = codec.parserFactory(readExpect([0x0024, 0x0028]));
-    const first = parser.push(hex("01 67 01 0D 00 04 17 70 03 E8 47 ED 01 E7 02 EA 31"));
+    const first = parser.push(
+      hex("01 67 01 0D 00 04 17 70 03 E8 47 ED 01 E7 02 EA 31"),
+    );
     expect(first.done).toBe(true);
     if (first.done && first.outcome.ok) {
       expect(first.outcome.value.kind).toBe("read");

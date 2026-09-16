@@ -13,9 +13,9 @@ const androidGlobal = { Capacitor: { getPlatform: () => "android" } };
 
 describe("detectAppPlatform", () => {
   it("宿主桥 platform=vscode → vscode", () => {
-    expect(
-      detectAppPlatform({ bridge: vscodeBridge, globalObject: {} }),
-    ).toBe("vscode");
+    expect(detectAppPlatform({ bridge: vscodeBridge, globalObject: {} })).toBe(
+      "vscode",
+    );
   });
 
   it("宿主桥 platform=electron → electron", () => {
@@ -31,9 +31,9 @@ describe("detectAppPlatform", () => {
   });
 
   it("无宿主桥 + 无 Capacitor → browser", () => {
-    expect(
-      detectAppPlatform({ bridge: undefined, globalObject: {} }),
-    ).toBe("browser");
+    expect(detectAppPlatform({ bridge: undefined, globalObject: {} })).toBe(
+      "browser",
+    );
   });
 
   it("无宿主桥 + Capacitor 报 web → browser（非 Android 容器）", () => {

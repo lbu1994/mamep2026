@@ -99,10 +99,7 @@ export class PollingCoordinator {
   private tick(): void {
     if (!this.runningFlag) return;
     for (const target of this.targets) {
-      if (
-        this.inFlight.has(target.key) ||
-        this.deferred.has(target.key)
-      ) {
+      if (this.inFlight.has(target.key) || this.deferred.has(target.key)) {
         this.skippedTicks.set(
           target.key,
           (this.skippedTicks.get(target.key) ?? 0) + 1,

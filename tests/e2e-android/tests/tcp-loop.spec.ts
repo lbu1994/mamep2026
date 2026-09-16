@@ -11,7 +11,13 @@
  *
  * 注意：本机 vivo 设备 `adb logcat` 无输出，故一切诊断走 CDP（见 helpers/adb.ts）。
  */
-import { chromium, expect, test, type Browser, type Page } from "@playwright/test";
+import {
+  chromium,
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from "@playwright/test";
 import * as net from "node:net";
 import {
   clearAppData,
@@ -198,7 +204,9 @@ test.beforeAll(async () => {
 
   await page.waitForSelector(".register-table-tabs", { timeout: 60_000 });
   // 非 mock 启动自动弹出 Connection Settings（等动画完成再交互，防启动竞态）。
-  await page.waitForSelector(".ant-modal-container:visible", { timeout: 30_000 });
+  await page.waitForSelector(".ant-modal-container:visible", {
+    timeout: 30_000,
+  });
   await page.waitForTimeout(1000);
 });
 
@@ -218,7 +226,9 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
   expect(page.url()).toContain("https://localhost");
 
   // Phase 2 后 Android 同时支持 RTU 与 TCP → 协议分组可见；本用例显式切到 TCP。
-  await expect(page.locator(".ant-modal-container")).toContainText("Modbus TCP");
+  await expect(page.locator(".ant-modal-container")).toContainText(
+    "Modbus TCP",
+  );
   await page
     .locator(".ant-modal-container")
     .getByText("Modbus TCP", { exact: true })
@@ -267,7 +277,9 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
   await expect(dataInput).toHaveText("12AB", { timeout: 20_000 });
 
   // 断开：回到未连接状态（头部 Disconnect 按钮消失）。
-  await disconnectButton.evaluate((element) => (element as HTMLElement).click());
+  await disconnectButton.evaluate((element) =>
+    (element as HTMLElement).click(),
+  );
   await expect(disconnectButton).toBeHidden({ timeout: 20_000 });
 });
 

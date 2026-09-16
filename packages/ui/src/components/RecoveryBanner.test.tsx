@@ -63,8 +63,6 @@ describe("RecoveryBanner", () => {
       />,
     );
     expect(screen.getByTestId("recovery-banner")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain(
-      "restore failed",
-    );
+    expect(screen.getByRole("alert").textContent).toContain("restore failed");
   });
 });

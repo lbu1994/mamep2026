@@ -76,9 +76,7 @@ test("暗黑模式侧边栏 Rename 输入框跟随主题（非白底黑字）", 
   await expect(input).toBeVisible();
 
   // 关键断言（修复红/绿分界）：dark 下输入框不应是浏览器 UA 默认「白底黑字」。
-  const bg = await input.evaluate(
-    (el) => getComputedStyle(el).backgroundColor,
-  );
+  const bg = await input.evaluate((el) => getComputedStyle(el).backgroundColor);
   const color = await input.evaluate((el) => getComputedStyle(el).color);
   expect(bg).not.toBe("rgb(255, 255, 255)");
   expect(color).not.toBe("rgb(0, 0, 0)");

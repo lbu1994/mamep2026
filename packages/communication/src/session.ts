@@ -542,9 +542,7 @@ export class CommunicationSession {
       quantity < 1 ||
       quantity > MAX_READ_QUANTITY
     ) {
-      return Promise.resolve(
-        fail(quantityOutOfRangeError("read", quantity)),
-      );
+      return Promise.resolve(fail(quantityOutOfRangeError("read", quantity)));
     }
     const run =
       this.codec !== null
@@ -650,10 +648,9 @@ export class CommunicationSession {
         fail(quantityOutOfRangeError("write", entries.length)),
       );
     }
-    return this.scheduler.enqueue(
-      () => this.executeCodecWrite(entries, meta),
-      { priority: meta.priority ?? "manual-write" },
-    );
+    return this.scheduler.enqueue(() => this.executeCodecWrite(entries, meta), {
+      priority: meta.priority ?? "manual-write",
+    });
   }
 
   private async executeRead(
@@ -839,8 +836,7 @@ export class CommunicationSession {
     exceptionCode: number,
   ): MamepError {
     return (
-      codec.mapException?.(exceptionCode) ??
-      modbusExceptionError(exceptionCode)
+      codec.mapException?.(exceptionCode) ?? modbusExceptionError(exceptionCode)
     );
   }
 
@@ -996,7 +992,10 @@ export class CommunicationSession {
   }
 
   /** 构建单次写尝试（frame + expect，FC0x10 多值，ADR-030）：TCP 每次尝试使用新 Transaction ID。 */
-  private buildWriteAttempt(sentAddress: number, values: number[]): {
+  private buildWriteAttempt(
+    sentAddress: number,
+    values: number[],
+  ): {
     frame: Uint8Array;
     expect: ExpectedResponse | TcpExpectedResponse;
   } {

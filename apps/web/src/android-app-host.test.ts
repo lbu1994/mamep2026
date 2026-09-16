@@ -168,7 +168,10 @@ describe("AndroidAppHost：平台声明", () => {
     if (!selected.ok) return;
     expect(selected.value).toEqual({ id: "usb-1", label: "CH340 (1-1)" });
 
-    const profile = { ...createDefaultRtuProfile("USB-RS485"), baudRate: 19200 };
+    const profile = {
+      ...createDefaultRtuProfile("USB-RS485"),
+      baudRate: 19200,
+    };
     const connected = await host.connect(profile, selected.value);
 
     expect(connected.ok).toBe(true);
@@ -192,13 +195,17 @@ describe("AndroidAppHost：平台声明", () => {
   it("文件导入导出返回能力错误（Phase 4 接 Capacitor Filesystem）", async () => {
     const { host } = createHost();
 
-    const saved = await host.saveTextFile({ suggestedName: "log.csv", content: "a" });
+    const saved = await host.saveTextFile({
+      suggestedName: "log.csv",
+      content: "a",
+    });
     expect(saved.ok).toBe(false);
     if (!saved.ok) expect(saved.error.category).toBe("capability");
 
     const opened = await host.openTextFile();
     expect(opened.ok).toBe(false);
-    if (!opened.ok) expect(opened.error.code).toBe("WORKSPACE_IMPORT_UNSUPPORTED");
+    if (!opened.ok)
+      expect(opened.error.code).toBe("WORKSPACE_IMPORT_UNSUPPORTED");
   });
 });
 
@@ -242,7 +249,10 @@ describe("AndroidAppHost：TCP 连接", () => {
 
   it("桥打开失败 → 返回结构化错误且状态仍为 disconnected", async () => {
     const { host, bridge } = createHost();
-    bridge.openError = { code: "TCP_CONNECT_FAILED", message: "connection refused" };
+    bridge.openError = {
+      code: "TCP_CONNECT_FAILED",
+      message: "connection refused",
+    };
 
     const result = await host.connectTcp(tcpProfile());
 

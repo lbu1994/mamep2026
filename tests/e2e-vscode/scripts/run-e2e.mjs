@@ -67,6 +67,8 @@ try {
   console.log("[e2e-vscode] all checks passed");
 } catch (cause) {
   console.error("[e2e-vscode] failed to run VSCode integration tests");
-  console.error(cause instanceof Error ? cause.stack ?? cause.message : cause);
+  console.error(
+    cause instanceof Error ? (cause.stack ?? cause.message) : cause,
+  );
   process.exit(1);
 }

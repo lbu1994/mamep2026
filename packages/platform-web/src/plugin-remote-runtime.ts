@@ -41,7 +41,10 @@ type PluginWorkerEvent =
       type: "communication-request";
       id: number;
       op: "read" | "write";
-      payload: { pluginId: string; req: { address: number; quantity?: number; values?: number[] } };
+      payload: {
+        pluginId: string;
+        req: { address: number; quantity?: number; values?: number[] };
+      };
     };
 
 export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
@@ -98,7 +101,10 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
     };
 
     try {
-      const ready = await this.postAndWait({ type: "init", entrySource: this.entrySource });
+      const ready = await this.postAndWait({
+        type: "init",
+        entrySource: this.entrySource,
+      });
       if (ready.type === "load-error") {
         await this.dispose();
         return fail(
@@ -129,11 +135,17 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
   }
 
   /** 在隔离线程执行插件 activate（通信面为跨线程代理）。 */
-  async activate(ctx: { pluginId: string; communication: PluginCommunicationApi }): Promise<void> {
+  async activate(ctx: {
+    pluginId: string;
+    communication: PluginCommunicationApi;
+  }): Promise<void> {
     if (this.worker === null) {
       throw new Error("plugin worker not loaded");
     }
-    const event = await this.postAndWait({ type: "activate", pluginId: ctx.pluginId });
+    const event = await this.postAndWait({
+      type: "activate",
+      pluginId: ctx.pluginId,
+    });
     if (event.type === "error") {
       throw new Error(event.message);
     }
@@ -172,7 +184,10 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
   }
 
   /** 出队第一个 waiter 并 resolve（协议为 FIFO：init → ready → activate → activated）。 */
-  private waiter(fallbackType: PluginWorkerEvent["type"], fallback: PluginWorkerEvent): void {
+  private waiter(
+    fallbackType: PluginWorkerEvent["type"],
+    fallback: PluginWorkerEvent,
+  ): void {
     const waiter = this.waiters.shift();
     if (waiter !== undefined) {
       waiter.resolve(fallback);
@@ -241,5 +256,9 @@ export function createWebPluginRemoteRuntime(
   communicationApiFactory: PluginCommunicationApiFactory,
   options: { workerFactory?: PluginWorkerFactory } = {},
 ): PluginRemoteRuntime {
-  return new WebPluginRemoteRuntime(entrySource, communicationApiFactory, options);
+  return new WebPluginRemoteRuntime(
+    entrySource,
+    communicationApiFactory,
+    options,
+  );
 }

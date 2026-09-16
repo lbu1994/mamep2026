@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatRawValue, groupBinaryBits, isScaled, isSigned, parseCellText } from "./data-types";
+import {
+  formatRawValue,
+  groupBinaryBits,
+  isScaled,
+  isSigned,
+  parseCellText,
+} from "./data-types";
 import type { DataType } from "@mamep2026/domain";
 
 function expectParse(text: string, type: DataType, expectedRaw: number): void {

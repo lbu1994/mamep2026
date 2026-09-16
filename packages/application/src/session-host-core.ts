@@ -84,7 +84,11 @@ export class SessionHostCore {
   private polling: PollingCoordinator | null = null;
   private trace: TraceCoordinator | null = null;
   private portLabel: string | null = null;
-  private pollingTargets: Array<{ key: string; address: number; quantity?: number }> = [];
+  private pollingTargets: Array<{
+    key: string;
+    address: number;
+    quantity?: number;
+  }> = [];
   /** 后台挂起标志（移动端生命周期）：挂起期间不启动轮询/追踪，回前台按原配置恢复。 */
   private backgroundSuspended = false;
   private readonly activeTraces = new Map<
@@ -100,7 +104,8 @@ export class SessionHostCore {
     this.getPollingIntervalMs = options.getPollingIntervalMs;
     // 地址变换解析（2026-09-02 插件外部化）：核心不再内置变换；由宿主装配点注入
     // （Renderer 经插件的 AddressTransformRegistry；桌面端 host 经随包插件导出 resolver）。
-    this.resolveAddressTransform = options.resolveAddressTransform ?? (() => null);
+    this.resolveAddressTransform =
+      options.resolveAddressTransform ?? (() => null);
     this.codecRegistry = options.codecRegistry ?? null;
     this.tableService = new RegisterTableService({
       getSession: () => this.session,
@@ -327,7 +332,12 @@ export class SessionHostCore {
     return this.backgroundSuspended;
   }
 
-  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+  ): void {
     this.activeTraces.set(key, { address, speedMs, quantity });
     if (this.backgroundSuspended) return;
     this.trace?.start(key, address, speedMs, quantity);

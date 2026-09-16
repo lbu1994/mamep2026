@@ -55,7 +55,10 @@ export function clearOverlayCloseStack(): void {
  * `onClose` 每次渲染通常是新函数，故用 ref 存最新值、注册稳定的包装函数，
  * 避免 effect 反复注销/重注册导致栈顺序错乱。
  */
-export function useOverlayClose(open: boolean, onClose: OverlayCloseHandler): void {
+export function useOverlayClose(
+  open: boolean,
+  onClose: OverlayCloseHandler,
+): void {
   const handlerRef = useRef(onClose);
   useEffect(() => {
     handlerRef.current = onClose;

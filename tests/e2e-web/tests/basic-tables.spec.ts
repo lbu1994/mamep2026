@@ -29,7 +29,11 @@ interface MamepMockApi {
   getInputRegister(address: number): number | null;
 }
 
-async function setCoil(page: Page, address: number, value: number): Promise<void> {
+async function setCoil(
+  page: Page,
+  address: number,
+  value: number,
+): Promise<void> {
   await page.evaluate(
     ({ a, v }) => {
       (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.setCoil(
@@ -75,7 +79,9 @@ async function reconnectAsActiveSheet(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: /Disconnect/ })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.locator(".ant-layout-header")).not.toContainText("Disconnect");
+  await expect(page.locator(".ant-layout-header")).not.toContainText(
+    "Disconnect",
+  );
   // 2) 打开 Connection Settings 并以活动表协议连接。
   await page
     .getByRole("button", { name: "Connection" })
@@ -161,7 +167,10 @@ test("离散输入表（只读）：Write 禁用、FC02 读", async ({ page }) =
 
   // 预置离散输入 1 = 1。
   await page.evaluate(() => {
-    (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.setInput(1, 1);
+    (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.setInput(
+      1,
+      1,
+    );
   });
   const first = parentRow(page, 0);
   const address = first.getByLabel("Address", { exact: true });
@@ -197,10 +206,9 @@ test("输入寄存器表（只读）：FC04 读 16 位值", async ({ page }) => 
 
   // 预置输入寄存器 2 = 0x1234。
   await page.evaluate(() => {
-    (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.setInputRegister(
-      2,
-      0x1234,
-    );
+    (
+      window as unknown as { __mamepMock: MamepMockApi }
+    ).__mamepMock.setInputRegister(2, 0x1234);
   });
   const first = parentRow(page, 0);
   const address = first.getByLabel("Address", { exact: true });

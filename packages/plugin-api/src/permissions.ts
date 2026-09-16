@@ -39,7 +39,9 @@ export const PERMISSION_LABEL_KEYS: Record<PermissionId, string> = {
 export const PLUGIN_PERMISSION_DENIED = "PLUGIN_PERMISSION_DENIED";
 
 /** 校验权限声明：非数组 / 含未知权限 → PLUGIN_PERMISSION_DENIED。 */
-export function validatePermissions(permissions: unknown): Result<PermissionId[]> {
+export function validatePermissions(
+  permissions: unknown,
+): Result<PermissionId[]> {
   const parsed = z.array(permissionIdSchema).safeParse(permissions);
   if (!parsed.success) {
     return fail(

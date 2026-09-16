@@ -38,9 +38,9 @@ test("toolbar shows Address Adjust defaulting to OFF（Connection Settings 已�
   const container = adjustSegmented(page);
   await expect(container).toContainText("Address Adjust");
   // 默认选中 OFF（antd Segmented 恒渲染 OFF/ON 两项，用 selected 类断言选中态）。
-  await expect(
-    container.locator(".ant-segmented-item-selected"),
-  ).toHaveText("OFF");
+  await expect(container.locator(".ant-segmented-item-selected")).toHaveText(
+    "OFF",
+  );
 
   // Connection Settings 弹窗不再包含 Address Adjust（全局选项已移出核心，ADR-042）。
   await page
@@ -94,9 +94,9 @@ test("Address Adjust 每表独立且刷新后恢复", async ({ page }) => {
   await container
     .locator(".ant-segmented-item", { hasText: "ON" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(
-    container.locator(".ant-segmented-item-selected"),
-  ).toHaveText("ON");
+  await expect(container.locator(".ant-segmented-item-selected")).toHaveText(
+    "ON",
+  );
   await page.waitForTimeout(1000); // 等待 IndexedDB 自动保存落盘（防抖）。
 
   // 新建 Sheet 2：默认 OFF（每表独立）。
@@ -108,9 +108,9 @@ test("Address Adjust 每表独立且刷新后恢复", async ({ page }) => {
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
   ).toContainText("Sheet 2");
   const container2 = adjustSegmented(page);
-  await expect(
-    container2.locator(".ant-segmented-item-selected"),
-  ).toHaveText("OFF");
+  await expect(container2.locator(".ant-segmented-item-selected")).toHaveText(
+    "OFF",
+  );
 
   // 切回 Sheet 1：仍为 ON。
   await page

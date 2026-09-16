@@ -33,7 +33,8 @@ export interface PluginContributionError {
 
 export const PLUGIN_CONTRIBUTION_UNKNOWN = "PLUGIN_CONTRIBUTION_UNKNOWN";
 export const PLUGIN_CONTRIBUTION_INVALID = "PLUGIN_CONTRIBUTION_INVALID";
-export const PLUGIN_CONTRIBUTION_POINT_EXISTS = "PLUGIN_CONTRIBUTION_POINT_EXISTS";
+export const PLUGIN_CONTRIBUTION_POINT_EXISTS =
+  "PLUGIN_CONTRIBUTION_POINT_EXISTS";
 
 interface ActiveContribution {
   pluginId: string;
@@ -41,8 +42,14 @@ interface ActiveContribution {
 }
 
 export class ContributionPointRegistry {
-  private readonly points = new Map<ContributionPointId, ContributionPoint<unknown>>();
-  private readonly contributions = new Map<ContributionPointId, ActiveContribution[]>();
+  private readonly points = new Map<
+    ContributionPointId,
+    ContributionPoint<unknown>
+  >();
+  private readonly contributions = new Map<
+    ContributionPointId,
+    ActiveContribution[]
+  >();
   /** pluginId → 贡献是否生效（禁用 / 激活失败时置 false，getContributions 过滤）。 */
   private readonly active = new Map<string, boolean>();
 

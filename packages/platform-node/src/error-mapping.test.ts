@@ -120,7 +120,9 @@ describe("mapOpenError", () => {
 
 describe("mapTcpError", () => {
   it("maps ECONNREFUSED to TCP_CONNECTION_FAILED, retryable", () => {
-    const mapped = mapTcpError(withCode("connect ECONNREFUSED", "ECONNREFUSED"));
+    const mapped = mapTcpError(
+      withCode("connect ECONNREFUSED", "ECONNREFUSED"),
+    );
     expect(mapped.code).toBe("TCP_CONNECTION_FAILED");
     expect(mapped.category).toBe("connection");
     expect(mapped.retryable).toBe(true);
@@ -150,22 +152,24 @@ describe("mapTcpError", () => {
   });
 
   it("maps EADDRINUSE to TCP_PORT_IN_USE, not retryable", () => {
-    const mapped = mapTcpError(withCode("address already in use", "EADDRINUSE"));
+    const mapped = mapTcpError(
+      withCode("address already in use", "EADDRINUSE"),
+    );
     expect(mapped.code).toBe("TCP_PORT_IN_USE");
     expect(mapped.category).toBe("permission");
     expect(mapped.retryable).toBe(false);
   });
 
   it("maps 'connection refused' message to TCP_CONNECTION_FAILED (controlled fallback)", () => {
-    expect(mapTcpError(new Error("connect ECONNREFUSED 127.0.0.1:502")).code).toBe(
-      "TCP_CONNECTION_FAILED",
-    );
+    expect(
+      mapTcpError(new Error("connect ECONNREFUSED 127.0.0.1:502")).code,
+    ).toBe("TCP_CONNECTION_FAILED");
   });
 
   it("maps 'address already in use' message to TCP_PORT_IN_USE (controlled fallback)", () => {
-    expect(mapTcpError(new Error("listen EADDRINUSE: address already in use")).code).toBe(
-      "TCP_PORT_IN_USE",
-    );
+    expect(
+      mapTcpError(new Error("listen EADDRINUSE: address already in use")).code,
+    ).toBe("TCP_PORT_IN_USE");
   });
 
   it("maps unknown io error to TCP_CONNECTION_FAILED preserving message/cause", () => {

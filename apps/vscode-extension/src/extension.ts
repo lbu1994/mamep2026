@@ -35,7 +35,11 @@ import {
 } from "@mamep2026/platform-api";
 import { DevFakeSerialFactory } from "./dev-fake-serial";
 import { createDevFakeTcpServer, type DevFakeTcpServer } from "./dev-fake-tcp";
-import { fakeDialogPaths, fakeOpenTextFile, fakeSaveTextFile } from "./dev-fake-dialog";
+import {
+  fakeDialogPaths,
+  fakeOpenTextFile,
+  fakeSaveTextFile,
+} from "./dev-fake-dialog";
 import type { PluginStorePort } from "@mamep2026/plugin-api";
 import { GlobalStatePluginStore } from "./plugin-store";
 import {
@@ -285,7 +289,13 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   hostPluginsRef = hostPlugins;
 
-  const activeDeps = createDeps(context, isDev, postEvent, hostPlugins, pluginStore);
+  const activeDeps = createDeps(
+    context,
+    isDev,
+    postEvent,
+    hostPlugins,
+    pluginStore,
+  );
   deps = activeDeps;
   // 宿主侧插件执行面（ADR-055，2026-09-12）：启动同步一次（已安装的 same-process 插件
   // 立即生效）；后续每次 plugin-store-save 由 ipc 回调再同步。
@@ -438,7 +448,10 @@ function getWebviewHtml(
  * （非文档同源），构建期静态 CSP 的 'self' 会拦截脚本；因此用 webview.cspSource（资源源）
  * 重写 CSP meta，并保留 style-src 'unsafe-inline'（antd CSS-in-JS）。
  */
-function getProdHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+function getProdHtml(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+): string {
   const mediaUri = vscode.Uri.joinPath(extensionUri, "dist", "media");
   const indexHtml = fs.readFileSync(
     vscode.Uri.joinPath(mediaUri, "index.html").fsPath,
@@ -454,28 +467,33 @@ function getProdHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string 
   // 策略内容见 ./webview/prod-csp.ts（含插件 Blob Worker 所需 worker-src）。
   const csp = buildWebviewCsp(webview.cspSource);
 
-  return indexHtml
-    // <base> 指向 media 的 asWebviewUri 根：兜底运行时构造的相对 URL（标准 Webview 模式）。
-    .replace(
-      "<head>",
-      `<head>\n    <base href="${webview.asWebviewUri(mediaUri).toString()}" />`,
-    )
-    // 用 Webview 专用 CSP 替换构建期静态 CSP meta（'self' 在 1.134+ 会拦截脚本）。
-    .replace(
-      /<meta http-equiv="Content-Security-Policy" content="[^"]*" \/>/,
-      `<meta http-equiv="Content-Security-Policy" content="${csp}" />`,
-    )
-    .replace(/\.\/assets\/([^"']+\.js)/g, (_match, file: string) =>
-      toWebviewUri(`assets/${file}`),
-    )
-    .replace(/\.\/assets\/([^"']+\.css)/g, (_match, file: string) =>
-      toWebviewUri(`assets/${file}`),
-    )
-    .replace(/href="\.\/favicon\.svg"/, () => `href="${toWebviewUri("favicon.svg")}"`)
-    .replace(
-      '<script type="module"',
-      `<script src="${bridgeUri}"></script>\n    <script type="module"`,
-    );
+  return (
+    indexHtml
+      // <base> 指向 media 的 asWebviewUri 根：兜底运行时构造的相对 URL（标准 Webview 模式）。
+      .replace(
+        "<head>",
+        `<head>\n    <base href="${webview.asWebviewUri(mediaUri).toString()}" />`,
+      )
+      // 用 Webview 专用 CSP 替换构建期静态 CSP meta（'self' 在 1.134+ 会拦截脚本）。
+      .replace(
+        /<meta http-equiv="Content-Security-Policy" content="[^"]*" \/>/,
+        `<meta http-equiv="Content-Security-Policy" content="${csp}" />`,
+      )
+      .replace(/\.\/assets\/([^"']+\.js)/g, (_match, file: string) =>
+        toWebviewUri(`assets/${file}`),
+      )
+      .replace(/\.\/assets\/([^"']+\.css)/g, (_match, file: string) =>
+        toWebviewUri(`assets/${file}`),
+      )
+      .replace(
+        /href="\.\/favicon\.svg"/,
+        () => `href="${toWebviewUri("favicon.svg")}"`,
+      )
+      .replace(
+        '<script type="module"',
+        `<script src="${bridgeUri}"></script>\n    <script type="module"`,
+      )
+  );
 }
 
 export function deactivate(): void {

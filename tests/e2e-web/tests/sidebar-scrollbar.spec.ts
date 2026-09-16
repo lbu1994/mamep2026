@@ -33,13 +33,19 @@ test("expanded sidebar has no horizontal scrollbar even with long group titles",
   // 侧边栏分组容器（.sheet-sidebar__groups，overflow:auto）不应产生水平溢出/滚动条。
   const groups = await page
     .locator(".sheet-sidebar__groups")
-    .evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+    .evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
   expect(groups.scrollWidth).toBeLessThanOrEqual(groups.clientWidth);
 
   // 侧边栏容器自身亦无水平溢出。
   const sidebar = await page
     .locator(".sheet-sidebar.ant-layout-sider")
-    .evaluate((el) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+    .evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
   expect(sidebar.scrollWidth).toBeLessThanOrEqual(sidebar.clientWidth);
 
   expect(errors).toEqual([]);

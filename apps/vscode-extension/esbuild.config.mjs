@@ -10,7 +10,10 @@ import { build } from "esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const SRC = path.resolve(ROOT, "apps/vscode-extension/src");
 const DIST = path.resolve(ROOT, "apps/vscode-extension/dist");
 

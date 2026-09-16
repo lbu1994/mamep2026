@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultRtuProfile, createTcpConnectionProfile } from "@mamep2026/domain";
+import {
+  createDefaultRtuProfile,
+  createTcpConnectionProfile,
+} from "@mamep2026/domain";
 import { AndroidPlatformHost } from "./android-platform-host";
 import {
   androidCapabilities,
@@ -138,7 +141,8 @@ describe("AndroidPlatformHost", () => {
 
     const selected = await host.selectSerialPort("usb-1");
     expect(selected.ok).toBe(true);
-    if (selected.ok) expect(selected.value).toEqual({ id: "usb-1", label: "CH340 (1-1)" });
+    if (selected.ok)
+      expect(selected.value).toEqual({ id: "usb-1", label: "CH340 (1-1)" });
 
     const cancelled = await host.selectSerialPort(null);
     expect(cancelled.ok).toBe(true);
@@ -166,7 +170,8 @@ describe("AndroidPlatformHost", () => {
     };
     const first = await host.requestSerialPort();
     expect(first.ok).toBe(true);
-    if (first.ok) expect(first.value).toEqual({ id: "usb-1", label: "CH340 (1-1)" });
+    if (first.ok)
+      expect(first.value).toEqual({ id: "usb-1", label: "CH340 (1-1)" });
   });
 
   it("openSerialTransport：参数不受支持 → SERIAL_PARAMETER_UNSUPPORTED（不发请求）", async () => {
@@ -180,7 +185,9 @@ describe("AndroidPlatformHost", () => {
     expect(opened.ok).toBe(false);
     if (!opened.ok) {
       expect(opened.error.code).toBe("SERIAL_PARAMETER_UNSUPPORTED");
-      expect(opened.error.userMessageKey).toBe("errors.serialParameterUnsupported");
+      expect(opened.error.userMessageKey).toBe(
+        "errors.serialParameterUnsupported",
+      );
     }
     expect(bridge.serialOpenCalls).toEqual([]);
   });
@@ -253,14 +260,20 @@ describe("AndroidPlatformHost", () => {
 
 describe("isAndroidPlatform", () => {
   it("Capacitor.getPlatform() === 'android' 时为 true", () => {
-    expect(isAndroidPlatform({ Capacitor: { getPlatform: () => "android" } })).toBe(true);
+    expect(
+      isAndroidPlatform({ Capacitor: { getPlatform: () => "android" } }),
+    ).toBe(true);
   });
 
   it("浏览器 / Electron / VSCode（无 Capacitor 或平台非 android）为 false", () => {
     expect(isAndroidPlatform({})).toBe(false);
     expect(isAndroidPlatform({ Capacitor: undefined })).toBe(false);
-    expect(isAndroidPlatform({ Capacitor: { getPlatform: () => "web" } })).toBe(false);
-    expect(isAndroidPlatform({ Capacitor: { getPlatform: () => "ios" } })).toBe(false);
+    expect(isAndroidPlatform({ Capacitor: { getPlatform: () => "web" } })).toBe(
+      false,
+    );
+    expect(isAndroidPlatform({ Capacitor: { getPlatform: () => "ios" } })).toBe(
+      false,
+    );
   });
 
   it("getPlatform 抛错时安全返回 false（不把探测变成崩溃点）", () => {

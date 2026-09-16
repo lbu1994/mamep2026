@@ -17,7 +17,12 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
-import { getScaleDigits, groupBinaryBits, isScaled, isSigned } from "./data-types";
+import {
+  getScaleDigits,
+  groupBinaryBits,
+  isScaled,
+  isSigned,
+} from "./data-types";
 
 const DECIMAL_ALLOWED = [1, 2, 4];
 const BINARY_ALLOWED = [1, 2, 3, 4];
@@ -80,9 +85,7 @@ export function formatRawValues(values: number[], type: DataType): string {
     case "binary":
       // 每 8 位一组（ADR-051）：32 位 4 组、48 位 6 组、64 位 8 组。
       return groupBinaryBits(
-        values
-          .map((value) => value.toString(2).padStart(16, "0"))
-          .join(""),
+        values.map((value) => value.toString(2).padStart(16, "0")).join(""),
       );
     case "string":
       return decodeAscii(values);
@@ -292,9 +295,7 @@ function parseCompositeString(
   const padded = text.padEnd(maxChars, " ");
   const values: number[] = [];
   for (let i = 0; i < registerCount; i++) {
-    values.push(
-      (padded.charCodeAt(i * 2) << 8) | padded.charCodeAt(i * 2 + 1),
-    );
+    values.push((padded.charCodeAt(i * 2) << 8) | padded.charCodeAt(i * 2 + 1));
   }
   return ok(values);
 }
@@ -366,10 +367,7 @@ function parseScaledBigInt(
   const fracPart = match[3] ?? "";
   if (sign === -1n && !signed) {
     return fail(
-      multiError(
-        "DATA_INVALID_NUMBER",
-        `negative value not allowed: ${text}`,
-      ),
+      multiError("DATA_INVALID_NUMBER", `negative value not allowed: ${text}`),
     );
   }
   if (fracPart.length > digits) {

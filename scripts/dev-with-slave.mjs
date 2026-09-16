@@ -219,9 +219,7 @@ function stopSlave(child) {
 async function runDev(mode) {
   const electron = mode === "dev:electron";
   const vscode = mode === "dev:vscode";
-  const viteArgs = electron
-    ? [VITE_ENTRY, "--mode", "electron"]
-    : [VITE_ENTRY];
+  const viteArgs = electron ? [VITE_ENTRY, "--mode", "electron"] : [VITE_ENTRY];
 
   console.log(
     `[dev-with-slave] 启动 ${
@@ -555,11 +553,7 @@ async function runSelfTest() {
         true,
       );
     } else {
-      add(
-        `RTU FC03 读 0x0000（${masterPort}）`,
-        false,
-        rtuError?.message,
-      );
+      add(`RTU FC03 读 0x0000（${masterPort}）`, false, rtuError?.message);
     }
   } catch (err) {
     add(`RTU FC03 读 0x0000（${masterPort}）`, false, err.message);
@@ -599,11 +593,7 @@ async function runSelfTest() {
       );
     }
   } catch (err) {
-    add(
-      `TCP FC03 读 0x0000（${tcp.host}:${tcp.port}）`,
-      false,
-      err.message,
-    );
+    add(`TCP FC03 读 0x0000（${tcp.host}:${tcp.port}）`, false, err.message);
   }
 
   await stopSlave(rtuSlave);

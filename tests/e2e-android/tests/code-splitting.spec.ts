@@ -135,7 +135,8 @@ test("① 分包与启动：多 chunk 加载、单 chunk < 500 kB、React 挂载
   const names = await loadedChunkNames(page);
   const chunks = await chunkSizes(page, names);
   const largest = chunks.reduce<LoadedChunk | null>(
-    (worst, chunk) => (worst === null || chunk.bytes > worst.bytes ? chunk : worst),
+    (worst, chunk) =>
+      worst === null || chunk.bytes > worst.bytes ? chunk : worst,
     null,
   );
   const entry = chunks.find((chunk) => chunk.name.startsWith("index-")) ?? null;

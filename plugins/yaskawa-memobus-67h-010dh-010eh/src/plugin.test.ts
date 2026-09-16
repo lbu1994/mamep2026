@@ -102,18 +102,18 @@ describe("Yaskawa MEMOBUS 插件（ADR-041；ADR-054 单文件手动安装）", 
       YASKAWA_MEMOBUS_PROTOCOL_ID,
     );
 
-    const toolbarActions = contributionRegistry.getContributions<
-      Array<{ id: string; titleKey: string }>
-    >("toolbarAction");
+    const toolbarActions =
+      contributionRegistry.getContributions<
+        Array<{ id: string; titleKey: string }>
+      >("toolbarAction");
     expect(toolbarActions).toHaveLength(1);
     expect(toolbarActions[0]?.payload.map((a) => a.id)).toEqual([
       "yaskawa.enter-rom",
       "yaskawa.enter-ram",
     ]);
 
-    const commands = contributionRegistry.getContributions<
-      Array<{ id: string }>
-    >("command");
+    const commands =
+      contributionRegistry.getContributions<Array<{ id: string }>>("command");
     expect(commands).toHaveLength(1);
     expect(commands[0]?.payload.map((c) => c.id)).toEqual([
       "yaskawa.enter-rom",
@@ -156,7 +156,10 @@ describe("Yaskawa MEMOBUS 插件（ADR-041；ADR-054 单文件手动安装）", 
     const { registry } = makeHarness({ communicationApiFactory });
 
     expect(
-      registry.canHandleToolbarAction(YASKAWA_MEMOBUS_PLUGIN_ID, "yaskawa.enter-rom"),
+      registry.canHandleToolbarAction(
+        YASKAWA_MEMOBUS_PLUGIN_ID,
+        "yaskawa.enter-rom",
+      ),
     ).toBe(true);
     const rom = await registry.invokeToolbarAction(
       YASKAWA_MEMOBUS_PLUGIN_ID,

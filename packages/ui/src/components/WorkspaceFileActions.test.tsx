@@ -19,9 +19,7 @@ import { useAppStore } from "../app-store";
 import type { AppHost } from "../host";
 import { WorkspaceFileActions } from "./WorkspaceFileActions";
 
-function makeHost(
-  caps: Partial<PlatformCapabilities> = {},
-): AppHost {
+function makeHost(caps: Partial<PlatformCapabilities> = {}): AppHost {
   const capabilities = {
     modbusRtu: true,
     modbusTcp: false,
@@ -105,7 +103,9 @@ describe("WorkspaceFileActions 导出", () => {
   it("导出用户取消（saved:false）提示已取消而非错误", async () => {
     const host = makeHost();
     (
-      host.saveTextFile as unknown as { mockResolvedValue: (v: unknown) => void }
+      host.saveTextFile as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
     ).mockResolvedValue({
       ok: true as const,
       value: { saved: false, filePath: null },
@@ -121,7 +121,9 @@ describe("WorkspaceFileActions 导出", () => {
   it("导出失败提示错误", async () => {
     const host = makeHost();
     (
-      host.saveTextFile as unknown as { mockResolvedValue: (v: unknown) => void }
+      host.saveTextFile as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
     ).mockResolvedValue({
       ok: false as const,
       error: {
@@ -146,7 +148,9 @@ describe("WorkspaceFileActions 导入（file 能力，桌面端）", () => {
   it("经 openTextFile 读取文本并置入导入草稿", async () => {
     const host = makeHost({ workspaceImport: "file" });
     (
-      host.openTextFile as unknown as { mockResolvedValue: (v: unknown) => void }
+      host.openTextFile as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
     ).mockResolvedValue({
       ok: true as const,
       value: { content: validWorkspaceJson("Imported") },

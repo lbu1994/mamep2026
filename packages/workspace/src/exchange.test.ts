@@ -9,9 +9,7 @@ import {
 
 describe("sanitizeWorkspaceNameForFile", () => {
   it("replaces illegal filename characters and collapses whitespace", () => {
-    expect(sanitizeWorkspaceNameForFile('a<b>:"c/d\\e|f?g*h')).toBe(
-      "abcdefgh",
-    );
+    expect(sanitizeWorkspaceNameForFile('a<b>:"c/d\\e|f?g*h')).toBe("abcdefgh");
   });
 
   it("trims surrounding whitespace and control characters", () => {
@@ -41,7 +39,7 @@ describe("workspaceExportFileName", () => {
   });
 
   it("sanitizes the name inside the file name", () => {
-    expect(workspaceExportFileName('a/b', now)).toBe(
+    expect(workspaceExportFileName("a/b", now)).toBe(
       "mamep-workspace-ab-20260829-102030.json",
     );
     expect(workspaceExportFileName("", now)).toBe(

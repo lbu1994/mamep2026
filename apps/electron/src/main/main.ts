@@ -11,7 +11,14 @@
  * MVP 串口（ADR-017）：与浏览器一致经 Web Serial API，主进程仅配合 select-serial-port 权限处理；
  * 后续 Node Serial/TCP Adapter 落地后由本进程接管。
  */
-import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  session,
+} from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import { writeFile, readFile } from "node:fs/promises";
@@ -81,9 +88,7 @@ let workspaceRepository: WorkspaceFileRepository | null = null;
 
 function ensureWorkspaceRepository(): WorkspaceFileRepository {
   if (workspaceRepository === null) {
-    workspaceRepository = new WorkspaceFileRepository(
-      app.getPath("userData"),
-    );
+    workspaceRepository = new WorkspaceFileRepository(app.getPath("userData"));
   }
   return workspaceRepository;
 }

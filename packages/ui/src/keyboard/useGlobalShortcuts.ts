@@ -6,7 +6,11 @@
  * ③ 命中注册表（APP_SHORTCUTS）→ preventDefault + 分发动作（首个匹配即消费）。
  */
 import { useEffect, useRef } from "react";
-import { APP_SHORTCUTS, matchesShortcut, type AppShortcutId } from "./shortcuts";
+import {
+  APP_SHORTCUTS,
+  matchesShortcut,
+  type AppShortcutId,
+} from "./shortcuts";
 import { isAnyModalOpen, isTextInputTarget } from "./guards";
 
 export type GlobalShortcutActions = Partial<Record<AppShortcutId, () => void>>;

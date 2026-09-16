@@ -64,7 +64,9 @@ test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）�
   await expect(disconnectButton).toBeVisible({ timeout: 30_000 });
 
   // 通信属性面板应显示所选串口标签（本 Host 记录的 portLabel）。
-  await expect(page.locator(".ant-layout-footer, .bottom-panel").first()).toBeVisible();
+  await expect(
+    page.locator(".ant-layout-footer, .bottom-panel").first(),
+  ).toBeVisible();
 
   // FC03：首行读回 4 位 HEX（真实从站返回值）。
   await setRowAddress(page, "0");
@@ -76,7 +78,9 @@ test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）�
   await writeRow(page, "1234");
   await expect(dataInput).toHaveText("1234", { timeout: 30_000 });
 
-  await disconnectButton.evaluate((element) => (element as HTMLElement).click());
+  await disconnectButton.evaluate((element) =>
+    (element as HTMLElement).click(),
+  );
   await expect(disconnectButton).toBeHidden({ timeout: 20_000 });
 });
 

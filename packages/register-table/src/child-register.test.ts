@@ -41,7 +41,11 @@ describe("childDataType", () => {
 
 describe("ensureRegisters", () => {
   it("范围行无 registers 时按父行 dataType 生成默认数组", () => {
-    const row = makeRow({ registerCount: 3, dataType: "unsigned", registers: null });
+    const row = makeRow({
+      registerCount: 3,
+      dataType: "unsigned",
+      registers: null,
+    });
     const regs = ensureRegisters(row);
     expect(regs).toHaveLength(3);
     expect(regs?.every((m) => m.dataType === "unsigned")).toBe(true);
@@ -89,7 +93,11 @@ describe("resizeRegisters（范围变化保留策略）", () => {
     });
     const next = resizeRegisters(row, 4);
     expect(next).toHaveLength(4);
-    expect(next?.[0]).toEqual({ name: "a", comment: "c1", dataType: "unsigned" });
+    expect(next?.[0]).toEqual({
+      name: "a",
+      comment: "c1",
+      dataType: "unsigned",
+    });
     expect(next?.[1]).toEqual({ name: "b", comment: "", dataType: "hex" });
     expect(next?.[2]).toEqual({ name: "", comment: "", dataType: "hex" });
     expect(next?.[3]).toEqual({ name: "", comment: "", dataType: "hex" });
@@ -139,7 +147,9 @@ describe("commitChildCellText", () => {
     const result = commitChildCellText(row, 0, "300");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.registerValues?.map((v) => v.value)).toEqual([300, 0xabcd]);
+    expect(result.value.registerValues?.map((v) => v.value)).toEqual([
+      300, 0xabcd,
+    ]);
     // 父行 cellText 按父行 dataType（hex）规范化。
     expect(result.value.cellText).toBe("012C ABCD");
   });
@@ -155,7 +165,9 @@ describe("commitChildCellText", () => {
     const result = commitChildCellText(row, 1, "ABCD");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.registerValues?.map((v) => v.value)).toEqual([0x12, 0xabcd]);
+    expect(result.value.registerValues?.map((v) => v.value)).toEqual([
+      0x12, 0xabcd,
+    ]);
     expect(result.value.cellText).toBe("0012 ABCD");
   });
 

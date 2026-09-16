@@ -45,9 +45,7 @@ describe("ScriptedModbusRtuDevice basic tables (ADR-043 E-1)", () => {
     const device = new ScriptedModbusRtuDevice();
     // 值 [1,0,1,1,0,0,0,1] → 0x8D
     const resp = device.handleFrame(
-      Uint8Array.from([
-        0x01, 0x0f, 0x00, 0x00, 0x00, 0x08, 0x01, 0x8d, 0, 0,
-      ]),
+      Uint8Array.from([0x01, 0x0f, 0x00, 0x00, 0x00, 0x08, 0x01, 0x8d, 0, 0]),
     );
     expect(resp).not.toBeNull();
     expect(Array.from(resp!.slice(0, 6))).toEqual([

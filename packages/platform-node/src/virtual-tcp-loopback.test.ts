@@ -73,7 +73,13 @@ describe("NodeTcpTransport over local loopback", () => {
       const received: Uint8Array[] = [];
       transport.onData((chunk) => received.push(chunk));
       expect((await transport.open()).ok).toBe(true);
-      expect((await transport.write(Uint8Array.from([0x01, 0x03, 0x00, 0x00, 0x00, 0x01]))).ok).toBe(true);
+      expect(
+        (
+          await transport.write(
+            Uint8Array.from([0x01, 0x03, 0x00, 0x00, 0x00, 0x01]),
+          )
+        ).ok,
+      ).toBe(true);
       await waitFor(() => concat(received).length >= 6);
       expect(concat(received)).toEqual([0x01, 0x03, 0x00, 0x00, 0x00, 0x01]);
       expect((await transport.close()).ok).toBe(true);
@@ -121,9 +127,13 @@ describe("NodeTcpTransport over local loopback", () => {
       const received: Uint8Array[] = [];
       transport.onData((chunk) => received.push(chunk));
       await transport.open();
-      await transport.write(Uint8Array.from([0x01, 0x03, 0x00, 0x00, 0x00, 0x02]));
+      await transport.write(
+        Uint8Array.from([0x01, 0x03, 0x00, 0x00, 0x00, 0x02]),
+      );
       await waitFor(() => concat(received).length >= 7);
-      expect(concat(received)).toEqual([0x01, 0x03, 0x02, 0x12, 0x34, 0x56, 0x78]);
+      expect(concat(received)).toEqual([
+        0x01, 0x03, 0x02, 0x12, 0x34, 0x56, 0x78,
+      ]);
       await transport.close();
     } finally {
       await loopback.close();

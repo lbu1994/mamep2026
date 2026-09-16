@@ -96,7 +96,10 @@ export function installVscodeDevThemeRelay(
   }
   if (!env.isIframe()) return false;
   // 请求主 frame 立即下发当前主题颜色（闭合「主 frame 先跑、本桥后装」竞态）。
-  env.postToParent({ source: THEME_RELAY_SOURCE, type: THEME_RELAY_REQUEST_TYPE });
+  env.postToParent({
+    source: THEME_RELAY_SOURCE,
+    type: THEME_RELAY_REQUEST_TYPE,
+  });
   env.targetWindow.addEventListener("message", (event: BridgeMessageEvent) => {
     const data = event.data as ThemeColorsRelayMessage;
     if (

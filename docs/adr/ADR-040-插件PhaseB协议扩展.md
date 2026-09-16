@@ -26,23 +26,31 @@ export interface CodecWriteRequest {
   entries: { address: number; value: number }[];
 }
 export type CodecDecodedResponse =
-  | { kind: "read"; values: number[] }   // 与指令 addresses 顺序一一对应
+  | { kind: "read"; values: number[] } // 与指令 addresses 顺序一一对应
   | { kind: "write" }
   | { kind: "exception"; exceptionCode: number };
 
 export interface FrameParser {
-  push(chunk: Uint8Array):
+  push(
+    chunk: Uint8Array,
+  ):
     | { done: false }
     | { done: true; outcome: Result<CodecDecodedResponse>; frame: Uint8Array };
 }
 
 export interface ProtocolCodec {
-  protocolId: string;                       // 如 "yaskawa-memobus-67h-010dh-010eh"
+  protocolId: string; // 如 "yaskawa-memobus-67h-010dh-010eh"
   encodeRead(req: CodecReadRequest): Uint8Array;
   encodeWrite(req: CodecWriteRequest): Uint8Array;
-  decodeResponse(frame: Uint8Array, expect: unknown): Result<CodecDecodedResponse>;
-  parserFactory(expect: unknown): FrameParser;   // 分帧 / 半包粘包 / 重同步
-  expectedLength(kind: "read" | "write", expect: unknown): { normal: number; exception: number };
+  decodeResponse(
+    frame: Uint8Array,
+    expect: unknown,
+  ): Result<CodecDecodedResponse>;
+  parserFactory(expect: unknown): FrameParser; // 分帧 / 半包粘包 / 重同步
+  expectedLength(
+    kind: "read" | "write",
+    expect: unknown,
+  ): { normal: number; exception: number };
 }
 ```
 

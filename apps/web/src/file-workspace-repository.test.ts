@@ -3,7 +3,10 @@
  * Renderer 薄桥 → preload 桥（workspace-load/save/clear），parse/serialize 在本层完成。
  */
 import { describe, expect, it, vi } from "vitest";
-import { createEmptyWorkspace, workspaceSchemaVersion } from "@mamep2026/domain";
+import {
+  createEmptyWorkspace,
+  workspaceSchemaVersion,
+} from "@mamep2026/domain";
 import type { Result, Workspace } from "@mamep2026/domain";
 import { serializeWorkspace } from "@mamep2026/workspace";
 import type { WorkspaceLoadResponse } from "@mamep2026/platform-api";
@@ -26,15 +29,13 @@ function makeBridge(overrides: Partial<BridgeWorkspaceLike> = {}): {
   let clearCalls = 0;
   let createBackupCalls = 0;
   const bridge: BridgeWorkspaceLike = {
-    workspaceLoad: vi.fn(
-      async (): Promise<Result<WorkspaceLoadResponse>> => ({
-        ok: true,
-        value: {
-          content: serializeWorkspace(createEmptyWorkspace()),
-          recoveryInfo: null,
-        },
-      }),
-    ),
+    workspaceLoad: vi.fn(async (): Promise<Result<WorkspaceLoadResponse>> => ({
+      ok: true,
+      value: {
+        content: serializeWorkspace(createEmptyWorkspace()),
+        recoveryInfo: null,
+      },
+    })),
     workspaceSave: vi.fn(async (content: string): Promise<Result<null>> => {
       saveCalls.push(content);
       return { ok: true, value: null };
@@ -134,7 +135,10 @@ describe("FileWorkspaceRepository", () => {
   it("import 校验后经桥 workspaceSave 落盘（§19.1）", async () => {
     const { bridge, saveCalls } = makeBridge();
     const repo = new FileWorkspaceRepository(bridge);
-    const serialized = serializeWorkspace({ ...createEmptyWorkspace(), name: "Imported" });
+    const serialized = serializeWorkspace({
+      ...createEmptyWorkspace(),
+      name: "Imported",
+    });
     const imported = await repo.import(serialized);
     expect(imported.ok).toBe(true);
     expect(saveCalls).toEqual([serialized]);

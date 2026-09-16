@@ -27,12 +27,7 @@ import type {
   WorkspaceRecoveryInfo,
   AddressTransform,
 } from "@mamep2026/domain";
-import {
-  createMamepError,
-  defaultConfig,
-  fail,
-  ok,
-} from "@mamep2026/domain";
+import { createMamepError, defaultConfig, fail, ok } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
 import {
   commLogEventFromPayload,

@@ -20,15 +20,15 @@
 
 ## 文件用途一览
 
-| 文件 | 运行时 | 用途 |
-|---|---|---|
-| `manifest.json` | ✅ 唯一需要 | 插件「名片」：安装时被读取、校验、注册。交付所用。 |
-| `src/plugin.ts` | ❌ | 用 TS 写带类型的 manifest（`technoproBlueThemeManifest`）+ `registerTechnoproBlueThemePlugin`（供单测）；`tsc` 能查错。 |
-| `src/index.ts` | ❌ | 包出口（`exports` 指向），`export * from "./plugin"`。 |
-| `src/plugin.test.ts` | ❌ | 单元测试：模拟注册表验证 manifest 合法、可注册。 |
-| `package.json` | ❌ | 声明为 pnpm workspace 包（`@mamep2026/technopro-blue-theme`），提供 `typecheck/test/lint` 脚本。 |
-| `tsconfig.json` | ❌ | 让本包可被独立 `tsc` 类型检查。 |
-| `README.md` | ❌ | 使用/开发说明。 |
+| 文件                 | 运行时      | 用途                                                                                                                    |
+| -------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `manifest.json`      | ✅ 唯一需要 | 插件「名片」：安装时被读取、校验、注册。交付所用。                                                                      |
+| `src/plugin.ts`      | ❌          | 用 TS 写带类型的 manifest（`technoproBlueThemeManifest`）+ `registerTechnoproBlueThemePlugin`（供单测）；`tsc` 能查错。 |
+| `src/index.ts`       | ❌          | 包出口（`exports` 指向），`export * from "./plugin"`。                                                                  |
+| `src/plugin.test.ts` | ❌          | 单元测试：模拟注册表验证 manifest 合法、可注册。                                                                        |
+| `package.json`       | ❌          | 声明为 pnpm workspace 包（`@mamep2026/technopro-blue-theme`），提供 `typecheck/test/lint` 脚本。                        |
+| `tsconfig.json`      | ❌          | 让本包可被独立 `tsc` 类型检查。                                                                                         |
+| `README.md`          | ❌          | 使用/开发说明。                                                                                                         |
 
 ## 纯数据插件（本插件即此类）
 

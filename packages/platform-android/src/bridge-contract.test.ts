@@ -57,14 +57,17 @@ describe("bridge-contract：base64 编解码", () => {
   it("非法字符 / 非法长度一律失败（不静默丢弃）", () => {
     const illegalChar = decodeBase64ToBytes("AQM*");
     expect(illegalChar.ok).toBe(false);
-    if (!illegalChar.ok) expect(illegalChar.error.code).toBe("BRIDGE_PAYLOAD_INVALID");
+    if (!illegalChar.ok)
+      expect(illegalChar.error.code).toBe("BRIDGE_PAYLOAD_INVALID");
 
     const illegalLength = decodeBase64ToBytes("AQM");
     expect(illegalLength.ok).toBe(false);
     if (!illegalLength.ok) {
       expect(illegalLength.error.code).toBe("BRIDGE_PAYLOAD_INVALID");
       expect(illegalLength.error.category).toBe("internal");
-      expect(illegalLength.error.userMessageKey).toBe("errors.bridgePayloadInvalid");
+      expect(illegalLength.error.userMessageKey).toBe(
+        "errors.bridgePayloadInvalid",
+      );
     }
   });
 });
@@ -72,16 +75,32 @@ describe("bridge-contract：base64 编解码", () => {
 describe("bridge-contract：出参与回包校验", () => {
   it("openTcp 参数非法（端口越界 / host 空 / 缺超时）被拒", () => {
     expect(
-      buildBridgeParams(bridgeOpenTcpParamsSchema, { host: "", port: 1, connectTimeoutMs: 1 }, "openTcp").ok,
+      buildBridgeParams(
+        bridgeOpenTcpParamsSchema,
+        { host: "", port: 1, connectTimeoutMs: 1 },
+        "openTcp",
+      ).ok,
     ).toBe(false);
     expect(
-      buildBridgeParams(bridgeOpenTcpParamsSchema, { host: "h", port: 0, connectTimeoutMs: 1 }, "openTcp").ok,
+      buildBridgeParams(
+        bridgeOpenTcpParamsSchema,
+        { host: "h", port: 0, connectTimeoutMs: 1 },
+        "openTcp",
+      ).ok,
     ).toBe(false);
     expect(
-      buildBridgeParams(bridgeOpenTcpParamsSchema, { host: "h", port: 70000, connectTimeoutMs: 1 }, "openTcp").ok,
+      buildBridgeParams(
+        bridgeOpenTcpParamsSchema,
+        { host: "h", port: 70000, connectTimeoutMs: 1 },
+        "openTcp",
+      ).ok,
     ).toBe(false);
     expect(
-      buildBridgeParams(bridgeOpenTcpParamsSchema, { host: "h", port: 502 }, "openTcp").ok,
+      buildBridgeParams(
+        bridgeOpenTcpParamsSchema,
+        { host: "h", port: 502 },
+        "openTcp",
+      ).ok,
     ).toBe(false);
   });
 
@@ -92,13 +111,24 @@ describe("bridge-contract：出参与回包校验", () => {
       "openTcp",
     );
     expect(built.ok).toBe(true);
-    if (built.ok) expect(built.value).toEqual({ host: "192.168.1.10", port: 502, connectTimeoutMs: 5000 });
+    if (built.ok)
+      expect(built.value).toEqual({
+        host: "192.168.1.10",
+        port: 502,
+        connectTimeoutMs: 5000,
+      });
   });
 
   it("write 参数要求非空 base64", () => {
-    expect(buildBridgeParams(bridgeWriteParamsSchema, { data: "" }, "write").ok).toBe(false);
-    expect(buildBridgeParams(bridgeWriteParamsSchema, { data: "AQ==" }, "write").ok).toBe(true);
-    expect(buildBridgeParams(bridgeWriteParamsSchema, {}, "write").ok).toBe(false);
+    expect(
+      buildBridgeParams(bridgeWriteParamsSchema, { data: "" }, "write").ok,
+    ).toBe(false);
+    expect(
+      buildBridgeParams(bridgeWriteParamsSchema, { data: "AQ==" }, "write").ok,
+    ).toBe(true);
+    expect(buildBridgeParams(bridgeWriteParamsSchema, {}, "write").ok).toBe(
+      false,
+    );
   });
 
   it("回包形状非法时失败并带上下文（不静默降级）", () => {

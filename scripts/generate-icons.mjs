@@ -134,7 +134,11 @@ function circleMask(size) {
 /** 把源 SVG 渲染为边长 `size` 的位图；`flatten` 为 true 时合成白底，否则保留透明底。 */
 async function renderAndroidBitmap(size, flatten) {
   const pipeline = sharp(svg).resize(size, size);
-  return (flatten ? pipeline.flatten({ background: ANDROID_BACKGROUND_COLOR }) : pipeline)
+  return (
+    flatten
+      ? pipeline.flatten({ background: ANDROID_BACKGROUND_COLOR })
+      : pipeline
+  )
     .png()
     .toBuffer();
 }
@@ -164,18 +168,26 @@ for (const { dir, legacy, foreground } of ANDROID_DENSITIES) {
   // 白底方形（系统会在旧版本上自行加圆角/圆形遮罩）。
   await writeFile(
     path.join(outDir, "ic_launcher.png"),
-    await composeAndroidIcon(legacy, Math.round(legacy * LEGACY_CONTENT_RATIO), {
-      flatten: true,
-    }),
+    await composeAndroidIcon(
+      legacy,
+      Math.round(legacy * LEGACY_CONTENT_RATIO),
+      {
+        flatten: true,
+      },
+    ),
   );
 
   // 白底圆形：先渲染白底方形，再用圆形遮罩裁掉圆外（圆外透明）。
   await writeFile(
     path.join(outDir, "ic_launcher_round.png"),
     await sharp(
-      await composeAndroidIcon(legacy, Math.round(legacy * LEGACY_CONTENT_RATIO), {
-        flatten: true,
-      }),
+      await composeAndroidIcon(
+        legacy,
+        Math.round(legacy * LEGACY_CONTENT_RATIO),
+        {
+          flatten: true,
+        },
+      ),
     )
       .composite([{ input: circleMask(legacy), blend: "dest-in" }])
       .png()

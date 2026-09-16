@@ -45,7 +45,10 @@ describe("CapacitorTcpTransport：打开", () => {
 
   it("openTcp 抛出原生错误 → 映射为结构化错误并清理监听", async () => {
     const bridge = new FakeTransportBridge();
-    bridge.openError = { code: "TCP_CONNECT_FAILED", message: "connection refused" };
+    bridge.openError = {
+      code: "TCP_CONNECT_FAILED",
+      message: "connection refused",
+    };
     const transport = createTransport(bridge);
 
     const result = await transport.open();
@@ -62,7 +65,10 @@ describe("CapacitorTcpTransport：打开", () => {
 
   it("监听注册失败 → 打开失败（不留下半注册状态）", async () => {
     const bridge = new FakeTransportBridge();
-    bridge.addListenerError = { code: "PLUGIN_UNAVAILABLE", message: "no plugin" };
+    bridge.addListenerError = {
+      code: "PLUGIN_UNAVAILABLE",
+      message: "no plugin",
+    };
     const transport = createTransport(bridge);
 
     const result = await transport.open();
@@ -146,7 +152,9 @@ describe("CapacitorTcpTransport：事件", () => {
     bridge.emitRawData({ data: "not base64!!" });
 
     expect(received).toEqual([]);
-    expect(errors.map((error) => error.code)).toEqual(["BRIDGE_PAYLOAD_INVALID"]);
+    expect(errors.map((error) => error.code)).toEqual([
+      "BRIDGE_PAYLOAD_INVALID",
+    ]);
   });
 
   it("data 回包非法 base64 → error 通道", async () => {
@@ -158,7 +166,9 @@ describe("CapacitorTcpTransport：事件", () => {
 
     bridge.emitRawData({ data: "AQM" });
 
-    expect(errors.map((error) => error.code)).toEqual(["BRIDGE_PAYLOAD_INVALID"]);
+    expect(errors.map((error) => error.code)).toEqual([
+      "BRIDGE_PAYLOAD_INVALID",
+    ]);
   });
 
   it("空数据不投递（避免空帧进入帧解析器）", async () => {
@@ -182,7 +192,9 @@ describe("CapacitorTcpTransport：事件", () => {
 
     bridge.emitError("REMOTE_CLOSED", "peer closed connection");
 
-    expect(errors.map((error) => error.code)).toEqual(["TCP_CONNECTION_FAILED"]);
+    expect(errors.map((error) => error.code)).toEqual([
+      "TCP_CONNECTION_FAILED",
+    ]);
   });
 
   it("closed 事件 → onClose 只发一次且 isOpen 变 false", async () => {

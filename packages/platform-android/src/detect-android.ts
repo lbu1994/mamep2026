@@ -9,9 +9,7 @@ interface CapacitorGlobalLike {
 }
 
 /** 是否运行在 Android（Capacitor 容器）中。浏览器 / Electron / VSCode 均为 false。 */
-export function isAndroidPlatform(
-  globalObject: unknown = globalThis,
-): boolean {
+export function isAndroidPlatform(globalObject: unknown = globalThis): boolean {
   const capacitor = (globalObject as { Capacitor?: CapacitorGlobalLike })
     ?.Capacitor;
   if (typeof capacitor?.getPlatform !== "function") return false;

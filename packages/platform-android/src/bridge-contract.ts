@@ -8,7 +8,12 @@
  * 非法回包一律拒绝（不静默降级），错误码 `BRIDGE_PAYLOAD_INVALID`。
  */
 import { z } from "zod";
-import { createMamepError, fail, type MamepError, type Result } from "@mamep2026/domain";
+import {
+  createMamepError,
+  fail,
+  type MamepError,
+  type Result,
+} from "@mamep2026/domain";
 
 /** 桥方法白名单（新增方法必须同时在此登记，便于评审与测试守住面）。 */
 export const MAMEP_TRANSPORT_METHODS = [
@@ -178,7 +183,8 @@ export function encodeBytesToBase64(bytes: Uint8Array): string {
     const chunk = (first << 16) | ((second ?? 0) << 8) | (third ?? 0);
     output += BASE64_ALPHABET.charAt((chunk >> 18) & 63);
     output += BASE64_ALPHABET.charAt((chunk >> 12) & 63);
-    output += second === undefined ? "=" : BASE64_ALPHABET.charAt((chunk >> 6) & 63);
+    output +=
+      second === undefined ? "=" : BASE64_ALPHABET.charAt((chunk >> 6) & 63);
     output += third === undefined ? "=" : BASE64_ALPHABET.charAt(chunk & 63);
   }
   return output;
@@ -192,7 +198,9 @@ export function decodeBase64ToBytes(value: string): Result<Uint8Array> {
   }
   if (trimmed.length % 4 !== 0) {
     return fail(
-      bridgeContractViolation(`base64 payload length ${trimmed.length} is not a multiple of 4`),
+      bridgeContractViolation(
+        `base64 payload length ${trimmed.length} is not a multiple of 4`,
+      ),
     );
   }
   const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0;
@@ -208,7 +216,11 @@ export function decodeBase64ToBytes(value: string): Result<Uint8Array> {
       }
       const decoded = BASE64_DECODE_TABLE[character.charCodeAt(0)] ?? -1;
       if (decoded < 0) {
-        return fail(bridgeContractViolation(`illegal base64 character ${JSON.stringify(character)}`));
+        return fail(
+          bridgeContractViolation(
+            `illegal base64 character ${JSON.stringify(character)}`,
+          ),
+        );
       }
       values.push(decoded);
     }

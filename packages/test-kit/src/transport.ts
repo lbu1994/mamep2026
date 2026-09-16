@@ -123,22 +123,10 @@ export class ScriptedModbusRtuDevice {
       return appendCrc(body);
     }
     if (functionCode === 0x01) {
-      return this.readBits(
-        this.coils,
-        slave,
-        0x01,
-        address,
-        quantity,
-      );
+      return this.readBits(this.coils, slave, 0x01, address, quantity);
     }
     if (functionCode === 0x02) {
-      return this.readBits(
-        this.inputs,
-        slave,
-        0x02,
-        address,
-        quantity,
-      );
+      return this.readBits(this.inputs, slave, 0x02, address, quantity);
     }
     if (functionCode === 0x10) {
       // must-multi 区：单写返回非法数据地址异常。

@@ -102,9 +102,7 @@ test("导出触发浏览器下载：文件名与版本化 JSON 内容", async ({
   const settings = await openSettings(page);
 
   const downloadPromise = page.waitForEvent("download");
-  await settings
-    .getByRole("button", { name: "Export Workspace" })
-    .click();
+  await settings.getByRole("button", { name: "Export Workspace" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(
     /^mamep-workspace-.*-\d{8}-\d{6}\.json$/,
@@ -128,9 +126,7 @@ test("导出→导入 roundtrip：导入后工作区恢复导出内容", async (
   // 导出当前工作区。
   const settings = await openSettings(page);
   const downloadPromise = page.waitForEvent("download");
-  await settings
-    .getByRole("button", { name: "Export Workspace" })
-    .click();
+  await settings.getByRole("button", { name: "Export Workspace" }).click();
   const download = await downloadPromise;
   const exported = await readDownload(download);
   await closeSettings(page);
@@ -158,9 +154,7 @@ test("导入预览取消不替换当前工作区", async ({ page }) => {
 
   // 先用导出得到合法工作区 JSON（手写 JSON 易缺必填字段导致解析失败）。
   const downloadPromise = page.waitForEvent("download");
-  await settings
-    .getByRole("button", { name: "Export Workspace" })
-    .click();
+  await settings.getByRole("button", { name: "Export Workspace" }).click();
   const download = await downloadPromise;
   const valid = await readDownload(download);
 
@@ -201,9 +195,7 @@ test("导入导出交互无 console 错误", async ({ page }) => {
 
   // 导出。
   const downloadPromise = page.waitForEvent("download");
-  await settings
-    .getByRole("button", { name: "Export Workspace" })
-    .click();
+  await settings.getByRole("button", { name: "Export Workspace" }).click();
   const download = await downloadPromise;
   const exported = await readDownload(download);
 

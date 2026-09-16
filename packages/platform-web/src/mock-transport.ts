@@ -145,9 +145,7 @@ export class MockTransport implements TransportPort {
         data[index] = (data[index] ?? 0) | (1 << (i & 7));
       }
     }
-    this.respond(
-      Uint8Array.from([slave, functionCode, byteCount, ...data]),
-    );
+    this.respond(Uint8Array.from([slave, functionCode, byteCount, ...data]));
   }
 
   private handleFrame(bytes: Uint8Array): void {
@@ -319,11 +317,7 @@ export class MockTransport implements TransportPort {
       return;
     }
     if (functionCode === 0x04) {
-      const tableRule = matchMockRule(
-        this.rules,
-        address,
-        "input-register",
-      );
+      const tableRule = matchMockRule(this.rules, address, "input-register");
       const behavior = tableRule?.read ?? { kind: "normal" };
       if (behavior.kind === "no-response") return;
       if (behavior.kind === "exception") {
@@ -410,8 +404,7 @@ export function installMockHooks(transport: MockTransport): void {
     getInput: (address: number) => transport.getInput(address),
     setInputRegister: (address: number, value: number) =>
       transport.setInputRegister(address, value),
-    getInputRegister: (address: number) =>
-      transport.getInputRegister(address),
+    getInputRegister: (address: number) => transport.getInputRegister(address),
   };
 }
 

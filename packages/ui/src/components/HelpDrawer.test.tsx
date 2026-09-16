@@ -27,18 +27,26 @@ beforeEach(() => {
 
 describe("HelpDrawer（PRD §8.3 完整用户帮助）", () => {
   it("渲染各页签标题，默认显示「快速上手」正文", () => {
-    render(<HelpDrawer open onClose={() => {}} documentationContributions={[]} />);
+    render(
+      <HelpDrawer open onClose={() => {}} documentationContributions={[]} />,
+    );
     // 页签标题（role=tab，与正文标题区分，避免与内容 <h4> 重复匹配）。
     expect(screen.getByRole("tab", { name: "Getting Started" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Connection" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Keyboard Shortcuts" })).toBeTruthy();
+    expect(
+      screen.getByRole("tab", { name: "Keyboard Shortcuts" }),
+    ).toBeTruthy();
     expect(screen.getByRole("tab", { name: "About" })).toBeTruthy();
     // 默认内容（markdown 渲染的 # 标题）。
-    expect(screen.getByRole("heading", { name: "Getting Started" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Getting Started" }),
+    ).toBeTruthy();
   });
 
   it("点击页签切换正文", () => {
-    render(<HelpDrawer open onClose={() => {}} documentationContributions={[]} />);
+    render(
+      <HelpDrawer open onClose={() => {}} documentationContributions={[]} />,
+    );
     clickTab("Table");
     expect(screen.getByRole("heading", { name: "Table" })).toBeTruthy();
     clickTab("About");
@@ -46,9 +54,13 @@ describe("HelpDrawer（PRD §8.3 完整用户帮助）", () => {
   });
 
   it("键盘快捷键页签渲染快捷键总览（app/table 两组）", () => {
-    render(<HelpDrawer open onClose={() => {}} documentationContributions={[]} />);
+    render(
+      <HelpDrawer open onClose={() => {}} documentationContributions={[]} />,
+    );
     clickTab("Keyboard Shortcuts");
-    expect(document.querySelectorAll(".keyboard-shortcuts__table").length).toBe(2);
+    expect(document.querySelectorAll(".keyboard-shortcuts__table").length).toBe(
+      2,
+    );
   });
 
   it("有文档贡献时渲染「插件文档」页签与内容", () => {
@@ -75,7 +87,9 @@ describe("HelpDrawer（PRD §8.3 完整用户帮助）", () => {
   });
 
   it("无文档贡献时不渲染「插件文档」页签", () => {
-    render(<HelpDrawer open onClose={() => {}} documentationContributions={[]} />);
+    render(
+      <HelpDrawer open onClose={() => {}} documentationContributions={[]} />,
+    );
     expect(screen.queryByText("Plugin Documentation")).toBeNull();
   });
 });

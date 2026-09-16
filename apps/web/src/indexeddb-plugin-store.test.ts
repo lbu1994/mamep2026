@@ -31,7 +31,8 @@ function makeKv(initial?: unknown): {
   const stored: { value: unknown } = { value: initial };
   return {
     kv: {
-      get: async (key: string) => (key === "plugins" ? stored.value : undefined),
+      get: async (key: string) =>
+        key === "plugins" ? stored.value : undefined,
       put: async (key: string, value: unknown) => {
         if (key === "plugins") stored.value = value;
       },

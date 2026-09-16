@@ -10,7 +10,12 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
 } from "@mamep2026/domain";
-import { createMamepError, createTcpConnectionProfile, fail, ok } from "@mamep2026/domain";
+import {
+  createMamepError,
+  createTcpConnectionProfile,
+  fail,
+  ok,
+} from "@mamep2026/domain";
 import type { Clock, TransportPort } from "@mamep2026/communication";
 import type { PlatformHost, SerialDeviceHandle } from "@mamep2026/platform-api";
 import type {

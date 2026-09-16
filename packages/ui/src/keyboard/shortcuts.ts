@@ -71,9 +71,24 @@ export function matchesShortcut(
 
 /** App 级快捷键（MamepApp，经 useGlobalShortcuts 分发）。 */
 export const APP_SHORTCUTS: ShortcutDef[] = [
-  { id: "openSettings", scope: "app", combo: { key: ",", mod: true }, comboLabel: "Ctrl+," },
-  { id: "toggleConnect", scope: "app", combo: { key: "enter", mod: true }, comboLabel: "Ctrl+Enter" },
-  { id: "openHelp", scope: "app", combo: { key: "/", mod: true }, comboLabel: "Ctrl+/" },
+  {
+    id: "openSettings",
+    scope: "app",
+    combo: { key: ",", mod: true },
+    comboLabel: "Ctrl+,",
+  },
+  {
+    id: "toggleConnect",
+    scope: "app",
+    combo: { key: "enter", mod: true },
+    comboLabel: "Ctrl+Enter",
+  },
+  {
+    id: "openHelp",
+    scope: "app",
+    combo: { key: "/", mod: true },
+    comboLabel: "Ctrl+/",
+  },
   {
     id: "openHelpQuestion",
     scope: "app",
@@ -81,34 +96,89 @@ export const APP_SHORTCUTS: ShortcutDef[] = [
     comboLabel: "?",
     aliasOf: "openHelp",
   },
-  { id: "prevSheet", scope: "app", combo: { key: "[", mod: true }, comboLabel: "Ctrl+[" },
-  { id: "nextSheet", scope: "app", combo: { key: "]", mod: true }, comboLabel: "Ctrl+]" },
-  { id: "newSheet", scope: "app", combo: { key: "n", mod: true, alt: true }, comboLabel: "Ctrl+Alt+N" },
-  { id: "closeSheet", scope: "app", combo: { key: "w", mod: true, alt: true }, comboLabel: "Ctrl+Alt+W" },
+  {
+    id: "prevSheet",
+    scope: "app",
+    combo: { key: "[", mod: true },
+    comboLabel: "Ctrl+[",
+  },
+  {
+    id: "nextSheet",
+    scope: "app",
+    combo: { key: "]", mod: true },
+    comboLabel: "Ctrl+]",
+  },
+  {
+    id: "newSheet",
+    scope: "app",
+    combo: { key: "n", mod: true, alt: true },
+    comboLabel: "Ctrl+Alt+N",
+  },
+  {
+    id: "closeSheet",
+    scope: "app",
+    combo: { key: "w", mod: true, alt: true },
+    comboLabel: "Ctrl+Alt+W",
+  },
   {
     id: "exportWorkspace",
     scope: "app",
     combo: { key: "s", mod: true, shift: true },
     comboLabel: "Ctrl+Shift+S",
   },
-  { id: "importWorkspace", scope: "app", combo: { key: "o", mod: true, alt: true }, comboLabel: "Ctrl+Alt+O" },
-  { id: "toggleTheme", scope: "app", combo: { key: "t", mod: true, alt: true }, comboLabel: "Ctrl+Alt+T" },
-  { id: "focusCommLog", scope: "app", combo: { key: "l", mod: true, alt: true }, comboLabel: "Ctrl+Alt+L" },
+  {
+    id: "importWorkspace",
+    scope: "app",
+    combo: { key: "o", mod: true, alt: true },
+    comboLabel: "Ctrl+Alt+O",
+  },
+  {
+    id: "toggleTheme",
+    scope: "app",
+    combo: { key: "t", mod: true, alt: true },
+    comboLabel: "Ctrl+Alt+T",
+  },
+  {
+    id: "focusCommLog",
+    scope: "app",
+    combo: { key: "l", mod: true, alt: true },
+    comboLabel: "Ctrl+Alt+L",
+  },
 ];
 
 /** 表格级快捷键（RegisterTable.handleGlobalKeyDown 扩展，作用于活动表/选中行）。 */
 export const TABLE_SHORTCUTS: ShortcutDef[] = [
   { id: "readAll", scope: "table", combo: { key: "f9" }, comboLabel: "F9" },
-  { id: "readSelected", scope: "table", combo: { key: "f8" }, comboLabel: "F8" },
+  {
+    id: "readSelected",
+    scope: "table",
+    combo: { key: "f8" },
+    comboLabel: "F8",
+  },
   {
     id: "writeSelected",
     scope: "table",
     combo: { key: "enter", mod: true, shift: true },
     comboLabel: "Ctrl+Shift+Enter",
   },
-  { id: "togglePolling", scope: "table", combo: { key: "p", alt: true }, comboLabel: "Alt+P" },
-  { id: "moveSelectionUp", scope: "table", combo: { key: "arrowup" }, comboLabel: "↑" },
-  { id: "moveSelectionDown", scope: "table", combo: { key: "arrowdown" }, comboLabel: "↓" },
+  {
+    id: "togglePolling",
+    scope: "table",
+    combo: { key: "p", alt: true },
+    comboLabel: "Alt+P",
+  },
+  {
+    id: "moveSelectionUp",
+    scope: "table",
+    combo: { key: "arrowup" },
+    comboLabel: "↑",
+  },
+  {
+    id: "moveSelectionDown",
+    scope: "table",
+    combo: { key: "arrowdown" },
+    comboLabel: "↓",
+  },
   {
     id: "restoreColumnLayout",
     scope: "table",
@@ -117,7 +187,10 @@ export const TABLE_SHORTCUTS: ShortcutDef[] = [
   },
 ];
 
-export const ALL_SHORTCUTS: ShortcutDef[] = [...APP_SHORTCUTS, ...TABLE_SHORTCUTS];
+export const ALL_SHORTCUTS: ShortcutDef[] = [
+  ...APP_SHORTCUTS,
+  ...TABLE_SHORTCUTS,
+];
 
 export type AppShortcutId = (typeof APP_SHORTCUTS)[number]["id"];
 export type TableShortcutId = (typeof TABLE_SHORTCUTS)[number]["id"];

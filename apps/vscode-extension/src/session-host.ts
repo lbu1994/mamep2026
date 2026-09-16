@@ -43,9 +43,7 @@ export interface VscodeSessionHostOptions {
    * 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055）：由宿主侧插件运行时
    * （HostPluginRuntime）注入，随插件安装/启停自动更新。
    */
-  resolveAddressTransform?: (
-    transformId: string,
-  ) => AddressTransform | null;
+  resolveAddressTransform?: (transformId: string) => AddressTransform | null;
 }
 
 export class VscodeSessionHost {
@@ -162,10 +160,12 @@ export class VscodeSessionHost {
   }
 
   /** 表级 Address Adjust（ADR-042）：仅 RTU 活动时生效（TCP 无地址变换），同步到宿主会话。 */
-  setAddressTransform(config: {
-    transformId: string;
-    enabled: boolean;
-  } | null): void {
+  setAddressTransform(
+    config: {
+      transformId: string;
+      enabled: boolean;
+    } | null,
+  ): void {
     if (this.active === "rtu") this.rtu.setAddressTransform(config);
   }
 

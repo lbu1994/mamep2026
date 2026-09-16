@@ -663,7 +663,10 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     );
     expect(result.type).toBe("response");
     expect(workspace.save).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "SaveMe", schemaVersion: workspaceSchemaVersion }),
+      expect.objectContaining({
+        name: "SaveMe",
+        schemaVersion: workspaceSchemaVersion,
+      }),
     );
   });
 
@@ -882,4 +885,3 @@ describe("extractMessageId", () => {
     expect(extractMessageId({ messageId: 123 })).toBe("");
   });
 });
-

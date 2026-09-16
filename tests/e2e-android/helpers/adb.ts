@@ -262,14 +262,19 @@ export function resolveWebviewSocket(appId: string = APP_ID): string | null {
     .map((line) => (line.split(/\s+/).pop() ?? "").replace(/^@/, ""))
     .filter((name) => name.startsWith("webview_devtools_remote_"));
   return (
-    names.find((name) => name === `webview_devtools_remote_${pid.split(/\s+/)[0]}`) ??
+    names.find(
+      (name) => name === `webview_devtools_remote_${pid.split(/\s+/)[0]}`,
+    ) ??
     names[0] ??
     null
   );
 }
 
 /** 把设备上的 WebView devtools socket 转发到宿主机 CDP 端口。 */
-export function forwardDevtools(socketName: string, port: number = CDP_PORT): void {
+export function forwardDevtools(
+  socketName: string,
+  port: number = CDP_PORT,
+): void {
   adb(["forward", `tcp:${port}`, `localabstract:${socketName}`]);
 }
 
@@ -284,5 +289,7 @@ export async function waitForWebviewSocket(
     if (socket !== null) return socket;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(`等待 WebView devtools socket 超时（${timeoutMs}ms，appId=${appId}）`);
+  throw new Error(
+    `等待 WebView devtools socket 超时（${timeoutMs}ms，appId=${appId}）`,
+  );
 }

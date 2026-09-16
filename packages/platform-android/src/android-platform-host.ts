@@ -149,7 +149,10 @@ export class AndroidPlatformHost implements PlatformHost {
     if (!params.ok) return fail(params.error);
 
     return ok(
-      new CapacitorUsbSerialTransport({ bridge: this.bridge, params: params.value }),
+      new CapacitorUsbSerialTransport({
+        bridge: this.bridge,
+        params: params.value,
+      }),
     );
   }
 

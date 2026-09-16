@@ -75,7 +75,10 @@ export class RegisterTableService {
     if (session === null) return fail(notConnectedError());
     const address = row.addressValue?.value;
     if (address === undefined) return fail(addressEmptyError());
-    const sent = applyAddressTransform(address, this.deps.getAddressTransform());
+    const sent = applyAddressTransform(
+      address,
+      this.deps.getAddressTransform(),
+    );
     if (!sent.ok) return sent;
     if (row.registerCount > 1) {
       return session.readRegisters(sent.value, row.registerCount, {
@@ -112,7 +115,10 @@ export class RegisterTableService {
     if (session === null) return fail(notConnectedError());
     const address = row.addressValue?.value;
     if (address === undefined) return fail(addressEmptyError());
-    const sent = applyAddressTransform(address, this.deps.getAddressTransform());
+    const sent = applyAddressTransform(
+      address,
+      this.deps.getAddressTransform(),
+    );
     if (!sent.ok) return sent;
     const writeVerify = options.writeVerify;
 
@@ -131,10 +137,7 @@ export class RegisterTableService {
           userAddress: address,
         });
       }
-      const coordinator = new WriteVerifyCoordinator(
-        session,
-        this.deps.clock,
-      );
+      const coordinator = new WriteVerifyCoordinator(session, this.deps.clock);
       return coordinator.writeWithVerifyMany(sent.value, values, writeVerify, {
         userAddress: address,
       });

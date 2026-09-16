@@ -69,7 +69,8 @@ export class CapacitorUsbSerialTransport implements TransportPort {
   }
 
   async open(): Promise<Result<void>> {
-    if (this.opened) return fail(serialOpenFailedError("serial port is already open"));
+    if (this.opened)
+      return fail(serialOpenFailedError("serial port is already open"));
 
     const subscribed = await this.subscribeBridgeEvents();
     if (!subscribed.ok) return fail(subscribed.error);
@@ -111,7 +112,9 @@ export class CapacitorUsbSerialTransport implements TransportPort {
       await this.bridge.write(params.value);
       return ok(undefined);
     } catch (cause) {
-      return fail(mapAndroidNativeError(toNativeBridgeError(cause), "serial-io"));
+      return fail(
+        mapAndroidNativeError(toNativeBridgeError(cause), "serial-io"),
+      );
     }
   }
 

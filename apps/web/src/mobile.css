@@ -55,7 +55,12 @@
      选择器必须压过 index.css 的桌面规则
      `.register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td`（height: 29px，
      特异性 0-3-2），故此处保持 4 个 class 前缀（0-4-2）；仅靠加载顺序不足以取胜。 */
-  .register-table-wrap .register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td {
+  .register-table-wrap
+    .register-table-tabs
+    .ant-table-wrapper
+    .ant-table-tbody
+    > tr
+    > td {
     height: 44px;
     padding-block: 4px;
   }

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { TcpConnectionProfile } from "@mamep2026/domain";
-import { NodeTcpPlatformHost, nodeTcpHostCapabilities } from "./node-tcp-platform-host";
+import {
+  NodeTcpPlatformHost,
+  nodeTcpHostCapabilities,
+} from "./node-tcp-platform-host";
 import { FakeNetFactory } from "./testing/fake-socket";
 
 /** 完整 TCP 连接配置（openTcpTransport 入参，与 NodePlatformHost 测试同构）。 */

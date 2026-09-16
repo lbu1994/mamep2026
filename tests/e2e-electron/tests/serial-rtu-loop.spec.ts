@@ -201,9 +201,7 @@ test.afterAll(async () => {
 test("取消/无可用端口：下拉框空态、无端口标签、无错误", async () => {
   const modal = page.locator(".ant-modal-container:visible");
   // 端口控件须限定在 Port 表单项内（连接对象配置分组已移除，ADR-034）。
-  const portField = modal
-    .locator(".ant-form-item")
-    .filter({ hasText: "Port" });
+  const portField = modal.locator(".ant-form-item").filter({ hasText: "Port" });
   const portSelect = portField.locator(".ant-select");
   const portRefresh = portField.locator('button[title="Refresh"]');
   // 触发刷新重新枚举，并拒绝请求（模拟无可用端口 / 用户取消）。
@@ -217,8 +215,9 @@ test("取消/无可用端口：下拉框空态、无端口标签、无错误", a
     return fake.hasPendingRequest();
   });
   await page.evaluate(() => {
-    (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
-      .rejectRequest("NotFoundError");
+    (
+      window as unknown as { __mamepFakeSerial: FakeSerialApi }
+    ).__mamepFakeSerial.rejectRequest("NotFoundError");
   });
 
   // 打开端口下拉框：空态提示、无端口选项、
@@ -228,15 +227,16 @@ test("取消/无可用端口：下拉框空态、无端口标签、无错误", a
   await portSelect.click({ force: true });
   const dropdown = page.locator(".ant-select-dropdown:visible");
   await expect(dropdown).toContainText("No serial ports found");
-  await expect(
-    page.getByRole("option", { name: "USB 1234:5678" }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "USB 1234:5678" })).toHaveCount(
+    0,
+  );
   await expect(modal).not.toContainText("USB 1234:5678");
   await expect(modal).not.toContainText(/select device first/i);
   // 清理：打开下拉框会再次触发枚举（挂起），settle 掉避免残留请求影响下一用例。
   await page.evaluate(() => {
-    (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
-      .rejectRequest("NotFoundError");
+    (
+      window as unknown as { __mamepFakeSerial: FakeSerialApi }
+    ).__mamepFakeSerial.rejectRequest("NotFoundError");
   });
   await page.keyboard.press("Escape");
 });
@@ -251,9 +251,7 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
 
   const modal = page.locator(".ant-modal-container:visible");
   // 端口刷新须限定在 Port 表单项内（连接对象配置分组已移除，ADR-034）。
-  const portField = modal
-    .locator(".ant-form-item")
-    .filter({ hasText: "Port" });
+  const portField = modal.locator(".ant-form-item").filter({ hasText: "Port" });
   const portSelect = portField.locator(".ant-select");
   const portRefresh = portField.locator('button[title="Refresh"]');
   // 触发刷新重新枚举并解析为可用端口（下拉框出现选项）；`force: true` 见上。
@@ -264,8 +262,9 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
     return fake.hasPendingRequest();
   });
   await page.evaluate(() => {
-    (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
-      .resolveRequest();
+    (
+      window as unknown as { __mamepFakeSerial: FakeSerialApi }
+    ).__mamepFakeSerial.resolveRequest();
   });
   // 等待枚举结果渲染进下拉选项（loading 结束、选项就绪）后再打开下拉框。
   await page.waitForTimeout(400);
@@ -281,8 +280,9 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
     return fake.hasPendingRequest();
   });
   await page.evaluate(() => {
-    (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
-      .resolveRequest();
+    (
+      window as unknown as { __mamepFakeSerial: FakeSerialApi }
+    ).__mamepFakeSerial.resolveRequest();
   });
   const option = page
     .locator(".ant-select-dropdown:visible .ant-select-item-option")
@@ -325,8 +325,9 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   await expect
     .poll(async () =>
       page.evaluate(() =>
-        (window as unknown as { __mamepFakeSerial: FakeSerialApi })
-          .__mamepFakeSerial.getRegister(0x0001),
+        (
+          window as unknown as { __mamepFakeSerial: FakeSerialApi }
+        ).__mamepFakeSerial.getRegister(0x0001),
       ),
     )
     .toBe(0x12ab);
@@ -368,8 +369,9 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
     '.register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=":c"]',
     (trs) =>
       trs.map((tr) =>
-        (Array.from(tr.querySelectorAll("td"))[7] as HTMLElement | undefined)
-          ?.textContent?.trim(),
+        (
+          Array.from(tr.querySelectorAll("td"))[7] as HTMLElement | undefined
+        )?.textContent?.trim(),
       ),
   );
   expect(childDatas).toEqual(["1111", "2222"]);
@@ -388,10 +390,7 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
       page.evaluate(() => {
         const fake = (window as unknown as { __mamepFakeSerial: FakeSerialApi })
           .__mamepFakeSerial;
-        return [
-          fake.getRegister(0x0001),
-          fake.getRegister(0x0002),
-        ];
+        return [fake.getRegister(0x0001), fake.getRegister(0x0002)];
       }),
     )
     .toEqual([0xaaaa, 0xbbbb]);

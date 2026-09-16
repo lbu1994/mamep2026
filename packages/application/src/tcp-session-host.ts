@@ -45,9 +45,7 @@ export interface TcpSessionHostOptions {
   clock: Clock;
   events: SessionHostEvents;
   /** 地址变换解析（ADR-042；2026-09-02 插件外部化：宿主注入随包插件 resolver，缺省不调整）。 */
-  resolveAddressTransform?: (
-    transformId: string,
-  ) => AddressTransform | null;
+  resolveAddressTransform?: (transformId: string) => AddressTransform | null;
   /**
    * 自动重连用的传输重开工厂（可选，仅 TCP）：由平台宿主注入（重新 openTcpTransport）。
    * 缺省时 TcpSessionHost 不启用自动重连（profile.autoReconnect 被忽略）。
@@ -220,7 +218,12 @@ export class TcpSessionHost {
     return this.core.isBackgroundSuspended();
   }
 
-  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+  ): void {
     this.core.traceStart(key, address, speedMs, quantity);
   }
 

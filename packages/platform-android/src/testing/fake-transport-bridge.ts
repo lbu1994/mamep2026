@@ -52,7 +52,8 @@ export class FakeTransportBridge implements MamepTransportBridge {
 
   async listSerialPorts(): Promise<unknown> {
     this.listSerialPortsCount += 1;
-    if (this.listSerialPortsError !== null) throw toError(this.listSerialPortsError);
+    if (this.listSerialPortsError !== null)
+      throw toError(this.listSerialPortsError);
     return this.serialPortsResult;
   }
 

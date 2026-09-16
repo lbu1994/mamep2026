@@ -118,11 +118,9 @@ describe("CommunicationSession 多寄存器读写（ADR-030）", () => {
   it("writeRegisters：values 超上限（>123）拒绝", async () => {
     const { session } = makeSession();
     await session.connect();
-    const result = await session.writeRegisters(
-      0x1000,
-      Array(124).fill(0),
-      { source: "manual-write" },
-    );
+    const result = await session.writeRegisters(0x1000, Array(124).fill(0), {
+      source: "manual-write",
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("QUANTITY_OUT_OF_RANGE");
   });

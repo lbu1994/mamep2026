@@ -5,12 +5,7 @@
  * 纯函数式（依赖经 deps 注入），便于单测。
  */
 import type { ApplicationMessage } from "@mamep2026/logging";
-import type {
-  RegisterRow,
-  Result,
-  RowId,
-  SheetId,
-} from "@mamep2026/domain";
+import type { RegisterRow, Result, RowId, SheetId } from "@mamep2026/domain";
 import {
   applyReadValueToRow,
   applyReadValuesToRow,

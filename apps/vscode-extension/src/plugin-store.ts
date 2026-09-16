@@ -23,7 +23,9 @@ export interface KeyValueMemento {
 
 const STORE_KEY = "mamep2026.plugins";
 
-function schemaInvalidError(technicalMessage: string): ReturnType<typeof createMamepError> {
+function schemaInvalidError(
+  technicalMessage: string,
+): ReturnType<typeof createMamepError> {
   return createMamepError({
     code: "PLUGIN_STORE_SCHEMA_INVALID",
     category: "plugin",
@@ -52,7 +54,9 @@ export class GlobalStatePluginStore implements PluginStorePort {
     const validated = pluginStoreDataSchema.safeParse(data);
     if (!validated.success) {
       return fail(
-        schemaInvalidError(`plugin store data is invalid: ${validated.error.message}`),
+        schemaInvalidError(
+          `plugin store data is invalid: ${validated.error.message}`,
+        ),
       );
     }
     try {

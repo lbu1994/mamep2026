@@ -44,12 +44,7 @@ export const androidCapabilities: PlatformCapabilities = Object.freeze({
     "modbus-basic-tables:discrete-input",
     "modbus-basic-tables:input-register",
   ],
-  tableTypes: [
-    "holding-register",
-    "coil",
-    "discrete-input",
-    "input-register",
-  ],
+  tableTypes: ["holding-register", "coil", "discrete-input", "input-register"],
 });
 
 /**
@@ -67,4 +62,3 @@ export function resolveAndroidCapabilities(input: {
     executablePlugins: input.blobWorkerSupported,
   };
 }
-

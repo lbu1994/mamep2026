@@ -71,7 +71,11 @@ async function setRadixHex(p: Page): Promise<void> {
 }
 
 /** 在弹窗内按 Form.Item 标签定位并填写 InputNumber（TCP Port / Unit ID 等）。 */
-async function fillNumber(modal: Locator, label: string, value: string): Promise<void> {
+async function fillNumber(
+  modal: Locator,
+  label: string,
+  value: string,
+): Promise<void> {
   const item = modal.locator(".ant-form-item").filter({ hasText: label });
   const input = item.locator(".ant-input-number-input").first();
   await input.click();
@@ -130,7 +134,9 @@ test.beforeAll(async () => {
   page.on("console", (msg) => {
     if (msg.type() === "error") consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
-  page.on("pageerror", (err) => consoleErrors.push(`PAGEERROR: ${String(err)}`));
+  page.on("pageerror", (err) =>
+    consoleErrors.push(`PAGEERROR: ${String(err)}`),
+  );
 
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases();

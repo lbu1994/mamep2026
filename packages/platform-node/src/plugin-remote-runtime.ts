@@ -32,7 +32,10 @@ type PluginWorkerEvent =
       type: "communication-request";
       id: number;
       op: "read" | "write";
-      payload: { pluginId: string; req: { address: number; quantity?: number; values?: number[] } };
+      payload: {
+        pluginId: string;
+        req: { address: number; quantity?: number; values?: number[] };
+      };
     };
 
 export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
@@ -42,7 +45,10 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
   private disposed = false;
   private waiters: Array<{ resolve: (value: PluginWorkerEvent) => void }> = [];
 
-  constructor(entrySource: string, communicationApiFactory: PluginCommunicationApiFactory) {
+  constructor(
+    entrySource: string,
+    communicationApiFactory: PluginCommunicationApiFactory,
+  ) {
     this.entrySource = entrySource;
     this.communicationApiFactory = communicationApiFactory;
   }
@@ -78,7 +84,10 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
     });
 
     try {
-      const ready = await this.postAndWait({ type: "init", entrySource: this.entrySource });
+      const ready = await this.postAndWait({
+        type: "init",
+        entrySource: this.entrySource,
+      });
       if (ready.type === "load-error") {
         await this.dispose();
         return fail(
@@ -108,11 +117,17 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
     }
   }
 
-  async activate(ctx: { pluginId: string; communication: PluginCommunicationApi }): Promise<void> {
+  async activate(ctx: {
+    pluginId: string;
+    communication: PluginCommunicationApi;
+  }): Promise<void> {
     if (this.worker === null) {
       throw new Error("plugin worker not loaded");
     }
-    const event = await this.postAndWait({ type: "activate", pluginId: ctx.pluginId });
+    const event = await this.postAndWait({
+      type: "activate",
+      pluginId: ctx.pluginId,
+    });
     if (event.type === "error") {
       throw new Error(event.message);
     }

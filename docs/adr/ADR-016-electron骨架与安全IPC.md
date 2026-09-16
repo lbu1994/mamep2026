@@ -11,6 +11,7 @@ PRD §8.2 P0「三端运行骨架」要求 Electron 端可启动主进程窗口�
 技术约束（TECH_DESIGN §22.1/§22.3、docs/AGENTS.md §23）：contextIsolation 开启、nodeIntegration 关闭、可行范围开启 sandbox、Renderer 不获得通用 ipcRenderer、Preload 只暴露白名单 API、Main 校验所有输入、跨边界消息使用版本化 Envelope + Zod 校验 + kind 白名单。
 
 勘察发现两个潜在问题：
+
 1. Electron 生产 `loadFile` 加载渲染器产物时，若使用 Vite 默认绝对路径 `/assets/*`，在 `file://` 下会解析到盘根目录导致资源加载失败；且浏览器构建（`base: "/"`）与 Electron 构建（需 `base: "./"`）若共用同一 `apps/web/dist/`，后构建会覆盖先构建（此前生产模式从未被验证，冒烟验证时实测复现）。
 2. `webRequest.onHeadersReceived` 对 `file://` 协议不触发，因此「headers CSP」对 `loadFile` 页面无效。
 

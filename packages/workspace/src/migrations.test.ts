@@ -7,9 +7,10 @@ import { parseWorkspace, serializeWorkspace } from "./schema";
 function toV1Data(
   options: { globalReadVerify?: unknown } = {},
 ): Record<string, unknown> {
-  const data = JSON.parse(
-    serializeWorkspace(createEmptyWorkspace()),
-  ) as Record<string, unknown> & {
+  const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
+    string,
+    unknown
+  > & {
     sheets: Array<Record<string, unknown>>;
   };
   for (const sheet of data.sheets) {
@@ -27,9 +28,10 @@ function toV1Data(
 function toV2Data(
   options: { lastKnownRawValue?: number | null } = {},
 ): Record<string, unknown> {
-  const data = JSON.parse(
-    serializeWorkspace(createEmptyWorkspace()),
-  ) as Record<string, unknown> & {
+  const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
+    string,
+    unknown
+  > & {
     sheets: Array<{ rows: Array<Record<string, unknown>> }>;
   };
   for (const sheet of data.sheets) {
@@ -45,10 +47,13 @@ function toV2Data(
 }
 
 /** 把 v4 序列化数据降级为 v3 形态：行去掉 registers、可指定范围行 registerCount、版本设为 3。 */
-function toV3Data(options: { rangeCount?: number } = {}): Record<string, unknown> {
-  const data = JSON.parse(
-    serializeWorkspace(createEmptyWorkspace()),
-  ) as Record<string, unknown> & {
+function toV3Data(
+  options: { rangeCount?: number } = {},
+): Record<string, unknown> {
+  const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
+    string,
+    unknown
+  > & {
     sheets: Array<{ rows: Array<Record<string, unknown>> }>;
   };
   for (const sheet of data.sheets) {
@@ -65,9 +70,10 @@ function toV3Data(options: { rangeCount?: number } = {}): Record<string, unknown
 
 /** 把 v5 序列化数据降级为 v4 形态：sheet 去掉 type、版本设为 4（ADR-041）。 */
 function toV4Data(): Record<string, unknown> {
-  const data = JSON.parse(
-    serializeWorkspace(createEmptyWorkspace()),
-  ) as Record<string, unknown> & {
+  const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
+    string,
+    unknown
+  > & {
     sheets: Array<Record<string, unknown>>;
   };
   for (const sheet of data.sheets) {
@@ -78,10 +84,13 @@ function toV4Data(): Record<string, unknown> {
 }
 
 /** 把 v6 序列化数据降级为 v5 形态（ADR-042）：sheet 去掉 addressTransform、preferences 去掉 themePrimary、RTU profile 加回全局 addressAdjust、版本设为 5。 */
-function toV5Data(options: { addressAdjust?: string } = {}): Record<string, unknown> {
-  const data = JSON.parse(
-    serializeWorkspace(createEmptyWorkspace()),
-  ) as Record<string, unknown> & {
+function toV5Data(
+  options: { addressAdjust?: string } = {},
+): Record<string, unknown> {
+  const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
+    string,
+    unknown
+  > & {
     sheets: Array<Record<string, unknown>>;
     connectionProfiles: Array<Record<string, unknown>>;
     preferences: Record<string, unknown>;
@@ -181,9 +190,9 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.value.schemaVersion).toBe(10);
-    expect(
-      parsed.value.sheets[0]?.rows[0]?.registerValues?.[0]?.value,
-    ).toBe(0x04d2);
+    expect(parsed.value.sheets[0]?.rows[0]?.registerValues?.[0]?.value).toBe(
+      0x04d2,
+    );
   });
 
   it("v3 数据：迁移到 v4，单寄存器行 registers=null", () => {
@@ -195,23 +204,27 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     if (!migrated.ok) return;
     expect(migrated.value.schemaVersion).toBe(10);
     const rows =
-      (migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>)[0]
-        ?.rows ?? [];
+      (
+        migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>
+      )[0]?.rows ?? [];
     expect(rows[0]?.registers).toBeNull();
   });
 
   it("v3 范围行数据：迁移到 v4 补齐 registers（继承父行 dataType，展示与迁移前一致）", () => {
     const data = toV3Data({ rangeCount: 2 });
     // 构造一个非 hex 类型范围行：验证补齐继承父行 dataType。
-    const sheet = (data.sheets as Array<{ rows: Array<Record<string, unknown>> }>)[0];
+    const sheet = (
+      data.sheets as Array<{ rows: Array<Record<string, unknown>> }>
+    )[0];
     const rows = sheet?.rows ?? [];
     if (rows[0] !== undefined) rows[0].dataType = "unsigned";
     const migrated = migrateData(data, migrations);
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
     const migratedRows =
-      (migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>)[0]
-        ?.rows ?? [];
+      (
+        migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>
+      )[0]?.rows ?? [];
     const row = migratedRows[0];
     expect(row?.registerCount).toBe(2);
     expect(row?.registers).toEqual([
@@ -280,7 +293,10 @@ describe("migrations v5→v6（表级 Address Adjust + 主题主色，ADR-042）
   });
 
   it("v5 数据：全局 off → 各表 addressTransform.enabled=false（旧工作区保持关闭）", () => {
-    const migrated = migrateData(toV5Data({ addressAdjust: "off" }), migrations);
+    const migrated = migrateData(
+      toV5Data({ addressAdjust: "off" }),
+      migrations,
+    );
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
     const sheets = migrated.value.sheets as Array<Record<string, unknown>>;
@@ -331,7 +347,9 @@ describe("migrations v6→v7（dataType 开放，ADR-043 E-3）", () => {
   it("v6 数据含插件 dataType：parseWorkspace round-trip 保留（E-3 开放字符串）", () => {
     const data = JSON.parse(
       serializeWorkspace(createEmptyWorkspace()),
-    ) as Record<string, unknown> & { sheets: Array<{ rows: Array<Record<string, unknown>> }> };
+    ) as Record<string, unknown> & {
+      sheets: Array<{ rows: Array<Record<string, unknown>> }>;
+    };
     // 把 dataType 改成插件类型字符串。
     const rows = data.sheets[0]?.rows ?? [];
     if (rows[0] !== undefined) rows[0].dataType = "my-plugin:speed";
@@ -345,9 +363,10 @@ describe("migrations v6→v7（dataType 开放，ADR-043 E-3）", () => {
 
 /** 把 v8 序列化数据降级为 v7 形态（ADR-047）：preferences.themePrimary 恢复为 {light,dark} 对象、版本设为 7。 */
 function toV7Data(): Record<string, unknown> {
-  const data = JSON.parse(
-    serializeWorkspace(createEmptyWorkspace()),
-  ) as Record<string, unknown> & { preferences: Record<string, unknown> };
+  const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
+    string,
+    unknown
+  > & { preferences: Record<string, unknown> };
   data.preferences.themePrimary = { light: "#1a7f37", dark: "#2ea043" };
   data.schemaVersion = 7;
   return data;
@@ -374,9 +393,10 @@ describe("migrations v7→v8（主题色预设 ID，ADR-047）", () => {
 
 /** 把 v10 序列化数据降级为 v8 形态（ADR-052）：行去掉 bitComments/bitNames、版本设为 8。 */
 function toV8Data(): Record<string, unknown> {
-  const data = JSON.parse(
-    serializeWorkspace(createEmptyWorkspace()),
-  ) as Record<string, unknown> & {
+  const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
+    string,
+    unknown
+  > & {
     sheets: Array<{ rows: Array<Record<string, unknown>> }>;
   };
   for (const sheet of data.sheets) {
@@ -391,9 +411,10 @@ function toV8Data(): Record<string, unknown> {
 
 /** 把 v10 序列化数据降级为 v9 形态（ADR-052）：行去掉 bitNames、版本设为 9（保留 bitComments）。 */
 function toV9Data(): Record<string, unknown> {
-  const data = JSON.parse(
-    serializeWorkspace(createEmptyWorkspace()),
-  ) as Record<string, unknown> & {
+  const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
+    string,
+    unknown
+  > & {
     sheets: Array<{ rows: Array<Record<string, unknown>> }>;
   };
   for (const sheet of data.sheets) {
@@ -412,8 +433,9 @@ describe("migrations v8→v9（位级注释，ADR-052）", () => {
     if (!migrated.ok) return;
     expect(migrated.value.schemaVersion).toBe(10);
     const rows =
-      (migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>)[0]
-        ?.rows ?? [];
+      (
+        migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>
+      )[0]?.rows ?? [];
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((row) => row.bitComments === null)).toBe(true);
   });
@@ -428,8 +450,9 @@ describe("migrations v8→v9（位级注释，ADR-052）", () => {
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
     const migratedRows =
-      (migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>)[0]
-        ?.rows ?? [];
+      (
+        migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>
+      )[0]?.rows ?? [];
     expect(migratedRows[0]?.bitComments).toEqual([["carry"]]);
   });
 
@@ -454,8 +477,9 @@ describe("migrations v9→v10（位级名称，ADR-052 需求追加）", () => {
     if (!migrated.ok) return;
     expect(migrated.value.schemaVersion).toBe(10);
     const migratedRows =
-      (migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>)[0]
-        ?.rows ?? [];
+      (
+        migrated.value.sheets as Array<{ rows: Array<Record<string, unknown>> }>
+      )[0]?.rows ?? [];
     expect(migratedRows.every((row) => row.bitNames === null)).toBe(true);
     // v9 已有位注释不丢。
     expect(migratedRows[0]?.bitComments).toEqual([["carry"]]);

@@ -102,9 +102,7 @@ class FakeMemobusCodec implements ProtocolCodec {
 
   parserFactory(expect: CodecExpect): FrameParser {
     const normal =
-      expect.kind === "read"
-        ? 8 + expect.request.addresses.length * 2
-        : 8;
+      expect.kind === "read" ? 8 + expect.request.addresses.length * 2 : 8;
     let buffer: number[] = [];
     // 箭头函数闭包捕获 this（codec），避免 this 别名（no-this-alias）。
     const tryParse = ():

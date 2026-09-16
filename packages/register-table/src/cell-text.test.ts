@@ -6,7 +6,11 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyRow, type DataType } from "@mamep2026/domain";
 import { createDataTypeResolver } from "@mamep2026/data-conversion";
-import { canonicalCellText, commitCellText, retargetRowDataType } from "./cell-text";
+import {
+  canonicalCellText,
+  commitCellText,
+  retargetRowDataType,
+} from "./cell-text";
 
 function makeRow(dataType: DataType) {
   return { ...createEmptyRow(), dataType, cellText: "" };
@@ -290,10 +294,7 @@ describe("retargetRowDataType（ADR-053：Type/Scale 切换即时刷新显示）
   it.each(compositeCases)(
     "范围行 %s×%i「%s」→ %s「%s」",
     (fromType, count, text, toType, expected) => {
-      const next = retargetRowDataType(
-        rowWith(fromType, text, count),
-        toType,
-      );
+      const next = retargetRowDataType(rowWith(fromType, text, count), toType);
       expect(next.dataType).toBe(toType);
       expect(next.cellText).toBe(expected);
     },

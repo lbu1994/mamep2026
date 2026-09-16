@@ -77,9 +77,13 @@ describe("plugin store v4（ADR-054：删除随包插件机制）", () => {
   });
 
   it("v1 且 plugins 非数组 → 视为损坏（PLUGIN_STORE_SCHEMA_INVALID）", () => {
-    const result = migratePluginStoreData({ schemaVersion: 1, plugins: "oops" });
+    const result = migratePluginStoreData({
+      schemaVersion: 1,
+      plugins: "oops",
+    });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe("PLUGIN_STORE_SCHEMA_INVALID");
+    if (!result.ok)
+      expect(result.error.code).toBe("PLUGIN_STORE_SCHEMA_INVALID");
   });
 
   it("非对象 → PLUGIN_STORE_SCHEMA_INVALID", () => {

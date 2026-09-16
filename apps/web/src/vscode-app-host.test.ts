@@ -40,12 +40,10 @@ function createFakeBridge(): {
   const copyCalls: string[] = [];
   const bridge: VscodeHostApi = {
     platform: "vscode",
-    getCapabilities: vi.fn(
-      async (): Promise<Result<PlatformCapabilities>> => ({
-        ok: true,
-        value: vscodeCapabilities,
-      }),
-    ),
+    getCapabilities: vi.fn(async (): Promise<Result<PlatformCapabilities>> => ({
+      ok: true,
+      value: vscodeCapabilities,
+    })),
     getAppVersion: vi.fn(async (): Promise<Result<string>> => ({
       ok: true,
       value: "0.0.0-test",
@@ -54,19 +52,18 @@ function createFakeBridge(): {
       copyCalls.push(text);
       return { ok: true, value: undefined };
     }),
-    readTextFromClipboard: vi.fn(
-      async (): Promise<Result<string | null>> => ({ ok: true, value: null }),
-    ),
+    readTextFromClipboard: vi.fn(async (): Promise<Result<string | null>> => ({
+      ok: true,
+      value: null,
+    })),
     selectSerialPort: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
     })),
-    getColorTheme: vi.fn(
-      async (): Promise<Result<"light" | "dark">> => ({
-        ok: true,
-        value: "dark",
-      }),
-    ),
+    getColorTheme: vi.fn(async (): Promise<Result<"light" | "dark">> => ({
+      ok: true,
+      value: "dark",
+    })),
     onEvent: vi.fn((listener: (event: MamepHostEvent) => void) => {
       listeners.add(listener);
       return () => {
@@ -172,12 +169,10 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
-    sessionGetState: vi.fn(
-      async (): Promise<Result<SessionStateResponse>> => ({
-        ok: true,
-        value: { connectionState: "disconnected" },
-      }),
-    ),
+    sessionGetState: vi.fn(async (): Promise<Result<SessionStateResponse>> => ({
+      ok: true,
+      value: { connectionState: "disconnected" },
+    })),
     sessionSetSlaveAddress: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
@@ -186,19 +181,18 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
-    sessionSetAddressTransform: vi.fn(
-      async (): Promise<Result<null>> => ({ ok: true, value: null }),
-    ),
+    sessionSetAddressTransform: vi.fn(async (): Promise<Result<null>> => ({
+      ok: true,
+      value: null,
+    })),
     sessionReadRow: vi.fn(async (): Promise<Result<number>> => ({
       ok: true,
       value: 0x1234,
     })),
-    sessionWriteRow: vi.fn(
-      async (): Promise<Result<WriteOutcomePayload>> => ({
-        ok: true,
-        value: { kind: "write-succeeded-no-verify" },
-      }),
-    ),
+    sessionWriteRow: vi.fn(async (): Promise<Result<WriteOutcomePayload>> => ({
+      ok: true,
+      value: { kind: "write-succeeded-no-verify" },
+    })),
     sessionBatchRead: vi.fn(
       async (batchId: string): Promise<Result<SessionBatchReadResponse>> => ({
         ok: true,
@@ -280,9 +274,7 @@ function makeHost(
 }
 
 /** 构造带主题 CSS 变量读取源的 fake（可按需修改 map 模拟主题变化）。 */
-function themedCssVarSource(
-  vars: Record<string, string>,
-): CssVarSource {
+function themedCssVarSource(vars: Record<string, string>): CssVarSource {
   return { getPropertyValue: (name) => vars[name] ?? "" };
 }
 
@@ -369,7 +361,9 @@ describe("VscodeAppHost", () => {
     });
     const config = useAppStore.getState().themeConfig;
     // buildVscodeTheme({}, dark) = merge(buildTheme(dark), {}) → 品牌/状态来自 base。
-    expect(config?.token?.colorPrimary).toBe(buildTheme(true).token?.colorPrimary);
+    expect(config?.token?.colorPrimary).toBe(
+      buildTheme(true).token?.colorPrimary,
+    );
     expect(config?.token?.colorBgContainer).toBeUndefined();
   });
 
@@ -428,7 +422,8 @@ describe("VscodeAppHost", () => {
     const profile = createDefaultRtuProfile();
     const connect = await host.connect(profile, null);
     expect(connect.ok).toBe(false);
-    if (!connect.ok) expect(connect.error.code).toBe("SERIAL_DEVICE_NOT_SELECTED");
+    if (!connect.ok)
+      expect(connect.error.code).toBe("SERIAL_DEVICE_NOT_SELECTED");
   });
 });
 
@@ -437,7 +432,10 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
     const profile = createDefaultRtuProfile();
-    const result = await host.connect(profile, { id: "COM4", label: "Fake (COM4)" });
+    const result = await host.connect(profile, {
+      id: "COM4",
+      label: "Fake (COM4)",
+    });
     expect(result.ok).toBe(true);
     expect(bridge.sessionConnect).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -453,9 +451,13 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
     const profile = createDefaultRtuProfile();
-    const result = await host.connect(profile, { id: "COM4", label: "Fake (COM4)" }, {
-      protocol: "modbus-basic-tables:coil",
-    });
+    const result = await host.connect(
+      profile,
+      { id: "COM4", label: "Fake (COM4)" },
+      {
+        protocol: "modbus-basic-tables:coil",
+      },
+    );
     expect(result.ok).toBe(true);
     expect(bridge.sessionConnect).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -470,8 +472,13 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
     const profile = createDefaultRtuProfile();
-    await host.connect(profile, { id: "COM4", label: "Fake (COM4)" }, { protocol: "rtu" });
-    const call = (bridge.sessionConnect as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    await host.connect(
+      profile,
+      { id: "COM4", label: "Fake (COM4)" },
+      { protocol: "rtu" },
+    );
+    const call = (bridge.sessionConnect as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0];
     expect(call).toBeDefined();
     expect(call).not.toHaveProperty("protocol");
   });
@@ -480,10 +487,20 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const { bridge } = createFakeBridge();
     (bridge.sessionConnect as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
-      error: { code: "SERIAL_PORT_IN_USE", category: "transport", severity: "error", retryable: false, userMessageKey: "errors.serialPortInUse", technicalMessage: "in use" },
+      error: {
+        code: "SERIAL_PORT_IN_USE",
+        category: "transport",
+        severity: "error",
+        retryable: false,
+        userMessageKey: "errors.serialPortInUse",
+        technicalMessage: "in use",
+      },
     });
     const host = makeHost(bridge);
-    const result = await host.connect(createDefaultRtuProfile(), { id: "COM4", label: "x" });
+    const result = await host.connect(createDefaultRtuProfile(), {
+      id: "COM4",
+      label: "x",
+    });
     expect(result.ok).toBe(false);
     expect(host.getConnectionState()).toBe("disconnected");
   });
@@ -493,10 +510,12 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const host = makeHost(bridge);
     const result = await host.enumerateSerialPorts();
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual([{ portId: "COM4", label: "Fake (COM4)" }]);
+    if (result.ok)
+      expect(result.value).toEqual([{ portId: "COM4", label: "Fake (COM4)" }]);
     const handle = await host.selectSerialPort("COM4");
     expect(handle.ok).toBe(true);
-    if (handle.ok) expect(handle.value).toEqual({ id: "COM4", label: "Fake (COM4)" });
+    if (handle.ok)
+      expect(handle.value).toEqual({ id: "COM4", label: "Fake (COM4)" });
   });
 
   it("readRow / writeRow 经 RPC 委托（row 序列化为 payload）", async () => {
@@ -518,7 +537,8 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     );
     const write = await host.writeRow(row);
     expect(write.ok).toBe(true);
-    if (write.ok) expect(write.value).toEqual({ kind: "write-succeeded-no-verify" });
+    if (write.ok)
+      expect(write.value).toEqual({ kind: "write-succeeded-no-verify" });
   });
 
   it("writeRow 携带 writeVerify 经 sessionWriteRow 转发（2026-08-26）", async () => {
@@ -563,7 +583,14 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
           Array.isArray(result.value) ? (result.value[0] ?? 0) : result.value,
         ]);
     });
-    emit({ kind: "poll-result", payload: { key: "row-a", address: 1, result: { ok: true, value: 0xabcd } } });
+    emit({
+      kind: "poll-result",
+      payload: {
+        key: "row-a",
+        address: 1,
+        result: { ok: true, value: 0xabcd },
+      },
+    });
     expect(results).toEqual([["row-a", 1, 0xabcd]]);
   });
 
@@ -605,7 +632,12 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     emit({
       kind: "app-message",
       payload: {
-        message: { timestamp: 1, level: "error", messageKey: "messages.deviceDisconnected", detail: null },
+        message: {
+          timestamp: 1,
+          level: "error",
+          messageKey: "messages.deviceDisconnected",
+          detail: null,
+        },
       },
     });
     expect(keys).toEqual(["messages.deviceDisconnected"]);
@@ -639,7 +671,9 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     host.traceStop("row-a");
     expect(bridge.sessionTraceStop).toHaveBeenCalledWith("row-a");
     host.updatePollingTargets([{ key: "row-a", address: 1 }]);
-    expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalledWith([{ key: "row-a", address: 1 }]);
+    expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalledWith([
+      { key: "row-a", address: 1 },
+    ]);
     host.startPolling();
     expect(bridge.sessionPollingStart).toHaveBeenCalled();
     host.stopPolling();

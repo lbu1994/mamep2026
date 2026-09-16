@@ -24,9 +24,7 @@ import { useAppStore, type WorkspaceImportPreview } from "./app-store";
 export interface WorkspaceTransfer {
   handleExportWorkspace: () => void;
   handleImportWorkspace: () => void;
-  handleImportFileChange: (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => void;
+  handleImportFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   importFileInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
@@ -52,7 +50,10 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
       // parseWorkspace 期望已解析的对象（与仓储加载路径一致，indexeddb-repository 先 JSON.parse）。
       data = JSON.parse(text);
     } catch {
-      void message.open({ type: "error", content: t("workspace.importFailed") });
+      void message.open({
+        type: "error",
+        content: t("workspace.importFailed"),
+      });
       appendMessage({
         timestamp: Date.now(),
         level: "error",
@@ -63,7 +64,10 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
     }
     const parsed = parseWorkspace(data);
     if (!parsed.ok) {
-      void message.open({ type: "error", content: t("workspace.importFailed") });
+      void message.open({
+        type: "error",
+        content: t("workspace.importFailed"),
+      });
       appendMessage({
         timestamp: Date.now(),
         level: "error",
@@ -164,8 +168,7 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
           appendMessage({
             timestamp: Date.now(),
             level: "error",
-            messageKey:
-              result.error.userMessageKey ?? "workspace.exportFailed",
+            messageKey: result.error.userMessageKey ?? "workspace.exportFailed",
             params: { detail: result.error.code },
             detail: result.error.code,
           });
@@ -187,7 +190,10 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
       }
     };
     reader.onerror = () => {
-      void message.open({ type: "error", content: t("workspace.importFailed") });
+      void message.open({
+        type: "error",
+        content: t("workspace.importFailed"),
+      });
     };
     reader.readAsText(file, "utf-8");
   };

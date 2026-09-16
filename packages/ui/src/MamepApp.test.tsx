@@ -156,16 +156,16 @@ describe("themeConfig（VSCode 完整主题注入 ConfigProvider，ADR-027）", 
   it("store.themeConfig 非空时 ConfigProvider 使用它（antd cssVar 输出对应 token）", () => {
     // 与 VscodeAppHost 装配路径一致：base + 覆盖合并后的完整配置。
     // 用表面色 token 断言（colorPrimary 会被 antd 色板派生转换，原值不可见）。
-    useAppStore
-      .getState()
-      .setThemeConfig(
-        mergeThemeConfig(buildTheme(true), {
-          token: { colorBgContainer: "#13579b" },
-        }),
-      );
+    useAppStore.getState().setThemeConfig(
+      mergeThemeConfig(buildTheme(true), {
+        token: { colorBgContainer: "#13579b" },
+      }),
+    );
     render(<MamepApp />);
     // antd cssVar 把 token 输出到 <head> 的 style（该值仅可能来自 themeConfig 覆盖）。
-    expect(document.head.innerHTML).toContain("--ant-color-bg-container:#13579b");
+    expect(document.head.innerHTML).toContain(
+      "--ant-color-bg-container:#13579b",
+    );
   });
 
   it("store.themeConfig 为 null 时回退 buildTheme 两态（浏览器/Electron 路径）", () => {
@@ -212,7 +212,11 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     fireAppKey("/", { ctrl: true });
     expect(useAppStore.getState().helpModalOpen).toBe(true);
     // 懒加载：抽屉首次打开时才下载/挂载 → 异步等待。
-    await screen.findByText("Keyboard Shortcuts", undefined, LAZY_MOUNT_TIMEOUT);
+    await screen.findByText(
+      "Keyboard Shortcuts",
+      undefined,
+      LAZY_MOUNT_TIMEOUT,
+    );
     // 抽屉默认「快速上手」页签，需切换到「键盘快捷键」页签后才挂载表格。
     fireEvent.click(screen.getByText("Keyboard Shortcuts"));
     await waitFor(() => {
@@ -225,7 +229,11 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
   it("? 打开帮助弹窗（别名 = Shift+/）", async () => {
     render(<MamepApp />);
     fireAppKey("?", { shift: true });
-    await screen.findByText("Keyboard Shortcuts", undefined, LAZY_MOUNT_TIMEOUT);
+    await screen.findByText(
+      "Keyboard Shortcuts",
+      undefined,
+      LAZY_MOUNT_TIMEOUT,
+    );
     expect(useAppStore.getState().helpModalOpen).toBe(true);
   });
 

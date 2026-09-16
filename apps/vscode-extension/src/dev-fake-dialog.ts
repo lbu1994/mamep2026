@@ -65,7 +65,8 @@ export async function fakeOpenTextFile(
         code: "OPEN_TEXT_FILE_FAILED",
         category: "persistence",
         userMessageKey: "workspace.importFailed",
-        technicalMessage: cause instanceof Error ? cause.message : String(cause),
+        technicalMessage:
+          cause instanceof Error ? cause.message : String(cause),
       }),
     );
   }
@@ -87,7 +88,8 @@ export async function fakeSaveTextFile(
         code: "SAVE_TEXT_FILE_FAILED",
         category: "persistence",
         userMessageKey: "workspace.exportFailed",
-        technicalMessage: cause instanceof Error ? cause.message : String(cause),
+        technicalMessage:
+          cause instanceof Error ? cause.message : String(cause),
       }),
     );
   }

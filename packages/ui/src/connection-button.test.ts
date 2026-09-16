@@ -59,7 +59,9 @@ describe("connectionButtonSpec", () => {
       const spec = connectionButtonSpec(state, false);
       expect(spec.labelKey).toBe(`state.${state}`);
       expect(spec.pulsing).toBe(true);
-      expect(spec.icon).toBe(state === "disconnecting" ? "disconnect" : "connect");
+      expect(spec.icon).toBe(
+        state === "disconnecting" ? "disconnect" : "connect",
+      );
       expect(spec.type).toBe("default");
       expect(spec.danger).toBe(false);
     }

@@ -66,8 +66,7 @@ export interface SerialPermissionOptions {
   readonly onPortsAvailable?: ((ports: SerialPortOption[]) => void) | undefined;
   /** 端口选择策略；设置则进入自动选择模式（不转发、不等待渲染进程）。 */
   readonly selectPort?:
-    | ((portList: readonly SerialPortChoice[]) => string)
-    | undefined;
+    ((portList: readonly SerialPortChoice[]) => string) | undefined;
 }
 
 /** 已安装的权限处理句柄：渲染进程回传选择结果时由主进程调用。 */
@@ -114,9 +113,7 @@ export function normalizeOrigin(
 }
 
 /** MVP 端口选择策略：自动选第一个可用端口；无可用设备返回空串（取消请求）。 */
-export function selectFirstPort(
-  portList: readonly SerialPortChoice[],
-): string {
+export function selectFirstPort(portList: readonly SerialPortChoice[]): string {
   return portList[0]?.portId ?? "";
 }
 
@@ -154,9 +151,8 @@ export function installSerialPermissionHandlers(
   };
   const selectPort = options.selectPort;
   // 同一时刻仅一个挂起选择（单窗口）；渲染进程重枚举前会先取消旧请求，正常路径不重叠。
-  let pending:
-    | { callback: (portId: string) => void; sender: unknown }
-    | null = null;
+  let pending: { callback: (portId: string) => void; sender: unknown } | null =
+    null;
 
   session.setPermissionCheckHandler(
     (_webContents, permission, _requestingOrigin, details) => {
@@ -170,20 +166,17 @@ export function installSerialPermissionHandlers(
     return isAllowedOrigin(details.origin);
   });
 
-  session.on(
-    "select-serial-port",
-    (event, portList, webContents, callback) => {
-      event.preventDefault();
-      if (selectPort !== undefined) {
-        // 自动选择模式（测试/无人值守场景）。
-        callback(selectPort(portList));
-        return;
-      }
-      // 延迟选择模式：转发端口列表给渲染进程，挂起 callback 等待用户选择。
-      pending = { callback, sender: webContents };
-      options.onPortsAvailable?.(toPortOptions(portList));
-    },
-  );
+  session.on("select-serial-port", (event, portList, webContents, callback) => {
+    event.preventDefault();
+    if (selectPort !== undefined) {
+      // 自动选择模式（测试/无人值守场景）。
+      callback(selectPort(portList));
+      return;
+    }
+    // 延迟选择模式：转发端口列表给渲染进程，挂起 callback 等待用户选择。
+    pending = { callback, sender: webContents };
+    options.onPortsAvailable?.(toPortOptions(portList));
+  });
 
   return {
     resolvePendingSelection(portId: string, sender: unknown): boolean {

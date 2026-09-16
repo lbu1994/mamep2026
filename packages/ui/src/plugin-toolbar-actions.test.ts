@@ -31,10 +31,7 @@ function makeHost(overrides: {
 
 function appendDeps(messages: Array<{ messageKey: string; level: string }>) {
   return {
-    appendMessage: (message: {
-      messageKey: string;
-      level: string;
-    }): void => {
+    appendMessage: (message: { messageKey: string; level: string }): void => {
       messages.push({ messageKey: message.messageKey, level: message.level });
     },
   };

@@ -284,20 +284,20 @@ blurry, jpeg artifacts, duplicate, extra fingers
 
 ### 落地尺寸参考
 
-| 场景 | 尺寸 | 说明 |
-| --- | --- | --- |
-| 单一事实源 | — | `build/AppIcon.svg`（SVG 矢量源文件；`scripts/generate-icons.mjs` 由此生成各端打包图标，见脚本头注释） |
-| 网页 favicon | 16 / 32 / 48 px | `apps/web/public/favicon.svg`（由 `build/AppIcon.svg` 派生；VSCode 面板图标也复用此文件） |
-| PWA / 浏览器图标 | 192 / 512 px | `apps/web/public/` |
-| Electron 应用图标 | 256 / 512 px（.ico） | `build/icon.ico`（`scripts/generate-icons.mjs` 生成，`electron-builder.yml` 的 `win.icon` 指向） |
-| VSCode 扩展图标 | 256×256 px（.png） | `apps/vscode-extension/icon.png`（`scripts/generate-icons.mjs` 生成，package.json `icon` 字段） |
+| 场景              | 尺寸                 | 说明                                                                                                   |
+| ----------------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
+| 单一事实源        | —                    | `build/AppIcon.svg`（SVG 矢量源文件；`scripts/generate-icons.mjs` 由此生成各端打包图标，见脚本头注释） |
+| 网页 favicon      | 16 / 32 / 48 px      | `apps/web/public/favicon.svg`（由 `build/AppIcon.svg` 派生；VSCode 面板图标也复用此文件）              |
+| PWA / 浏览器图标  | 192 / 512 px         | `apps/web/public/`                                                                                     |
+| Electron 应用图标 | 256 / 512 px（.ico） | `build/icon.ico`（`scripts/generate-icons.mjs` 生成，`electron-builder.yml` 的 `win.icon` 指向）       |
+| VSCode 扩展图标   | 256×256 px（.png）   | `apps/vscode-extension/icon.png`（`scripts/generate-icons.mjs` 生成，package.json `icon` 字段）        |
 
 ---
 
 ## 6. 迭代话术（生成结果不理想时反馈给工具）
 
-- 太复杂/太满 → *"Simplify to a single central motif, remove background details, more negative space."*
-- 太卡通 → *"More geometric, sharper angles, professional engineering tool aesthetic, reduce roundness of shapes."*
-- 颜色跑偏 → *"Strictly blue color palette only: hex #1460d6 background, cyan #1677ff and white accents. No purple, no red."*
-- 有文字/水印 → *"Remove all text, letters and watermarks."*
-- 想更贴产品 → *"Make the register grid cells and the data pulse the dominant elements."*
+- 太复杂/太满 → _"Simplify to a single central motif, remove background details, more negative space."_
+- 太卡通 → _"More geometric, sharper angles, professional engineering tool aesthetic, reduce roundness of shapes."_
+- 颜色跑偏 → _"Strictly blue color palette only: hex #1460d6 background, cyan #1677ff and white accents. No purple, no red."_
+- 有文字/水印 → _"Remove all text, letters and watermarks."_
+- 想更贴产品 → _"Make the register grid cells and the data pulse the dominant elements."_

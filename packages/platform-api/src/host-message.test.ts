@@ -427,7 +427,8 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
     });
     const restoredFail = fromResultPayload(toResultPayload(fail(failed)));
     expect(restoredFail.ok).toBe(false);
-    if (!restoredFail.ok) expect(restoredFail.error.code).toBe("REQUEST_TIMEOUT");
+    if (!restoredFail.ok)
+      expect(restoredFail.error.code).toBe("REQUEST_TIMEOUT");
   });
 });
 
@@ -896,9 +897,7 @@ describe("host-message plugin runtime kinds（2026-08-31，ADR-039）", () => {
 
   it("validates plugin contribution query response via pluginContributionQueryResponseSchema", () => {
     const parsed = pluginContributionQueryResponseSchema.safeParse({
-      points: [
-        { pluginId: "demo", pointId: "panels", payload: { id: "p" } },
-      ],
+      points: [{ pluginId: "demo", pointId: "panels", payload: { id: "p" } }],
     });
     expect(parsed.success).toBe(true);
   });

@@ -34,7 +34,10 @@ function buildTcpFrame(tid: number, unitId: number, pdu: Uint8Array): Buffer {
 }
 
 /** 测试进程内假 TCP 设备：MBAP responder（FC03 读 / FC10 写，共享寄存器状态）。 */
-function createFakeTcpServer(): Promise<{ port: number; registers: Map<number, number> }> {
+function createFakeTcpServer(): Promise<{
+  port: number;
+  registers: Map<number, number>;
+}> {
   const registers = new Map<number, number>();
   const server = net.createServer((socket) => {
     const buffer: number[] = [];
@@ -83,11 +86,7 @@ function createFakeTcpServer(): Promise<{ port: number; registers: Map<number, n
           );
         } else {
           socket.write(
-            buildTcpFrame(
-              tid,
-              unitId,
-              Uint8Array.from([fc | 0x80, 0x01]),
-            ),
+            buildTcpFrame(tid, unitId, Uint8Array.from([fc | 0x80, 0x01])),
           );
         }
       }
@@ -100,7 +99,8 @@ function createFakeTcpServer(): Promise<{ port: number; registers: Map<number, n
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
-      const port = typeof address === "object" && address !== null ? address.port : 0;
+      const port =
+        typeof address === "object" && address !== null ? address.port : 0;
       resolve({ port, registers });
     });
   });
@@ -162,7 +162,10 @@ test("TCP 配置连接 + FC03 读 + FC10 写闭环（主进程会话）", async 
 
   const modal = page.locator(".ant-modal-container:visible");
   // 1. 切换到 Modbus TCP（Segmented 选项）。
-  await modal.locator(".ant-segmented-item").filter({ hasText: "Modbus TCP" }).click();
+  await modal
+    .locator(".ant-segmented-item")
+    .filter({ hasText: "Modbus TCP" })
+    .click();
 
   // 2. 填写 host（占位符 192.168.1.10 的 Input）与端口（TCP 模式下第一个 InputNumber）。
   const hostInput = modal.getByPlaceholder("192.168.1.10");
@@ -203,7 +206,9 @@ test("TCP 配置连接 + FC03 读 + FC10 写闭环（主进程会话）", async 
     .getByRole("button", { name: "Write", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect.poll(() => Promise.resolve(fakeRegisters.get(0x0001))).toBe(0x12ab);
+  await expect
+    .poll(() => Promise.resolve(fakeRegisters.get(0x0001)))
+    .toBe(0x12ab);
 });
 
 test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {

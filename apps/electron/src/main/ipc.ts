@@ -3,8 +3,18 @@
  * 与 electron 运行时解耦：外部能力经 IpcDeps 注入，便于单测校验/分发/拒绝路径
  * （未知 kind、非法 payload、发送者校验、debug 探针打包禁用等）。
  */
-import { createMamepError, fail, ok, type MamepError, type Result } from "@mamep2026/domain";
-import type { ReadVerifySettings, RegisterRow, TcpConnectionProfile } from "@mamep2026/domain";
+import {
+  createMamepError,
+  fail,
+  ok,
+  type MamepError,
+  type Result,
+} from "@mamep2026/domain";
+import type {
+  ReadVerifySettings,
+  RegisterRow,
+  TcpConnectionProfile,
+} from "@mamep2026/domain";
 import type {
   BatchReadHandle,
   BatchReadRow,
@@ -414,17 +424,14 @@ export async function handleRequest(
           "debug probe is disabled in packaged builds",
         );
       }
-      return okResponse(
-        message,
-        {
-          platform: "electron",
-          appVersion: deps.appVersion(),
-          packaged: deps.isPackaged(),
-          windowCount: deps.windowCount(),
-          connectionState: deps.connectionState(),
-          uptimeMs: deps.uptimeMs(),
-        } satisfies HostDebugState,
-      );
+      return okResponse(message, {
+        platform: "electron",
+        appVersion: deps.appVersion(),
+        packaged: deps.isPackaged(),
+        windowCount: deps.windowCount(),
+        connectionState: deps.connectionState(),
+        uptimeMs: deps.uptimeMs(),
+      } satisfies HostDebugState);
     case "debug:fake-tcp-drop":
       // dev/e2e 探针（2026-08-30 自动重连）：Electron 的假 TCP 设备在测试进程内
       // （Playwright net server），不驻留主进程，故恒返回 dropped:false。

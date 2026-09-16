@@ -56,8 +56,8 @@
    - `workspace-save`：payload `{ content: string }`（序列化 JSON 字符串；主进程先
      `parseWorkspace` 校验再落盘），response `null`；
    - `workspace-clear`：payload `{}`，response `null`。
-   Zod 校验 + `HOST_REQUEST_KINDS` 白名单 + preload 桥 + 主进程 ipc 分发，全部经
-   `sessionResult` 包装（错误 `category`/`userMessageKey` 原样往返，ADR-028 不回归）。
+     Zod 校验 + `HOST_REQUEST_KINDS` 白名单 + preload 桥 + 主进程 ipc 分发，全部经
+     `sessionResult` 包装（错误 `category`/`userMessageKey` 原样往返，ADR-028 不回归）。
 8. **Renderer 薄桥 `FileWorkspaceRepository`（apps/web）**：实现 `WorkspaceRepositoryPort`，
    `load()` = `bridge.workspaceLoad()` → `parseWorkspace(content)`；`save(w)` =
    `serializeWorkspace(w)` → `bridge.workspaceSave(content)`；`clear()` = `bridge.workspaceClear()`。

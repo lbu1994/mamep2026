@@ -48,7 +48,11 @@ const RELEASE_AAB_PATH = path.join(
   "release",
   "app-release.aab",
 );
-const KEYSTORE_PROPERTIES_PATH = path.join(ANDROID_NATIVE, "app", "keystore.properties");
+const KEYSTORE_PROPERTIES_PATH = path.join(
+  ANDROID_NATIVE,
+  "app",
+  "keystore.properties",
+);
 
 /** Android 上可用的 JDK 上限（Gradle 8.14 支持到 Java 24）。 */
 const MAX_SUPPORTED_JAVA_MAJOR = 24;
@@ -66,7 +70,11 @@ function javaMajor(javaBinary) {
 
 function probeJdk(candidate) {
   if (candidate === undefined || candidate === "") return null;
-  const javaBinary = path.join(candidate, "bin", process.platform === "win32" ? "java.exe" : "java");
+  const javaBinary = path.join(
+    candidate,
+    "bin",
+    process.platform === "win32" ? "java.exe" : "java",
+  );
   if (!existsSync(javaBinary)) return null;
   const major = javaMajor(javaBinary);
   if (major === null) return null;
@@ -84,7 +92,9 @@ function resolveJdk() {
 
   const probed = candidates.map(probeJdk).filter((jdk) => jdk !== null);
   const usable = probed.find(
-    (jdk) => jdk.major >= MIN_SUPPORTED_JAVA_MAJOR && jdk.major <= MAX_SUPPORTED_JAVA_MAJOR,
+    (jdk) =>
+      jdk.major >= MIN_SUPPORTED_JAVA_MAJOR &&
+      jdk.major <= MAX_SUPPORTED_JAVA_MAJOR,
   );
   if (usable !== undefined) return usable;
 
@@ -113,7 +123,8 @@ function resolveAndroidSdk() {
     path.join(process.env.LOCALAPPDATA ?? "", "Android", "Sdk"),
   ];
   const found = candidates.find(
-    (candidate) => candidate !== undefined && candidate !== "" && existsSync(candidate),
+    (candidate) =>
+      candidate !== undefined && candidate !== "" && existsSync(candidate),
   );
   if (found === undefined) {
     throw new Error(
@@ -125,7 +136,11 @@ function resolveAndroidSdk() {
 
 function run(command, args, options = {}) {
   console.log(`\n[build:android] ${command} ${args.join(" ")}`);
-  execFileSync(command, args, { stdio: "inherit", shell: process.platform === "win32", ...options });
+  execFileSync(command, args, {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    ...options,
+  });
 }
 
 const skipWeb = process.argv.includes("--skip-web");
@@ -136,9 +151,9 @@ const hasSigningMaterial =
   existsSync(KEYSTORE_PROPERTIES_PATH) ||
   Boolean(
     process.env.MAMEP_ANDROID_KEYSTORE_PATH &&
-      process.env.MAMEP_ANDROID_KEYSTORE_PASSWORD &&
-      process.env.MAMEP_ANDROID_KEY_ALIAS &&
-      process.env.MAMEP_ANDROID_KEY_PASSWORD,
+    process.env.MAMEP_ANDROID_KEYSTORE_PASSWORD &&
+    process.env.MAMEP_ANDROID_KEY_ALIAS &&
+    process.env.MAMEP_ANDROID_KEY_PASSWORD,
   );
 const jdk = resolveJdk();
 const sdk = resolveAndroidSdk();

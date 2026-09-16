@@ -20,7 +20,8 @@ import {
   type BasicSheetType,
   type MamepError,
   type Result,
-} from "@mamep2026/domain";import {
+} from "@mamep2026/domain";
+import {
   decodeRtuResponse,
   encodeReadBitsRequest,
   encodeReadInputRegistersRequest,
@@ -61,9 +62,7 @@ function basicTablesError(
 
 /** 表类型 → 读期望 kind（仅读类）。 */
 type BasicReadKind =
-  | "read-coils"
-  | "read-discrete-inputs"
-  | "read-input-registers";
+  "read-coils" | "read-discrete-inputs" | "read-input-registers";
 
 function readKindFor(tableType: BasicSheetType): BasicReadKind {
   switch (tableType) {
@@ -101,8 +100,7 @@ export class BasicTablesRtuCodec implements ProtocolCodec {
       tableType === "input-register"
         ? MAX_READ_QUANTITY
         : MAX_READ_BITS_QUANTITY;
-    this.maxWrite =
-      tableType === "coil" ? MAX_WRITE_COILS_QUANTITY : 0;
+    this.maxWrite = tableType === "coil" ? MAX_WRITE_COILS_QUANTITY : 0;
   }
 
   /**
@@ -173,7 +171,9 @@ export class BasicTablesRtuCodec implements ProtocolCodec {
     if (expect.kind === "read") {
       const quantity = expect.request.addresses.length;
       const startAddress = expect.request.addresses[0] ?? 0;
-      let result: Result<import("@mamep2026/protocol-modbus").DecodedRtuResponse>;
+      let result: Result<
+        import("@mamep2026/protocol-modbus").DecodedRtuResponse
+      >;
       switch (this.tableType) {
         case "coil":
           result = decodeRtuResponse(frame, {
@@ -202,7 +202,10 @@ export class BasicTablesRtuCodec implements ProtocolCodec {
       }
       if (!result.ok) return result;
       if (result.value.kind === "exception") {
-        return ok({ kind: "exception", exceptionCode: result.value.exceptionCode });
+        return ok({
+          kind: "exception",
+          exceptionCode: result.value.exceptionCode,
+        });
       }
       if (
         result.value.kind === "read-coils" ||
@@ -229,7 +232,10 @@ export class BasicTablesRtuCodec implements ProtocolCodec {
     });
     if (!result.ok) return result;
     if (result.value.kind === "exception") {
-      return ok({ kind: "exception", exceptionCode: result.value.exceptionCode });
+      return ok({
+        kind: "exception",
+        exceptionCode: result.value.exceptionCode,
+      });
     }
     if (result.value.kind === "write-multiple-coils") {
       return ok({ kind: "write" });
@@ -317,7 +323,11 @@ export class BasicTablesRtuCodec implements ProtocolCodec {
 
 /** 向注册表注册全部基础表 codec（coil/discrete-input/input-register），三端装配共用。 */
 export function registerBasicTablesCodecs(registry: CodecRegistry): void {
-  for (const tableType of ["coil", "discrete-input", "input-register"] as const) {
+  for (const tableType of [
+    "coil",
+    "discrete-input",
+    "input-register",
+  ] as const) {
     registry.register(new BasicTablesRtuCodec(tableType));
   }
 }

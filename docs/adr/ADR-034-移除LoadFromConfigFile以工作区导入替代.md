@@ -36,12 +36,12 @@
    - UI：`packages/ui` `ConnectionSettingsModal`「Load from Config File」分组（连接对象 Select →
      预填表单 + RTU 端口匹配 + 从站地址同步）；`connection-settings-model.ts` `loadConnectionToSettings`；
      `AppHost.loadConnectionConfig()` 接口；i18n `configGroup/configLoadPlaceholder/configEmpty/
-     configSource/configInvalidJson/configInvalid`（en/zh）。
+configSource/configInvalidJson/configInvalid`（en/zh）。
    - 契约：`packages/platform-api` `connection-config-load` kind + `ConnectionConfigLoadResponse` +
      `loadConnectionConfig()`（`MamepHostApi`/`VscodeHostApi`/`vscode-bridge`）。
    - 共享包：`packages/connection-config`（`ConnectionConfigFile` schema/解析/映射）。
    - 桌面端：`apps/electron/src/main/config-loader.ts`、`apps/vscode-extension/src/config-loader.ts`
-     + 各自 ipc 分支、preload/extension 装配；VSCode 设置项 `mamep2026.connectionConfigPath`。
+     - 各自 ipc 分支、preload/extension 装配；VSCode 设置项 `mamep2026.connectionConfigPath`。
    - 浏览器：`apps/web/src/connection-config-url.ts`（`?connectionConfig=` URL 载入）+ AppHost 字段/方法。
    - 能力矩阵：`PlatformCapabilities.connectionConfig`（`"file" | "import" | "unsupported"`）整体删除，
      同步 `packages/domain`、`packages/platform-node`（node-platform-host / node-tcp-platform-host）、

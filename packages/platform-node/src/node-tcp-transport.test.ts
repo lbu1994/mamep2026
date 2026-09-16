@@ -8,9 +8,9 @@ function withCode(message: string, code: string): Error {
 
 describe("NodeTcpTransport", () => {
   it("has kind 'node-tcp'", () => {
-    expect(new NodeTcpTransport(new FakeSocket({ host: "h", port: 502 })).kind).toBe(
-      "node-tcp",
-    );
+    expect(
+      new NodeTcpTransport(new FakeSocket({ host: "h", port: 502 })).kind,
+    ).toBe("node-tcp");
   });
 
   it("opens, forwards data, and closes", async () => {
@@ -46,14 +46,18 @@ describe("NodeTcpTransport", () => {
   });
 
   it("rejects write before open with TRANSPORT_NOT_OPEN", async () => {
-    const transport = new NodeTcpTransport(new FakeSocket({ host: "h", port: 502 }));
+    const transport = new NodeTcpTransport(
+      new FakeSocket({ host: "h", port: 502 }),
+    );
     const result = await transport.write(Uint8Array.from([0x01]));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("TRANSPORT_NOT_OPEN");
   });
 
   it("fails opening twice with TCP_OPEN_FAILED", async () => {
-    const transport = new NodeTcpTransport(new FakeSocket({ host: "h", port: 502 }));
+    const transport = new NodeTcpTransport(
+      new FakeSocket({ host: "h", port: 502 }),
+    );
     expect((await transport.open()).ok).toBe(true);
     const result = await transport.open();
     expect(result.ok).toBe(false);

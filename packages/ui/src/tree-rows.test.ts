@@ -4,11 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyRow, newRowId, type RegisterRow } from "@mamep2026/domain";
 import { BITS_PER_REGISTER } from "@mamep2026/register-table";
-import {
-  buildTreeRows,
-  isVirtualBitRow,
-  isVirtualChildRow,
-} from "./tree-rows";
+import { buildTreeRows, isVirtualBitRow, isVirtualChildRow } from "./tree-rows";
 
 function makeRow(overrides: Partial<RegisterRow> = {}): RegisterRow {
   const row = createEmptyRow();
@@ -42,7 +38,19 @@ describe("buildTreeRows", () => {
     });
     // addressValue 未提交时 base=0
     const tree = buildTreeRows([row]);
-    const children = (tree[0] as { children?: Array<{ __virtualChild: { index: number; address: number; dataText: string | null }; cellText: string }> }).children ?? [];
+    const children =
+      (
+        tree[0] as {
+          children?: Array<{
+            __virtualChild: {
+              index: number;
+              address: number;
+              dataText: string | null;
+            };
+            cellText: string;
+          }>;
+        }
+      ).children ?? [];
     expect(children[0]?.__virtualChild.address).toBe(0);
     expect(children[1]?.__virtualChild.address).toBe(1);
     expect(children[0]?.__virtualChild.dataText).toBe("1234");
@@ -56,7 +64,12 @@ describe("buildTreeRows", () => {
       dataType: "signed",
     });
     const tree = buildTreeRows([row]);
-    const children = (tree[0] as { children?: Array<{ __virtualChild: { dataText: string | null } }> }).children ?? [];
+    const children =
+      (
+        tree[0] as {
+          children?: Array<{ __virtualChild: { dataText: string | null } }>;
+        }
+      ).children ?? [];
     expect(children[0]?.__virtualChild.dataText).toBe("-1");
   });
 
@@ -70,7 +83,8 @@ describe("buildTreeRows", () => {
       ],
     });
     const tree = buildTreeRows([row]);
-    const children = (tree[0] as { children?: Array<RegisterRow> }).children ?? [];
+    const children =
+      (tree[0] as { children?: Array<RegisterRow> }).children ?? [];
     expect(children[0]?.name).toBe("Hi");
     expect(children[0]?.comment).toBe("high");
     expect(children[0]?.dataType).toBe("unsigned");
@@ -89,7 +103,8 @@ describe("buildTreeRows", () => {
       ],
     });
     const tree = buildTreeRows([row]);
-    const children = (tree[0] as { children?: Array<{ cellText: string }> }).children ?? [];
+    const children =
+      (tree[0] as { children?: Array<{ cellText: string }> }).children ?? [];
     expect(children[0]?.cellText).toBe("-1");
     expect(children[1]?.cellText).toBe("4660");
   });
@@ -102,7 +117,8 @@ describe("buildTreeRows", () => {
       registers: null,
     });
     const tree = buildTreeRows([row]);
-    const children = (tree[0] as { children?: Array<{ cellText: string }> }).children ?? [];
+    const children =
+      (tree[0] as { children?: Array<{ cellText: string }> }).children ?? [];
     expect(children[0]?.cellText).toBe("00010001 00010001");
     expect(children[1]?.cellText).toBe("00000000 11110000");
   });
@@ -115,7 +131,8 @@ describe("buildTreeRows", () => {
       registers: null,
     });
     const tree = buildTreeRows([row]);
-    const children = (tree[0] as { children?: Array<RegisterRow> }).children ?? [];
+    const children =
+      (tree[0] as { children?: Array<RegisterRow> }).children ?? [];
     expect(children[0]?.dataType).toBe("signed");
     expect(children[0]?.name).toBe("");
   });
@@ -123,7 +140,12 @@ describe("buildTreeRows", () => {
   it("uses null data text when a register has not been read", () => {
     const row = makeRow({ registerCount: 2, registerValues: null });
     const tree = buildTreeRows([row]);
-    const children = (tree[0] as { children?: Array<{ __virtualChild: { dataText: string | null } }> }).children ?? [];
+    const children =
+      (
+        tree[0] as {
+          children?: Array<{ __virtualChild: { dataText: string | null } }>;
+        }
+      ).children ?? [];
     expect(children[0]?.__virtualChild.dataText).toBeNull();
     expect(children[1]?.__virtualChild.dataText).toBeNull();
   });
@@ -175,9 +197,7 @@ describe("buildTreeRows 位明细（ADR-052）", () => {
       addressValue: { value: 0x2000 } as never,
       registerValues: [{ value: 0x0004 }],
       bitComments: [
-        Array.from({ length: 16 }, (_, index) =>
-          index === 2 ? "ready" : "",
-        ),
+        Array.from({ length: 16 }, (_, index) => (index === 2 ? "ready" : "")),
       ],
       bitNames: [
         Array.from({ length: 16 }, (_, index) =>

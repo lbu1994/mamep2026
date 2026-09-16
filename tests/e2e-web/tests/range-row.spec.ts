@@ -34,13 +34,16 @@ interface MamepMockApi {
 }
 
 /** 通过 mock 钩子预置寄存器值。 */
-async function mockSet(page: Page, address: number, value: number): Promise<void> {
+async function mockSet(
+  page: Page,
+  address: number,
+  value: number,
+): Promise<void> {
   await page.evaluate(
     ({ a, v }) => {
-      (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.setRegister(
-        a,
-        v,
-      );
+      (
+        window as unknown as { __mamepMock: MamepMockApi }
+      ).__mamepMock.setRegister(a, v);
     },
     { a: address, v: value },
   );
@@ -101,9 +104,7 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await address.press("Enter");
 
   // 展开箭头出现；点击展开 → 2 个只读子行（地址 0/1，Data「—」）。
-  await expect(
-    first.locator('button[aria-label="Expand row"]'),
-  ).toBeVisible();
+  await expect(first.locator('button[aria-label="Expand row"]')).toBeVisible();
   await first.locator('button[aria-label="Expand row"]').click();
   const childRows = page.locator(
     ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=':c']",
@@ -112,7 +113,9 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await expect(childRows.nth(0)).toContainText("0");
   await expect(childRows.nth(1)).toContainText("1");
   // 子行只读：无 Read/Write 按钮、无拖拽手柄、复选框禁用。
-  await expect(childRows.nth(0).getByRole("button", { name: "Read" })).toHaveCount(0);
+  await expect(
+    childRows.nth(0).getByRole("button", { name: "Read" }),
+  ).toHaveCount(0);
   await expect(
     childRows.nth(0).locator('[aria-label="Drag to reorder"]'),
   ).toHaveCount(0);
@@ -138,17 +141,19 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
     first.locator(".register-table__status-dot--success"),
   ).toBeVisible();
   const written = await page.evaluate(() => ({
-    a: (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.getRegister(
-      0x0000,
-    ),
-    b: (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.getRegister(
-      0x0001,
-    ),
+    a: (
+      window as unknown as { __mamepMock: MamepMockApi }
+    ).__mamepMock.getRegister(0x0000),
+    b: (
+      window as unknown as { __mamepMock: MamepMockApi }
+    ).__mamepMock.getRegister(0x0001),
   }));
   expect(written).toEqual({ a: 0xaaaa, b: 0xbbbb });
 });
 
-test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", async ({ page }) => {
+test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", async ({
+  page,
+}) => {
   await openApp(page);
   const first = parentRow(page, 0);
   const address = first.getByLabel("Address", { exact: true });
@@ -248,10 +253,9 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
   // 重启恢复（IndexedDB 自动保存）：先等自动保存落盘，再 reload；展开后子行元数据与值全部还原。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText(
-    "Disconnect",
-    { timeout: 15000 },
-  );
+  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+    timeout: 15000,
+  });
   const restoredParent = parentRow(page, 0);
   await expect(
     restoredParent.locator('button[aria-label="Expand row"]'),
@@ -261,9 +265,7 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
     ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=':c']",
   );
   await expect(restoredChildren).toHaveCount(2);
-  await expect(restoredChildren.nth(0).getByLabel("Name")).toHaveText(
-    "ChildA",
-  );
+  await expect(restoredChildren.nth(0).getByLabel("Name")).toHaveText("ChildA");
   await expect(restoredChildren.nth(0).getByLabel("Data")).toHaveText("00AB");
   await expect(restoredChildren.nth(0).getByLabel("Comment")).toHaveText(
     "First",
@@ -314,12 +316,12 @@ test("must-multi 区：单读/单写异常，多读/多写正常", async ({ page
     mustRow.locator(".register-table__status-dot--success"),
   ).toBeVisible();
   const written = await page.evaluate(() => ({
-    a: (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.getRegister(
-      0x0800,
-    ),
-    b: (window as unknown as { __mamepMock: MamepMockApi }).__mamepMock.getRegister(
-      0x0801,
-    ),
+    a: (
+      window as unknown as { __mamepMock: MamepMockApi }
+    ).__mamepMock.getRegister(0x0800),
+    b: (
+      window as unknown as { __mamepMock: MamepMockApi }
+    ).__mamepMock.getRegister(0x0801),
   }));
   expect(written).toEqual({ a: 0xcafe, b: 0xbeef });
 });
@@ -338,9 +340,7 @@ test("范围长度 × 类型合法集校验：unsigned 非法数量在类型列�
   await page
     .locator(".ant-select-dropdown:visible [title='Unsigned Dec.']")
     .click();
-  await expect(
-    first.locator(".ant-select-status-error"),
-  ).toBeVisible();
+  await expect(first.locator(".ant-select-status-error")).toBeVisible();
   await expect(
     first.getByRole("button", { name: "Read", exact: true }),
   ).toBeDisabled();
@@ -379,7 +379,8 @@ test("剪贴板范围编解码往返：复制范围行粘贴恢复 registerCount
 
   // 拦截的剪贴板写入应含 CSV 范围 "0-1"。
   const writes = await page.evaluate(
-    () => (window as unknown as { __clipboardWrites: string[] }).__clipboardWrites,
+    () =>
+      (window as unknown as { __clipboardWrites: string[] }).__clipboardWrites,
   );
   expect(writes[0]).toContain("0-1");
 

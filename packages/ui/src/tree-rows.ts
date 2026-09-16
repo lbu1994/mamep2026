@@ -180,4 +180,3 @@ export function buildTreeRows(rows: readonly RegisterRow[]): TreeRow[] {
 
 /** 位明细行数（每寄存器 16 位）；供 UI/测试引用。 */
 export { BITS_PER_REGISTER };
-

@@ -64,36 +64,68 @@ describe("createTcpConnectionProfile", () => {
   });
 
   it("rejects empty or non-string host", () => {
-    expect(createTcpConnectionProfile({ host: "", port: 502, unitId: 1 }).ok).toBe(false);
+    expect(
+      createTcpConnectionProfile({ host: "", port: 502, unitId: 1 }).ok,
+    ).toBe(false);
     expect(
       createTcpConnectionProfile({ host: "  ", port: 502, unitId: 1 }).ok,
     ).toBe(false);
-    expect(createTcpConnectionProfile({ host: 42, port: 502, unitId: 1 }).ok).toBe(false);
+    expect(
+      createTcpConnectionProfile({ host: 42, port: 502, unitId: 1 }).ok,
+    ).toBe(false);
   });
 
   it("rejects ports outside 1..65535", () => {
-    expect(createTcpConnectionProfile({ host: "h", port: 0, unitId: 1 }).ok).toBe(false);
-    expect(createTcpConnectionProfile({ host: "h", port: 65536, unitId: 1 }).ok).toBe(false);
-    expect(createTcpConnectionProfile({ host: "h", port: 1.5, unitId: 1 }).ok).toBe(false);
-    const result = createTcpConnectionProfile({ host: "h", port: 0, unitId: 1 });
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 0, unitId: 1 }).ok,
+    ).toBe(false);
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 65536, unitId: 1 }).ok,
+    ).toBe(false);
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 1.5, unitId: 1 }).ok,
+    ).toBe(false);
+    const result = createTcpConnectionProfile({
+      host: "h",
+      port: 0,
+      unitId: 1,
+    });
     if (!result.ok) expect(result.error.code).toBe("TCP_PORT_OUT_OF_RANGE");
   });
 
   it("accepts port boundaries 1 and 65535", () => {
-    expect(createTcpConnectionProfile({ host: "h", port: 1, unitId: 1 }).ok).toBe(true);
-    expect(createTcpConnectionProfile({ host: "h", port: 65535, unitId: 1 }).ok).toBe(true);
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 1, unitId: 1 }).ok,
+    ).toBe(true);
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 65535, unitId: 1 }).ok,
+    ).toBe(true);
   });
 
   it("rejects unitId outside 0..255", () => {
-    expect(createTcpConnectionProfile({ host: "h", port: 502, unitId: -1 }).ok).toBe(false);
-    expect(createTcpConnectionProfile({ host: "h", port: 502, unitId: 256 }).ok).toBe(false);
-    expect(createTcpConnectionProfile({ host: "h", port: 502, unitId: 1.5 }).ok).toBe(false);
-    const result = createTcpConnectionProfile({ host: "h", port: 502, unitId: 256 });
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 502, unitId: -1 }).ok,
+    ).toBe(false);
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 502, unitId: 256 }).ok,
+    ).toBe(false);
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 502, unitId: 1.5 }).ok,
+    ).toBe(false);
+    const result = createTcpConnectionProfile({
+      host: "h",
+      port: 502,
+      unitId: 256,
+    });
     if (!result.ok) expect(result.error.code).toBe("TCP_UNIT_ID_OUT_OF_RANGE");
   });
 
   it("accepts unitId full MBAP range 0 and 255", () => {
-    expect(createTcpConnectionProfile({ host: "h", port: 502, unitId: 0 }).ok).toBe(true);
-    expect(createTcpConnectionProfile({ host: "h", port: 502, unitId: 255 }).ok).toBe(true);
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 502, unitId: 0 }).ok,
+    ).toBe(true);
+    expect(
+      createTcpConnectionProfile({ host: "h", port: 502, unitId: 255 }).ok,
+    ).toBe(true);
   });
 });

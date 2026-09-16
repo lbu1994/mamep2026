@@ -30,10 +30,8 @@ function makeMemento(initial?: unknown): {
   const stored: { value: unknown } = { value: initial };
   return {
     memento: {
-      get: <T,>(key: string): T | undefined =>
-        key === "mamep2026.plugins"
-          ? (stored.value as T)
-          : undefined,
+      get: <T>(key: string): T | undefined =>
+        key === "mamep2026.plugins" ? (stored.value as T) : undefined,
       update: async (key: string, value: unknown) => {
         if (key === "mamep2026.plugins") stored.value = value;
       },

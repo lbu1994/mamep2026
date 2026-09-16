@@ -45,13 +45,13 @@
 
 插件**一律手动安装**（不随包分发，ADR-054），入口在 **Settings → Plugins → Install Plugin**：
 
-| 项 | Android 实现 |
-| --- | --- |
+| 项       | Android 实现                                                                                                                                                                                                                                                                                 |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 安装入口 | `pluginInstall: "upload"`：隐藏 `<input type="file">` + 客户端读文件文本（Capacitor `BridgeWebChromeClient.onShowFileChooser` 走系统文件选择器，**不需要 Capacitor Filesystem**）。点击 Install 会拉起系统选择器——这是原生 Activity，e2e 无法驱动，故用例改为 `setInputFiles` 直投隐藏 input |
-| 文件过滤 | `accept=".json,.mjs,.js"`（**仅扩展名**：部分 ROM 按 MIME 过滤会把 `.mjs` 判为 `application/octet-stream` 而不可选） |
-| 执行能力 | `executablePlugins` 由**运行时探测**决定（`probePluginExecutionSupport()` 实测「Blob Worker + Worker 内 blob entry 动态 import」），静态值为 **fail-closed 基线 `false`**。本机（WebView 151）实测可用 → `true` |
-| 执行模式 | 与桌面端一致：默认**隔离线程**；「Same process」需在安装确认框中显式授权（同步能力 codec / dataType / tableType 需要它） |
-| 持久化 | IndexedDB（与工作区共用库 `mamep2026` → `kv` → 键 `plugins`），reload / 重启后按存储重建执行面 |
+| 文件过滤 | `accept=".json,.mjs,.js"`（**仅扩展名**：部分 ROM 按 MIME 过滤会把 `.mjs` 判为 `application/octet-stream` 而不可选）                                                                                                                                                                         |
+| 执行能力 | `executablePlugins` 由**运行时探测**决定（`probePluginExecutionSupport()` 实测「Blob Worker + Worker 内 blob entry 动态 import」），静态值为 **fail-closed 基线 `false`**。本机（WebView 151）实测可用 → `true`                                                                              |
+| 执行模式 | 与桌面端一致：默认**隔离线程**；「Same process」需在安装确认框中显式授权（同步能力 codec / dataType / tableType 需要它）                                                                                                                                                                     |
+| 持久化   | IndexedDB（与工作区共用库 `mamep2026` → `kv` → 键 `plugins`），reload / 重启后按存储重建执行面                                                                                                                                                                                               |
 
 > 探测只覆盖隔离路径（Worker）；若某 ROM 拦下**文档内**的 blob `import()`（同进程模式），安装会以
 > `errors.pluginLoadFailed` 报错——无法像 Worker 那样预先探测。
@@ -129,22 +129,22 @@ adb shell am start -n com.mamep2026.app/.MainActivity
 
 前提：**真机 + USB 调试 或 无线调试**（本套件不静默跳过，无设备即失败），且：
 
-| 前置 | 原因 |
-| --- | --- |
-| 屏幕解锁 + **不熄屏**（USB 调试：`adb shell svc power stayon true`；**无线调试见下方专节**） | 设备休眠时 OEM（vivo 等）无法弹出安装确认框 → `INSTALL_FAILED_ABORTED`；**休眠还会冻结 WebView** → CDP 上的定位/点击会永久挂起（表象像「卡住」，实为等待到用例超时） |
-| 允许「USB 安装」/ 首次安装时在手机上点确认 | 同上 |
-| 宿主机可达（`adb reverse` 由用例负责） | TCP 用例把宿主回环端口反向转发给设备，真实字节往返经原生 socket。**无线调试下 `adb reverse` 同样可用**（2026-09-13 实测） |
-| **USB-RS485 闭环用例额外前置** | ① USB 转接器插在**手机**上（OTG）；另一端接 PC 侧从站（或另一只 USB-TTL，TX↔RX 交叉 + 共地）；② PC 侧先启动 RTU 从站：`pnpm slave`（端口/波特率取 `config/connections.json`）；③ 显式开启：设 `MAMEP_ANDROID_USB_SERIAL=1`；④ 首次连接需在手机上确认 USB 授权（用例等待最长 30s）。**无硬件时该用例自动跳过**，`rtu-ui.spec.ts` 无需硬件即可跑 |
-| **vivo/iQOO：安装被静默拒绝** | `adb install -r` 可能报 `INSTALL_FAILED_ABORTED: User rejected permissions` 而**手机无任何弹窗**——这是 ROM 拒绝**流式安装**。`helpers/adb.ts` 已优先用 `adb install -r --no-streaming`（push 安装）并在失败时回退；若两者都失败，检查开发者选项的「USB 安装」开关 |
+| 前置                                                                                         | 原因                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 屏幕解锁 + **不熄屏**（USB 调试：`adb shell svc power stayon true`；**无线调试见下方专节**） | 设备休眠时 OEM（vivo 等）无法弹出安装确认框 → `INSTALL_FAILED_ABORTED`；**休眠还会冻结 WebView** → CDP 上的定位/点击会永久挂起（表象像「卡住」，实为等待到用例超时）                                                                                                                                                                           |
+| 允许「USB 安装」/ 首次安装时在手机上点确认                                                   | 同上                                                                                                                                                                                                                                                                                                                                           |
+| 宿主机可达（`adb reverse` 由用例负责）                                                       | TCP 用例把宿主回环端口反向转发给设备，真实字节往返经原生 socket。**无线调试下 `adb reverse` 同样可用**（2026-09-13 实测）                                                                                                                                                                                                                      |
+| **USB-RS485 闭环用例额外前置**                                                               | ① USB 转接器插在**手机**上（OTG）；另一端接 PC 侧从站（或另一只 USB-TTL，TX↔RX 交叉 + 共地）；② PC 侧先启动 RTU 从站：`pnpm slave`（端口/波特率取 `config/connections.json`）；③ 显式开启：设 `MAMEP_ANDROID_USB_SERIAL=1`；④ 首次连接需在手机上确认 USB 授权（用例等待最长 30s）。**无硬件时该用例自动跳过**，`rtu-ui.spec.ts` 无需硬件即可跑 |
+| **vivo/iQOO：安装被静默拒绝**                                                                | `adb install -r` 可能报 `INSTALL_FAILED_ABORTED: User rejected permissions` 而**手机无任何弹窗**——这是 ROM 拒绝**流式安装**。`helpers/adb.ts` 已优先用 `adb install -r --no-streaming`（push 安装）并在失败时回退；若两者都失败，检查开发者选项的「USB 安装」开关                                                                              |
 
 ### 无线调试（2026-09-13 实测可用）
 
 Android 11+ 的「无线调试」是**两个不同的随机端口**，且都需要先配对：
 
-| 端口 | 出处 | 用途 |
-| --- | --- | --- |
-| `_adb-tls-pairing` | 弹窗「使用配对码配对设备」 | `adb pair <ip:配对端口>`（随后输入设备上 6 位配对码；**弹窗与配对码约 1 分钟失效**） |
-| `_adb-tls-connect` | 「无线调试」主界面显示的「IP 地址和端口」 | `adb connect <ip:连接端口>`（配对成功后才可连） |
+| 端口               | 出处                                      | 用途                                                                                 |
+| ------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------ |
+| `_adb-tls-pairing` | 弹窗「使用配对码配对设备」                | `adb pair <ip:配对端口>`（随后输入设备上 6 位配对码；**弹窗与配对码约 1 分钟失效**） |
+| `_adb-tls-connect` | 「无线调试」主界面显示的「IP 地址和端口」 | `adb connect <ip:连接端口>`（配对成功后才可连）                                      |
 
 ```bash
 # 1) 设备与电脑同一 Wi-Fi；设备开启「开发者选项 → 无线调试」并保持在该页面

@@ -28,8 +28,14 @@ export function deactivate() {
 
 function makeApi() {
   return {
-    readRegisters: vi.fn(async () => ({ ok: true as const, value: [0xaa, 0xbb] })),
-    writeRegisters: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    readRegisters: vi.fn(async () => ({
+      ok: true as const,
+      value: [0xaa, 0xbb],
+    })),
+    writeRegisters: vi.fn(async () => ({
+      ok: true as const,
+      value: undefined,
+    })),
   };
 }
 
@@ -74,7 +80,10 @@ describe("NodePluginRemoteRuntime（ADR-044 Phase F-2）", () => {
       export const manifest = { id: "bad", name: "Bad", version: "1.0.0", apiVersion: "2.0", platform: { web: false, node: true }, permissions: [], contributes: {} };
       export function activate() { throw new Error("activate boom"); }
     `;
-    const runtime = new NodePluginRemoteRuntime(badEntry, makeFactory(makeApi()));
+    const runtime = new NodePluginRemoteRuntime(
+      badEntry,
+      makeFactory(makeApi()),
+    );
     expect((await runtime.load()).ok).toBe(true);
     await expect(
       runtime.activate({ pluginId: "bad", communication: makeApi() }),
@@ -84,7 +93,10 @@ describe("NodePluginRemoteRuntime（ADR-044 Phase F-2）", () => {
 
   it("entry 缺 manifest → load 返回 PLUGIN_LOAD_FAILED", async () => {
     const badEntry = `export const x = 1;`;
-    const runtime = new NodePluginRemoteRuntime(badEntry, makeFactory(makeApi()));
+    const runtime = new NodePluginRemoteRuntime(
+      badEntry,
+      makeFactory(makeApi()),
+    );
     const result = await runtime.load();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("PLUGIN_LOAD_FAILED");

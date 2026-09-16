@@ -165,7 +165,8 @@ export function mapAndroidNativeError(
   }
 
   // 兜底：按上下文区分「TCP 打开 / TCP 读写 / 串口打开 / 串口读写」。
-  if (fallback === "serial-open") return serialOpenFailedError(`${code}: ${message}`);
+  if (fallback === "serial-open")
+    return serialOpenFailedError(`${code}: ${message}`);
   if (fallback === "serial-io") {
     return createMamepError({
       code: "SERIAL_ERROR",
@@ -224,9 +225,7 @@ export function serialUnsupportedError(technicalMessage: string): MamepError {
 }
 
 /** 串口链路参数不受支持（bnudRate/dataBits/stopBits/parity/flowControl）。 */
-export function serialParameterUnsupportedError(
-  reason: string,
-): MamepError {
+export function serialParameterUnsupportedError(reason: string): MamepError {
   return createMamepError({
     code: "SERIAL_PARAMETER_UNSUPPORTED",
     category: "validation",

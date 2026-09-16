@@ -72,11 +72,11 @@ function createHarness(
     ),
   };
   const transport = new FakeTransport();
-  const openTransport = vi.fn(
-    async (): Promise<Result<TransportPort>> => ok(transport),
+  const openTransport = vi.fn(async (): Promise<Result<TransportPort>> =>
+    ok(transport),
   );
-  const performReconnect = vi.fn(
-    async (): Promise<Result<void>> => ok(undefined),
+  const performReconnect = vi.fn(async (): Promise<Result<void>> =>
+    ok(undefined),
   );
   const profile = createDefaultTcpProfile("PLC");
   profile.autoReconnect = options.autoReconnect ?? true;

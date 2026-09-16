@@ -47,7 +47,11 @@
  * - 各 row 补 bitNames=null（v9 数据仅有位注释，名称缺省为空；bitComments 原值保留）；
  * - schemaVersion 升为 10。
  */
-import { createMamepError, BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID, type Result } from "@mamep2026/domain";
+import {
+  createMamepError,
+  BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID,
+  type Result,
+} from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 
 export interface Migration {
@@ -182,8 +186,7 @@ const migrationV5ToV6: Migration = {
       : [];
     const rtuProfile = profiles.find((p) => p.protocol === "rtu");
     const globalAdjust =
-      rtuProfile !== undefined &&
-      typeof rtuProfile.addressAdjust === "string"
+      rtuProfile !== undefined && typeof rtuProfile.addressAdjust === "string"
         ? rtuProfile.addressAdjust
         : "off";
     const sheets = Array.isArray(data.sheets)
@@ -339,8 +342,7 @@ export function migrateData(
   migrationList: readonly Migration[],
 ): Result<Record<string, unknown>> {
   let current = data;
-  let version =
-    typeof data.schemaVersion === "number" ? data.schemaVersion : 1;
+  let version = typeof data.schemaVersion === "number" ? data.schemaVersion : 1;
   const sorted = [...migrationList].sort(
     (a, b) => a.fromVersion - b.fromVersion,
   );

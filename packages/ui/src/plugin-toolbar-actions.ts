@@ -6,9 +6,7 @@
  * 0900H/0910H），核心（packages/ui）不再硬编码厂商地址/写入规则（docs/AGENTS.md §24.4）。
  * 本模块仅保留平台侧通用执行前置（连接检查 + 消息提示）与代理调用。
  */
-import type {
-  ApplicationMessage,
-} from "@mamep2026/logging";
+import type { ApplicationMessage } from "@mamep2026/logging";
 import type { AppHost } from "./host";
 
 export interface PluginToolbarActionDeps {

@@ -80,9 +80,7 @@ test("移动布局：侧栏/底部面板改为抽屉，工具栏次要控件进�
   await expect(toolbar.getByRole("button", { name: "Read All" })).toBeVisible();
   await expect(toolbar.locator(".table-toolbar__radix")).toHaveCount(0);
 
-  await toolbar
-    .getByRole("button", { name: "More toolbar actions" })
-    .click();
+  await toolbar.getByRole("button", { name: "More toolbar actions" }).click();
   const panel = page.locator(".table-toolbar__more");
   await expect(panel).toBeVisible();
   await expect(panel.locator(".table-toolbar__radix")).toBeVisible();
@@ -93,7 +91,9 @@ test("移动布局：侧栏/底部面板改为抽屉，工具栏次要控件进�
   const sheet = page.locator(".register-table-tabs .ant-tabs-content-active");
   const scroller = sheet.locator(".ant-table-content, .ant-table-body").first();
   expect(
-    await scroller.evaluate((element) => element.scrollWidth > element.clientWidth),
+    await scroller.evaluate(
+      (element) => element.scrollWidth > element.clientWidth,
+    ),
   ).toBe(true);
   await expect(
     sheet.locator(".ant-table-tbody > tr.ant-table-row > td").first(),

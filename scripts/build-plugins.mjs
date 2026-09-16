@@ -72,7 +72,9 @@ async function buildExecutablePlugin({ dir, pluginId }) {
     `${JSON.stringify(mod.manifest, null, 2)}\n`,
     "utf8",
   );
-  console.log(`[build:plugins] ${pluginId}: ${path.relative(ROOT, bundleFile)}`);
+  console.log(
+    `[build:plugins] ${pluginId}: ${path.relative(ROOT, bundleFile)}`,
+  );
 }
 
 function copyManifestOnlyPlugin({ dir, pluginId }) {

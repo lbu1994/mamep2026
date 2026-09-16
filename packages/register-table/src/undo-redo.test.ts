@@ -126,7 +126,12 @@ describe("snapshotSheet / applySheetSnapshot", () => {
       rows: renumberRows(
         updated.rows.map((r) =>
           r.rowId === r1?.rowId
-            ? { ...r, name: "Renamed", cellText: "9999", registerValues: [raw(9999)] }
+            ? {
+                ...r,
+                name: "Renamed",
+                cellText: "9999",
+                registerValues: [raw(9999)],
+              }
             : r,
         ),
       ),

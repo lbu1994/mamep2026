@@ -18,19 +18,32 @@ import {
   renderMarkdown,
   type DocumentationContribution,
 } from "./documentation-markdown";
-import {
-  resolveHelpContent,
-  type HelpTabId,
-} from "../help/help-content";
+import { resolveHelpContent, type HelpTabId } from "../help/help-content";
 
 /** 动态正文页（标题走 i18n，正文按语言解析 markdown）。 */
-const CONTENT_TABS: ReadonlyArray<{ key: string; tabId: HelpTabId; i18nKey: string }> = [
-  { key: "getting-started", tabId: "getting-started", i18nKey: "help.tabGettingStarted" },
+const CONTENT_TABS: ReadonlyArray<{
+  key: string;
+  tabId: HelpTabId;
+  i18nKey: string;
+}> = [
+  {
+    key: "getting-started",
+    tabId: "getting-started",
+    i18nKey: "help.tabGettingStarted",
+  },
   { key: "connection", tabId: "connection", i18nKey: "help.tabConnection" },
-  { key: "register-table", tabId: "register-table", i18nKey: "help.tabRegisterTable" },
+  {
+    key: "register-table",
+    tabId: "register-table",
+    i18nKey: "help.tabRegisterTable",
+  },
   { key: "read-write", tabId: "read-write", i18nKey: "help.tabReadWrite" },
   { key: "workspace", tabId: "workspace", i18nKey: "help.tabWorkspace" },
-  { key: "settings-theme", tabId: "settings-theme", i18nKey: "help.tabSettings" },
+  {
+    key: "settings-theme",
+    tabId: "settings-theme",
+    i18nKey: "help.tabSettings",
+  },
   { key: "plugins", tabId: "plugins", i18nKey: "help.tabPlugins" },
 ] as const;
 
@@ -88,7 +101,11 @@ export function HelpDrawer({
       onClose={onClose}
       className="help-drawer"
     >
-      <Tabs className="help-drawer__tabs" defaultActiveKey="getting-started" items={items} />
+      <Tabs
+        className="help-drawer__tabs"
+        defaultActiveKey="getting-started"
+        items={items}
+      />
     </Drawer>
   );
 }

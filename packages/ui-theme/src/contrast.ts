@@ -96,11 +96,7 @@ export function toRgbaString(color: Color): string {
  * 提升前景 alpha 直到与背景的对比度 ≥ minRatio（从 fg.a 起步，步长 0.02，上限 1）。
  * 返回可直接作为 CSS 颜色的字符串（rgba()/rgb()）。
  */
-export function ensureContrast(
-  fg: Color,
-  bg: Color,
-  minRatio: number,
-): string {
+export function ensureContrast(fg: Color, bg: Color, minRatio: number): string {
   let alpha = fg.a;
   let current = blend(withAlpha(fg, alpha), bg);
   while (contrastRatio(current, bg) < minRatio && alpha < 1) {
@@ -114,8 +110,5 @@ export function ensureContrast(
 export function isWhiteOnPrimaryAa(color: string): boolean {
   const parsed = parseColor(color);
   if (parsed === null) return false;
-  return contrastRatio(
-    { r: 255, g: 255, b: 255, a: 1 },
-    parsed,
-  ) >= 4.5;
+  return contrastRatio({ r: 255, g: 255, b: 255, a: 1 }, parsed) >= 4.5;
 }

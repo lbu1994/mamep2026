@@ -57,7 +57,11 @@ export class RealSocket implements SocketLike {
       };
       const onClose = () => {
         cleanup();
-        reject(new Error(`tcp connection closed before connect (${this.host}:${this.port})`));
+        reject(
+          new Error(
+            `tcp connection closed before connect (${this.host}:${this.port})`,
+          ),
+        );
       };
       const cleanup = () => {
         this.socket.off("connect", onConnect);

@@ -36,7 +36,9 @@ async function reconnectAsActiveSheet(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: /Disconnect/ })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.locator(".ant-layout-header")).not.toContainText("Disconnect");
+  await expect(page.locator(".ant-layout-header")).not.toContainText(
+    "Disconnect",
+  );
   await page
     .getByRole("button", { name: "Connection" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -73,7 +75,11 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
 
   // 预置寄存器 1 = 0x1234；FC65 读。
   await page.evaluate(() => {
-    (window as unknown as { __mamepMock: { setRegister(a: number, v: number): void } }).__mamepMock.setRegister(1, 0x1234);
+    (
+      window as unknown as {
+        __mamepMock: { setRegister(a: number, v: number): void };
+      }
+    ).__mamepMock.setRegister(1, 0x1234);
   });
   const first = parentRow(page, 0);
   const address = first.getByLabel("Address", { exact: true });
@@ -110,7 +116,9 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
     .poll(() =>
       page.evaluate(() => {
         return (
-          window as unknown as { __mamepMock: { getRegister(a: number): number | null } }
+          window as unknown as {
+            __mamepMock: { getRegister(a: number): number | null };
+          }
         ).__mamepMock.getRegister(1);
       }),
     )
@@ -125,7 +133,9 @@ test("插件 dataType 出现在 Type 下拉且可解析（scaled x0.1）", async
   // 打开 Type 下拉：可见内置选项 + 插件类型。
   await first.getByLabel("Type").click();
   await expect(
-    page.locator(".ant-select-dropdown:visible [title='Scaled (x0.1, example)']"),
+    page.locator(
+      ".ant-select-dropdown:visible [title='Scaled (x0.1, example)']",
+    ),
   ).toBeVisible();
   // 选择插件类型。
   await page

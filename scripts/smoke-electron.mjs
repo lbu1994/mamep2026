@@ -18,7 +18,9 @@ const consoleErrors = [];
 
 function record(name, ok, detail = "") {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`);
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`,
+  );
 }
 
 const electronApp = await _electron.launch({
@@ -52,7 +54,10 @@ record(
 const caps = await page.evaluate(() => window.mamepHost.getCapabilities());
 record(
   "getCapabilities -> ok（RTU 支持，串口 enumerated 下拉选择）",
-  caps?.ok === true && caps.value?.modbusRtu === true && caps.value?.modbusTcp === false && caps.value?.serialPorts === "enumerated",
+  caps?.ok === true &&
+    caps.value?.modbusRtu === true &&
+    caps.value?.modbusTcp === false &&
+    caps.value?.serialPorts === "enumerated",
   caps?.ok
     ? `rtu=${caps.value?.modbusRtu}, tcp=${caps.value?.modbusTcp}, serialPorts=${caps.value?.serialPorts}`
     : `code=${caps?.error?.code}`,
@@ -85,7 +90,9 @@ record(
   copyRes?.ok === true &&
     readRes?.ok === true &&
     readRes.value === "smoke-20260821",
-  readRes?.ok ? `read=${JSON.stringify(readRes.value)}` : `code=${readRes?.error?.code}`,
+  readRes?.ok
+    ? `read=${JSON.stringify(readRes.value)}`
+    : `code=${readRes?.error?.code}`,
 );
 
 record(

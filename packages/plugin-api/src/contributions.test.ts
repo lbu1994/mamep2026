@@ -8,21 +8,26 @@ import {
 } from "./contributions";
 import { THEME_CONTRIBUTION_SCHEMA } from "./builtin-contribution-points";
 
-const PANELS_SCHEMA = z.array(z.object({ id: z.string(), titleKey: z.string() }));
+const PANELS_SCHEMA = z.array(
+  z.object({ id: z.string(), titleKey: z.string() }),
+);
 const THEME_SCHEMA = z.object({ colorPrimary: z.string().optional() });
 
 describe("ContributionPointRegistry（ADR-039：贡献点注册表）", () => {
   it("注册贡献点后可校验并登记插件贡献", () => {
     const registry = new ContributionPointRegistry();
-    expect(registry.registerPoint({ id: "panels", schema: PANELS_SCHEMA }).ok).toBe(
-      true,
-    );
+    expect(
+      registry.registerPoint({ id: "panels", schema: PANELS_SCHEMA }).ok,
+    ).toBe(true);
     expect(registry.hasPoint("panels")).toBe(true);
     const errors = registry.addContributions("p1", {
       panels: [{ id: "info", titleKey: "x" }],
     });
     expect(errors).toEqual([]);
-    const contributions = registry.getContributions<{ id: string; titleKey: string }>("panels");
+    const contributions = registry.getContributions<{
+      id: string;
+      titleKey: string;
+    }>("panels");
     expect(contributions).toHaveLength(1);
     expect(contributions[0]?.pluginId).toBe("p1");
     // panels 贡献的 payload 即声明数组本身。
@@ -32,7 +37,10 @@ describe("ContributionPointRegistry（ADR-039：贡献点注册表）", () => {
   it("重复注册贡献点 → PLUGIN_CONTRIBUTION_POINT_EXISTS", () => {
     const registry = new ContributionPointRegistry();
     registry.registerPoint({ id: "panels", schema: PANELS_SCHEMA });
-    const result = registry.registerPoint({ id: "panels", schema: PANELS_SCHEMA });
+    const result = registry.registerPoint({
+      id: "panels",
+      schema: PANELS_SCHEMA,
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe(PLUGIN_CONTRIBUTION_POINT_EXISTS);
@@ -112,9 +120,7 @@ describe("THEME_CONTRIBUTION_SCHEMA（ADR-047：多色数组；2026-09-03 方案
 
   it("非法：preset 缺 id/titleKey → 拒绝", () => {
     const result = THEME_CONTRIBUTION_SCHEMA.safeParse({
-      colors: [
-        { colorPrimary: "#fff" },
-      ],
+      colors: [{ colorPrimary: "#fff" }],
     });
     expect(result.success).toBe(false);
   });

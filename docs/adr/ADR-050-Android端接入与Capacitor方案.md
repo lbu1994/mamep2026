@@ -12,11 +12,11 @@
 
 现状盘点（2026-09-10）：仓库已是 monorepo 三层结构，共享层与平台层的切分**已经就位**，Android 端不需要架构改造：
 
-| 接缝 | 位置 | Android 是否够用 |
-| --- | --- | --- |
-| `PlatformHost`（能力矩阵 + 打开传输 + Clock） | `packages/platform-api/src/host.ts` | 够用 |
+| 接缝                                                     | 位置                                           | Android 是否够用                                                           |
+| -------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------- |
+| `PlatformHost`（能力矩阵 + 打开传输 + Clock）            | `packages/platform-api/src/host.ts`            | 够用                                                                       |
 | `TransportPort`（open / write / onData / close，字节流） | `packages/communication/src/transport-port.ts` | 够用（已支持 `web-serial` / `node-serial` / `node-tcp` / `mock` / `fake`） |
-| `AppHost`（UI 只经它访问业务能力） | `packages/ui/src/host.ts` | 够用（需扩 `platform` 联合类型） |
+| `AppHost`（UI 只经它访问业务能力）                       | `packages/ui/src/host.ts`                      | 够用（需扩 `platform` 联合类型）                                           |
 
 Electron 与 VSCode 即「同一份 React UI + 平台 Host」的两个实现（`apps/web/src/electron-app-host.ts`、`apps/web/src/vscode-app-host.ts`）。
 因此 **Android 是第四个 Host 实现**，复用面为：`domain`、`protocol-modbus`、`data-conversion`、`communication`、
@@ -32,7 +32,7 @@ Electron 与 VSCode 即「同一份 React UI + 平台 Host」的两个实现（`
 3. **接缝层级**：提案的 `ModbusTransport{readHoldingRegisters}` 把接缝切在功能码层，会导致协议栈与调度层（`RequestScheduler` /
    `BatchReadCoordinator` / `PollingCoordinator` / `WriteVerifyCoordinator` / Trace）失去复用。**改用 `TransportPort` 字节流接缝**。
 4. **插件不必刻意阉割**：`plugins/*` 随包插件随同一份 web 包编译；ADR-044 的隔离运行时即 `platform-web` 的 Web Worker 实现，Android WebView 同样可跑。
-5. **"UI 组件 80~90% 复用"偏乐观、"平台层 10~20%"偏低估**：仓库 `index.css` 无任何 media query、`MamepApp` 为写死的三区布局；
+5. **"UI 组件 80~~90% 复用"偏乐观、"平台层 10~~20%"偏低估**：仓库 `index.css` 无任何 media query、`MamepApp` 为写死的三区布局；
    行右键菜单（`contextmenu`）、sheet 双击重命名、hover Tooltip 在触摸屏不成立，属实打实工作量。
 
 ## 方案
@@ -97,10 +97,10 @@ VSCode 之所以把通信下沉 Extension Host，是因为 Webview 的 `navigato
 
 首期（Phase 1–2，用户已确认）：
 
-| 传输 | 实现 | 自动化程度 |
-| --- | --- | --- |
-| Modbus TCP | 自研最小 Kotlin 插件（`java.net.Socket` + 读线程 + `notifyListeners`），零第三方依赖 | 全自动 e2e（`adb reverse`） |
-| USB-RS485 | 自研插件，底层 `usb-serial-for-android`（CH340/341A、CP210x、FTDI、PL2303、CDC-ACM 如 CH343/CH9102）；USB Host + `USB_PERMISSION` 运行时授权 + detach 事件（**Phase 2 已落地**） | 真机半自动（无硬件时自动跳过） |
+| 传输       | 实现                                                                                                                                                                             | 自动化程度                     |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Modbus TCP | 自研最小 Kotlin 插件（`java.net.Socket` + 读线程 + `notifyListeners`），零第三方依赖                                                                                             | 全自动 e2e（`adb reverse`）    |
+| USB-RS485  | 自研插件，底层 `usb-serial-for-android`（CH340/341A、CP210x、FTDI、PL2303、CDC-ACM 如 CH343/CH9102）；USB Host + `USB_PERMISSION` 运行时授权 + detach 事件（**Phase 2 已落地**） | 真机半自动（无硬件时自动跳过） |
 
 后续（Phase 4，另行确认）：BLE UART（`@capacitor-community/bluetooth-le` 在 JS 侧实现，零原生代码；`writeWithoutResponse` +
 `startNotifications` + `requestConnectionPriority`）、经典蓝牙 SPP（HC-05 类，需自研 Kotlin）。
@@ -120,17 +120,17 @@ VSCode 之所以把通信下沉 Extension Host，是因为 Webview 的 `navigato
 
 新增 `androidCapabilities`。**Phase 1 如实声明**（不得声明未实现的能力）：
 
-| 能力位 | 值（Phase 1 → Phase 2） | 说明 |
-| --- | --- | --- |
-| `modbusRtu` | `false` → **`true`** | Phase 2（2026-09-10）已实现 USB-RS485，遂如实翻转 |
-| `serialPorts` | `"unsupported"` → **`"enumerated"`** | USB Host 枚举 + 下拉选择（无 Web Serial 手势约束） |
-| `modbusTcp` | `true` | 原生 socket 插件 |
-| `filesystem` | `"limited"` | IndexedDB 直接可用（WebView 支持） |
-| `nodePlugins` / `hostPlugins` | `false` | Android 无 Node 侧插件执行面 |
-| `webPlugins` | `true` | 插件同步贡献（codec / dataType / transform）可用 |
-| `executablePlugins` | **运行时探测**（Phase 5，ADR-056） | 静态基线 `false`（**fail-closed**）：装配期由 `probePluginExecutionSupport()` 实测「Blob Worker + Worker 内 blob entry 动态 import」，再经 `resolveAndroidCapabilities({ blobWorkerSupported })` 覆盖（真机 WebView 151 实测可用 → `true`） |
-| `pluginInstall` | **`"upload"`**（Phase 5，ADR-056） | WebView `<input type="file">` + 客户端读文件文本（Capacitor `BridgeWebChromeClient.onShowFileChooser` 已实现），无需 Capacitor Filesystem |
-| `logExport` / `workspaceImport` / `workspaceExport` | Phase 1 声明 `"unsupported"` | Phase 4 接 Capacitor Filesystem + 系统分享/SAF 后按实翻转 |
+| 能力位                                              | 值（Phase 1 → Phase 2）              | 说明                                                                                                                                                                                                                                        |
+| --------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modbusRtu`                                         | `false` → **`true`**                 | Phase 2（2026-09-10）已实现 USB-RS485，遂如实翻转                                                                                                                                                                                           |
+| `serialPorts`                                       | `"unsupported"` → **`"enumerated"`** | USB Host 枚举 + 下拉选择（无 Web Serial 手势约束）                                                                                                                                                                                          |
+| `modbusTcp`                                         | `true`                               | 原生 socket 插件                                                                                                                                                                                                                            |
+| `filesystem`                                        | `"limited"`                          | IndexedDB 直接可用（WebView 支持）                                                                                                                                                                                                          |
+| `nodePlugins` / `hostPlugins`                       | `false`                              | Android 无 Node 侧插件执行面                                                                                                                                                                                                                |
+| `webPlugins`                                        | `true`                               | 插件同步贡献（codec / dataType / transform）可用                                                                                                                                                                                            |
+| `executablePlugins`                                 | **运行时探测**（Phase 5，ADR-056）   | 静态基线 `false`（**fail-closed**）：装配期由 `probePluginExecutionSupport()` 实测「Blob Worker + Worker 内 blob entry 动态 import」，再经 `resolveAndroidCapabilities({ blobWorkerSupported })` 覆盖（真机 WebView 151 实测可用 → `true`） |
+| `pluginInstall`                                     | **`"upload"`**（Phase 5，ADR-056）   | WebView `<input type="file">` + 客户端读文件文本（Capacitor `BridgeWebChromeClient.onShowFileChooser` 已实现），无需 Capacitor Filesystem                                                                                                   |
+| `logExport` / `workspaceImport` / `workspaceExport` | Phase 1 声明 `"unsupported"`         | Phase 4 接 Capacitor Filesystem + 系统分享/SAF 后按实翻转                                                                                                                                                                                   |
 
 同时：`packages/ui/src/host.ts` 的 `AppHost.platform` 联合类型新增 `"android"`；i18n 增侧边栏 footer 文案；
 `browserCompatibility` 返回 `null`（Android 不用 Web Serial 兼容性提示，避免误弹「浏览器不支持 Web Serial」横幅）。
@@ -225,18 +225,18 @@ tests/e2e-android/                         # 真机 e2e（Playwright connectOver
 
 #### 13.1 用户决策（2026-09-10）
 
-| # | 决策点 | 结论 |
-| --- | --- | --- |
-| 1 | 无 USB-RS485 硬件时的验收 | **只做实现 + 单测 + e2e 预置**（硬件读写闭环用例门控 `MAMEP_ANDROID_USB_SERIAL=1` 自动跳过）；真机 UI 面 e2e 无需硬件即可跑 |
-| 2 | 依赖 | **采用 `com.github.mik3y:usb-serial-for-android:3.11.0`（MIT，JitPack）**；**不得退回自研 CDC-ACM**（若 JitPack 解析失败则停下来报告） |
-| 3 | 权限体验 | 连接时无权限则请求，拒绝即报错；不做自动重试 |
-| 4 | 端口标识 | `handle.id = UsbDevice.deviceName`，label 展示驱动名 + VID:PID；`recentPortHint` 仅提示、不自动连接（维持 §19.3） |
-| 5 | 链路参数 | 直接透传 `baudRate/dataBits/stopBits/parity/flowControl`；驱动不支持流控 → **如实报参数错误，不静默忽略** |
-| 6 | 读回聚合 | USB 用 **10ms 空闲窗口**聚合（TCP 维持 `available()` 立即吸收） |
-| 7 | detach | 拔线 → `closed(USB_DETACHED)` → 会话 failed + 提示；**不做 USB 自动重连** |
-| 8 | 能力位翻转时机 | **先实现即翻转**（`modbusRtu:true` / `serialPorts:"enumerated"`），真机 USB 验证由用户后续自行完成 |
-| 9 | 原生单测 | 本期不做（Robolectric 对 `UsbManager` 支持有限）；以 TS fake 桥单测 + 真机 e2e 覆盖 |
-| 10 | 插件形态 | 沿用 `MamepTransportPlugin` 新增方法（不另建插件） |
+| #   | 决策点                    | 结论                                                                                                                                   |
+| --- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 无 USB-RS485 硬件时的验收 | **只做实现 + 单测 + e2e 预置**（硬件读写闭环用例门控 `MAMEP_ANDROID_USB_SERIAL=1` 自动跳过）；真机 UI 面 e2e 无需硬件即可跑            |
+| 2   | 依赖                      | **采用 `com.github.mik3y:usb-serial-for-android:3.11.0`（MIT，JitPack）**；**不得退回自研 CDC-ACM**（若 JitPack 解析失败则停下来报告） |
+| 3   | 权限体验                  | 连接时无权限则请求，拒绝即报错；不做自动重试                                                                                           |
+| 4   | 端口标识                  | `handle.id = UsbDevice.deviceName`，label 展示驱动名 + VID:PID；`recentPortHint` 仅提示、不自动连接（维持 §19.3）                      |
+| 5   | 链路参数                  | 直接透传 `baudRate/dataBits/stopBits/parity/flowControl`；驱动不支持流控 → **如实报参数错误，不静默忽略**                              |
+| 6   | 读回聚合                  | USB 用 **10ms 空闲窗口**聚合（TCP 维持 `available()` 立即吸收）                                                                        |
+| 7   | detach                    | 拔线 → `closed(USB_DETACHED)` → 会话 failed + 提示；**不做 USB 自动重连**                                                              |
+| 8   | 能力位翻转时机            | **先实现即翻转**（`modbusRtu:true` / `serialPorts:"enumerated"`），真机 USB 验证由用户后续自行完成                                     |
+| 9   | 原生单测                  | 本期不做（Robolectric 对 `UsbManager` 支持有限）；以 TS fake 桥单测 + 真机 e2e 覆盖                                                    |
+| 10  | 插件形态                  | 沿用 `MamepTransportPlugin` 新增方法（不另建插件）                                                                                     |
 
 #### 13.2 实现落点（新增/修改文件）
 
@@ -284,30 +284,30 @@ packages/ui/src/i18n/index.ts       # +errors.serialDriverUnsupported（其余�
 
 #### 13.5 验收（本次）
 
-| 项 | 结果 |
-| --- | --- |
-| 单测 | `pnpm test` **28/28 tasks**（`platform-android` 47→78、`apps/web` 99→100、`ui` 345+） |
-| 类型检查 / Lint | `pnpm typecheck` 32/32、`pnpm lint` EXIT=0 |
-| APK 构建 | `pnpm build:android` 成功（含 JitPack 依赖解析与 Kotlin 编译；增量 ~3s） |
-| 真机 e2e | `pnpm test:e2e:android` **5 passed / 2 skipped**：`rtu-ui` 3 个（协议分组 + RTU 表单齐全 + 串口下拉可打开 + 无 console 错误）、`tcp-loop` 2 个（Phase 1 闭环无回归）；`rtu-loop` 2 个按预期跳过（需硬件） |
-| **未完成** | **USB-RS485 读写闭环真机验证**（用户无硬件，硬件到位后设 `MAMEP_ANDROID_USB_SERIAL=1` 执行） |
+| 项              | 结果                                                                                                                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 单测            | `pnpm test` **28/28 tasks**（`platform-android` 47→78、`apps/web` 99→100、`ui` 345+）                                                                                                                     |
+| 类型检查 / Lint | `pnpm typecheck` 32/32、`pnpm lint` EXIT=0                                                                                                                                                                |
+| APK 构建        | `pnpm build:android` 成功（含 JitPack 依赖解析与 Kotlin 编译；增量 ~3s）                                                                                                                                  |
+| 真机 e2e        | `pnpm test:e2e:android` **5 passed / 2 skipped**：`rtu-ui` 3 个（协议分组 + RTU 表单齐全 + 串口下拉可打开 + 无 console 错误）、`tcp-loop` 2 个（Phase 1 闭环无回归）；`rtu-loop` 2 个按预期跳过（需硬件） |
+| **未完成**      | **USB-RS485 读写闭环真机验证**（用户无硬件，硬件到位后设 `MAMEP_ANDROID_USB_SERIAL=1` 执行）                                                                                                              |
 
 ### 14. Phase 3（响应式布局 + 触摸交互 + 移动端生命周期）落地情况（2026-09-10）
 
 #### 14.1 用户决策
 
-| # | 决策点 | 结论 |
-| --- | --- | --- |
-| 1 | 断点 | **统一为 1023px**（删掉 Phase 3 前的 1100px，避免 1024~1100 区间两套阈值打架）；< 1024 = 移动布局 |
-| 2 | 移动布局形态 | 侧栏 → `Drawer placement="left"`（280px）；底部面板 → `Drawer placement="bottom"`（60vh）；移动端**不渲染 Splitter 的侧栏/底部面板面板** |
-| 3 | 工具栏溢出 | 保留高频控件（撤销/重做、新建行、Read All/取消），其余（进制 / 从站地址 / 写后回读 / Address Adjust / 恢复列布局 / 行数）收进「更多」`Popover` 面板；**桌面不受影响**（≥1024px 仍直接铺开）——同一份 JSX 变量复用，避免两套实现漂移 |
-| 4 | 表格 | `scroll.x` 移动端 960（桌面 920）；**窄屏不做任何列固定**（2026-09-11 用户决策：固定列在多列横滑时占用可视宽度且与触摸横滑手势争抢，原 `fixed:"left"` 已移除）+ **移动端禁用列宽调整与列拖拽排序** |
-| 5 | 后台挂起层位 | **application 层** `SessionHostCore.pauseBackground/resumeBackground`（保留 `pollingTargets`/`activeTraces`，复用断线重连恢复路径）+ `AppHost` 可选方法 |
-| 6 | 返回键与生命周期事件源 | **`@capacitor/app` 已接入**：`backButton` 先关覆盖层（overlay-close 栈）再 `minimizeApp()`；`appStateChange` 与 `visibilitychange` 双通道驱动后台挂起（幂等） |
-| 7 | 触摸交互 | 行高 44dp（移动端）、长按行菜单（靠 WebView 长按触发的 `contextmenu` + CSS 抑制选择）、双击重命名保留、行拖拽加 `TouchSensor`（长按 250ms）、**侧栏排序移动端不做** |
-| 8 | KeepAwake | **做**，自研零依赖：原生 `FLAG_KEEP_SCREEN_ON`，由 UI 按「是否存在持续轮询/追踪」自动开关 |
-| 9 | 响应式实现 | 自研 `useIsMobileLayout()`（与 CSS 同一数值，媒体查询手写同值 + 注释同源标记） |
-| 10 | 持久化 | 移动端不新增工作区字段（抽屉开合为会话内状态） |
+| #   | 决策点                 | 结论                                                                                                                                                                                                                               |
+| --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 断点                   | **统一为 1023px**（删掉 Phase 3 前的 1100px，避免 1024~1100 区间两套阈值打架）；< 1024 = 移动布局                                                                                                                                  |
+| 2   | 移动布局形态           | 侧栏 → `Drawer placement="left"`（280px）；底部面板 → `Drawer placement="bottom"`（60vh）；移动端**不渲染 Splitter 的侧栏/底部面板面板**                                                                                           |
+| 3   | 工具栏溢出             | 保留高频控件（撤销/重做、新建行、Read All/取消），其余（进制 / 从站地址 / 写后回读 / Address Adjust / 恢复列布局 / 行数）收进「更多」`Popover` 面板；**桌面不受影响**（≥1024px 仍直接铺开）——同一份 JSX 变量复用，避免两套实现漂移 |
+| 4   | 表格                   | `scroll.x` 移动端 960（桌面 920）；**窄屏不做任何列固定**（2026-09-11 用户决策：固定列在多列横滑时占用可视宽度且与触摸横滑手势争抢，原 `fixed:"left"` 已移除）+ **移动端禁用列宽调整与列拖拽排序**                                 |
+| 5   | 后台挂起层位           | **application 层** `SessionHostCore.pauseBackground/resumeBackground`（保留 `pollingTargets`/`activeTraces`，复用断线重连恢复路径）+ `AppHost` 可选方法                                                                            |
+| 6   | 返回键与生命周期事件源 | **`@capacitor/app` 已接入**：`backButton` 先关覆盖层（overlay-close 栈）再 `minimizeApp()`；`appStateChange` 与 `visibilitychange` 双通道驱动后台挂起（幂等）                                                                      |
+| 7   | 触摸交互               | 行高 44dp（移动端）、长按行菜单（靠 WebView 长按触发的 `contextmenu` + CSS 抑制选择）、双击重命名保留、行拖拽加 `TouchSensor`（长按 250ms）、**侧栏排序移动端不做**                                                                |
+| 8   | KeepAwake              | **做**，自研零依赖：原生 `FLAG_KEEP_SCREEN_ON`，由 UI 按「是否存在持续轮询/追踪」自动开关                                                                                                                                          |
+| 9   | 响应式实现             | 自研 `useIsMobileLayout()`（与 CSS 同一数值，媒体查询手写同值 + 注释同源标记）                                                                                                                                                     |
+| 10  | 持久化                 | 移动端不新增工作区字段（抽屉开合为会话内状态）                                                                                                                                                                                     |
 
 #### 14.2 已完成的落点
 
@@ -331,13 +331,13 @@ apps/android/.../MamepTransportPlugin.kt    # setKeepScreenOn（FLAG_KEEP_SCREEN
 
 #### 14.3 验收（本次）
 
-| 项 | 结果 |
-| --- | --- |
-| 单测 | `pnpm test`（仅单测，不含 e2e 包）全绿；`apps/web` 105（+5 返回键）、`ui`、`platform-android` 等无回归 |
-| 类型 / Lint | `pnpm typecheck` 32/32、`pnpm lint` EXIT=0 |
-| 移动布局 e2e（web） | `tests/e2e-web/tests/mobile-layout.spec.ts` **5/5 全绿**：侧栏→左抽屉（选中即收起）/ 底部面板→底部抽屉 / 表格横滚+固定前两列+行高 44 / 工具栏「更多」面板 / 无 console 错误 |
-| 桌面回归 | `pnpm test:e2e:web`（141 用例）：第 1 轮 **140/141**（失败 = 本次引入：工具栏「更多」按钮与顶栏 More **可访问名重名** → 已修）；第 2 轮 **140/141**（失败 = 既有用例 `app.spec.ts:195` 偶发 `Execution context was destroyed`，**单跑 `app.spec.ts` 10/10 通过**）；第 3 轮由用户要求中止（已跑到第 8 项均通过，含该用例）。**两处失败均经定位，无产品缺陷遗留** |
-| 真机 e2e（Android） | 新增 `tests/e2e-android/tests/mobile-ui.spec.ts`（移动布局 + 返回键关抽屉/最小化）——**已写好，待真机执行**（需用户设备） |
+| 项                  | 结果                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 单测                | `pnpm test`（仅单测，不含 e2e 包）全绿；`apps/web` 105（+5 返回键）、`ui`、`platform-android` 等无回归                                                                                                                                                                                                                                                           |
+| 类型 / Lint         | `pnpm typecheck` 32/32、`pnpm lint` EXIT=0                                                                                                                                                                                                                                                                                                                       |
+| 移动布局 e2e（web） | `tests/e2e-web/tests/mobile-layout.spec.ts` **5/5 全绿**：侧栏→左抽屉（选中即收起）/ 底部面板→底部抽屉 / 表格横滚+固定前两列+行高 44 / 工具栏「更多」面板 / 无 console 错误                                                                                                                                                                                      |
+| 桌面回归            | `pnpm test:e2e:web`（141 用例）：第 1 轮 **140/141**（失败 = 本次引入：工具栏「更多」按钮与顶栏 More **可访问名重名** → 已修）；第 2 轮 **140/141**（失败 = 既有用例 `app.spec.ts:195` 偶发 `Execution context was destroyed`，**单跑 `app.spec.ts` 10/10 通过**）；第 3 轮由用户要求中止（已跑到第 8 项均通过，含该用例）。**两处失败均经定位，无产品缺陷遗留** |
+| 真机 e2e（Android） | 新增 `tests/e2e-android/tests/mobile-ui.spec.ts`（移动布局 + 返回键关抽屉/最小化）——**已写好，待真机执行**（需用户设备）                                                                                                                                                                                                                                         |
 
 **回归中发现并修复**（均为本次 Phase 3 引入，由 e2e 抳出）：
 
@@ -385,14 +385,14 @@ apps/android/.../MamepTransportPlugin.kt    # setKeepScreenOn（FLAG_KEEP_SCREEN
 
 ## 分期
 
-| 阶段 | 内容 | 估时 |
-| --- | --- | --- |
-| Phase 0 | 本 ADR + PRD / TECH_DESIGN / AGENTS 同步 + 桥延迟 spike + CSP `worker-src` 修复 | 2–3 天 |
-| Phase 1 | `packages/platform-android`（能力矩阵 / 桥契约 / 错误映射 / TCP 传输 / PlatformHost）+ `apps/android`（Capacitor 工程 + app 内 Kotlin TCP 插件）+ `apps/web` 的 `--mode android` 与 `AndroidAppHost` + 真机 TCP e2e ——**已完成（2026-09-10，e2e 2/2 全绿）** | ~1 周 |
-| Phase 2 | USB-RS485 插件（枚举 / 授权 / detach / 错误映射）+ 真机 RTU 闭环 ——**实现已完成（2026-09-10）**；真机 UI 面 e2e 全绿，**USB 读写闭环待硬件** | 1–1.5 周 |
-| Phase 3 | 响应式布局 + 触摸交互 + 移动端生命周期 ——**落地（2026-09-10）**：移动布局（1023 断点 / 侧栏→Drawer / 底部面板→底部抽屉）+ 后台挂起恢复 + KeepAwake + 工具栏「更多」面板 + `@capacitor/app` 返回键/前后台；余项：真机 e2e 执行与长按确认（见 §14.4） | 1–2 周 |
-| Phase 4（另行确认） | BLE（BLE UART 优先）+ profile schema v9 + 文件导入导出/分享 | 1–2 周 |
-| Phase 5 | 第三方脚本插件（运行时探测 + 安装入口）+ APK/AAB 打包签名 ——**已完成（2026-09-13，ADR-056）**：`pluginInstall: "upload"`、`executablePlugins` 运行时探测翻转、`build:android:release`（APK + AAB，签名材料缺失则产出 unsigned）；真机插件 e2e **7/7 全绿** | 0.5–1 周 |
+| 阶段                | 内容                                                                                                                                                                                                                                                         | 估时     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Phase 0             | 本 ADR + PRD / TECH_DESIGN / AGENTS 同步 + 桥延迟 spike + CSP `worker-src` 修复                                                                                                                                                                              | 2–3 天   |
+| Phase 1             | `packages/platform-android`（能力矩阵 / 桥契约 / 错误映射 / TCP 传输 / PlatformHost）+ `apps/android`（Capacitor 工程 + app 内 Kotlin TCP 插件）+ `apps/web` 的 `--mode android` 与 `AndroidAppHost` + 真机 TCP e2e ——**已完成（2026-09-10，e2e 2/2 全绿）** | ~1 周    |
+| Phase 2             | USB-RS485 插件（枚举 / 授权 / detach / 错误映射）+ 真机 RTU 闭环 ——**实现已完成（2026-09-10）**；真机 UI 面 e2e 全绿，**USB 读写闭环待硬件**                                                                                                                 | 1–1.5 周 |
+| Phase 3             | 响应式布局 + 触摸交互 + 移动端生命周期 ——**落地（2026-09-10）**：移动布局（1023 断点 / 侧栏→Drawer / 底部面板→底部抽屉）+ 后台挂起恢复 + KeepAwake + 工具栏「更多」面板 + `@capacitor/app` 返回键/前后台；余项：真机 e2e 执行与长按确认（见 §14.4）          | 1–2 周   |
+| Phase 4（另行确认） | BLE（BLE UART 优先）+ profile schema v9 + 文件导入导出/分享                                                                                                                                                                                                  | 1–2 周   |
+| Phase 5             | 第三方脚本插件（运行时探测 + 安装入口）+ APK/AAB 打包签名 ——**已完成（2026-09-13，ADR-056）**：`pluginInstall: "upload"`、`executablePlugins` 运行时探测翻转、`build:android:release`（APK + AAB，签名材料缺失则产出 unsigned）；真机插件 e2e **7/7 全绿**   | 0.5–1 周 |
 
 ## 不做什么
 

@@ -19,12 +19,7 @@ import type {
   ConnectionState,
   WriteOutcome,
 } from "@mamep2026/communication";
-import {
-  createMamepError,
-  defaultConfig,
-  fail,
-  ok,
-} from "@mamep2026/domain";
+import { createMamepError, defaultConfig, fail, ok } from "@mamep2026/domain";
 import type {
   BrowserCompatibility,
   PlatformCapabilities,
@@ -508,7 +503,8 @@ export class ElectronAppHost implements AppHost {
         stopBits: 1,
         parity: "none",
         flowControl: "off",
-        timeoutMs: profile?.requestTimeoutMs ?? defaultConfig.tcp.requestTimeoutMs,
+        timeoutMs:
+          profile?.requestTimeoutMs ?? defaultConfig.tcp.requestTimeoutMs,
         retryCount: profile?.retryCount ?? 1,
         connectionState: this.tcpConnectionState,
       };

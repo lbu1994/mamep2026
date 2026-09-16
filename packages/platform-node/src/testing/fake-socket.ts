@@ -3,7 +3,11 @@
  * 注入打开/关闭/读/写/连接拒绝/分片/迟到/错误注入/被动关闭等场景。
  * 与 testing/fake-serial-port.ts 风格一致。
  */
-import type { NetFactoryLike, SocketLike, TcpConnectLike } from "../socket-like";
+import type {
+  NetFactoryLike,
+  SocketLike,
+  TcpConnectLike,
+} from "../socket-like";
 
 export class FakeSocket implements SocketLike {
   readonly openedOptions: TcpConnectLike;

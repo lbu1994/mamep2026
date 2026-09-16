@@ -19,7 +19,9 @@ type KeyEventLike = Pick<
 
 function evt(
   key: string,
-  mods: Partial<Pick<KeyEventLike, "ctrlKey" | "metaKey" | "shiftKey" | "altKey">> = {},
+  mods: Partial<
+    Pick<KeyEventLike, "ctrlKey" | "metaKey" | "shiftKey" | "altKey">
+  > = {},
 ): KeyEventLike {
   return {
     key,
@@ -91,7 +93,9 @@ describe("快捷键注册表", () => {
     const writeSelected = TABLE_SHORTCUTS.find(
       (s) => s.id === "writeSelected",
     )!;
-    expect(matchesShortcut(evt("Enter", { ctrlKey: true }), openSettings.combo)).toBe(false);
+    expect(
+      matchesShortcut(evt("Enter", { ctrlKey: true }), openSettings.combo),
+    ).toBe(false);
     expect(
       matchesShortcut(
         evt("Enter", { ctrlKey: true, shiftKey: true }),
@@ -107,18 +111,26 @@ describe("快捷键注册表", () => {
     const readAll = TABLE_SHORTCUTS.find((s) => s.id === "readAll")!;
     expect(matchesShortcut(evt("F9"), readAll.combo)).toBe(true);
     expect(matchesShortcut(evt("f9"), readAll.combo)).toBe(true);
-    expect(matchesShortcut(evt("F9", { ctrlKey: true }), readAll.combo)).toBe(false);
+    expect(matchesShortcut(evt("F9", { ctrlKey: true }), readAll.combo)).toBe(
+      false,
+    );
     // Shift+F9 不命中 F9
-    expect(matchesShortcut(evt("F9", { shiftKey: true }), readAll.combo)).toBe(false);
+    expect(matchesShortcut(evt("F9", { shiftKey: true }), readAll.combo)).toBe(
+      false,
+    );
   });
 
   it("matchesShortcut：Alt+P 与 P 可区分；mod 组合在 macOS 下用 metaKey", () => {
     const togglePolling = TABLE_SHORTCUTS.find(
       (s) => s.id === "togglePolling",
     )!;
-    expect(matchesShortcut(evt("p", { altKey: true }), togglePolling.combo)).toBe(true);
+    expect(
+      matchesShortcut(evt("p", { altKey: true }), togglePolling.combo),
+    ).toBe(true);
     expect(matchesShortcut(evt("p"), togglePolling.combo)).toBe(false);
     const openSettings = APP_SHORTCUTS.find((s) => s.id === "openSettings")!;
-    expect(matchesShortcut(evt(",", { metaKey: true }), openSettings.combo)).toBe(true);
+    expect(
+      matchesShortcut(evt(",", { metaKey: true }), openSettings.combo),
+    ).toBe(true);
   });
 });

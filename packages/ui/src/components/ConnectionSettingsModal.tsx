@@ -129,7 +129,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const protocol =
     useWatch({ control, name: "protocol" }) ?? onlySupportedProtocol ?? "rtu";
   // 浏览器仅支持 RTU：协议 Segmented 单选项冗余 → 隐藏「协议」分组；两类都有则保留切换（2026-09-06）。
-  const showProtocolSwitcher = (supportsRtu ? 1 : 0) + (supportsTcp ? 1 : 0) > 1;
+  const showProtocolSwitcher =
+    (supportsRtu ? 1 : 0) + (supportsTcp ? 1 : 0) > 1;
 
   const supportsSerial = host?.supportsWebSerial() ?? false;
   const isMock = host?.isMockMode ?? false;
@@ -139,7 +140,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
   // 禁止执行不可用的串口操作，但工作区仍可查看。
   const compat = host?.browserCompatibility ?? null;
   // 串口缺失只影响 RTU：平台仅支持 TCP 时（Android Phase 1）不得因此禁用 CONNECT（ADR-050）。
-  const serialBlocked = !isMock && !supportsSerial && !isEnumerated && protocol === "rtu";
+  const serialBlocked =
+    !isMock && !supportsSerial && !isEnumerated && protocol === "rtu";
 
   // 连接协议由活动表类型决定（ADR-041 决策 A）：核心表 → rtu；安川表 → codec 协议。
   // tableType 贡献（插件声明）提供 表类型 → protocolId 映射；协议不在平台能力矩阵内回退 rtu。

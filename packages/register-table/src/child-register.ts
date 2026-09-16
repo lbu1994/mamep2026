@@ -45,9 +45,7 @@ export function childDataType(row: RegisterRow, index: number): DataType {
 }
 
 /** 保证 registers 数组存在且长度=registerCount（单寄存器行返回 null）。 */
-export function ensureRegisters(
-  row: RegisterRow,
-): RegisterSubRowMeta[] | null {
+export function ensureRegisters(row: RegisterRow): RegisterSubRowMeta[] | null {
   if (row.registerCount <= 1) return null;
   if (row.registers !== null && row.registers.length === row.registerCount) {
     return row.registers;

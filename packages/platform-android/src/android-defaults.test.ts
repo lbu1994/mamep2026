@@ -31,7 +31,9 @@ describe("applyAndroidTcpDefaults", () => {
       }),
     );
 
-    expect(applied.requestTimeoutMs).toBe(ANDROID_TCP_DEFAULT_REQUEST_TIMEOUT_MS);
+    expect(applied.requestTimeoutMs).toBe(
+      ANDROID_TCP_DEFAULT_REQUEST_TIMEOUT_MS,
+    );
     expect(applied.retryCount).toBe(ANDROID_TCP_DEFAULT_RETRY_COUNT);
     expect(ANDROID_TCP_DEFAULT_REQUEST_TIMEOUT_MS).toBe(300);
     expect(ANDROID_TCP_DEFAULT_RETRY_COUNT).toBe(2);

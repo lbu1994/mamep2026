@@ -97,7 +97,10 @@ const DEFAULT_CONFIG = {
 
 // 默认配置文件：脚本同目录下的 modbus-slave.config.json。
 // 未显式 --config 时自动加载；该文件不存在则回退内建默认配置。
-const DEFAULT_CONFIG_PATH = join(import.meta.dirname, "modbus-slave.config.json");
+const DEFAULT_CONFIG_PATH = join(
+  import.meta.dirname,
+  "modbus-slave.config.json",
+);
 
 function assertConfigNumber(value, fieldName, { min, max }) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -231,7 +234,9 @@ class ModbusRtuSlave {
         this.log.warn("串口已关闭");
       });
       this.port.on("open", () => {
-        const parityLabel = { none: "N", even: "E", odd: "O", mark: "M", space: "S" }[parity] ?? "N";
+        const parityLabel =
+          { none: "N", even: "E", odd: "O", mark: "M", space: "S" }[parity] ??
+          "N";
         this.log.info(
           `从站已启动: ${port} @ ${baudRate} ${dataBits}${parityLabel}${stopBits}，从站地址 ${this.config.slaveAddress}`,
         );
@@ -287,7 +292,11 @@ class ModbusRtuSlave {
       if (behavior.kind === "exception") {
         this.logException(functionCode, behavior.exceptionCode, addrHex);
         this.respond(
-          this.exceptionFrame(slave, FUNCTION_READ_HOLDING, behavior.exceptionCode),
+          this.exceptionFrame(
+            slave,
+            FUNCTION_READ_HOLDING,
+            behavior.exceptionCode,
+          ),
           behavior,
         );
         return;
@@ -295,7 +304,11 @@ class ModbusRtuSlave {
       const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
       // must-multi 区（ADR-030）：单读返回非法数据地址异常。
       if (rule?.mustMulti === true && quantity === 1) {
-        this.logException(functionCode, EXCEPTION_ILLEGAL_DATA_ADDRESS, addrHex);
+        this.logException(
+          functionCode,
+          EXCEPTION_ILLEGAL_DATA_ADDRESS,
+          addrHex,
+        );
         this.respond(
           this.exceptionFrame(
             slave,
@@ -343,14 +356,22 @@ class ModbusRtuSlave {
       if (behavior.kind === "exception") {
         this.logException(functionCode, behavior.exceptionCode, addrHex);
         this.respond(
-          this.exceptionFrame(slave, FUNCTION_WRITE_MULTIPLE, behavior.exceptionCode),
+          this.exceptionFrame(
+            slave,
+            FUNCTION_WRITE_MULTIPLE,
+            behavior.exceptionCode,
+          ),
           behavior,
         );
         return;
       }
       // must-multi 区（ADR-030）：单写返回非法数据地址异常。
       if (rule?.mustMulti === true && quantity === 1) {
-        this.logException(functionCode, EXCEPTION_ILLEGAL_DATA_ADDRESS, addrHex);
+        this.logException(
+          functionCode,
+          EXCEPTION_ILLEGAL_DATA_ADDRESS,
+          addrHex,
+        );
         this.respond(
           this.exceptionFrame(
             slave,
@@ -369,7 +390,11 @@ class ModbusRtuSlave {
           `写 ${addrHex} = 0x${value.toString(16).toUpperCase()} 超出上限 0x${behavior.maxValue.toString(16).toUpperCase()}，回异常 0x03`,
         );
         this.respond(
-          this.exceptionFrame(slave, FUNCTION_WRITE_MULTIPLE, EXCEPTION_ILLEGAL_DATA_VALUE),
+          this.exceptionFrame(
+            slave,
+            FUNCTION_WRITE_MULTIPLE,
+            EXCEPTION_ILLEGAL_DATA_VALUE,
+          ),
           behavior,
         );
         return;
@@ -580,10 +605,7 @@ class ModbusRtuSlave {
         for (let i = 0; i < quantity; i++) {
           const hi = bytes[7 + i * 2] ?? 0;
           const lo = bytes[8 + i * 2] ?? 0;
-          this.registers.set(
-            (address + i) & 0xffff,
-            ((hi << 8) | lo) & 0xffff,
-          );
+          this.registers.set((address + i) & 0xffff, ((hi << 8) | lo) & 0xffff);
         }
         this.log.debug(
           `写 ${addrHex} × ${quantity} ← [${Array.from(
@@ -623,7 +645,9 @@ class ModbusRtuSlave {
   logException(functionCode, exceptionCode, addrHex) {
     const fcHex = `0x${functionCode.toString(16).toUpperCase().padStart(2, "0")}`;
     const name = EXCEPTION_NAMES[exceptionCode] ?? `未知(${exceptionCode})`;
-    this.log.warn(`异常 ${fcHex} @ ${addrHex} → 0x${exceptionCode.toString(16).padStart(2, "0")}（${name}）`);
+    this.log.warn(
+      `异常 ${fcHex} @ ${addrHex} → 0x${exceptionCode.toString(16).padStart(2, "0")}（${name}）`,
+    );
   }
 
   /** 构造异常响应体（slave + fc|0x80 + exceptionCode；CRC 由 respond 追加，共 5 字节）。 */
@@ -808,15 +832,16 @@ function assertFrame(actual, expectedHex) {
   }
   // 期望值只写响应体（不含 CRC），此处自动追加 CRC16-Modbus。
   const expected = appendCrc(
-    Uint8Array.from(
-      expectedHex.split(" ").map((s) => Number.parseInt(s, 16)),
-    ),
+    Uint8Array.from(expectedHex.split(" ").map((s) => Number.parseInt(s, 16))),
   );
   if (
     actual.length !== expected.length ||
     !actual.every((b, i) => b === expected[i])
   ) {
-    return { ok: false, detail: `期望 ${toHex(expected)}，实际 ${toHex(actual)}` };
+    return {
+      ok: false,
+      detail: `期望 ${toHex(expected)}，实际 ${toHex(actual)}`,
+    };
   }
   return { ok: true, detail: toHex(actual) };
 }
@@ -1090,19 +1115,26 @@ function printHelp() {
 }
 
 function parseArgs(argv) {
-  const args = { configPath: null, selfTest: false, masterPort: null, help: false };
+  const args = {
+    configPath: null,
+    selfTest: false,
+    masterPort: null,
+    help: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") {
       args.help = true;
     } else if (arg === "--config") {
       args.configPath = argv[++i];
-      if (args.configPath === undefined) throw new Error("--config 缺少文件路径");
+      if (args.configPath === undefined)
+        throw new Error("--config 缺少文件路径");
     } else if (arg === "--self-test") {
       args.selfTest = true;
     } else if (arg === "--master-port") {
       args.masterPort = argv[++i];
-      if (args.masterPort === undefined) throw new Error("--master-port 缺少端口名");
+      if (args.masterPort === undefined)
+        throw new Error("--master-port 缺少端口名");
     } else {
       throw new Error(`未知参数: ${arg}`);
     }

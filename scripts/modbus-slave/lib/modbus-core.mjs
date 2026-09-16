@@ -291,10 +291,7 @@ export function normalizeRules(rules) {
       start: rule.start & 0xffff,
       end: rule.end & 0xffff,
       read: normalizeBehavior(rule.read ?? "normal", `rules[${index}].read`),
-      write: normalizeBehavior(
-        rule.write ?? "normal",
-        `rules[${index}].write`,
-      ),
+      write: normalizeBehavior(rule.write ?? "normal", `rules[${index}].write`),
       // ADR-030：must-multi 区（单读/单写异常，多读/多写正常）。
       ...(rule.mustMulti === true ? { mustMulti: true } : {}),
       // ADR-043 E-1：表类型专用规则（基础表与保持寄存器地址空间可重叠）。
@@ -442,7 +439,8 @@ export function unpackRawBits(data, startOffset, byteCount, quantity) {
   for (let i = 0; i < quantity; i += 1) {
     const byteIndex = i >> 3;
     const bitIndex = i & 7;
-    const byte = byteIndex < byteCount ? (data[startOffset + byteIndex] ?? 0) : 0;
+    const byte =
+      byteIndex < byteCount ? (data[startOffset + byteIndex] ?? 0) : 0;
     values.push((byte >> bitIndex) & 1);
   }
   return values;
@@ -456,7 +454,12 @@ export function unpackRawBits(data, startOffset, byteCount, quantity) {
  * @param {object} [behavior] 命中规则的行为（缺省 normal）
  * @param {{ baseDelayMs?: number }} [options] 全局响应延迟（normal 时生效）
  */
-export function sendWithBehavior(write, frame, behavior = { kind: "normal" }, { baseDelayMs = 0 } = {}) {
+export function sendWithBehavior(
+  write,
+  frame,
+  behavior = { kind: "normal" },
+  { baseDelayMs = 0 } = {},
+) {
   if (behavior.kind === "delayed-response") {
     setTimeout(() => write(frame), behavior.delayMs);
     return;

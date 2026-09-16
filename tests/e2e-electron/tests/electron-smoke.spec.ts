@@ -26,7 +26,11 @@ interface BridgeApi {
     value?: { modbusRtu?: boolean; modbusTcp?: boolean; serialPorts?: string };
     error?: { code?: string };
   }>;
-  getAppVersion(): Promise<{ ok: boolean; value?: string; error?: { code?: string } }>;
+  getAppVersion(): Promise<{
+    ok: boolean;
+    value?: string;
+    error?: { code?: string };
+  }>;
   copyTextToClipboard(text: string): Promise<{ ok: boolean }>;
   readTextFromClipboard(): Promise<{ ok: boolean; value?: string | null }>;
   getDebugState(): Promise<{
@@ -116,17 +120,17 @@ test("debug 探针与剪贴板往返可用", async () => {
 });
 
 test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async () => {
+  expect(await page.evaluate(() => typeof window.require)).toBe("undefined");
   expect(
-    await page.evaluate(() => typeof window.require),
-  ).toBe("undefined");
-  expect(
-    await page.evaluate(() => typeof (window as unknown as { process?: unknown }).process),
+    await page.evaluate(
+      () => typeof (window as unknown as { process?: unknown }).process,
+    ),
   ).toBe("undefined");
 
   const keys = await page.evaluate(() =>
     Object.keys(
-      (window as unknown as { mamepHost?: Record<string, unknown> }).mamepHost ??
-        {},
+      (window as unknown as { mamepHost?: Record<string, unknown> })
+        .mamepHost ?? {},
     ),
   );
   expect(keys.sort()).toEqual(

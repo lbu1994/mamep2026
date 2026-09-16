@@ -1,10 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
-import {
-  PluginRegistry,
-  type PluginManifest,
-} from "@mamep2026/plugin-api";
+import { PluginRegistry, type PluginManifest } from "@mamep2026/plugin-api";
 import type { OpenTextFileResponse } from "@mamep2026/platform-api";
 import type { Result } from "@mamep2026/domain";
 import type { AppHost } from "../host";

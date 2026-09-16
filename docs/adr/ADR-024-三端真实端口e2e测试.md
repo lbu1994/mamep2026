@@ -10,7 +10,7 @@
 
 - 三端真实连接路径已就绪（ADR-016/017/021/022/023）：浏览器 `WebSerialTransport`、
   Electron RTU=Renderer Web Serial + TCP=主进程、VSCode=`NodePlatformHost`（serialport/net）
-  + `RtuSessionHost`/`TcpSessionHost`；MOCK/FAKE 为显式 dev 手段，默认路径已走真实设备。
+  - `RtuSessionHost`/`TcpSessionHost`；MOCK/FAKE 为显式 dev 手段，默认路径已走真实设备。
 - 既有 e2e 全部基于 MOCK/FAKE（`?mockTransport=1`、`MAMEP_FAKE_SERIAL/TCP=1`），缺少
   **真实端口**（com0com 虚拟串口对 + 真实从站进程 + 本地回环 TCP）的自动化闭环；
   且 VSCode 端 e2e 仅 RPC 级断言（`debug:rpc`），未覆盖 UI 行为（状态点/错误提示/通信日志）。
@@ -43,8 +43,8 @@
      窗口 2000ms → 主站超时/重试后迟到帧被丢弃，验证 `LATE_RESPONSE_DISCARDED` 路径；
      2026-08-25 由 1500ms 上调——1500ms 落在重试窗口内会被重试消费，RTU 无事务 ID 无法区分）；
    - `{ "splitResponse": { chunkSize, chunkDelayMs } }` — 响应拆段发送（半包/粘包组帧健壮性）。
-   RTU 从站重构复用该模块（`--self-test` 保证行为不变）；TCP 从站默认 host/port/unitId 读
-   `config/connections.json` 的 `tcp-local-slave`（唯一事实源），`--config`/`--host`/`--port` 可覆盖。
+     RTU 从站重构复用该模块（`--self-test` 保证行为不变）；TCP 从站默认 host/port/unitId 读
+     `config/connections.json` 的 `tcp-local-slave`（唯一事实源），`--config`/`--host`/`--port` 可覆盖。
 2. **统一编排与门控（`scripts/e2e-real.mjs <web|electron|vscode|all>`）**：
    - 预检（缺环境 → 打印清晰 SKIP 提示、退出码 0 不失败）：RTU 用 serialport `list()` 检查
      主站口（rtu-com4-master.port）与从站口（modbus-slave.config.json.port）均存在；TCP

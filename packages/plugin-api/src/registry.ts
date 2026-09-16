@@ -85,7 +85,8 @@ export function createUnavailableSyncRegistries(): PluginSyncRegistries {
         code: "PLUGIN_SYNC_REGISTRY_UNAVAILABLE",
         category: "capability",
         userMessageKey: "errors.pluginRuntimeNotAvailable",
-        technicalMessage: "plugin sync registries are not available on this host",
+        technicalMessage:
+          "plugin sync registries are not available on this host",
       }),
     );
   return {

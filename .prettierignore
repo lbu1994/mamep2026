@@ -1,0 +1,38 @@
+# Prettier 忽略清单（2026-09-16 新增）
+# 目的：`pnpm format` / `pnpm format:check` 只作用于手写源码与文档，
+# 不触碰生成产物、缓存、测试报告与必须逐字节保持原样的文件。
+# 与 .gitignore、eslint.config.js 的 globalIgnores 对齐。
+
+# ---- 依赖与构建产物 ----
+node_modules
+dist
+dist-*
+dist-electron
+build
+release
+.turbo
+
+# ---- 测试/覆盖率产物 ----
+coverage
+playwright-report
+test-results
+test-reports
+.vscode-test
+
+# ---- Android（Capacitor）工程：Gradle 产物与 Capacitor 拷贝的 web 资源均为生成物 ----
+apps/android/android/**/build
+apps/android/android/.gradle
+apps/android/android/app/src/main/assets/public
+apps/android/android/capacitor-cordova-android-plugins
+
+# ---- 必须逐字节保持原样（pnpm patch 会被原样应用）----
+patches
+
+# ---- 锁文件与包管理器生成物 ----
+pnpm-lock.yaml
+
+# ---- 本地环境/工具目录与临时资产 ----
+.vscode
+.github/prompts
+.venv
+_screenshots

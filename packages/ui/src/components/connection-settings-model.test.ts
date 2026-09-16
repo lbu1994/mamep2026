@@ -6,6 +6,8 @@ import {
 import {
   extractPersistedSettings,
   profileToValues,
+  RTU_TIMEOUT_OPTIONS,
+  rtuPersistedSettingsSchema,
   settingsSchema,
   type ConnectionSettingsValues,
 } from "./connection-settings-model";
@@ -138,5 +140,84 @@ describe("settingsSchema（表单校验：host 非空仅 TCP 生效，2026-08-23
       unitId: 1,
     });
     expect(result.success).toBe(true);
+  });
+});
+
+/** RTU 超时档位基准：5..100 步进 5（2026-09-06 既有的 20 项）。 */
+const BASE_TIMEOUT_OPTIONS = Array.from({ length: 20 }, (_, i) => 5 * (i + 1));
+
+/** 2026-09-16 增补的长超时档位（13 项）。 */
+const LONG_TIMEOUT_OPTIONS = [
+  150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000,
+];
+
+describe("RTU_TIMEOUT_OPTIONS（RTU 超时固定档位，2026-09-16 增补长档位）", () => {
+  it("= 既有 5..100（步进 5）+ 长超时阶梯，升序且无重复", () => {
+    expect(RTU_TIMEOUT_OPTIONS).toEqual([
+      ...BASE_TIMEOUT_OPTIONS,
+      ...LONG_TIMEOUT_OPTIONS,
+    ]);
+    expect(RTU_TIMEOUT_OPTIONS).toHaveLength(33);
+    // 升序（Select 按声明顺序渲染，需保持从小到大）。
+    expect(RTU_TIMEOUT_OPTIONS).toEqual(
+      [...RTU_TIMEOUT_OPTIONS].sort((a, b) => a - b),
+    );
+    expect(new Set(RTU_TIMEOUT_OPTIONS).size).toBe(33);
+    // 默认值 50 必须是合法档位，否则表单初始值无法回显。
+    expect(RTU_TIMEOUT_OPTIONS).toContain(50);
+  });
+
+  it("不含 105–145 之间的值（100 → 150 有意留空隙）", () => {
+    expect(RTU_TIMEOUT_OPTIONS).not.toContain(105);
+    expect(RTU_TIMEOUT_OPTIONS).not.toContain(125);
+    expect(RTU_TIMEOUT_OPTIONS).not.toContain(145);
+  });
+});
+
+describe("RTU 超时 schema 上限（2026-09-16 由 100 放宽至 1000）", () => {
+  const rtuValues = {
+    protocol: "rtu",
+    host: "",
+    port: 502,
+    unitId: 0,
+    baudRate: 9600,
+    dataBits: 8,
+    stopBits: 1,
+    parity: "none",
+    flowControl: "off",
+    rtuTimeout: 1000,
+    retry: 1,
+    tcpTimeout: 1500,
+    autoReconnect: false,
+  };
+
+  it("表单 schema 接受 1000，拒绝 1001 与 4", () => {
+    expect(settingsSchema.safeParse(rtuValues).success).toBe(true);
+    expect(
+      settingsSchema.safeParse({ ...rtuValues, rtuTimeout: 1001 }).success,
+    ).toBe(false);
+    expect(
+      settingsSchema.safeParse({ ...rtuValues, rtuTimeout: 4 }).success,
+    ).toBe(false);
+  });
+
+  it("持久化 schema 接受 1000，拒绝 1001", () => {
+    const persisted = {
+      protocol: "rtu",
+      baudRate: 9600,
+      dataBits: 8,
+      stopBits: 1,
+      parity: "none",
+      flowControl: "off",
+      requestTimeoutMs: 1000,
+      retryCount: 1,
+    };
+    expect(rtuPersistedSettingsSchema.safeParse(persisted).success).toBe(true);
+    expect(
+      rtuPersistedSettingsSchema.safeParse({
+        ...persisted,
+        requestTimeoutMs: 1001,
+      }).success,
+    ).toBe(false);
   });
 });

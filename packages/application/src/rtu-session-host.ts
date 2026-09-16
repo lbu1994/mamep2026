@@ -51,9 +51,7 @@ export interface RtuSessionHostOptions {
   clock: Clock;
   events: RtuSessionHostEvents;
   /** 地址变换解析（ADR-042）：缺省仅内置 builtin.address-adjust。 */
-  resolveAddressTransform?: (
-    transformId: string,
-  ) => AddressTransform | null;
+  resolveAddressTransform?: (transformId: string) => AddressTransform | null;
 }
 
 export class RtuSessionHost {
@@ -85,7 +83,8 @@ export class RtuSessionHost {
         : {}),
       slaveAddress: input.slaveAddress,
       onLog: (event: CommunicationLogEvent) => this.core.emitLog(event),
-      onStateChange: (state: ConnectionState) => this.core.emitStateChange(state),
+      onStateChange: (state: ConnectionState) =>
+        this.core.emitStateChange(state),
     });
     return this.core.connect(session, input.portLabel);
   }
@@ -173,7 +172,12 @@ export class RtuSessionHost {
     return this.core.isBackgroundSuspended();
   }
 
-  traceStart(key: string, address: number, speedMs: number, quantity = 1): void {
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+  ): void {
     this.core.traceStart(key, address, speedMs, quantity);
   }
 
@@ -181,4 +185,3 @@ export class RtuSessionHost {
     this.core.traceStop(key);
   }
 }
-

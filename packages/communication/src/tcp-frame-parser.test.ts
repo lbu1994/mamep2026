@@ -136,7 +136,9 @@ describe("TcpFrameParser 分帧与匹配", () => {
 
   it("异常响应：解析为 exception", () => {
     const parser = new TcpFrameParser(expectRead);
-    const outcome = parser.push(tcpFrame(0x1234, 1, Uint8Array.from([0x83, 0x02])));
+    const outcome = parser.push(
+      tcpFrame(0x1234, 1, Uint8Array.from([0x83, 0x02])),
+    );
     expect(outcome.done).toBe(true);
     if (outcome.done && outcome.outcome.ok) {
       expect(outcome.outcome.value).toEqual({

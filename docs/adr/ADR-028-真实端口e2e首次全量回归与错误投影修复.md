@@ -17,6 +17,7 @@
 ## 发现的问题与修复
 
 ### 1. 从站脚本：`LOG_LEVELS` 未导入（blocking）
+
 - `scripts/modbus-slave/modbus-rtu-slave.mjs` 的 `loadConfig` 引用 `LOG_LEVELS` 但未从
   `lib/modbus-core.mjs` 导入 → 从站启动即 `ReferenceError` 退出 → 三端 real 全部
   「rtu-slave 提前退出」。
@@ -24,6 +25,7 @@
   校验键统一为共享 `LOG_LEVELS`（原注释「未导出到本文件」已过时）。
 
 ### 2. 测试选择器：进制切换 `setRadixHex` 用错组件类（blocking）
+
 - 地址进制切换控件是 antd `Segmented`（渲染 `.ant-segmented`），real 套件 `setRadixHex`
   却用 `.table-toolbar__radix .ant-select`（Select 类）→ 首个连接用例在切 HEX 处 30s 超时；
   失败后 UI 状态残留**连锁污染**后续用例（弹窗/遮罩拦截点击），放大为批量失败。
@@ -32,6 +34,7 @@
 - 根因：ADR-014（进制切换 Segmented 化）未同步到 real 套件，且 ADR-024 从未真正执行过。
 
 ### 3. React 受控组件竞态：`fill` + 立即 `Enter` 提交被跳过
+
 - 共享 UI `EditableCellValue.commit` 用 `draft === value` 判「未修改不提交」，且 `draft` 是
   React state（闭包捕获渲染时的值）；自动化 `input.fill()` 触发 `onChange`（异步
   `setDraft`）后立即 `press("Enter")`，`commit` 闭包仍读到旧 draft → 地址/Data 提交被跳过
@@ -43,12 +46,14 @@
 - 验证：`packages/ui` 单测 151 全绿；electron / vscode real 三端延迟响应用例稳定通过。
 
 ### 4. 通信日志断言：虚拟列表只渲染视口内行
+
 - `BottomPanel` 用 antd `Listy` 虚拟列表，`toContainText` 只匹配渲染出的可见行；real 套件
   共享会话累积日志，早期帧被滚动挤出视口 → 断言历史帧失败。
 - 修复：通信日志用例改为测试内 Clear（`panel.clear` 按钮）+ 重建目标帧（写值门控异常
   0x03、只读区异常 0x02、读 0x0000）。
 
 ### 5. **产品 bug：HostMessage 错误投影硬编码 userMessageKey / category**
+
 - `apps/electron/src/main/ipc.ts` 与 `apps/vscode-extension/src/ipc.ts` 的 `errorEnvelope`
   把会话错误统一投影为 `userMessageKey: "errors.hostMessageRejected"`（category 也硬编码，
   Electron 侧连传入都漏掉）；`toErrorPayload`/`fromErrorPayload`（packages/platform-api）
@@ -61,18 +66,21 @@
   原样传入。
 
 ### 6. 从站延迟响应配置低估重试窗口
+
 - RTU 无 Transaction ID，重试请求与原始请求完全相同；0x0700 `delayedResponse: 1500ms` 落在
   1000ms×2（retryCount=1）重试窗口内，迟到响应被当作重试响应消费 → 读「成功」无 error 点
   （TCP 有 tid 丢弃机制不受影响）。
 - 修复：`modbus-slave*.config.json` 0x0700 延迟改为 2500ms（落在窗口外，验证迟到丢弃路径）。
 
 ### 7. VSCode real 模块加载：缺 `"type": "module"`
+
 - `tests/e2e-vscode/real/*.spec.ts` 用 `import.meta`，包未声明 `"type": "module"` →
   `SyntaxError: Cannot use 'import.meta' outside a module`（主套件是 tsc 编译 CJS 产物，
   不受影响）。
 - 修复：`tests/e2e-vscode/real/package.json` 单独声明 `"type": "module"`。
 
 ### 8. vscode-test-playwright@0.0.1-beta2 与 Playwright 1.62 不兼容
+
 - 库调用已移除的内部 API `playwright._toImpl`（3 处：`_evaluator`×2 + `_enableRecorder`×1），
   且无更新版本（npm latest = 0.0.1-beta2）。
 - 修复：**pnpm patch**（`patches/vscode-test-playwright@0.0.1-beta2.patch` +
@@ -81,13 +89,15 @@
   stderr），`_enableRecorder` 省略关闭监听（仅本地手动录制用）。
 
 ### 9. VSCode webview 两层结构：frame 定位错误
+
 - VSCode 1.134 webview 为两层：容器 frame（`vscode-webview://.../index.html`）+ 内容 frame
   （`.../fake.html`，承载共享 UI 的 `#root/.ant-app`）。`waitForWebviewFrame` 按 URL 前缀
   匹配到容器层 → UI 操作全部落空（弹窗找不到、主题 token 读不到）。
 - 修复：改为定位含共享 UI 的内容 frame（`document.querySelector("#root .ant-app,
-  .ant-layout")` 轮询）。
+.ant-layout")` 轮询）。
 
 ### 10. 串口下拉定位：误点「Load from Config File」连接对象下拉
+
 - ADR-023 后弹窗首个 `.ant-select` 是「Load from Config File」连接对象下拉（非串口）；
   real-serial 点 `.ant-select` first 误点它。e2e-electron 恰好因连接对象名
   「COM4（com0com 主站…）」含 "COM4" 且 `applyConnection` 自动匹配串口而**侥幸通过**；
@@ -95,6 +105,7 @@
 - 修复：三端 real-serial 按 Port Form.Item 语义定位串口下拉（`filter({ hasText: "Port" })`）。
 
 ### 11. `electron-smoke.spec.ts` 白名单断言漏 `sessionSetUnitId`
+
 - ADR-026（TCP Unit ID 动态修改）新增 preload 桥方法，主套件「Renderer 安全边界」白名单
   断言未同步 → Electron 主套件 e2e 失败。补入断言。
 

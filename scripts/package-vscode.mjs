@@ -26,7 +26,15 @@
  *      产物 release/mamep2026-<version>.vsix。
  */
 import { execSync } from "node:child_process";
-import { access, cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,8 +44,12 @@ const RELEASE_DIR = path.join(ROOT, "release");
 const STAGING = path.join(RELEASE_DIR, "vscode-extension");
 const VSCE_BIN = path.join(ROOT, "node_modules", "@vscode", "vsce", "vsce");
 
-const extPkg = JSON.parse(await readFile(path.join(EXT, "package.json"), "utf-8"));
-const rootPkg = JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf-8"));
+const extPkg = JSON.parse(
+  await readFile(path.join(EXT, "package.json"), "utf-8"),
+);
+const rootPkg = JSON.parse(
+  await readFile(path.join(ROOT, "package.json"), "utf-8"),
+);
 
 // 1. 前置检查：先 build:vscode 才有关闭产物
 const builtExtension = path.join(EXT, "dist", "extension.js");
@@ -54,7 +66,9 @@ try {
 await rm(STAGING, { recursive: true, force: true });
 await mkdir(STAGING, { recursive: true });
 await mkdir(RELEASE_DIR, { recursive: true });
-await cp(path.join(EXT, "dist"), path.join(STAGING, "dist"), { recursive: true });
+await cp(path.join(EXT, "dist"), path.join(STAGING, "dist"), {
+  recursive: true,
+});
 
 // 2.5. 拷贝扩展图标（package.json icon 字段指向，vsce 打包进 VSIX 作为市场图标；
 //   由 scripts/generate-icons.mjs 从 build/AppIcon.svg 生成）
@@ -106,8 +120,13 @@ package-lock.json
 );
 
 // 6. 生产依赖安装（serialport 原生绑定走 postinstall 下载预编译，勿加 --ignore-scripts）
-console.log("[package-vscode] step: npm install (production deps, serialport native binding)");
-execSync("npm install --omit=dev --no-audit --no-fund", { cwd: STAGING, stdio: "inherit" });
+console.log(
+  "[package-vscode] step: npm install (production deps, serialport native binding)",
+);
+execSync("npm install --omit=dev --no-audit --no-fund", {
+  cwd: STAGING,
+  stdio: "inherit",
+});
 
 // 7. vsce 打包（--no-yarn 强制 npm 依赖扫描；--skip-license 仓库无 LICENSE 文件；
 //    --allow-missing-repository 仓库无远程 URL 字段，免交互；
@@ -123,4 +142,6 @@ const stats = await stat(outVsix);
 console.log(
   `[package-vscode] done -> ${outVsix} (${(stats.size / 1024 / 1024).toFixed(1)} MB)`,
 );
-console.log("  安装验证: VS Code 命令面板 → 'Extensions: Install from VSIX...'");
+console.log(
+  "  安装验证: VS Code 命令面板 → 'Extensions: Install from VSIX...'",
+);

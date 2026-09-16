@@ -18,7 +18,10 @@ import type { MamepHostApi } from "@mamep2026/platform-api";
 export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
   private readonly bridge: Pick<
     MamepHostApi,
-    "workspaceLoad" | "workspaceSave" | "workspaceClear" | "workspaceCreateBackup"
+    | "workspaceLoad"
+    | "workspaceSave"
+    | "workspaceClear"
+    | "workspaceCreateBackup"
   >;
   /** workspace-load 响应带回来的恢复元数据（ADR-049）。 */
   private recoveryInfo: WorkspaceRecoveryInfo | null = null;
@@ -26,7 +29,10 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
   constructor(
     bridge: Pick<
       MamepHostApi,
-      "workspaceLoad" | "workspaceSave" | "workspaceClear" | "workspaceCreateBackup"
+      | "workspaceLoad"
+      | "workspaceSave"
+      | "workspaceClear"
+      | "workspaceCreateBackup"
     >,
   ) {
     this.bridge = bridge;

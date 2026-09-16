@@ -98,7 +98,10 @@ describe("address-adjust 插件（ADR-054：用户手动安装的单文件插件
   });
 
   it("变换语义：发送 = 用户地址 − 1；0 下溢 ADDRESS_ADJUST_UNDERFLOW", () => {
-    expect(ADDRESS_ADJUST_TRANSFORM.apply(0x0100)).toEqual({ ok: true, value: 0xff });
+    expect(ADDRESS_ADJUST_TRANSFORM.apply(0x0100)).toEqual({
+      ok: true,
+      value: 0xff,
+    });
     const underflow = ADDRESS_ADJUST_TRANSFORM.apply(0);
     expect(underflow.ok).toBe(false);
     if (!underflow.ok) {
@@ -111,9 +114,9 @@ describe("address-adjust 插件（ADR-054：用户手动安装的单文件插件
   });
 
   it("resolveAddressAdjustTransform：仅解析内建 id；未知返回 null", () => {
-    expect(resolveAddressAdjustTransform("builtin.address-adjust")).not.toBeNull();
     expect(
-      resolveAddressAdjustTransform("unknown.transform"),
-    ).toBeNull();
+      resolveAddressAdjustTransform("builtin.address-adjust"),
+    ).not.toBeNull();
+    expect(resolveAddressAdjustTransform("unknown.transform")).toBeNull();
   });
 });

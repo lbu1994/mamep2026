@@ -62,9 +62,7 @@ async function openSettings(): Promise<void> {
     await more.click();
     await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   } else {
-    await topbar
-      .getByRole("button", { name: "Settings", exact: true })
-      .click();
+    await topbar.getByRole("button", { name: "Settings", exact: true }).click();
   }
   await page.waitForSelector(".settings-drawer.ant-drawer-open", {
     timeout: 10_000,
@@ -164,9 +162,7 @@ async function uninstallPlugin(pluginName: string): Promise<void> {
   const confirm = page
     .locator(".ant-modal-container")
     .filter({ hasText: "Uninstall this plugin?" });
-  await confirm
-    .getByRole("button", { name: "Uninstall", exact: true })
-    .click();
+  await confirm.getByRole("button", { name: "Uninstall", exact: true }).click();
   await expect(
     page.getByText("Plugin uninstalled.", { exact: true }).first(),
   ).toBeVisible({ timeout: 15_000 });
@@ -186,9 +182,7 @@ async function storedPlugin(pluginId: string): Promise<
   const stored = (await readPluginStore(session.page)) as {
     plugins?: Array<{ manifest?: { id?: string } }>;
   } | null;
-  return stored?.plugins?.find(
-    (plugin) => plugin.manifest?.id === pluginId,
-  ) as
+  return stored?.plugins?.find((plugin) => plugin.manifest?.id === pluginId) as
     | { enabled?: boolean; executionMode?: string; entrySource?: string }
     | undefined;
 }

@@ -105,9 +105,9 @@ test("row context menu inserts an empty row below the target", async ({
     base + 2,
   );
   await expect(row(page, 1).getByLabel("Name")).toHaveText("");
-  await expect(
-    row(page, 1).getByLabel("Address", { exact: true }),
-  ).toHaveText("");
+  await expect(row(page, 1).getByLabel("Address", { exact: true })).toHaveText(
+    "",
+  );
 });
 
 test("checkbox multi-select, shift range and select-all update the toolbar", async ({
@@ -293,9 +293,7 @@ test("粘贴时按行类型规范化 Data 文本（ADR-051）", async ({ page })
 
   await expect(row(page, 1).getByLabel("Data")).toHaveText("001F");
   await expect(row(page, 2).getByLabel("Data")).toHaveText("5");
-  await expect(row(page, 3).getByLabel("Data")).toHaveText(
-    "00000000 00000101",
-  );
+  await expect(row(page, 3).getByLabel("Data")).toHaveText("00000000 00000101");
   // 非法文本保留原文（写入/编辑时仍按既有校验提示）。
   await expect(row(page, 4).getByLabel("Data")).toHaveText("zz");
 });

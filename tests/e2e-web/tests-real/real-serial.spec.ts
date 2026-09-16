@@ -84,8 +84,9 @@ async function setRadixHex(p: Page): Promise<void> {
 
 /**
  * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时已改为 50ms
- * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式手动输入 Select 上限 100ms。
- * 通过 showSearch 的手动输入（键入数值 + Enter）选中，避免点击下拉选项的脆弱性。
+ * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
+ * 2026-09-16 增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
+ * 改为「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
  */
 async function setRtuTimeoutSelect(
   p: Page,
@@ -100,8 +101,12 @@ async function setRtuTimeoutSelect(
   await select.click();
   await p.keyboard.press("Control+a");
   await p.keyboard.type(String(timeoutMs));
-  await p.keyboard.press("Enter");
-  await expect(modal).toContainText(`${timeoutMs} ms`, { timeout: 5000 });
+  // 锚定正则只命中目标档位（避免前缀匹配到 "1000 ms"）。
+  await p
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: new RegExp(`^${timeoutMs} ms$`) })
+    .click();
+  await expect(select).toHaveText(new RegExp(`^${timeoutMs} ms$`));
 }
 
 /** 首行填入地址（HEX 4 位）并提交。 */
@@ -181,7 +186,9 @@ test.beforeAll(async () => {
   page.on("console", (msg) => {
     if (msg.type() === "error") consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
-  page.on("pageerror", (err) => consoleErrors.push(`PAGEERROR: ${String(err)}`));
+  page.on("pageerror", (err) =>
+    consoleErrors.push(`PAGEERROR: ${String(err)}`),
+  );
 
   // 清理 IndexedDB（避免跨运行残留工作区自动恢复）后加载；localStorage 保留。
   await page.goto(BASE_URL);
@@ -213,21 +220,16 @@ test.beforeAll(async () => {
   console.log(
     "[real-serial] 请在系统串口选择器中选中 COM4（连接 COM5 从站），本测试最长等待 120s…",
   );
-  await modal
-    .getByRole("button", { name: /Select serial port/i })
-    .click();
+  await modal.getByRole("button", { name: /Select serial port/i }).click();
   await modal.getByText(/^USB /).waitFor({ timeout: 120_000 });
   const label = (await modal.getByText(/^USB /).first().innerText()).trim();
   console.log(`[real-serial] 已选择串口: ${label}`);
 
   // 记录到 localStorage（后续运行对照 + 运行内复用）。
-  await page.evaluate(
-    ([key, value]) => localStorage.setItem(key, value),
-    [
-      LOCAL_STORAGE_KEY,
-      JSON.stringify({ portId: label, label, selectedAt: Date.now() }),
-    ] as const,
-  );
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value), [
+    LOCAL_STORAGE_KEY,
+    JSON.stringify({ portId: label, label, selectedAt: Date.now() }),
+  ] as const);
 
   // 真实端口稳定连接：RTU 超时手动输入设 Select 上限 100ms。
   await setRtuTimeoutSelect(page, modal, 100);
@@ -285,10 +287,7 @@ test("写值门控 0x0400：写 0x8000 被拒（异常 0x03），写 0x1234 成�
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   await expect(
     page.locator(".register-table__status-dot").first(),
-  ).toHaveAttribute(
-    "aria-label",
-    "The device returned a Modbus exception.",
-  );
+  ).toHaveAttribute("aria-label", "The device returned a Modbus exception.");
   // 合法值成功（读回验证）。
   await writeRow(page, "1234");
   await expect(
@@ -494,9 +493,7 @@ test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Typ
 });
 
 test("断开连接 → 状态复位为断开（连接按钮恢复 Connect 态）", async () => {
-  await page
-    .getByRole("button", { name: /Disconnect/i })
-    .click();
+  await page.getByRole("button", { name: /Disconnect/i }).click();
   // Header 连接 UI 已于 2026-09-06 整合为单一多功能按钮（状态点 + Connect/Disconnect 合一），
   // 不再单独渲染 "Offline" 文本；改用按钮 data-conn-state 判定断开态（宽/窄窗口均适用）。
   await expect(

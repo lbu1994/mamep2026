@@ -165,7 +165,10 @@ test.afterAll(async () => {
 test("TCP 全表读取取消：Read All → 取消 → 汇总 cancelledCount > 0 + 无 console 错误", async () => {
   const modal = page.locator(".ant-modal-container:visible");
   // 1. 切换到 Modbus TCP 并连接本地假设备。
-  await modal.locator(".ant-segmented-item").filter({ hasText: "Modbus TCP" }).click();
+  await modal
+    .locator(".ant-segmented-item")
+    .filter({ hasText: "Modbus TCP" })
+    .click();
   const hostInput = modal.getByPlaceholder("192.168.1.10");
   await expect(hostInput).toBeVisible({ timeout: 5000 });
   await hostInput.fill("127.0.0.1");
@@ -189,18 +192,14 @@ test("TCP 全表读取取消：Read All → 取消 → 汇总 cancelledCount > 0
   }
 
   // 3. 点击 Read All：运行态出现取消按钮。
-  await page
-    .getByRole("button", { name: "reload Read All" })
-    .click();
+  await page.getByRole("button", { name: "reload Read All" }).click();
   await expect(page.getByRole("button", { name: /Cancel/ })).toBeVisible({
     timeout: 5000,
   });
 
   // 4. 取消：立即退出运行态，汇总消息含 cancelledCount > 0。
   await page.getByRole("button", { name: /Cancel/ }).click();
-  await expect(
-    page.getByRole("button", { name: /Cancel/ }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Cancel/ })).toHaveCount(0);
 
   await expect(page.locator(".bottom-panel")).toContainText(/cancelled/i, {
     timeout: 10000,

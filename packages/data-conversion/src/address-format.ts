@@ -85,10 +85,7 @@ export function parseRegisterAddressDraft(
 }
 
 /** 解析范围单段（HEX 1~4 位 / DEC 0~65535）。 */
-function parseAddressPart(
-  part: string,
-  radix: RegisterRadix,
-): Result<number> {
+function parseAddressPart(part: string, radix: RegisterRadix): Result<number> {
   if (radix === "hex") {
     if (!/^[0-9a-fA-F]+$/.test(part)) {
       return fail(

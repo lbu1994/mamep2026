@@ -6,7 +6,8 @@
 import { createMamepError } from "@mamep2026/domain";
 import { PLUGIN_API_VERSION } from "./manifest";
 
-export type CompatibilityVerdict = "loadable" | "loadable-warning" | "forbidden";
+export type CompatibilityVerdict =
+  "loadable" | "loadable-warning" | "forbidden";
 
 export interface CompatibilityResult {
   verdict: CompatibilityVerdict;

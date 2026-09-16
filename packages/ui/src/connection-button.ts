@@ -82,9 +82,8 @@ export function connectionButtonSpec(
 ): ConnectionButtonSpec {
   const disconnected = state === "disconnected";
   const connected = state === "connected";
-  const icon: ConnectionButtonIcon = connected || state === "disconnecting"
-    ? "disconnect"
-    : "connect";
+  const icon: ConnectionButtonIcon =
+    connected || state === "disconnecting" ? "disconnect" : "connect";
   // 统一 Default 样式；未连接（Connect）额外用主题主色描边（default + color=primary + variant=outlined），
   // 与 Disconnect（danger 描边）同为「有外框颜色」的控件，颜色取自主题配套色。
   const type: "primary" | "default" = "default";

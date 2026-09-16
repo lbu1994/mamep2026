@@ -47,10 +47,7 @@ export interface ReconnectCoordinatorOptions {
 
 /** 重连生命周期状态（空闲为 null；宿主回退到会话自身状态）。 */
 export type ReconnectLifecycleState =
-  | "reconnect-waiting"
-  | "reconnecting"
-  | "failed"
-  | null;
+  "reconnect-waiting" | "reconnecting" | "failed" | null;
 
 export class ReconnectCoordinator {
   private readonly clock: Clock;
@@ -167,7 +164,10 @@ export class ReconnectCoordinator {
   }
 
   private backoffDelay(attempt: number): number {
-    return Math.min(this.baseIntervalMs * 2 ** (attempt - 1), this.maxIntervalMs);
+    return Math.min(
+      this.baseIntervalMs * 2 ** (attempt - 1),
+      this.maxIntervalMs,
+    );
   }
 
   /** 达到尝试上限：转 failed 并上报 app-message（此后停止自动重连，等待用户手动）。 */

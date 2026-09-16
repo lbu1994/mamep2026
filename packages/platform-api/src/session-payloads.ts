@@ -150,20 +150,11 @@ export const registerRowPayloadSchema = z.object({
   /** 各寄存器原始值（ADR-030，替代 lastKnownRawValue）：null=未读 */
   registerValues: z.array(z.number().int().min(0).max(65535)).nullable(),
   /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据 */
-  registers: z
-    .array(registerSubRowMetaPayloadSchema)
-    .nullable()
-    .default(null),
+  registers: z.array(registerSubRowMetaPayloadSchema).nullable().default(null),
   /** 位级注释（ADR-052，2026-09-11）：外层长度=registerCount，内层长度 16（下标=bit 号） */
-  bitComments: z
-    .array(z.array(z.string()).nullable())
-    .nullable()
-    .default(null),
+  bitComments: z.array(z.array(z.string()).nullable()).nullable().default(null),
   /** 位级名称（ADR-052 需求追加）：结构同 bitComments */
-  bitNames: z
-    .array(z.array(z.string()).nullable())
-    .nullable()
-    .default(null),
+  bitNames: z.array(z.array(z.string()).nullable()).nullable().default(null),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -174,8 +165,7 @@ export function toRegisterRowPayload(row: RegisterRow): RegisterRowPayload {
     ...row,
     addressValue:
       row.addressValue === null ? null : { value: row.addressValue.value },
-    registerValues:
-      row.registerValues?.map((value) => value.value) ?? null,
+    registerValues: row.registerValues?.map((value) => value.value) ?? null,
     registers: row.registers ?? null,
     bitComments: row.bitComments ?? null,
     bitNames: row.bitNames ?? null,
@@ -199,8 +189,7 @@ export function registerRowFromPayload(
   return {
     ...payload,
     rowId: payload.rowId as RowId,
-    addressValue:
-      address === null ? null : address.ok ? address.value : null,
+    addressValue: address === null ? null : address.ok ? address.value : null,
     registerValues:
       registerValues === null
         ? null
@@ -357,13 +346,7 @@ export const commLogEventPayloadSchema = z.object({
   sentAddress: z.number().nullable(),
   quantity: z.number().nullable(),
   attempt: z.number(),
-  status: z.enum([
-    "success",
-    "failure",
-    "timeout",
-    "cancelled",
-    "discarded",
-  ]),
+  status: z.enum(["success", "failure", "timeout", "cancelled", "discarded"]),
   errorCode: z.string().nullable(),
   exceptionCode: z.number().nullable(),
   source: z.enum([
@@ -411,9 +394,7 @@ export const appMessagePayloadSchema = z.object({
   timestamp: z.number(),
   level: z.enum(["info", "warning", "error"]),
   messageKey: z.string(),
-  params: z
-    .record(z.string(), z.union([z.string(), z.number()]))
-    .optional(),
+  params: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
   detail: z.string().nullable(),
 });
 export type AppMessagePayload = z.infer<typeof appMessagePayloadSchema>;
@@ -482,11 +463,15 @@ export const pluginStoreDataPayloadSchema = z.object({
   schemaVersion: z.literal(4),
   plugins: z.array(storedPluginPayloadSchema),
 });
-export type PluginStoreDataPayload = z.infer<typeof pluginStoreDataPayloadSchema>;
+export type PluginStoreDataPayload = z.infer<
+  typeof pluginStoreDataPayloadSchema
+>;
 
 /** plugin-store-load 响应载荷（结构同 PluginStoreData v4，空 store 返回 { schemaVersion:4, plugins:[] }）。 */
 export const pluginStoreDataResponseSchema = pluginStoreDataPayloadSchema;
-export type PluginStoreDataResponse = z.infer<typeof pluginStoreDataResponseSchema>;
+export type PluginStoreDataResponse = z.infer<
+  typeof pluginStoreDataResponseSchema
+>;
 
 // ---- 插件运行时桥（2026-08-31，ADR-039：Phase A 契约一次定型，宿主侧返回能力错误）----
 

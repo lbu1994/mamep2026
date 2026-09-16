@@ -112,7 +112,8 @@ export function applyManualResult(
   // 保持原状态，绝不产生成功点（§18.2 防御，杜绝「失败却绿点」）。
   if (
     kind === "write" &&
-    (writeOutcome === undefined || writeStatus !== "success" && writeStatus !== "failure")
+    (writeOutcome === undefined ||
+      (writeStatus !== "success" && writeStatus !== "failure"))
   ) {
     return state;
   }

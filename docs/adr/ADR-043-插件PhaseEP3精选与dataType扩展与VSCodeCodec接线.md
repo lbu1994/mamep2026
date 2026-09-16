@@ -6,7 +6,7 @@
 
 ## 背景
 
-- **Phase A~D 已落地（ADR-039~042）**：贡献点注册表（`tableType`/`protocolExtension`/`dataType`/`documentation` 等 10 点，其中 dataType/documentation 仍为空/占位消费方）；Manifest v2 + 内置同进程执行面；`ProtocolCodec` + `CodecRegistry` + `CommunicationSession` codec 注入（Phase B）；安川表类型 + ROM/RAM（Phase C）；主题色 + 表级 Address Adjust（Phase D）。
+- **Phase A~~D 已落地（ADR-039~~042）**：贡献点注册表（`tableType`/`protocolExtension`/`dataType`/`documentation` 等 10 点，其中 dataType/documentation 仍为空/占位消费方）；Manifest v2 + 内置同进程执行面；`ProtocolCodec` + `CodecRegistry` + `CommunicationSession` codec 注入（Phase B）；安川表类型 + ROM/RAM（Phase C）；主题色 + 表级 Address Adjust（Phase D）。
 - **现状缺口（2026-09-01 代码调研）**：
   - `protocol-modbus` 仅 FC03/FC0x10，功能码硬编码；无 FC01/02/04/0F 任何实现；
   - test-kit `ScriptedModbusRtuDevice`、platform-web `MockTransport`、从站（modbus-core + rtu/tcp slave）均只支持 03/10（其余回异常 0x01）；
@@ -98,6 +98,7 @@
 ## 实施注记（E-4/E-5/E-6 落地，2026-09-01）
 
 ### E-4 自定义功能码示例插件（已落地）
+
 - 新包 `plugins/custom-function-code`：`CustomFunctionCodec`（protocolId="custom-function-code"，FC 0x65 读 / 0x66 写，复用 protocol-modbus `appendCrc`/`crc16Modbus`）、
   `registerCustomFunctionPlugin(registry, {codecRegistry, dataTypeResolver})`（manifest 含 protocolExtension+tableType+toolbarAction+command+dataType 贡献，
   activate 注册 codec + dataType handlers `custom-function-code:scaled`）、codec.test.ts 9 用例 + plugin.test.ts 3 用例全绿。
@@ -108,6 +109,7 @@
 - **踩坑**：Vite dev server 缓存模块图，新增 workspace 包后 500 → kill 5173 重启 `pnpm dev`。
 
 ### E-5 寄存器手册（documentation 贡献点，已落地）
+
 - `packages/plugin-api/src/builtin-contribution-points.ts`：`DOCUMENTATION_CONTRIBUTION_SCHEMA` 扩展 `{id, titleKey, markdown: z.string()}`。
 - `packages/ui/src/components/DocumentationPanel.tsx`（组件）+ `documentation-markdown.tsx`（`renderMarkdown` 轻量渲染 + `DocumentationContribution` 接口，拆分因 react-refresh only-export-components）：
   `#`/`##`/`###` 标题、段落（行内 code/bold）、`-`/`*` 无序列表、``` 围栏代码块（antd Typography + pre）。
@@ -118,6 +120,7 @@
 - **坑**：段落文本被行内元素拆分 → `getByText(/A paragraph with/)` 正则。
 
 ### E-6 VSCode codec 接线（已落地，e2e-vscode 全绿）
+
 - `packages/platform-api/src/host-message.ts`：`sessionConnectPayloadSchema` 增可选 `protocol: z.string().optional()`。
 - `apps/web/src/vscode-app-host.ts`：`connect(profile, handle, options?: {protocol?})`，bridge.sessionConnect 仅非 rtu 时携带 protocol。
 - `apps/vscode-extension/src/session-host.ts`：`VscodeSessionHostOptions` 增 `codecRegistry?`；`connect` 增 `options?: {protocol?}`，

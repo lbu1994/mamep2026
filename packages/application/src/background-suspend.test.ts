@@ -12,7 +12,11 @@ import type {
 } from "@mamep2026/communication";
 import { createDefaultRtuProfile, type Result } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
-import { FakeTransport, ScriptedModbusRtuDevice, VirtualClock } from "@mamep2026/test-kit";
+import {
+  FakeTransport,
+  ScriptedModbusRtuDevice,
+  VirtualClock,
+} from "@mamep2026/test-kit";
 import { RtuSessionHost, type RtuSessionHostEvents } from "./rtu-session-host";
 
 type MockedEvent = ReturnType<typeof vi.fn>;
@@ -31,9 +35,14 @@ function createHarness() {
   const events: Record<keyof RtuSessionHostEvents, MockedEvent> = {
     onLog: vi.fn<(event: CommunicationLogEvent) => void>(),
     onStateChange: vi.fn<(state: ConnectionState) => void>(),
-    onPollResult: vi.fn<
-      (key: string, address: number, result: Result<number | number[]>) => void
-    >(),
+    onPollResult:
+      vi.fn<
+        (
+          key: string,
+          address: number,
+          result: Result<number | number[]>,
+        ) => void
+      >(),
     onTraceSample: vi.fn<(sample: TraceSample) => void>(),
     onMessage: vi.fn<(message: ApplicationMessage) => void>(),
   };

@@ -47,5 +47,7 @@ export const schneiderGreenThemeManifest: PluginManifest = {
  * 返回注册结果（测试断言 + 文档可检查失败）。
  */
 export function registerSchneiderGreenThemePlugin(registry: PluginRegistry) {
-  return registry.register(schneiderGreenThemeManifest, { source: "installed" });
+  return registry.register(schneiderGreenThemeManifest, {
+    source: "installed",
+  });
 }

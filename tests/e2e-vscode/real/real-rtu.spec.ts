@@ -58,8 +58,7 @@ async function waitForWebviewFrame(page: Page): Promise<Frame> {
       if (!f.url().startsWith("vscode-webview://")) continue;
       try {
         const hasUi = await f.evaluate(
-          () =>
-            document.querySelector("#root .ant-app, .ant-layout") !== null,
+          () => document.querySelector("#root .ant-app, .ant-layout") !== null,
         );
         if (hasUi) return f;
       } catch {
@@ -194,8 +193,9 @@ async function writeRow(frame: Frame, valueHex: string): Promise<void> {
 
 /**
  * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时已改为 50ms
- * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式手动输入 Select 上限 100ms。
- * 通过 showSearch 的手动输入（键入数值 + Enter）选中，避免点击下拉选项的脆弱性。
+ * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
+ * 2026-09-16 增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
+ * 改为「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
  */
 async function setRtuTimeoutSelect(
   frame: Frame,
@@ -210,8 +210,13 @@ async function setRtuTimeoutSelect(
   await select.click();
   await frame.page().keyboard.press("Control+a");
   await frame.page().keyboard.type(String(timeoutMs));
-  await frame.page().keyboard.press("Enter");
-  await expect(modal).toContainText(`${timeoutMs} ms`, { timeout: 5000 });
+  // 锚定正则只命中目标档位（避免前缀匹配到 "1000 ms"）。
+  await frame
+    .page()
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: new RegExp(`^${timeoutMs} ms$`) })
+    .click();
+  await expect(select).toHaveText(new RegExp(`^${timeoutMs} ms$`));
 }
 
 test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
@@ -228,7 +233,9 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     if (!sourceUrl.startsWith("vscode-webview://")) return;
     consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
-  workbox.on("pageerror", (err) => consoleErrors.push(`PAGEERROR: ${String(err)}`));
+  workbox.on("pageerror", (err) =>
+    consoleErrors.push(`PAGEERROR: ${String(err)}`),
+  );
 
   // 桌面布局（避免窄窗口响应式分支）。
   await workbox.setViewportSize({ width: 1600, height: 900 });
@@ -472,7 +479,9 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     await frame.getByRole("button", { name: /Disconnect/i }).click();
     // Header 连接按钮已整合（2026-09-06），断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定。
     await expect(
-      frame.locator(".connection-cluster__button[data-conn-state='disconnected']"),
+      frame.locator(
+        ".connection-cluster__button[data-conn-state='disconnected']",
+      ),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 
     // 重连：Connection Settings → 串口下拉复用 → 选 COM4 → Connect。

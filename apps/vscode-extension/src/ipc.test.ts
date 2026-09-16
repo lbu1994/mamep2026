@@ -582,7 +582,9 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     );
     expect(result.type).toBe("response");
     if (result.type === "response") {
-      expect(result.payload).toEqual([{ portId: "COM4", label: "Fake (COM4)" }]);
+      expect(result.payload).toEqual([
+        { portId: "COM4", label: "Fake (COM4)" },
+      ]);
     }
   });
 
@@ -599,7 +601,11 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     expect(result.type).toBe("response");
     expect(session.connect).toHaveBeenCalledWith(
       "COM4",
-      expect.objectContaining({ id: "conn-1", protocol: "rtu", baudRate: 9600 }),
+      expect.objectContaining({
+        id: "conn-1",
+        protocol: "rtu",
+        baudRate: 9600,
+      }),
       1,
       undefined,
     );
@@ -619,7 +625,11 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     expect(result.type).toBe("response");
     expect(session.connect).toHaveBeenCalledWith(
       "COM4",
-      expect.objectContaining({ id: "conn-1", protocol: "rtu", baudRate: 9600 }),
+      expect.objectContaining({
+        id: "conn-1",
+        protocol: "rtu",
+        baudRate: 9600,
+      }),
       1,
       { protocol: "modbus-basic-tables:coil" },
     );

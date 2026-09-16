@@ -22,7 +22,11 @@ const MAIN_FILE = "plugins.json";
 const BACKUP_FILE = "plugins.json.bak";
 const TEMP_FILE = "plugins.json.tmp";
 
-function pluginStoreError(code: string, technicalMessage: string, cause?: unknown) {
+function pluginStoreError(
+  code: string,
+  technicalMessage: string,
+  cause?: unknown,
+) {
   return createMamepError({
     code,
     category: "plugin",

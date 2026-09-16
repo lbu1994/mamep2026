@@ -7,10 +7,7 @@
  *     acquireVsCodeApi()（仅在 Webview 主 frame 可用）并设置 window.mamepHost，
  *     先于共享 UI 的 module script 就绪。
  */
-import {
-  createVscodeBridge,
-  type VsCodeApi,
-} from "@mamep2026/platform-api";
+import { createVscodeBridge, type VsCodeApi } from "@mamep2026/platform-api";
 
 export { createVscodeBridge };
 export type { VsCodeApi };

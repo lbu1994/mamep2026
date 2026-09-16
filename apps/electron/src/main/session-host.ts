@@ -34,9 +34,7 @@ export interface ElectronSessionHostOptions {
    * 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055）：由宿主侧插件运行时
    * （HostPluginRuntime，随 application 装配）注入，渲染端不再传递变换函数。
    */
-  resolveAddressTransform?: (
-    transformId: string,
-  ) => AddressTransform | null;
+  resolveAddressTransform?: (transformId: string) => AddressTransform | null;
 }
 
 export class ElectronSessionHost {

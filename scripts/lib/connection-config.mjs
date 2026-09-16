@@ -39,9 +39,7 @@ export function findConnection(id) {
   const config = loadConnectionConfig();
   const connection = config.connections.find((c) => c.id === id);
   if (connection === undefined) {
-    throw new Error(
-      `连接对象 "${id}" 未在 config/connections.json 中定义`,
-    );
+    throw new Error(`连接对象 "${id}" 未在 config/connections.json 中定义`);
   }
   return connection;
 }

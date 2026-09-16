@@ -94,11 +94,7 @@ class FakeTcpDevice {
           );
         } else {
           socket.write(
-            buildTcpFrame(
-              tid,
-              unitId,
-              Uint8Array.from([fc | 0x80, 0x01]),
-            ),
+            buildTcpFrame(tid, unitId, Uint8Array.from([fc | 0x80, 0x01])),
           );
         }
       }
@@ -269,9 +265,12 @@ test("autoReconnect 关闭：断线后不自动重连（保持 Interrupted）", 
   const countBefore = device.connectionCount;
 
   device.dropClients();
-  await expect(page.locator(".ant-layout-header")).toContainText("Interrupted", {
-    timeout: 5000,
-  });
+  await expect(page.locator(".ant-layout-header")).toContainText(
+    "Interrupted",
+    {
+      timeout: 5000,
+    },
+  );
   // 等待超过首个退避间隔（1s），确认没有发起重连。
   await page.waitForTimeout(1500);
   expect(device.connectionCount).toBe(countBefore);

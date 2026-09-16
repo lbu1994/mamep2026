@@ -7,7 +7,10 @@
  */
 import { theme as antdTheme, type ThemeConfig } from "antd";
 import type { Contribution } from "@mamep2026/plugin-api";
-import { pluginLocalizedTitle, type PluginLocalizedTitle } from "./plugin-title";
+import {
+  pluginLocalizedTitle,
+  type PluginLocalizedTitle,
+} from "./plugin-title";
 
 /** 插件注册的单条可选主题色（与 plugin-api THEME_COLOR_PRESET_SCHEMA 结构一致）。
  * 2026-09-03 方案 A：新增 `title` 插件自带翻译（en-US 必填 / zh-CN 可选），缺失语言回退英文；

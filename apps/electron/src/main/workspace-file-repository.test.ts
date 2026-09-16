@@ -4,7 +4,10 @@
  * （自愈写回）、双坏错误、无文件空工作区、clear、v1→v4 迁移、错误映射（category persistence）。
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { createEmptyWorkspace, workspaceSchemaVersion } from "@mamep2026/domain";
+import {
+  createEmptyWorkspace,
+  workspaceSchemaVersion,
+} from "@mamep2026/domain";
 import { serializeWorkspace } from "@mamep2026/workspace";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

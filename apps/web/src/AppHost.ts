@@ -845,7 +845,8 @@ export class BrowserAppHost implements AppHost {
       stopBits: profile?.stopBits ?? 1,
       parity: profile?.parity ?? "none",
       flowControl: profile?.flowControl ?? "off",
-      timeoutMs: profile?.requestTimeoutMs ?? defaultConfig.rtu.requestTimeoutMs,
+      timeoutMs:
+        profile?.requestTimeoutMs ?? defaultConfig.rtu.requestTimeoutMs,
       retryCount: profile?.retryCount ?? 1,
       connectionState: this.getConnectionState(),
     };

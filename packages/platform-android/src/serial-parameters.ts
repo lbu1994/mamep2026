@@ -17,8 +17,7 @@ export const ANDROID_SUPPORTED_BAUD_RATES: readonly number[] = Object.freeze([
 ]);
 
 export type SerialParameterValidation =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string };
+  { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 /** 校验 RTU profile 的串口链路参数是否受 Android 端支持。 */
 export function validateSerialParameters(
@@ -48,7 +47,10 @@ export function validateSerialParameters(
     profile.flowControl !== "rts-cts" &&
     profile.flowControl !== "xon-xoff"
   ) {
-    return { ok: false, reason: `unsupported flow control ${profile.flowControl}` };
+    return {
+      ok: false,
+      reason: `unsupported flow control ${profile.flowControl}`,
+    };
   }
   return { ok: true };
 }

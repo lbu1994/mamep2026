@@ -26,9 +26,7 @@ describe("renderMarkdown（ADR-043 E-5 轻量渲染）", () => {
 
   it("渲染围栏代码块", () => {
     render(
-      <div>
-        {renderMarkdown("```\nslave + 67H + 01H + 0DH + CRC\n```")}
-      </div>,
+      <div>{renderMarkdown("```\nslave + 67H + 01H + 0DH + CRC\n```")}</div>,
     );
     expect(screen.getByText("slave + 67H + 01H + 0DH + CRC")).toBeTruthy();
   });

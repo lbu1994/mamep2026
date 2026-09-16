@@ -81,8 +81,8 @@ describe("fakeSaveTextFile", () => {
       expect(result.value.saved).toBe(true);
       expect(result.value.filePath).toBe(savePath);
     }
-    expect(await (await import("node:fs/promises")).readFile(savePath, "utf8")).toBe(
-      content,
-    );
+    expect(
+      await (await import("node:fs/promises")).readFile(savePath, "utf8"),
+    ).toBe(content);
   });
 });

@@ -2,6 +2,8 @@
 
 > 日期：2026-09-06　状态：完成
 > 关联：ADR-022 连接设置字段 / RTU profile。纯连接设置 UI 打磨，无新增 ADR。
+>
+> **修订（2026-09-16）**：RTU 超时档位上限由 100 ms 放宽至 1000 ms（新增 13 个长超时档位，表单与持久化 schema 上限同步放宽），见 [2026-09-16-RTU超时档位扩充.md](2026-09-16-RTU超时档位扩充.md)；本文中「5–100」的取值描述以该文档为准。
 
 ## 需求摘要
 
@@ -27,18 +29,18 @@ Modbus RTU 通信选项「超时(毫秒)」默认值由 1000ms 改为 50ms；输
 
 ## 影响模块
 
-| 包/端 | 文件 | 改动原因 |
-|------|------|---------|
-| packages/domain | `src/config.ts` | `rtu.requestTimeoutMs` / `tcp.requestTimeoutMs` 1000→50 |
-| packages/domain | `src/config.test.ts` | 断言 1000→50 |
-| packages/ui | `src/components/connection-settings-model.ts` | 新增 `RTU_TIMEOUT_OPTIONS`；`settingsSchema` 拆 `rtuTimeout`(5–100)/`tcpTimeout`(50–60000)；`rtuPersistedSettingsSchema.requestTimeoutMs` 收窄 5–100；`toProfile`/`profileToValues`/`extractPersistedSettings` 按协议分别映射（顺带修复 RTU `toProfile` spread 未映射 `timeout`→`requestTimeoutMs` 的潜在缺口） |
-| packages/ui | `src/components/ConnectionSettingsModal.tsx` | RTU 超时 `name="rtuTimeout"` 改 `Select`（`showSearch` 支持手动输入，仅范围内档位可选；`RTU_TIMEOUT_OPTIONS` 5..100 步进 5 共 20 项）；TCP `name="tcpTimeout"` 保留 `InputNumber` |
-| packages/ui | `src/components/connection-settings-model.test.ts` | 字段改名 + 范围断言 |
-| packages/ui | `src/app-store.test.ts` | `setConnectionSettings` 用例改 5–100 内 / 默认断言 50 |
-| packages/ui | `src/components/ConnectionSettingsModal.tcp.test.tsx` | 适配新字段/控件 |
-| apps/web | `src/AppHost.ts` / `electron-app-host.ts` / `vscode-app-host.ts` | `?? 1000` 兜底统一改 `?? defaultConfig` 引用 |
-| config | `connections.json` + `README.md` | `requestTimeoutMs` 1000→50（真实端口 e2e 连接对象，匹配 Select 上限） |
-| tests | `tests/e2e-*/tests-real/real-serial.spec.ts`、`tests/e2e-vscode/real/real-rtu.spec.ts` | 真实端口 e2e 连接流：RTU 超时经 `showSearch` 手动输入（键入数值+Enter）设为 100ms（应用默认维持 50ms），替代点击下拉项；延迟响应用例注释/等待时机改用例 |
+| 包/端           | 文件                                                                                   | 改动原因                                                                                                                                                                                                                                                                                                        |
+| --------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| packages/domain | `src/config.ts`                                                                        | `rtu.requestTimeoutMs` / `tcp.requestTimeoutMs` 1000→50                                                                                                                                                                                                                                                         |
+| packages/domain | `src/config.test.ts`                                                                   | 断言 1000→50                                                                                                                                                                                                                                                                                                    |
+| packages/ui     | `src/components/connection-settings-model.ts`                                          | 新增 `RTU_TIMEOUT_OPTIONS`；`settingsSchema` 拆 `rtuTimeout`(5–100)/`tcpTimeout`(50–60000)；`rtuPersistedSettingsSchema.requestTimeoutMs` 收窄 5–100；`toProfile`/`profileToValues`/`extractPersistedSettings` 按协议分别映射（顺带修复 RTU `toProfile` spread 未映射 `timeout`→`requestTimeoutMs` 的潜在缺口） |
+| packages/ui     | `src/components/ConnectionSettingsModal.tsx`                                           | RTU 超时 `name="rtuTimeout"` 改 `Select`（`showSearch` 支持手动输入，仅范围内档位可选；`RTU_TIMEOUT_OPTIONS` 5..100 步进 5 共 20 项）；TCP `name="tcpTimeout"` 保留 `InputNumber`                                                                                                                               |
+| packages/ui     | `src/components/connection-settings-model.test.ts`                                     | 字段改名 + 范围断言                                                                                                                                                                                                                                                                                             |
+| packages/ui     | `src/app-store.test.ts`                                                                | `setConnectionSettings` 用例改 5–100 内 / 默认断言 50                                                                                                                                                                                                                                                           |
+| packages/ui     | `src/components/ConnectionSettingsModal.tcp.test.tsx`                                  | 适配新字段/控件                                                                                                                                                                                                                                                                                                 |
+| apps/web        | `src/AppHost.ts` / `electron-app-host.ts` / `vscode-app-host.ts`                       | `?? 1000` 兜底统一改 `?? defaultConfig` 引用                                                                                                                                                                                                                                                                    |
+| config          | `connections.json` + `README.md`                                                       | `requestTimeoutMs` 1000→50（真实端口 e2e 连接对象，匹配 Select 上限）                                                                                                                                                                                                                                           |
+| tests           | `tests/e2e-*/tests-real/real-serial.spec.ts`、`tests/e2e-vscode/real/real-rtu.spec.ts` | 真实端口 e2e 连接流：RTU 超时经 `showSearch` 手动输入（键入数值+Enter）设为 100ms（应用默认维持 50ms），替代点击下拉项；延迟响应用例注释/等待时机改用例                                                                                                                                                         |
 
 ## 计划（Plan 摘要）
 

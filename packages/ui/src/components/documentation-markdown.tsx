@@ -26,7 +26,9 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={`${keyPrefix}-b-${index}`}>{part.slice(2, -2)}</strong>;
+      return (
+        <strong key={`${keyPrefix}-b-${index}`}>{part.slice(2, -2)}</strong>
+      );
     }
     if (part.startsWith("`") && part.endsWith("`")) {
       return <code key={`${keyPrefix}-c-${index}`}>{part.slice(1, -1)}</code>;

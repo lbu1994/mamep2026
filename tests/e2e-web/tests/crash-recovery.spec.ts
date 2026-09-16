@@ -108,7 +108,10 @@ test("损坏恢复：损坏主记录 + 合法备份 → reload 恢复 + Recovery
   await page.waitForTimeout(800);
   const main = await readWorkspaceMain(page);
   // 构造备份（合法主记录）并破坏主记录。
-  await seedWorkspaceDb(page, { main: { schemaVersion: "broken" }, backup: main });
+  await seedWorkspaceDb(page, {
+    main: { schemaVersion: "broken" },
+    backup: main,
+  });
   await page.reload();
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,

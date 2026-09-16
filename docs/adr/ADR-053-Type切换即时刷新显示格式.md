@@ -45,14 +45,14 @@
 
 ### 实现语义（`retargetRowDataType(row, dataType, resolver?)`）
 
-| 情形 | 行为 |
-| --- | --- |
-| `dataType === row.dataType` | 原引用返回（零更新短路） |
-| `cellText.trim() === ""` | 仅改 `dataType`（保持空文本，不生成 `0`） |
-| 范围行（`registerCount > 1`） | 用**旧** Type `parseCompositeText(text, oldType, registerCount)`；成功 → `formatRawValues(values, newType)` 写回 |
-| 单寄存器 | 用**旧** Type `resolver.parse(text, oldType)`；成功 → `resolver.format(raw, newType)` 写回 |
-| 旧文本解析失败 | 保留原文，仅改 `dataType`（§23） |
-| 新 Type 无法格式化（`bool` / 未知插件类型 + `registerCount > 1` 会抛 `unsupported data type`） | try/catch 兜底：保留原文，绝不抛出/崩溃 |
+| 情形                                                                                           | 行为                                                                                                             |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `dataType === row.dataType`                                                                    | 原引用返回（零更新短路）                                                                                         |
+| `cellText.trim() === ""`                                                                       | 仅改 `dataType`（保持空文本，不生成 `0`）                                                                        |
+| 范围行（`registerCount > 1`）                                                                  | 用**旧** Type `parseCompositeText(text, oldType, registerCount)`；成功 → `formatRawValues(values, newType)` 写回 |
+| 单寄存器                                                                                       | 用**旧** Type `resolver.parse(text, oldType)`；成功 → `resolver.format(raw, newType)` 写回                       |
+| 旧文本解析失败                                                                                 | 保留原文，仅改 `dataType`（§23）                                                                                 |
+| 新 Type 无法格式化（`bool` / 未知插件类型 + `registerCount > 1` 会抛 `unsupported data type`） | try/catch 兜底：保留原文，绝不抛出/崩溃                                                                          |
 
 - **不改** `registerValues`（设备读回值 / 子行数据源）、**不改** `updatedAt` 语义（沿用 `Date.now()`）。
 - **不新增** HostMessage v1 kind、工作区 schema 版本、能力矩阵字段、协议/调度改动。
@@ -100,10 +100,10 @@
 
 ### 回归结果（2026-09-11）
 
-| 项 | 结果 |
-| --- | --- |
+| 项                                             | 结果                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
 | `pnpm --filter @mamep2026/register-table test` | **214 / 214**（含新增 `retargetRowDataType` 表驱动用例与关键反例） |
-| `pnpm --filter @mamep2026/ui test` | **383 / 383**（含新增 `setRowDataType` 用例与既有撤销/重做用例） |
-| `pnpm typecheck` | **32 / 32** |
-| `pnpm lint` | **EXIT = 0** |
-| e2e-web `type-switch-refresh.spec.ts` | 已新增 4 用例；**未执行**（执行时机由用户决定） |
+| `pnpm --filter @mamep2026/ui test`             | **383 / 383**（含新增 `setRowDataType` 用例与既有撤销/重做用例）   |
+| `pnpm typecheck`                               | **32 / 32**                                                        |
+| `pnpm lint`                                    | **EXIT = 0**                                                       |
+| e2e-web `type-switch-refresh.spec.ts`          | 已新增 4 用例；**未执行**（执行时机由用户决定）                    |

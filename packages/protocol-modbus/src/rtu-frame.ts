@@ -142,9 +142,7 @@ export function isBitPackedRead(kind: ExpectedResponse["kind"]): boolean {
 }
 
 /** 期望 kind → 功能码（解码校验用）。 */
-export function functionCodeForKind(
-  kind: ExpectedResponse["kind"],
-): number {
+export function functionCodeForKind(kind: ExpectedResponse["kind"]): number {
   switch (kind) {
     case "read-coils":
       return FUNCTION_READ_COILS;

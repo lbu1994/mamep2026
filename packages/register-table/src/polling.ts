@@ -13,10 +13,7 @@ import type {
   RegisterSheet,
 } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
-import {
-  applyAddressTransform,
-  resolveSheetAddressTransform,
-} from "./address";
+import { applyAddressTransform, resolveSheetAddressTransform } from "./address";
 import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 
 export interface PollingTarget {
@@ -37,7 +34,9 @@ function sheetTransform(
 /** 从工作区表格构建轮询目标（表级地址变换已应用到发送地址，ADR-042）。 */
 export function buildPollingTargets(
   sheets: readonly RegisterSheet[],
-  options?: { resolveAddressTransform?: (id: string) => AddressTransform | null },
+  options?: {
+    resolveAddressTransform?: (id: string) => AddressTransform | null;
+  },
 ): PollingTarget[] {
   const resolve = options?.resolveAddressTransform;
   const targets: PollingTarget[] = [];
@@ -89,7 +88,9 @@ export function applyPollResult(
   key: string,
   address: number,
   raw: number | number[],
-  options?: { resolveAddressTransform?: (id: string) => AddressTransform | null },
+  options?: {
+    resolveAddressTransform?: (id: string) => AddressTransform | null;
+  },
 ): RegisterRow | null {
   const resolve = options?.resolveAddressTransform;
   for (const sheet of sheets) {

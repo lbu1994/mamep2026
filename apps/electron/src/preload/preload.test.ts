@@ -423,19 +423,28 @@ describe("preload 白名单桥", () => {
     const received: MamepHostEvent[] = [];
     const unsubscribe = bridge.onEvent((event) => received.push(event));
 
-    expect(on).toHaveBeenCalledWith(MAMEP_IPC_EVENT_CHANNEL, expect.any(Function));
-    handler({}, {
-      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
-      type: "event",
-      messageId: "e",
-      kind: "connection-state",
-      payload: { state: "connected" },
-    });
+    expect(on).toHaveBeenCalledWith(
+      MAMEP_IPC_EVENT_CHANNEL,
+      expect.any(Function),
+    );
+    handler(
+      {},
+      {
+        protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+        type: "event",
+        messageId: "e",
+        kind: "connection-state",
+        payload: { state: "connected" },
+      },
+    );
     expect(received).toEqual([
       { kind: "connection-state", payload: { state: "connected" } },
     ]);
 
     unsubscribe();
-    expect(removeListener).toHaveBeenCalledWith(MAMEP_IPC_EVENT_CHANNEL, handler);
+    expect(removeListener).toHaveBeenCalledWith(
+      MAMEP_IPC_EVENT_CHANNEL,
+      handler,
+    );
   });
 });

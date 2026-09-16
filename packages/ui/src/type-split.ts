@@ -9,12 +9,7 @@ import type { DataType } from "@mamep2026/domain";
 
 /** 进制列取值（与 domain DataType 前缀对应）。bool 为 ADR-043 E-2 基础表位值类型。 */
 export type DataRadix =
-  | "hex"
-  | "unsigned"
-  | "signed"
-  | "binary"
-  | "string"
-  | "bool";
+  "hex" | "unsigned" | "signed" | "binary" | "string" | "bool";
 
 /** scale 列取值（字符串表示，便于 Select 直接使用）。 */
 export type ScaleValue = "1" | "0.1" | "0.01" | "0.001" | "0.0001";

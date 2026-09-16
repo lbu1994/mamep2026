@@ -220,11 +220,13 @@ export function createVscodeBridge(
       }),
     // ---- 工作区文件仓储（2026-08-30，ADR-036）：VSCode filesystem 维持 unsupported，
     // 宿主返回能力错误；转发保留契约一致性（VscodeHostApi 继承 MamepHostApi）。----
-    workspaceLoad: () => postRequest<WorkspaceLoadResponse>("workspace-load", {}),
+    workspaceLoad: () =>
+      postRequest<WorkspaceLoadResponse>("workspace-load", {}),
     workspaceSave: (content: string) =>
       postRequest<null>("workspace-save", { content }),
     workspaceClear: () => postRequest<null>("workspace-clear", {}),
-    workspaceCreateBackup: () => postRequest<null>("workspace-create-backup", {}),
+    workspaceCreateBackup: () =>
+      postRequest<null>("workspace-create-backup", {}),
     // ---- 插件存储（2026-08-30，ADR-038）：VSCode 由 Extension Host globalState 承载，
     // 经 plugin-store-load/save 转发。----
     pluginStoreLoad: () =>

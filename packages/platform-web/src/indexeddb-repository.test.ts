@@ -147,7 +147,10 @@ describe("IndexedDBWorkspaceRepository", () => {
   it("load 主+备份均损坏时 getRecoveryInfo source=fresh + errorCode（ADR-049）", async () => {
     const store = memoryStore();
     await store.put("workspace", JSON.parse('{"schemaVersion":"broken"}'));
-    await store.put("workspace-backup", JSON.parse('{"schemaVersion":"broken"}'));
+    await store.put(
+      "workspace-backup",
+      JSON.parse('{"schemaVersion":"broken"}'),
+    );
     const repo = new IndexedDBWorkspaceRepository(store);
     await repo.load();
     expect(repo.getRecoveryInfo()).toMatchObject({

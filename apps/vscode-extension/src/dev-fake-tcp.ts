@@ -28,7 +28,11 @@ export function resetDevFakeTcp(): void {
 }
 
 /** 组 MBAP 帧（tid/proto=0/length/unit + pdu），无 CRC。 */
-function buildTcpFrame(tid: number, unitId: number, pdu: Uint8Array): Uint8Array {
+function buildTcpFrame(
+  tid: number,
+  unitId: number,
+  pdu: Uint8Array,
+): Uint8Array {
   const length = 1 + pdu.length;
   const frame = new Uint8Array(6 + length);
   frame[0] = (tid >> 8) & 0xff;
@@ -126,17 +130,11 @@ export class DevFakeTcpServer {
         address >= devFakeTcpState.mustMultiStart &&
         quantity === 1
       ) {
-        return buildTcpFrame(
-          tid,
-          unitId,
-          Uint8Array.from([0x83, 0x02]),
-        );
+        return buildTcpFrame(tid, unitId, Uint8Array.from([0x83, 0x02]));
       }
       const values: number[] = [];
       for (let i = 0; i < quantity; i += 1) {
-        values.push(
-          devFakeTcpState.registers.get((address + i) & 0xffff) ?? 0,
-        );
+        values.push(devFakeTcpState.registers.get((address + i) & 0xffff) ?? 0);
       }
       return buildTcpFrame(
         tid,
@@ -158,11 +156,7 @@ export class DevFakeTcpServer {
         address >= devFakeTcpState.mustMultiStart &&
         quantity === 1
       ) {
-        return buildTcpFrame(
-          tid,
-          unitId,
-          Uint8Array.from([0x90, 0x02]),
-        );
+        return buildTcpFrame(tid, unitId, Uint8Array.from([0x90, 0x02]));
       }
       const values: number[] = [];
       for (let i = 0; i < quantity; i += 1) {
@@ -171,10 +165,7 @@ export class DevFakeTcpServer {
         );
       }
       for (let i = 0; i < quantity; i += 1) {
-        devFakeTcpState.registers.set(
-          (address + i) & 0xffff,
-          values[i] ?? 0,
-        );
+        devFakeTcpState.registers.set((address + i) & 0xffff, values[i] ?? 0);
       }
       return buildTcpFrame(
         tid,
@@ -197,11 +188,6 @@ export class DevFakeTcpServer {
 }
 
 export function createDevFakeTcpServer(): DevFakeTcpServer {
-  const delay = Number.parseInt(
-    process.env.MAMEP_FAKE_TCP_DELAY_MS ?? "0",
-    10,
-  );
-  return new DevFakeTcpServer(
-    Number.isFinite(delay) && delay > 0 ? delay : 0,
-  );
+  const delay = Number.parseInt(process.env.MAMEP_FAKE_TCP_DELAY_MS ?? "0", 10);
+  return new DevFakeTcpServer(Number.isFinite(delay) && delay > 0 ? delay : 0);
 }

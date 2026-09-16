@@ -62,9 +62,7 @@ export function formatTimestampRfc3339Local(timestamp: number): string {
 }
 
 /** 单条日志 → CSV 行（列顺序与 COMMUNICATION_LOG_CSV_COLUMNS 一致）。 */
-export function communicationLogCsvRow(
-  entry: CommunicationLogEntry,
-): string {
+export function communicationLogCsvRow(entry: CommunicationLogEntry): string {
   const fields: unknown[] = [
     entry.seq,
     formatTimestampRfc3339Local(entry.timestamp),

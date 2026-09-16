@@ -97,7 +97,11 @@ function loadDefaultTcpTarget() {
     const conn =
       (raw.connections ?? []).find((c) => c.id === "tcp-local-slave") ??
       (raw.connections ?? []).find((c) => c.protocol === "tcp");
-    if (conn && typeof conn.host === "string" && typeof conn.port === "number") {
+    if (
+      conn &&
+      typeof conn.host === "string" &&
+      typeof conn.port === "number"
+    ) {
       return {
         host: conn.host,
         port: conn.port,
@@ -138,7 +142,8 @@ function loadConfig(configPath) {
   };
 
   const effectivePath =
-    configPath ?? (existsSync(DEFAULT_CONFIG_PATH) ? DEFAULT_CONFIG_PATH : null);
+    configPath ??
+    (existsSync(DEFAULT_CONFIG_PATH) ? DEFAULT_CONFIG_PATH : null);
   if (effectivePath) {
     if (!existsSync(effectivePath)) {
       throw new Error(`配置文件不存在: ${effectivePath}`);
@@ -220,7 +225,9 @@ class ModbusTcpSlave {
   port() {
     if (!this.server) return null;
     const address = this.server.address();
-    return typeof address === "object" && address !== null ? address.port : null;
+    return typeof address === "object" && address !== null
+      ? address.port
+      : null;
   }
 
   handleSocket(socket) {
@@ -639,10 +646,7 @@ class ModbusTcpSlave {
         for (let i = 0; i < quantity; i++) {
           const hi = pdu[6 + i * 2] ?? 0;
           const lo = pdu[7 + i * 2] ?? 0;
-          this.registers.set(
-            (address + i) & 0xffff,
-            ((hi << 8) | lo) & 0xffff,
-          );
+          this.registers.set((address + i) & 0xffff, ((hi << 8) | lo) & 0xffff);
         }
         this.log.debug(
           `写 ${addrHex} × ${quantity} ← [${Array.from(
@@ -941,27 +945,75 @@ async function runSelfTest() {
   };
 
   // ① FC03 读正常区（初始值 0）
-  await run("FC03 读 0x0000 返回当前值 0", encodeReadPdu(0x0000), "03 02 00 00");
+  await run(
+    "FC03 读 0x0000 返回当前值 0",
+    encodeReadPdu(0x0000),
+    "03 02 00 00",
+  );
   // ② FC10 写后回执 + 重读验证值已更新
-  await run("FC10 写 0x0001=0x1234 回执", encodeWritePdu(0x0001, 0x1234), "10 00 01 00 01");
-  await run("FC03 重读 0x0001 值已更新为 0x1234", encodeReadPdu(0x0001), "03 02 12 34");
+  await run(
+    "FC10 写 0x0001=0x1234 回执",
+    encodeWritePdu(0x0001, 0x1234),
+    "10 00 01 00 01",
+  );
+  await run(
+    "FC03 重读 0x0001 值已更新为 0x1234",
+    encodeReadPdu(0x0001),
+    "03 02 12 34",
+  );
   // ③ 只读区：写回异常 0x02
-  await run("写 0x0100（只读区）→ 异常 0x02", encodeWritePdu(0x0100, 1), "90 02");
+  await run(
+    "写 0x0100（只读区）→ 异常 0x02",
+    encodeWritePdu(0x0100, 1),
+    "90 02",
+  );
   // ④ 只写区：读回异常 0x02
   await run("读 0x0200（只写区）→ 异常 0x02", encodeReadPdu(0x0200), "83 02");
   // ⑤ 寄存器不存在：读/写均异常 0x02
   await run("读 0x0300（不存在区）→ 异常 0x02", encodeReadPdu(0x0300), "83 02");
-  await run("写 0x0300（不存在区）→ 异常 0x02", encodeWritePdu(0x0300, 1), "90 02");
+  await run(
+    "写 0x0300（不存在区）→ 异常 0x02",
+    encodeWritePdu(0x0300, 1),
+    "90 02",
+  );
   // ⑥ 非法数据值：超限异常 0x03、合法成功
-  await run("写 0x0400=0x8000（超 0x7FFF）→ 异常 0x03", encodeWritePdu(0x0400, 0x8000), "90 03");
-  await run("写 0x0400=0x1234（合法）→ 回执", encodeWritePdu(0x0400, 0x1234), "10 04 00 00 01");
-  await run("读 0x0400（非法值区）→ 正常返回当前值", encodeReadPdu(0x0400), "03 02 12 34");
+  await run(
+    "写 0x0400=0x8000（超 0x7FFF）→ 异常 0x03",
+    encodeWritePdu(0x0400, 0x8000),
+    "90 03",
+  );
+  await run(
+    "写 0x0400=0x1234（合法）→ 回执",
+    encodeWritePdu(0x0400, 0x1234),
+    "10 04 00 00 01",
+  );
+  await run(
+    "读 0x0400（非法值区）→ 正常返回当前值",
+    encodeReadPdu(0x0400),
+    "03 02 12 34",
+  );
   // ⑦ 写忽略区：写入回执成功但不落盘（读回仍为旧值 0）
-  await run("写 0x0900=0x1234（写忽略区）→ 回执成功", encodeWritePdu(0x0900, 0x1234), "10 09 00 00 01");
-  await run("读 0x0900（写忽略区）→ 仍为旧值 0（写入未落盘）", encodeReadPdu(0x0900), "03 02 00 00");
+  await run(
+    "写 0x0900=0x1234（写忽略区）→ 回执成功",
+    encodeWritePdu(0x0900, 0x1234),
+    "10 09 00 00 01",
+  );
+  await run(
+    "读 0x0900（写忽略区）→ 仍为旧值 0（写入未落盘）",
+    encodeReadPdu(0x0900),
+    "03 02 00 00",
+  );
   // ⑧ 不支持功能：读/写均异常 0x01
-  await run("读 0x0500（不支持功能区）→ 异常 0x01", encodeReadPdu(0x0500), "83 01");
-  await run("写 0x0500（不支持功能区）→ 异常 0x01", encodeWritePdu(0x0500, 1), "90 01");
+  await run(
+    "读 0x0500（不支持功能区）→ 异常 0x01",
+    encodeReadPdu(0x0500),
+    "83 01",
+  );
+  await run(
+    "写 0x0500（不支持功能区）→ 异常 0x01",
+    encodeWritePdu(0x0500, 1),
+    "90 01",
+  );
   // ⑨ 未知功能码 0x06 → 异常 0x01
   await run(
     "未知功能码 0x06 → 异常 0x01",
@@ -969,17 +1021,42 @@ async function runSelfTest() {
     "86 01",
   );
   // ⑨ no-response 区间 → 无响应（验证超时/重试路径）
-  await runNoResponse("读 0x0600（no-response 区）→ 无响应", encodeReadPdu(0x0600));
-  await runNoResponse("写 0x0600（no-response 区）→ 无响应", encodeWritePdu(0x0600, 1));
+  await runNoResponse(
+    "读 0x0600（no-response 区）→ 无响应",
+    encodeReadPdu(0x0600),
+  );
+  await runNoResponse(
+    "写 0x0600（no-response 区）→ 无响应",
+    encodeWritePdu(0x0600, 1),
+  );
   // ⑩ unitId 不匹配 → 忽略无响应
-  await runNoResponse("unitId 不匹配（unit=2）→ 忽略无响应", encodeReadPdu(0x0001), 2);
+  await runNoResponse(
+    "unitId 不匹配（unit=2）→ 忽略无响应",
+    encodeReadPdu(0x0001),
+    2,
+  );
   // ⑪ 扩展：split-response 拆段发送 → 主站仍正确组帧
-  await run("读 0x0800（分片区）→ 拆段后仍返回当前值", encodeReadPdu(0x0800), "03 02 00 00");
+  await run(
+    "读 0x0800（分片区）→ 拆段后仍返回当前值",
+    encodeReadPdu(0x0800),
+    "03 02 00 00",
+  );
   // ⑫ 扩展：delayed-response（1500ms > 短超时 400ms）→ 无响应（迟到路径）
-  await runNoResponse("读 0x0700（延迟区）→ 短超时内无响应", encodeReadPdu(0x0700));
+  await runNoResponse(
+    "读 0x0700（延迟区）→ 短超时内无响应",
+    encodeReadPdu(0x0700),
+  );
   // ⑬ 边界：规则外地址 0xFFFF 回退正常行为
-  await run("读 0xFFFF（规则外）→ 回退正常返回 0", encodeReadPdu(0xffff), "03 02 00 00");
-  await run("写 0xFFFF=0x1234（规则外）→ 回执", encodeWritePdu(0xffff, 0x1234), "10 FF FF 00 01");
+  await run(
+    "读 0xFFFF（规则外）→ 回退正常返回 0",
+    encodeReadPdu(0xffff),
+    "03 02 00 00",
+  );
+  await run(
+    "写 0xFFFF=0x1234（规则外）→ 回执",
+    encodeWritePdu(0xffff, 0x1234),
+    "10 FF FF 00 01",
+  );
   await run("重读 0xFFFF → 0x1234", encodeReadPdu(0xffff), "03 02 12 34");
   // ⑭ FC01 读线圈 0x0000（预置 coil0=1）→ 位打包字节 bit0=1
   await run(
@@ -1022,19 +1099,12 @@ async function runSelfTest() {
     encodeCustomWritePdu(0x0003, 0xabcd),
     "66 00 03 00 01",
   );
-  await run(
-    "FC03 重读 0x0003 → 0xABCD",
-    encodeReadPdu(0x0003),
-    "03 02 AB CD",
-  );
+  await run("FC03 重读 0x0003 → 0xABCD", encodeReadPdu(0x0003), "03 02 AB CD");
   // ⑳ ASCII 字符串区（0x0010–0x001F，16 寄存器 = 32 字符）：一次连续读回正常 ASCII 字符串
   //    该区间未命中任何规则 → 回退正常行为（无需新增规则）。
   await run(
     `FC03 读 0x0010 连续 ${ASCII_STRING_REGION.registerCount} 寄存器 → ASCII 字符串 "${ASCII_STRING_REGION.text}"`,
-    encodeReadPdu(
-      ASCII_STRING_REGION.start,
-      ASCII_STRING_REGION.registerCount,
-    ),
+    encodeReadPdu(ASCII_STRING_REGION.start, ASCII_STRING_REGION.registerCount),
     asciiStringReadPduHex(),
   );
   // ㉑ ASCII 字符串区部分读（前 4 个寄存器 = 前 8 字符）
@@ -1101,7 +1171,8 @@ function parseArgs(argv) {
       args.help = true;
     } else if (arg === "--config") {
       args.configPath = argv[++i];
-      if (args.configPath === undefined) throw new Error("--config 缺少文件路径");
+      if (args.configPath === undefined)
+        throw new Error("--config 缺少文件路径");
     } else if (arg === "--self-test") {
       args.selfTest = true;
     } else if (arg === "--host") {

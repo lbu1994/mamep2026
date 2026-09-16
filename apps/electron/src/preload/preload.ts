@@ -36,7 +36,11 @@ import {
   MAMEP_IPC_INVOKE_CHANNEL,
   fromErrorPayload,
 } from "@mamep2026/platform-api";
-import type { MamepError, PlatformCapabilities, Result } from "@mamep2026/domain";
+import type {
+  MamepError,
+  PlatformCapabilities,
+  Result,
+} from "@mamep2026/domain";
 import { ok } from "@mamep2026/domain";
 
 let seq = 0;
@@ -46,7 +50,8 @@ function nextMessageId(): string {
   return `preload-${Date.now()}-${seq}`;
 }
 
-type InvokeResult<T> = { ok: true; value: T } | { ok: false; error: MamepError };
+type InvokeResult<T> =
+  { ok: true; value: T } | { ok: false; error: MamepError };
 
 async function invoke<T>(
   kind: HostRequestKind,
@@ -106,9 +111,7 @@ const api: MamepHostApi = {
     return invoke<SaveTextFileResponse>("save-text-file", {
       suggestedName: options.suggestedName,
       content: options.content,
-      ...(options.mimeType !== undefined
-        ? { mimeType: options.mimeType }
-        : {}),
+      ...(options.mimeType !== undefined ? { mimeType: options.mimeType } : {}),
     });
   },
   /** 打开文件对话框并读取 UTF-8 文本（open-text-file，2026-08-29 工作区导入）。 */
@@ -160,9 +163,12 @@ const api: MamepHostApi = {
   pluginContributionQuery(payload?: {
     pointId?: string;
   }): Promise<Result<PluginContributionQueryResponse>> {
-    return invoke<PluginContributionQueryResponse>("plugin-contribution-query", {
-      ...(payload?.pointId !== undefined ? { pointId: payload.pointId } : {}),
-    });
+    return invoke<PluginContributionQueryResponse>(
+      "plugin-contribution-query",
+      {
+        ...(payload?.pointId !== undefined ? { pointId: payload.pointId } : {}),
+      },
+    );
   },
   // ---- 远程会话 RPC（Electron TCP 会话在主进程，Renderer 远程代理）----
   sessionDisconnect(): Promise<Result<null>> {

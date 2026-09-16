@@ -183,8 +183,9 @@ test("取消/无可用端口：下拉框空态、无端口标签、无错误", a
     .locator(".ant-select");
   // 弹窗打开时已自动触发枚举（fake requestPort 挂起）：拒绝它 → 空列表、不自动选中。
   await page.evaluate(() => {
-    (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
-      .rejectRequest("NotFoundError");
+    (
+      window as unknown as { __mamepFakeSerial: FakeSerialApi }
+    ).__mamepFakeSerial.rejectRequest("NotFoundError");
   });
   await page.waitForTimeout(300);
 
@@ -198,15 +199,16 @@ test("取消/无可用端口：下拉框空态、无端口标签、无错误", a
   await portSelect.click({ force: true });
   const dropdown = page.locator(".ant-select-dropdown:visible");
   await expect(dropdown).toContainText("No serial ports found");
-  await expect(
-    page.getByRole("option", { name: "USB 1234:5678" }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "USB 1234:5678" })).toHaveCount(
+    0,
+  );
   await expect(modal).not.toContainText("USB 1234:5678");
   await expect(modal).not.toContainText(/select device first/i);
   // 清理：settle 打开下拉框触发的第二次枚举，避免残留挂起请求影响下一用例。
   await page.evaluate(() => {
-    (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
-      .rejectRequest("NotFoundError");
+    (
+      window as unknown as { __mamepFakeSerial: FakeSerialApi }
+    ).__mamepFakeSerial.rejectRequest("NotFoundError");
   });
   await page.keyboard.press("Escape");
 });
@@ -221,9 +223,7 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
 
   const modal = page.locator(".ant-modal-container:visible");
   // 端口刷新须限定在 Port 表单项内（连接对象配置分组已移除，ADR-034）。
-  const portField = modal
-    .locator(".ant-form-item")
-    .filter({ hasText: "Port" });
+  const portField = modal.locator(".ant-form-item").filter({ hasText: "Port" });
   const portSelect = portField.locator(".ant-select");
   const portRefresh = portField.locator('button[title="Refresh"]');
   // 触发刷新重新枚举并解析为可用端口（下拉框出现选项）。
@@ -235,8 +235,9 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
     return fake.hasPendingRequest();
   });
   await page.evaluate(() => {
-    (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
-      .resolveRequest();
+    (
+      window as unknown as { __mamepFakeSerial: FakeSerialApi }
+    ).__mamepFakeSerial.resolveRequest();
   });
   // 等待枚举结果渲染进下拉选项（loading 结束、选项就绪）后再打开下拉框。
   await page.waitForTimeout(400);
@@ -253,8 +254,9 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
     return fake.hasPendingRequest();
   });
   await page.evaluate(() => {
-    (window as unknown as { __mamepFakeSerial: FakeSerialApi }).__mamepFakeSerial
-      .resolveRequest();
+    (
+      window as unknown as { __mamepFakeSerial: FakeSerialApi }
+    ).__mamepFakeSerial.resolveRequest();
   });
   const option = page
     .locator(".ant-select-dropdown:visible .ant-select-item-option")
@@ -297,8 +299,9 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   await expect
     .poll(async () =>
       page.evaluate(() =>
-        (window as unknown as { __mamepFakeSerial: FakeSerialApi })
-          .__mamepFakeSerial.getRegister(0x0001),
+        (
+          window as unknown as { __mamepFakeSerial: FakeSerialApi }
+        ).__mamepFakeSerial.getRegister(0x0001),
       ),
     )
     .toBe(0x12ab);

@@ -44,10 +44,7 @@ import { useAppStore } from "../app-store";
 import { STATE_DOT_COLOR } from "../connection-state";
 import { isNearBottom } from "../log-scroll";
 import { usePluginContributions } from "../plugin/use-contributions";
-import {
-  PluginPanels,
-  type PanelContribution,
-} from "./plugin-contributions";
+import { PluginPanels, type PanelContribution } from "./plugin-contributions";
 
 /**
  * 通信日志单行（性能优化）：memo 后追加新日志时，旧行 entry 引用不变即跳过整棵子树重渲染，
@@ -95,7 +92,9 @@ export interface BottomPanelProps {
   variant?: "docked" | "drawer";
 }
 
-export function BottomPanel({ variant = "docked" }: BottomPanelProps = {}): React.ReactNode {
+export function BottomPanel({
+  variant = "docked",
+}: BottomPanelProps = {}): React.ReactNode {
   const { t, i18n } = useTranslation();
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
@@ -122,7 +121,8 @@ export function BottomPanel({ variant = "docked" }: BottomPanelProps = {}): Reac
   );
 
   // drawer 形态下抽屉自身控制高度，忽略持久化的折叠态（否则抽屉内会出现“只剩标签栏”的空白）。
-  const collapsed = variant === "drawer" ? false : panelLayout.bottomPanelCollapsed;
+  const collapsed =
+    variant === "drawer" ? false : panelLayout.bottomPanelCollapsed;
   const activeTab = panelLayout.activeBottomTab;
   // 折叠时新错误到达 → Messages 标签红点（事件驱动，避免在 effect 中 setState）。
   const [seenCount, setSeenCount] = useState(0);

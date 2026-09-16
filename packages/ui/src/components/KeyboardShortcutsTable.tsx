@@ -68,7 +68,10 @@ export function KeyboardShortcutsTable(): React.ReactNode {
         dataSource={rows.filter((r) => r.scope === "table")}
         className="keyboard-shortcuts__table"
       />
-      <Typography.Paragraph type="secondary" className="keyboard-shortcuts__hint">
+      <Typography.Paragraph
+        type="secondary"
+        className="keyboard-shortcuts__hint"
+      >
         {t("keyboard.hint")}
       </Typography.Paragraph>
     </div>

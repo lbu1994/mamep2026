@@ -32,7 +32,10 @@ describe("error-mapping：原生错误 → 项目错误", () => {
 
   it("TCP_OPEN_FAILED → TCP_OPEN_FAILED（transport）", () => {
     const error = mapAndroidNativeError(
-      { code: ANDROID_NATIVE_ERROR_CODES.openFailed, message: "connect timeout" },
+      {
+        code: ANDROID_NATIVE_ERROR_CODES.openFailed,
+        message: "connect timeout",
+      },
       "open",
     );
     expect(error.code).toBe("TCP_OPEN_FAILED");
@@ -51,7 +54,10 @@ describe("error-mapping：原生错误 → 项目错误", () => {
 
   it("PLUGIN_UNAVAILABLE → TCP_UNSUPPORTED（capability，不可重试）", () => {
     const error = mapAndroidNativeError(
-      { code: ANDROID_NATIVE_ERROR_CODES.pluginUnavailable, message: "no plugin" },
+      {
+        code: ANDROID_NATIVE_ERROR_CODES.pluginUnavailable,
+        message: "no plugin",
+      },
       "open",
     );
     expect(error.code).toBe("TCP_UNSUPPORTED");
@@ -61,11 +67,17 @@ describe("error-mapping：原生错误 → 项目错误", () => {
   });
 
   it("未识别错误按上下文兜底并保留原始码（不丢技术信息）", () => {
-    const openError = mapAndroidNativeError({ code: "WEIRD", message: "?" }, "open");
+    const openError = mapAndroidNativeError(
+      { code: "WEIRD", message: "?" },
+      "open",
+    );
     expect(openError.code).toBe("TCP_OPEN_FAILED");
     expect(openError.technicalMessage).toContain("WEIRD");
 
-    const ioError = mapAndroidNativeError({ code: "WEIRD", message: "?" }, "io");
+    const ioError = mapAndroidNativeError(
+      { code: "WEIRD", message: "?" },
+      "io",
+    );
     expect(ioError.code).toBe("TCP_CONNECTION_FAILED");
     expect(ioError.technicalMessage).toContain("WEIRD");
   });
@@ -90,7 +102,9 @@ describe("error-mapping：toNativeBridgeError", () => {
       message: "no code",
     });
 
-    expect(toNativeBridgeError({ code: "NOT_OPEN", message: "closed" })).toEqual({
+    expect(
+      toNativeBridgeError({ code: "NOT_OPEN", message: "closed" }),
+    ).toEqual({
       code: "NOT_OPEN",
       message: "closed",
     });
@@ -115,12 +129,24 @@ describe("error-mapping：能力错误", () => {
 describe("error-mapping：USB 串口（Phase 2）", () => {
   it("权限被拒 / 设备占用 / 未找到 / 拔线 各自映射到既有串口文案", () => {
     const cases: Array<[string, string, string]> = [
-      ["USB_PERMISSION_DENIED", "SERIAL_PERMISSION_DENIED", "errors.serialPermissionDenied"],
+      [
+        "USB_PERMISSION_DENIED",
+        "SERIAL_PERMISSION_DENIED",
+        "errors.serialPermissionDenied",
+      ],
       ["USB_DEVICE_BUSY", "SERIAL_PORT_IN_USE", "errors.serialPortInUse"],
       ["USB_DEVICE_NOT_FOUND", "SERIAL_NOT_FOUND", "errors.serialNotFound"],
-      ["USB_DETACHED", "SERIAL_DEVICE_DISCONNECTED", "errors.serialDeviceDisconnected"],
+      [
+        "USB_DETACHED",
+        "SERIAL_DEVICE_DISCONNECTED",
+        "errors.serialDeviceDisconnected",
+      ],
       ["USB_OPEN_FAILED", "SERIAL_OPEN_FAILED", "errors.serialOpenFailed"],
-      ["USB_PARAMETERS_UNSUPPORTED", "SERIAL_PARAMETER_UNSUPPORTED", "errors.serialParameterUnsupported"],
+      [
+        "USB_PARAMETERS_UNSUPPORTED",
+        "SERIAL_PARAMETER_UNSUPPORTED",
+        "errors.serialParameterUnsupported",
+      ],
     ];
 
     for (const [nativeCode, expectedCode, expectedKey] of cases) {

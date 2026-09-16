@@ -804,21 +804,21 @@ Host 负责装配具体适配器，不实现领域规则。
 
 建议定义以下能力：
 
-| 能力         |                      Browser | Electron |         VSCode | Android（ADR-050，分期） |
-| ------------ | ---------------------------: | -------: | -------------: | -----------------------: |
-| Modbus RTU   |                         支持 |     支持 |           支持 | 支持（USB Host + usb-serial-for-android，Phase 2 已落地） |
-| Modbus TCP   |                       不支持 |     支持 |           支持 | 支持（原生 socket，Phase 1） |
-| 串口枚举     | 授权 picker 承担，无全量枚举 | 授权 picker（MVP，同浏览器） |     支持 | 支持（USB Host 枚举；无 Web Serial 手势约束） |
-| COM10 及以上 |     由浏览器设备选择机制处理 |     支持 |           支持 | 支持（USB 设备制，无 Windows 路径问题） |
-| 本地文件系统 |                         受限 |     支持 |           支持 | 受限（IndexedDB；文件通道 Phase 4） |
-| 工作区文件   |           可通过导入导出实现 |     支持 |           支持 | 可通过导入导出实现（Capacitor Filesystem，Phase 4） |
-| IndexedDB    |                         支持 |   非默认 |         非默认 | 支持（WebView 原生支持） |
-| Node.js 插件 |                       不支持 | 受控支持 |       受控支持 | 不支持 |
-| Web 插件     |                 支持受限插件 |   可支持 |         可支持 | 支持受限插件（手动安装；`executablePlugins` 运行时探测，ADR-056） |
-| VSCode 命令  |                       不支持 |   不支持 |           支持 | 不适用 |
-| 系统通知     |                   浏览器能力 |     支持 |    VSCode 通知 | Phase 4+ |
-| 连接对象配置文件（ADR-023） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034） |
-| 自动更新     |                       不适用 | 后续支持 | 由 VSCode 管理 | Phase 5（APK/AAB 打包签名已落地：`build:android:release`，ADR-056） |
+| 能力                        |                             Browser |                            Electron |                              VSCode |                                            Android（ADR-050，分期） |
+| --------------------------- | ----------------------------------: | ----------------------------------: | ----------------------------------: | ------------------------------------------------------------------: |
+| Modbus RTU                  |                                支持 |                                支持 |                                支持 |           支持（USB Host + usb-serial-for-android，Phase 2 已落地） |
+| Modbus TCP                  |                              不支持 |                                支持 |                                支持 |                                        支持（原生 socket，Phase 1） |
+| 串口枚举                    |        授权 picker 承担，无全量枚举 |        授权 picker（MVP，同浏览器） |                                支持 |                       支持（USB Host 枚举；无 Web Serial 手势约束） |
+| COM10 及以上                |            由浏览器设备选择机制处理 |                                支持 |                                支持 |                             支持（USB 设备制，无 Windows 路径问题） |
+| 本地文件系统                |                                受限 |                                支持 |                                支持 |                                 受限（IndexedDB；文件通道 Phase 4） |
+| 工作区文件                  |                  可通过导入导出实现 |                                支持 |                                支持 |                 可通过导入导出实现（Capacitor Filesystem，Phase 4） |
+| IndexedDB                   |                                支持 |                              非默认 |                              非默认 |                                            支持（WebView 原生支持） |
+| Node.js 插件                |                              不支持 |                            受控支持 |                            受控支持 |                                                              不支持 |
+| Web 插件                    |                        支持受限插件 |                              可支持 |                              可支持 |   支持受限插件（手动安装；`executablePlugins` 运行时探测，ADR-056） |
+| VSCode 命令                 |                              不支持 |                              不支持 |                                支持 |                                                              不适用 |
+| 系统通知                    |                          浏览器能力 |                                支持 |                         VSCode 通知 |                                                            Phase 4+ |
+| 连接对象配置文件（ADR-023） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） | 已移除（ADR-034，由工作区导入替代） |                                                   已移除（ADR-034） |
+| 自动更新                    |                              不适用 |                            后续支持 |                      由 VSCode 管理 | Phase 5（APK/AAB 打包签名已落地：`build:android:release`，ADR-056） |
 
 > 实现状态（2026-08-21；2026-08-23 更新）：上表为三端能力规划。Browser 列已随浏览器 MVP 落地（Web Serial RTU、IndexedDB 持久化、授权 picker 串口选择、dev `?mockTransport=1` 模拟传输）；Electron MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**VSCode 列 RTU 已接线（2026-08-23，ADR-021）**（Extension Host `NodePlatformHost` + 共享 `RtuSessionHost`，Renderer 远程代理，能力翻转）。**两端 Modbus TCP 已接线（2026-08-23，ADR-022）**：会话层 `CommunicationSession` 支持 `protocol:"tcp"`（`TcpFrameParser` MBAP 分帧 + Transaction ID 管理）；Electron TCP 会话承载主进程（`ElectronSessionHost`，Renderer `ElectronAppHost` 混合远程代理）、VSCode TCP 会话承载 Extension Host（`VscodeSessionHost.connectTcp`），能力矩阵 `electronCapabilities`/`vscodeCapabilities` → `modbusTcp:true`；UI Connection Settings 增加 TCP 分组（协议 Segmented 能力门控，浏览器不显示 TCP 入口）；`tests/e2e-vscode` 走通 TCP 闭环、`tests/e2e-electron` 走通 TCP 配置连接 → FC03 读 → FC10 写闭环。**连接对象配置文件（2026-08-24，ADR-023；应用侧功能 2026-08-29 由 ADR-034 移除）**：`config/connections.json`（JSON，schemaVersion 1）定义真实设备连接对象（RTU 含串口名/从站地址，TCP 含 host/port/unitId 等），**保留供测试/验证脚本消费**（消除 COM4/COM5/127.0.0.1:1502 硬编码）；应用侧「Load from Config File」UI、`packages/connection-config` 包、`connection-config-load` kind、能力矩阵 `connectionConfig` 字段、浏览器 `?connectionConfig=` URL 已删除，连接对象导入由 Settings → 工作区导入（ADR-033）承担。VSCode 文件持久化仍为规划目标。
 
@@ -1101,9 +1101,10 @@ RTU 和 TCP 可以使用不同的 Transport 配置，但应向 CommunicationSess
 
 > 实现状态（2026-08-23，ADR-020）：Node 串口原型已通过并产出选型 ADR——`packages/platform-node`
 > 落地 `NodeSerialTransport` + `NodePlatformHost` + 错误映射 + 能力描述 + 注入式 `SerialPortLike` 隔离面
-> + Fake 测试，com0com COM4↔COM5 虚拟串口闭环全绿（详见 [node-serial-prototype-验证记录.md](./node-serial-prototype-验证记录.md)）。
-> 正式接线（Electron 替换 Web Serial、VSCode 接线）仍属后续版本；MVP 阶段 Electron 与浏览器一致使用
-> Web Serial API（Renderer `navigator.serial`，ADR-017）。
+>
+> - Fake 测试，com0com COM4↔COM5 虚拟串口闭环全绿（详见 [node-serial-prototype-验证记录.md](./node-serial-prototype-验证记录.md)）。
+>   正式接线（Electron 替换 Web Serial、VSCode 接线）仍属后续版本；MVP 阶段 Electron 与浏览器一致使用
+>   Web Serial API（Renderer `navigator.serial`，ADR-017）。
 
 Electron（后续版本替换 Web Serial）和 VSCode 共用 Node Serial Adapter。
 

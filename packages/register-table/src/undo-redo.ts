@@ -67,9 +67,7 @@ export function extractRowEditFields(row: RegisterRow): RowEditFields {
     bitComments:
       row.bitComments === null
         ? null
-        : row.bitComments.map((group) =>
-            group === null ? null : [...group],
-          ),
+        : row.bitComments.map((group) => (group === null ? null : [...group])),
     bitNames:
       row.bitNames === null
         ? null
@@ -188,9 +186,7 @@ export function applySheetSnapshot(
 }
 
 /** 从快照重建一张表（表当前不存在时用；行全部用 full 完整行重建）。 */
-export function sheetFromSnapshot(
-  snapshot: SheetEditSnapshot,
-): RegisterSheet {
+export function sheetFromSnapshot(snapshot: SheetEditSnapshot): RegisterSheet {
   return {
     sheetId: snapshot.sheetId,
     name: snapshot.name,
@@ -250,7 +246,9 @@ export function pushEntry(
   const limit = options.limit ?? UNDO_LIMIT_DEFAULT;
   const undoStack = [...state.undoStack, entry];
   const trimmed =
-    undoStack.length > limit ? undoStack.slice(undoStack.length - limit) : undoStack;
+    undoStack.length > limit
+      ? undoStack.slice(undoStack.length - limit)
+      : undoStack;
   return { undoStack: trimmed, redoStack: [] };
 }
 
@@ -267,25 +265,33 @@ export function canRedo(state: UndoRedoState): boolean {
 }
 
 /** 弹出栈顶撤销条目（undo 用）；返回更新后的状态与条目（空栈返回 null）。 */
-export function popUndo(
-  state: UndoRedoState,
-): { state: UndoRedoState; entry: UndoEntry | null } {
+export function popUndo(state: UndoRedoState): {
+  state: UndoRedoState;
+  entry: UndoEntry | null;
+} {
   const entry = state.undoStack[state.undoStack.length - 1] ?? null;
   if (entry === null) return { state, entry: null };
   return {
-    state: { undoStack: state.undoStack.slice(0, -1), redoStack: state.redoStack },
+    state: {
+      undoStack: state.undoStack.slice(0, -1),
+      redoStack: state.redoStack,
+    },
     entry,
   };
 }
 
 /** 弹出栈顶重做条目（redo 用）。 */
-export function popRedo(
-  state: UndoRedoState,
-): { state: UndoRedoState; entry: UndoEntry | null } {
+export function popRedo(state: UndoRedoState): {
+  state: UndoRedoState;
+  entry: UndoEntry | null;
+} {
   const entry = state.redoStack[state.redoStack.length - 1] ?? null;
   if (entry === null) return { state, entry: null };
   return {
-    state: { redoStack: state.redoStack.slice(0, -1), undoStack: state.undoStack },
+    state: {
+      redoStack: state.redoStack.slice(0, -1),
+      undoStack: state.undoStack,
+    },
     entry,
   };
 }

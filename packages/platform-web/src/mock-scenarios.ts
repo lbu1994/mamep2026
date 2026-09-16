@@ -30,10 +30,7 @@ export type MockOpBehavior =
 
 /** 模拟表类型（ADR-043 E-1）：保持寄存器之外的 Modbus 基础表。 */
 export type MockTableType =
-  | "holding"
-  | "coil"
-  | "discrete-input"
-  | "input-register";
+  "holding" | "coil" | "discrete-input" | "input-register";
 
 /** 地址区间 → 读写行为规则。 */
 export interface MockRangeRule {
@@ -140,7 +137,8 @@ export const DEFAULT_MOCK_SCENARIOS: readonly MockScenario[] = [
     // ADR-030：单寄存器读/写返回异常 0x02；多寄存器读/写正常（必须连续读写）。
     mustMulti: true,
     namePrefix: "MustMulti",
-    comment: "多寄存器区：单读/单写返回异常 0x02；多读/多写正常（必须连续读写）",
+    comment:
+      "多寄存器区：单读/单写返回异常 0x02；多读/多写正常（必须连续读写）",
     seedRows: 3,
   },
   {

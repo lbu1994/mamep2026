@@ -57,8 +57,7 @@ async function waitForWebviewFrame(page: Page): Promise<Frame> {
       if (!f.url().startsWith("vscode-webview://")) continue;
       try {
         const hasUi = await f.evaluate(
-          () =>
-            document.querySelector("#root .ant-app, .ant-layout") !== null,
+          () => document.querySelector("#root .ant-app, .ant-layout") !== null,
         );
         if (hasUi) return f;
       } catch {
@@ -217,7 +216,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     if (!sourceUrl.startsWith("vscode-webview://")) return;
     consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
-  workbox.on("pageerror", (err) => consoleErrors.push(`PAGEERROR: ${String(err)}`));
+  workbox.on("pageerror", (err) =>
+    consoleErrors.push(`PAGEERROR: ${String(err)}`),
+  );
 
   await workbox.setViewportSize({ width: 1600, height: 900 });
 
@@ -450,7 +451,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await frame.getByRole("button", { name: /Disconnect/i }).click();
     // Header 连接按钮已整合（2026-09-06），断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定。
     await expect(
-      frame.locator(".connection-cluster__button[data-conn-state='disconnected']"),
+      frame.locator(
+        ".connection-cluster__button[data-conn-state='disconnected']",
+      ),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 
     // 重连：Connection Settings → 切 TCP → 重填（值仍来自 config）。

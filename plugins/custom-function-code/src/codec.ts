@@ -101,7 +101,10 @@ export class CustomFunctionCodec implements ProtocolCodec {
       expect.kind === "read" ? CUSTOM_READ_FUNCTION : CUSTOM_WRITE_FUNCTION;
     if (frame.length < 5) {
       return fail(
-        customError("CUSTOM_FRAME_TOO_SHORT", `frame too short: ${frame.length}`),
+        customError(
+          "CUSTOM_FRAME_TOO_SHORT",
+          `frame too short: ${frame.length}`,
+        ),
       );
     }
     const slave = frame[0] ?? 0;

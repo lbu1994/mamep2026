@@ -24,7 +24,9 @@ describe("technopro-blue-theme 插件（2026-09-08）", () => {
     const registry = makeRegistry();
     const result = registerTechnoproBlueThemePlugin(registry);
     expect(result.ok).toBe(true);
-    expect(registry.getSource(TECHNOPRO_BLUE_THEME_PLUGIN_ID)).toBe("installed");
+    expect(registry.getSource(TECHNOPRO_BLUE_THEME_PLUGIN_ID)).toBe(
+      "installed",
+    );
     expect(registry.getRuntime(TECHNOPRO_BLUE_THEME_PLUGIN_ID)).toBeUndefined();
     expect(registry.getLifecycleState(TECHNOPRO_BLUE_THEME_PLUGIN_ID)).toBe(
       "registered",

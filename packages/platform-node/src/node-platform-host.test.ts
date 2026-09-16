@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultRtuProfile, type TcpConnectionProfile } from "@mamep2026/domain";
+import {
+  createDefaultRtuProfile,
+  type TcpConnectionProfile,
+} from "@mamep2026/domain";
 import { NodePlatformHost, displayLabel } from "./node-platform-host";
 import { FakeSerialPortFactory } from "./testing/fake-serial-port";
 import { FakeNetFactory } from "./testing/fake-socket";

@@ -5,10 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { HOST_MESSAGE_PROTOCOL_VERSION } from "@mamep2026/platform-api";
-import {
-  createVscodeBridge,
-  type VsCodeApi,
-} from "./vscode-bridge";
+import { createVscodeBridge, type VsCodeApi } from "./vscode-bridge";
 
 function createHarness() {
   const posted: unknown[] = [];
@@ -128,7 +125,9 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
 
   it("openTextFile 携带 suggestedName payload 并透传 content 响应（2026-08-29）", async () => {
     const { posted, bridge, dispatch } = createHarness();
-    const promise = bridge.openTextFile({ suggestedName: "mamep-workspace.json" });
+    const promise = bridge.openTextFile({
+      suggestedName: "mamep-workspace.json",
+    });
     expect(posted).toHaveLength(1);
     expect(posted[0]).toMatchObject({
       kind: "open-text-file",
@@ -318,7 +317,9 @@ describe("createVscodeBridge（HostMessage v1 编解码）", () => {
       kind: "color-theme-changed",
       payload: { theme: "dark" },
     });
-    expect(received).toEqual([{ kind: "color-theme-changed", payload: { theme: "dark" } }]);
+    expect(received).toEqual([
+      { kind: "color-theme-changed", payload: { theme: "dark" } },
+    ]);
     unsubscribe();
     dispatch({
       protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,

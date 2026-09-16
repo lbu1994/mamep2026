@@ -19,10 +19,7 @@ import {
   createAddressTransformRegistry,
   type PluginSyncRegistries,
 } from "@mamep2026/plugin-api";
-import type {
-  CompatibilityEnv,
-  KeyValueStore,
-} from "@mamep2026/platform-web";
+import type { CompatibilityEnv, KeyValueStore } from "@mamep2026/platform-web";
 // IndexedDB KV（浏览器 / Android 共用能力）：四端构建共用该模块，非平台专属依赖。
 import { createIdbKeyValueStore } from "@mamep2026/platform-web";
 import { createPluginSyncRegistries } from "./sync-registries";
@@ -80,6 +77,7 @@ export function createPlatformHostContext(
     resolveAddressTransform,
     mockTransport: env.mockTransport,
     compatibilityEnv: env.compatibilityEnv,
-    createIdbKeyValueStore: env.createIdbKeyValueStore ?? createIdbKeyValueStore,
+    createIdbKeyValueStore:
+      env.createIdbKeyValueStore ?? createIdbKeyValueStore,
   };
 }

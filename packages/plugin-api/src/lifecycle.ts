@@ -100,9 +100,7 @@ export type PluginCodecExpect =
 
 /** 协议 codec 分帧解析器（结构镜像 communication.FrameParser）。 */
 export interface PluginFrameParser {
-  push(
-    chunk: Uint8Array,
-  ):
+  push(chunk: Uint8Array):
     | { done: false }
     | {
         done: true;
@@ -155,7 +153,7 @@ export interface PluginSyncRegistries {
   readonly addressTransform: AddressTransformRegistry;
 }
 
-/** 传给 activate/deactivate 的插件上下文。 */export interface PluginContext {
+/** 传给 activate/deactivate 的插件上下文。 */ export interface PluginContext {
   pluginId: string;
   /** 唯一通信面（不暴露 Transport / socket 句柄，经统一调度器）。 */
   communication: PluginCommunicationApi;

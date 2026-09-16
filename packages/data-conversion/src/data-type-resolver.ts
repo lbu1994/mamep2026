@@ -14,10 +14,7 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import { formatRawValue, parseCellText } from "./data-types";
-import {
-  allowedRegisterCounts,
-  isValidRegisterCount,
-} from "./multi-register";
+import { allowedRegisterCounts, isValidRegisterCount } from "./multi-register";
 
 /** 插件数据类型解析处理函数（ADR-043 E-3 范围收敛：仅单寄存器插件类型）。 */
 export interface PluginDataTypeHandlers {

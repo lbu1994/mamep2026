@@ -59,7 +59,9 @@ async function launch(userDataDirPath: string): Promise<void> {
   });
   page.on("pageerror", (err) => consoleErrors.push(String(err)));
   // 关闭启动弹出的 Connection Settings（本 spec 不连接设备），避免遮罩拦截点击。
-  await page.waitForSelector(".ant-modal-container:visible", { timeout: 15000 });
+  await page.waitForSelector(".ant-modal-container:visible", {
+    timeout: 15000,
+  });
   await page.waitForTimeout(1000);
   await page
     .locator(".ant-modal-container:visible .ant-modal-close")
@@ -71,13 +73,10 @@ test.beforeAll(async () => {
   userDataDir = await mkdtemp(path.join(tmpdir(), "mamep-plugin-host-"));
   // 系统对话框不可自动化：主进程 dialog.showOpenDialog 桩 → 插件产物路径。
   await launch(userDataDir);
-  await app.evaluate(
-    async ({ dialog }, entryPath) => {
-      (dialog as unknown as { showOpenDialog: unknown }).showOpenDialog =
-        async () => ({ canceled: false, filePaths: [entryPath] });
-    },
-    PLUGIN_ENTRY_PATH,
-  );
+  await app.evaluate(async ({ dialog }, entryPath) => {
+    (dialog as unknown as { showOpenDialog: unknown }).showOpenDialog =
+      async () => ({ canceled: false, filePaths: [entryPath] });
+  }, PLUGIN_ENTRY_PATH);
 });
 
 test.afterAll(async () => {
@@ -134,13 +133,16 @@ test("安装同进程可执行插件 → 主进程 plugins.json 落盘（含 exe
 
   // 主进程 plugins.json 原子落盘：插件记录含 entrySource + executionMode。
   await expect
-    .poll(async () => {
-      try {
-        return await readFile(path.join(userDataDir, "plugins.json"), "utf8");
-      } catch {
-        return "";
-      }
-    }, { timeout: 10000 })
+    .poll(
+      async () => {
+        try {
+          return await readFile(path.join(userDataDir, "plugins.json"), "utf8");
+        } catch {
+          return "";
+        }
+      },
+      { timeout: 10000 },
+    )
     .toContain(PLUGIN_ID);
   const stored = JSON.parse(
     await readFile(path.join(userDataDir, "plugins.json"), "utf8"),
@@ -184,16 +186,19 @@ test("卸载 → plugins.json 清空（宿主侧插件随之注销）", async ()
   await closeSettings();
 
   await expect
-    .poll(async () => {
-      try {
-        const data = JSON.parse(
-          await readFile(path.join(userDataDir, "plugins.json"), "utf8"),
-        ) as { plugins: unknown[] };
-        return data.plugins.length;
-      } catch {
-        return -1;
-      }
-    }, { timeout: 10000 })
+    .poll(
+      async () => {
+        try {
+          const data = JSON.parse(
+            await readFile(path.join(userDataDir, "plugins.json"), "utf8"),
+          ) as { plugins: unknown[] };
+          return data.plugins.length;
+        } catch {
+          return -1;
+        }
+      },
+      { timeout: 10000 },
+    )
     .toBe(0);
 });
 

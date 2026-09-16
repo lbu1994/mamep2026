@@ -99,7 +99,8 @@ describe("WriteVerifyCoordinator 写后回读（§15.3 / §18.2）", () => {
     await completeWrite(clock, transport, 0x0001);
     const result = await promise;
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ kind: "write-succeeded-no-verify" });
+    if (result.ok)
+      expect(result.value).toEqual({ kind: "write-succeeded-no-verify" });
     // 不回读：只发送了写入帧。
     expect(transport.sentFrames).toHaveLength(1);
   });

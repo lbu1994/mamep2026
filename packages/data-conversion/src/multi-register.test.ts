@@ -53,9 +53,7 @@ describe("formatRawValues (ADR-030)", () => {
     expect(formatRawValues([0x0001, 0x0002, 0x0003], "binary")).toBe(
       "00000000 00000001 00000000 00000010 00000000 00000011",
     );
-    expect(
-      formatRawValues([0xffff, 0xffff, 0xffff, 0xffff], "binary"),
-    ).toBe(
+    expect(formatRawValues([0xffff, 0xffff, 0xffff, 0xffff], "binary")).toBe(
       "11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111",
     );
   });
@@ -70,18 +68,18 @@ describe("formatRawValues (ADR-030)", () => {
   });
 
   it("formats 64-bit unsigned without precision loss", () => {
-    expect(
-      formatRawValues([0xffff, 0xffff, 0xffff, 0xffff], "unsigned"),
-    ).toBe("18446744073709551615");
+    expect(formatRawValues([0xffff, 0xffff, 0xffff, 0xffff], "unsigned")).toBe(
+      "18446744073709551615",
+    );
   });
 
   it("formats 64-bit signed big-endian", () => {
-    expect(
-      formatRawValues([0xffff, 0xffff, 0xffff, 0xffff], "signed"),
-    ).toBe("-1");
-    expect(
-      formatRawValues([0x0000, 0x0000, 0x0000, 0x0001], "signed"),
-    ).toBe("1");
+    expect(formatRawValues([0xffff, 0xffff, 0xffff, 0xffff], "signed")).toBe(
+      "-1",
+    );
+    expect(formatRawValues([0x0000, 0x0000, 0x0000, 0x0001], "signed")).toBe(
+      "1",
+    );
   });
 
   it("formats ASCII string (2 chars per register)", () => {
@@ -117,29 +115,17 @@ describe("parseCompositeText (ADR-030)", () => {
   it("parses binary with optional spaces and left-padding", () => {
     expect(
       valueOf(
-        parseCompositeText(
-          "00000000000000010000000000000010",
-          "binary",
-          2,
-        ),
+        parseCompositeText("00000000000000010000000000000010", "binary", 2),
       ),
     ).toEqual([1, 2]);
     expect(
       valueOf(
-        parseCompositeText(
-          "00000000 00000001 00000000 00000010",
-          "binary",
-          2,
-        ),
+        parseCompositeText("00000000 00000001 00000000 00000010", "binary", 2),
       ),
     ).toEqual([1, 2]);
     expect(
       valueOf(
-        parseCompositeText(
-          "0000000000000001 0000000000000010",
-          "binary",
-          2,
-        ),
+        parseCompositeText("0000000000000001 0000000000000010", "binary", 2),
       ),
     ).toEqual([1, 2]);
     expect(valueOf(parseCompositeText("1", "binary", 2))).toEqual([0, 1]);
@@ -167,9 +153,9 @@ describe("parseCompositeText (ADR-030)", () => {
     expect(
       valueOf(parseCompositeText("18446744073709551615", "unsigned", 4)),
     ).toEqual([0xffff, 0xffff, 0xffff, 0xffff]);
-    expect(
-      parseCompositeText("18446744073709551616", "unsigned", 4).ok,
-    ).toBe(false);
+    expect(parseCompositeText("18446744073709551616", "unsigned", 4).ok).toBe(
+      false,
+    );
   });
 
   it("parses ASCII string padded with spaces", () => {
@@ -209,15 +195,16 @@ describe("parseCompositeText (ADR-030)", () => {
 
 describe("round-trip (ADR-030)", () => {
   it("formatRawValues(parseCompositeText(text)) normalizes to display form", () => {
-    const cases: Array<[string, import("@mamep2026/domain").DataType, number]> = [
-      ["1234 ABCD", "hex", 2],
-      ["00000000 00000001 00000000 00000010", "binary", 2],
-      ["65538", "unsigned", 2],
-      ["-1", "signed", 2],
-      ["18446744073709551615", "unsigned", 4],
-      ["-0.01", "signed-0.01", 2],
-      ["ABCD", "string", 2],
-    ];
+    const cases: Array<[string, import("@mamep2026/domain").DataType, number]> =
+      [
+        ["1234 ABCD", "hex", 2],
+        ["00000000 00000001 00000000 00000010", "binary", 2],
+        ["65538", "unsigned", 2],
+        ["-1", "signed", 2],
+        ["18446744073709551615", "unsigned", 4],
+        ["-0.01", "signed-0.01", 2],
+        ["ABCD", "string", 2],
+      ];
     for (const [text, type, count] of cases) {
       const parsed = valueOf(parseCompositeText(text, type, count));
       expect(formatRawValues(parsed, type)).toBe(text);

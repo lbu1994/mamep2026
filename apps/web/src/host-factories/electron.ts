@@ -7,7 +7,10 @@
 import { ElectronAppHost } from "../electron-app-host";
 import type { PlatformHostFactory } from "../host-assembly";
 
-export const createElectronHost: PlatformHostFactory = ({ context, bridge }) => {
+export const createElectronHost: PlatformHostFactory = ({
+  context,
+  bridge,
+}) => {
   if (bridge === undefined || bridge.platform === "vscode") {
     throw new Error("ElectronAppHost requires the Electron preload bridge.");
   }

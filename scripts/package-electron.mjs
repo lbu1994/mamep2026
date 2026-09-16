@@ -26,7 +26,10 @@ const STAGING = path.join(ROOT, "release", "staging-app");
 
 const REQUIRED_DIRS = [
   { rel: "dist-electron", label: "主进程产物（先执行 pnpm build:electron）" },
-  { rel: path.join("apps", "web", "dist-electron"), label: "渲染器产物（先执行 pnpm build:electron）" },
+  {
+    rel: path.join("apps", "web", "dist-electron"),
+    label: "渲染器产物（先执行 pnpm build:electron）",
+  },
 ];
 
 for (const { rel, label } of REQUIRED_DIRS) {
@@ -48,9 +51,13 @@ await rm(STAGING, { recursive: true, force: true });
 await mkdir(STAGING, { recursive: true });
 
 // 2. 主进程 + preload
-await cp(path.join(ROOT, "dist-electron"), path.join(STAGING, "dist-electron"), {
-  recursive: true,
-});
+await cp(
+  path.join(ROOT, "dist-electron"),
+  path.join(STAGING, "dist-electron"),
+  {
+    recursive: true,
+  },
+);
 
 // 3. 渲染器（保持 main.ts 的 __dirname 相对路径结构：<app>/apps/web/dist-electron/index.html）
 await cp(
@@ -76,5 +83,7 @@ await writeFile(
   "utf-8",
 );
 
-console.log(`[package-electron] staging 就绪: ${STAGING}（版本 ${rootPkg.version}）`);
+console.log(
+  `[package-electron] staging 就绪: ${STAGING}（版本 ${rootPkg.version}）`,
+);
 console.log(`  下一步: electron-builder（产出 release/win-unpacked/）`);

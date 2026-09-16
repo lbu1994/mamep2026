@@ -87,7 +87,11 @@ describe("serializeCommunicationLogToCsv", () => {
   it("emits header then one row per entry with CRLF line endings", () => {
     const csv = serializeCommunicationLogToCsv([
       entry(),
-      entry({ seq: 2, direction: "response", bytesHex: "01 03 02 01 02 29 8E" }),
+      entry({
+        seq: 2,
+        direction: "response",
+        bytesHex: "01 03 02 01 02 29 8E",
+      }),
     ]);
     const lines = csv.split("\r\n");
     // 末尾换行会 split 出空元素：表头 + 2 行数据 + 尾部空串。
@@ -162,10 +166,7 @@ describe("communicationLogExportFileName", () => {
 
   it("uses tcp for a tcp-only buffer", () => {
     expect(
-      communicationLogExportFileName(
-        [entry({ protocol: "tcp" })],
-        now,
-      ),
+      communicationLogExportFileName([entry({ protocol: "tcp" })], now),
     ).toBe("comm-log-tcp-20260828-102030.csv");
   });
 

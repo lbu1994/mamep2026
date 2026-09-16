@@ -164,13 +164,7 @@ export function encodeClipboardCsv(
           ? `${row.addressValue}-${row.addressValue + row.registerCount - 1}`
           : String(row.addressValue);
     lines.push(
-      [
-        row.name,
-        registerField,
-        row.cellText,
-        row.dataType,
-        row.comment,
-      ]
+      [row.name, registerField, row.cellText, row.dataType, row.comment]
         .map(csvEscape)
         .join(","),
     );
@@ -305,7 +299,14 @@ export function decodeClipboardCsv(
     } else if (typeText !== "") {
       issues.push({ rowIndex, code: "UNKNOWN_TYPE" });
     }
-    rows.push({ name, addressValue, registerCount, dataType, cellText, comment });
+    rows.push({
+      name,
+      addressValue,
+      registerCount,
+      dataType,
+      cellText,
+      comment,
+    });
   }
   return { rows, issues };
 }

@@ -471,7 +471,9 @@ describe("setSheetAddressTransform（ADR-042）/ setThemePrimary（2026-09-02，
       transformId: "builtin.address-adjust",
       enabled: true,
     });
-    expect(after.find((s) => s.sheetId === second)?.addressTransform).toBeNull();
+    expect(
+      after.find((s) => s.sheetId === second)?.addressTransform,
+    ).toBeNull();
   });
 
   it("setSheetAddressTransform(null) 关闭表级调整", () => {
@@ -481,7 +483,9 @@ describe("setSheetAddressTransform（ADR-042）/ setThemePrimary（2026-09-02，
       enabled: true,
     });
     useAppStore.getState().setSheetAddressTransform(first, null);
-    expect(useAppStore.getState().workspace.sheets[0]?.addressTransform).toBeNull();
+    expect(
+      useAppStore.getState().workspace.sheets[0]?.addressTransform,
+    ).toBeNull();
   });
 
   it("setThemePrimary 持久化到 workspace.preferences.themePrimary（预设 ID）；null 重置", () => {
@@ -492,7 +496,9 @@ describe("setSheetAddressTransform（ADR-042）/ setThemePrimary（2026-09-02，
     );
     useAppStore.getState().setThemePrimary(null);
     expect(useAppStore.getState().themePrimary).toBeNull();
-    expect(useAppStore.getState().workspace.preferences.themePrimary).toBeNull();
+    expect(
+      useAppStore.getState().workspace.preferences.themePrimary,
+    ).toBeNull();
   });
 });
 
@@ -693,9 +699,7 @@ describe("位明细动作（ADR-052，2026-09-11）", () => {
     useAppStore.getState().setRegisterBitValue(row.rowId, 1, 0, 1);
     const updated = rowOf(row.rowId);
     expect(updated?.registerValues?.map((v) => v.value)).toEqual([0, 1]);
-    expect(updated?.cellText).toBe(
-      "00000000 00000000 00000000 00000001",
-    );
+    expect(updated?.cellText).toBe("00000000 00000000 00000000 00000001");
   });
 
   it("setBitName 写入位名称并入撤销栈（与位注释对称）", () => {
@@ -1155,7 +1159,8 @@ describe("setConnectionSettings", () => {
     });
 
     const stored = useAppStore.getState().workspace.connectionProfiles[0];
-    const profile = stored !== undefined && stored.protocol === "rtu" ? stored : undefined;
+    const profile =
+      stored !== undefined && stored.protocol === "rtu" ? stored : undefined;
     // 端口参数被更新。
     expect(profile?.baudRate).toBe(115200);
     expect(profile?.dataBits).toBe(7);
@@ -1180,13 +1185,32 @@ describe("setConnectionSettings", () => {
       requestTimeoutMs: 999999,
       retryCount: 4,
     });
-    // 越界 requestTimeoutMs（>100，收窄后）使持久化 schema 校验失败，整个写入被拒绝。
+    // 越界 requestTimeoutMs（>1000，持久化 schema 上限）使校验失败，整个写入被拒绝。
     const stored = useAppStore.getState().workspace.connectionProfiles[0];
     expect(
       stored !== undefined && stored.protocol === "rtu"
         ? stored.requestTimeoutMs
         : undefined,
     ).toBe(50);
+  });
+
+  it("长超时档位（1000ms，2026-09-16 放宽后）可正常写回", () => {
+    useAppStore.getState().setConnectionSettings({
+      protocol: "rtu",
+      baudRate: 115200,
+      dataBits: 7,
+      stopBits: 2,
+      parity: "even",
+      flowControl: "rts-cts",
+      requestTimeoutMs: 1000,
+      retryCount: 4,
+    });
+    const stored = useAppStore.getState().workspace.connectionProfiles[0];
+    expect(
+      stored !== undefined && stored.protocol === "rtu"
+        ? stored.requestTimeoutMs
+        : undefined,
+    ).toBe(1000);
   });
 });
 
@@ -1362,13 +1386,11 @@ describe("commitCellText（Data 单元格提交校验）", () => {
     resetRowStatus();
     const row = addFirstRow();
     // 值与显示文本已是规范形式（hex 00AB），改输入小写等价写法。
-    useAppStore
-      .getState()
-      .updateRow(row.rowId, (r) => ({
-        ...r,
-        dataType: "hex",
-        cellText: "00AB",
-      }));
+    useAppStore.getState().updateRow(row.rowId, (r) => ({
+      ...r,
+      dataType: "hex",
+      cellText: "00AB",
+    }));
     const result = useAppStore.getState().commitCellText(row.rowId, "00ab");
     expect(result.ok).toBe(true);
     const updated = useAppStore.getState().workspace.sheets[0]?.rows[0];
@@ -1414,258 +1436,258 @@ describe("commitCellText（Data 单元格提交校验）", () => {
     ]);
   });
 
-// ---- 撤销/重做（TECH_DESIGN §24.4，PRD §8.3 P1）----
-describe("撤销/重做", () => {
-  beforeEach(() => {
-    useAppStore.setState({ undoStack: [], redoStack: [] });
-  });
+  // ---- 撤销/重做（TECH_DESIGN §24.4，PRD §8.3 P1）----
+  describe("撤销/重做", () => {
+    beforeEach(() => {
+      useAppStore.setState({ undoStack: [], redoStack: [] });
+    });
 
-  function firstRowId(): RowId {
-    const sheet = useAppStore.getState().workspace.sheets[0];
-    const row = sheet?.rows[0];
-    if (row === undefined) throw new Error("missing row");
-    return row.rowId;
-  }
-
-  function findRowById(rowId: RowId) {
-    return useAppStore
-      .getState()
-      .workspace.sheets.flatMap((s) => s.rows)
-      .find((r) => r.rowId === rowId);
-  }
-
-  function canUndo(): boolean {
-    return useAppStore.getState().undoStack.length > 0;
-  }
-
-  function canRedo(): boolean {
-    return useAppStore.getState().redoStack.length > 0;
-  }
-
-  it("改名可撤销/重做", () => {
-    const store = useAppStore.getState();
-    const rowId = firstRowId();
-    store.setRowName(rowId, "New Name");
-    expect(findRowById(rowId)?.name).toBe("New Name");
-    expect(canUndo()).toBe(true);
-    store.undo();
-    expect(findRowById(rowId)?.name).not.toBe("New Name");
-    expect(canRedo()).toBe(true);
-    store.redo();
-    expect(findRowById(rowId)?.name).toBe("New Name");
-  });
-
-  it("删除行可撤销恢复（含行内容）与重做", () => {
-    const store = useAppStore.getState();
-    const sheetId = firstSheetId();
-    const rowId = firstRowId();
-    store.setRowName(rowId, "ToDelete");
-    store.deleteRow(sheetId, rowId);
-    expect(findRowById(rowId)).toBeUndefined();
-    expect(canUndo()).toBe(true);
-    store.undo();
-    expect(findRowById(rowId)?.name).toBe("ToDelete");
-    store.redo();
-    expect(findRowById(rowId)).toBeUndefined();
-  });
-
-  it("新增行可撤销/重做", () => {
-    const store = useAppStore.getState();
-    const sheetId = firstSheetId();
-    const beforeCount = store.workspace.sheets[0]?.rows.length ?? 0;
-    store.addRow(sheetId);
-    expect(useAppStore.getState().workspace.sheets[0]?.rows.length).toBe(
-      beforeCount + 1,
-    );
-    store.undo();
-    expect(useAppStore.getState().workspace.sheets[0]?.rows.length).toBe(
-      beforeCount,
-    );
-    store.redo();
-    expect(useAppStore.getState().workspace.sheets[0]?.rows.length).toBe(
-      beforeCount + 1,
-    );
-  });
-
-  it("移动行可撤销（行顺序恢复）", () => {
-    const store = useAppStore.getState();
-    const sheetId = firstSheetId();
-    const rows = store.workspace.sheets[0]?.rows ?? [];
-    const first = rows[0];
-    const second = rows[1];
-    if (first === undefined || second === undefined) {
-      throw new Error("need at least 2 rows");
+    function firstRowId(): RowId {
+      const sheet = useAppStore.getState().workspace.sheets[0];
+      const row = sheet?.rows[0];
+      if (row === undefined) throw new Error("missing row");
+      return row.rowId;
     }
-    const before = rows.map((r) => r.rowId);
-    store.moveRow(sheetId, second.rowId, "up");
-    expect(
-      useAppStore.getState().workspace.sheets[0]?.rows.map((r) => r.rowId)[0],
-    ).toBe(second.rowId);
-    store.undo();
-    expect(
-      useAppStore.getState().workspace.sheets[0]?.rows.map((r) => r.rowId),
-    ).toEqual(before);
-  });
 
-  it("修改地址可撤销（含范围行 registerCount/registers 恢复）", () => {
-    const store = useAppStore.getState();
-    const rowId = firstRowId();
-    store.commitRowAddress(rowId, "100-101");
-    expect(findRowById(rowId)?.registerCount).toBe(2);
-    store.undo();
-    expect(findRowById(rowId)?.registerCount).toBe(1);
-    store.redo();
-    expect(findRowById(rowId)?.registerCount).toBe(2);
-  });
+    function findRowById(rowId: RowId) {
+      return useAppStore
+        .getState()
+        .workspace.sheets.flatMap((s) => s.rows)
+        .find((r) => r.rowId === rowId);
+    }
 
-  it("Data 单元格编辑不纳入撤销（§20.4 第 7 条）", () => {
-    const store = useAppStore.getState();
-    const rowId = firstRowId();
-    store.commitCellText(rowId, "1234");
-    expect(useAppStore.getState().undoStack.length).toBe(0);
-    store.commitRowAddress(rowId, "100");
-    expect(useAppStore.getState().undoStack.length).toBe(1);
-    store.undo();
-    expect(findRowById(rowId)?.cellText).toBe("1234");
-  });
+    function canUndo(): boolean {
+      return useAppStore.getState().undoStack.length > 0;
+    }
 
-  it("设备读值不因撤销回退（§24.4「不撤销设备读取结果」）", () => {
-    const store = useAppStore.getState();
-    const rowId = firstRowId();
-    store.commitRowAddress(rowId, "100");
-    // 模拟轮询/读取覆盖 cellText（运行时路径，不入栈）。
-    store.updateRow(rowId, (r) => ({ ...r, cellText: "9999" }));
-    store.undo();
-    expect(findRowById(rowId)?.cellText).toBe("9999");
-  });
+    function canRedo(): boolean {
+      return useAppStore.getState().redoStack.length > 0;
+    }
 
-  it("新编辑截断重做栈", () => {
-    const store = useAppStore.getState();
-    const rowId = firstRowId();
-    store.setRowName(rowId, "A");
-    store.undo();
-    expect(canRedo()).toBe(true);
-    store.setRowName(rowId, "B");
-    expect(canRedo()).toBe(false);
-    expect(findRowById(rowId)?.name).toBe("B");
-  });
-
-  it("每表配置可撤销（radix/slaveAddress/writeVerify）", () => {
-    const store = useAppStore.getState();
-    const sheetId = firstSheetId();
-    store.setSheetRegisterRadix(sheetId, "hex");
-    store.setSheetSlaveAddress(sheetId, 9);
-    store.setSheetWriteVerify(sheetId, { mode: "delayed", delayMs: 200 });
-    expect(useAppStore.getState().workspace.sheets[0]?.registerRadix).toBe(
-      "hex",
-    );
-    expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(9);
-    expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
-      mode: "delayed",
-      delayMs: 200,
+    it("改名可撤销/重做", () => {
+      const store = useAppStore.getState();
+      const rowId = firstRowId();
+      store.setRowName(rowId, "New Name");
+      expect(findRowById(rowId)?.name).toBe("New Name");
+      expect(canUndo()).toBe(true);
+      store.undo();
+      expect(findRowById(rowId)?.name).not.toBe("New Name");
+      expect(canRedo()).toBe(true);
+      store.redo();
+      expect(findRowById(rowId)?.name).toBe("New Name");
     });
-    store.undo();
-    expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
-      mode: "immediate",
-      delayMs: null,
+
+    it("删除行可撤销恢复（含行内容）与重做", () => {
+      const store = useAppStore.getState();
+      const sheetId = firstSheetId();
+      const rowId = firstRowId();
+      store.setRowName(rowId, "ToDelete");
+      store.deleteRow(sheetId, rowId);
+      expect(findRowById(rowId)).toBeUndefined();
+      expect(canUndo()).toBe(true);
+      store.undo();
+      expect(findRowById(rowId)?.name).toBe("ToDelete");
+      store.redo();
+      expect(findRowById(rowId)).toBeUndefined();
     });
-    store.undo();
-    expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(1);
-    store.undo();
-    expect(useAppStore.getState().workspace.sheets[0]?.registerRadix).toBe(
-      "dec",
-    );
-    store.redo();
-    expect(useAppStore.getState().workspace.sheets[0]?.registerRadix).toBe(
-      "hex",
-    );
-  });
 
-  it("新增表可撤销/重做", () => {
-    const store = useAppStore.getState();
-    const before = sheetNames();
-    store.addSheet();
-    expect(sheetNames()).toContain("Sheet 2");
-    store.undo();
-    expect(sheetNames()).toEqual(before);
-    store.redo();
-    expect(sheetNames()).toContain("Sheet 2");
-  });
+    it("新增行可撤销/重做", () => {
+      const store = useAppStore.getState();
+      const sheetId = firstSheetId();
+      const beforeCount = store.workspace.sheets[0]?.rows.length ?? 0;
+      store.addRow(sheetId);
+      expect(useAppStore.getState().workspace.sheets[0]?.rows.length).toBe(
+        beforeCount + 1,
+      );
+      store.undo();
+      expect(useAppStore.getState().workspace.sheets[0]?.rows.length).toBe(
+        beforeCount,
+      );
+      store.redo();
+      expect(useAppStore.getState().workspace.sheets[0]?.rows.length).toBe(
+        beforeCount + 1,
+      );
+    });
 
-  it("重命名表可撤销/重做", () => {
-    const store = useAppStore.getState();
-    const sheetId = firstSheetId();
-    store.renameSheet(sheetId, "Renamed");
-    expect(sheetNames()).toEqual(["Renamed"]);
-    store.undo();
-    expect(sheetNames()).toEqual(["Sheet 1"]);
-    store.redo();
-    expect(sheetNames()).toEqual(["Renamed"]);
-  });
+    it("移动行可撤销（行顺序恢复）", () => {
+      const store = useAppStore.getState();
+      const sheetId = firstSheetId();
+      const rows = store.workspace.sheets[0]?.rows ?? [];
+      const first = rows[0];
+      const second = rows[1];
+      if (first === undefined || second === undefined) {
+        throw new Error("need at least 2 rows");
+      }
+      const before = rows.map((r) => r.rowId);
+      store.moveRow(sheetId, second.rowId, "up");
+      expect(
+        useAppStore.getState().workspace.sheets[0]?.rows.map((r) => r.rowId)[0],
+      ).toBe(second.rowId);
+      store.undo();
+      expect(
+        useAppStore.getState().workspace.sheets[0]?.rows.map((r) => r.rowId),
+      ).toEqual(before);
+    });
 
-  it("删除表可撤销/重做（多表场景）", () => {
-    const store = useAppStore.getState();
-    const sheetId = firstSheetId();
-    store.addSheet();
-    store.deleteSheet(sheetId);
-    expect(sheetNames()).not.toContain("Sheet 1");
-    store.undo();
-    expect(sheetNames()).toContain("Sheet 1");
-    store.redo();
-    expect(sheetNames()).not.toContain("Sheet 1");
-  });
+    it("修改地址可撤销（含范围行 registerCount/registers 恢复）", () => {
+      const store = useAppStore.getState();
+      const rowId = firstRowId();
+      store.commitRowAddress(rowId, "100-101");
+      expect(findRowById(rowId)?.registerCount).toBe(2);
+      store.undo();
+      expect(findRowById(rowId)?.registerCount).toBe(1);
+      store.redo();
+      expect(findRowById(rowId)?.registerCount).toBe(2);
+    });
 
-  it("删除唯一表后撤销恢复原表并移除保底默认表", () => {
-    const store = useAppStore.getState();
-    const sheetId = firstSheetId();
-    expect(sheetNames()).toEqual(["Sheet 1"]);
-    store.deleteSheet(sheetId);
-    // 删除唯一表后 UI 保底重建默认空表。
-    expect(sheetNames()).toEqual(["Sheet 1"]);
-    store.undo();
-    // 撤销后应只有被恢复的原表（默认空表被移除）；原表带默认行。
-    expect(sheetNames()).toEqual(["Sheet 1"]);
-    expect(store.workspace.sheets[0]?.rows.length).toBeGreaterThan(0);
-  });
+    it("Data 单元格编辑不纳入撤销（§20.4 第 7 条）", () => {
+      const store = useAppStore.getState();
+      const rowId = firstRowId();
+      store.commitCellText(rowId, "1234");
+      expect(useAppStore.getState().undoStack.length).toBe(0);
+      store.commitRowAddress(rowId, "100");
+      expect(useAppStore.getState().undoStack.length).toBe(1);
+      store.undo();
+      expect(findRowById(rowId)?.cellText).toBe("1234");
+    });
 
-  it("移动表顺序可撤销/重做", () => {
-    const store = useAppStore.getState();
-    store.addSheet(); // Sheet 2
-    store.addSheet(); // Sheet 3
-    store.moveSheetTo(firstSheetId(), 2);
-    expect(sheetNames()).toEqual(["Sheet 2", "Sheet 3", "Sheet 1"]);
-    store.undo();
-    expect(sheetNames()).toEqual(["Sheet 1", "Sheet 2", "Sheet 3"]);
-    store.redo();
-    expect(sheetNames()).toEqual(["Sheet 2", "Sheet 3", "Sheet 1"]);
-  });
+    it("设备读值不因撤销回退（§24.4「不撤销设备读取结果」）", () => {
+      const store = useAppStore.getState();
+      const rowId = firstRowId();
+      store.commitRowAddress(rowId, "100");
+      // 模拟轮询/读取覆盖 cellText（运行时路径，不入栈）。
+      store.updateRow(rowId, (r) => ({ ...r, cellText: "9999" }));
+      store.undo();
+      expect(findRowById(rowId)?.cellText).toBe("9999");
+    });
 
-  it("撤销历史为会话状态：setWorkspace 加载时清空", () => {
-    // setWorkspace 内部调用 applyLanguage：需先初始化 i18n（非组件测试默认未初始化）。
-    initI18n();
-    const store = useAppStore.getState();
-    store.setRowName(firstRowId(), "X");
-    expect(canUndo()).toBe(true);
-    useAppStore.getState().setWorkspace(createEmptyWorkspace());
-    expect(canUndo()).toBe(false);
-    expect(canRedo()).toBe(false);
-  });
+    it("新编辑截断重做栈", () => {
+      const store = useAppStore.getState();
+      const rowId = firstRowId();
+      store.setRowName(rowId, "A");
+      store.undo();
+      expect(canRedo()).toBe(true);
+      store.setRowName(rowId, "B");
+      expect(canRedo()).toBe(false);
+      expect(findRowById(rowId)?.name).toBe("B");
+    });
 
-  it("setWorkspaceRecovery 写入/清除恢复元数据（ADR-049）", () => {
-    const store = useAppStore.getState();
-    store.setWorkspaceRecovery(null);
-    expect(useAppStore.getState().workspaceRecovery).toBeNull();
-    const info = {
-      recovered: true,
-      source: "backup" as const,
-      recoveredAt: 1000,
-      backupTimestamp: 900,
-      errorCode: null,
-    };
-    store.setWorkspaceRecovery(info);
-    expect(useAppStore.getState().workspaceRecovery).toEqual(info);
+    it("每表配置可撤销（radix/slaveAddress/writeVerify）", () => {
+      const store = useAppStore.getState();
+      const sheetId = firstSheetId();
+      store.setSheetRegisterRadix(sheetId, "hex");
+      store.setSheetSlaveAddress(sheetId, 9);
+      store.setSheetWriteVerify(sheetId, { mode: "delayed", delayMs: 200 });
+      expect(useAppStore.getState().workspace.sheets[0]?.registerRadix).toBe(
+        "hex",
+      );
+      expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(9);
+      expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
+        mode: "delayed",
+        delayMs: 200,
+      });
+      store.undo();
+      expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
+        mode: "immediate",
+        delayMs: null,
+      });
+      store.undo();
+      expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(1);
+      store.undo();
+      expect(useAppStore.getState().workspace.sheets[0]?.registerRadix).toBe(
+        "dec",
+      );
+      store.redo();
+      expect(useAppStore.getState().workspace.sheets[0]?.registerRadix).toBe(
+        "hex",
+      );
+    });
+
+    it("新增表可撤销/重做", () => {
+      const store = useAppStore.getState();
+      const before = sheetNames();
+      store.addSheet();
+      expect(sheetNames()).toContain("Sheet 2");
+      store.undo();
+      expect(sheetNames()).toEqual(before);
+      store.redo();
+      expect(sheetNames()).toContain("Sheet 2");
+    });
+
+    it("重命名表可撤销/重做", () => {
+      const store = useAppStore.getState();
+      const sheetId = firstSheetId();
+      store.renameSheet(sheetId, "Renamed");
+      expect(sheetNames()).toEqual(["Renamed"]);
+      store.undo();
+      expect(sheetNames()).toEqual(["Sheet 1"]);
+      store.redo();
+      expect(sheetNames()).toEqual(["Renamed"]);
+    });
+
+    it("删除表可撤销/重做（多表场景）", () => {
+      const store = useAppStore.getState();
+      const sheetId = firstSheetId();
+      store.addSheet();
+      store.deleteSheet(sheetId);
+      expect(sheetNames()).not.toContain("Sheet 1");
+      store.undo();
+      expect(sheetNames()).toContain("Sheet 1");
+      store.redo();
+      expect(sheetNames()).not.toContain("Sheet 1");
+    });
+
+    it("删除唯一表后撤销恢复原表并移除保底默认表", () => {
+      const store = useAppStore.getState();
+      const sheetId = firstSheetId();
+      expect(sheetNames()).toEqual(["Sheet 1"]);
+      store.deleteSheet(sheetId);
+      // 删除唯一表后 UI 保底重建默认空表。
+      expect(sheetNames()).toEqual(["Sheet 1"]);
+      store.undo();
+      // 撤销后应只有被恢复的原表（默认空表被移除）；原表带默认行。
+      expect(sheetNames()).toEqual(["Sheet 1"]);
+      expect(store.workspace.sheets[0]?.rows.length).toBeGreaterThan(0);
+    });
+
+    it("移动表顺序可撤销/重做", () => {
+      const store = useAppStore.getState();
+      store.addSheet(); // Sheet 2
+      store.addSheet(); // Sheet 3
+      store.moveSheetTo(firstSheetId(), 2);
+      expect(sheetNames()).toEqual(["Sheet 2", "Sheet 3", "Sheet 1"]);
+      store.undo();
+      expect(sheetNames()).toEqual(["Sheet 1", "Sheet 2", "Sheet 3"]);
+      store.redo();
+      expect(sheetNames()).toEqual(["Sheet 2", "Sheet 3", "Sheet 1"]);
+    });
+
+    it("撤销历史为会话状态：setWorkspace 加载时清空", () => {
+      // setWorkspace 内部调用 applyLanguage：需先初始化 i18n（非组件测试默认未初始化）。
+      initI18n();
+      const store = useAppStore.getState();
+      store.setRowName(firstRowId(), "X");
+      expect(canUndo()).toBe(true);
+      useAppStore.getState().setWorkspace(createEmptyWorkspace());
+      expect(canUndo()).toBe(false);
+      expect(canRedo()).toBe(false);
+    });
+
+    it("setWorkspaceRecovery 写入/清除恢复元数据（ADR-049）", () => {
+      const store = useAppStore.getState();
+      store.setWorkspaceRecovery(null);
+      expect(useAppStore.getState().workspaceRecovery).toBeNull();
+      const info = {
+        recovered: true,
+        source: "backup" as const,
+        recoveredAt: 1000,
+        backupTimestamp: 900,
+        errorCode: null,
+      };
+      store.setWorkspaceRecovery(info);
+      expect(useAppStore.getState().workspaceRecovery).toEqual(info);
+    });
   });
-});
 
   it("非法提交后再次合法提交：清除校验错误并置编辑完成态", () => {
     resetRowStatus();
@@ -1770,7 +1792,8 @@ describe("workspaceImportDraft（工作区导入，2026-08-29）", () => {
   });
 });
 
-describe("traceWindows（TM 追踪窗口）", () => {  function addFirstRowForTrace() {
+describe("traceWindows（TM 追踪窗口）", () => {
+  function addFirstRowForTrace() {
     clearAllSheetRows();
     const id = firstSheetId();
     useAppStore.getState().addRow(id);

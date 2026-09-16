@@ -76,10 +76,12 @@ export interface VscodeSessionLike {
   /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）。 */
   setUnitId(unitId: number): void;
   /** 表级 Address Adjust（session-set-address-transform，2026-09-01 ADR-042）。 */
-  setAddressTransform(config: {
-    transformId: string;
-    enabled: boolean;
-  } | null): void;
+  setAddressTransform(
+    config: {
+      transformId: string;
+      enabled: boolean;
+    } | null,
+  ): void;
   readRow(row: RegisterRow): Promise<Result<number | number[]>>;
   writeRow(
     row: RegisterRow,
@@ -370,7 +372,9 @@ export async function handleVscodeRequest(
         ),
       );
     case "session-trace-stop":
-      return sessionVoid(message, () => deps.session.traceStop(message.payload.key));
+      return sessionVoid(message, () =>
+        deps.session.traceStop(message.payload.key),
+      );
     case "session-tcp-connect": {
       // 两端 TCP 接线（2026-08-23）：profile 即连接参数，无串口句柄。
       const { profile } = message.payload;
@@ -446,16 +450,13 @@ export async function handleVscodeRequest(
           "debug probe is disabled in production",
         );
       }
-      return okResponse(
-        message,
-        {
-          platform: "vscode",
-          appVersion: deps.appVersion(),
-          colorTheme: deps.colorTheme(),
-          capabilities: deps.capabilities(),
-          sessionStats: deps.sessionStats(),
-        } satisfies VscodeHostDebugState,
-      );
+      return okResponse(message, {
+        platform: "vscode",
+        appVersion: deps.appVersion(),
+        colorTheme: deps.colorTheme(),
+        capabilities: deps.capabilities(),
+        sessionStats: deps.sessionStats(),
+      } satisfies VscodeHostDebugState);
     case "debug:fake-tcp-drop":
       // 开发/测试探针（e2e 自动重连用）：生产构建禁用。
       if (!deps.isDev()) {

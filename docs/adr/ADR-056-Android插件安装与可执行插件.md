@@ -45,10 +45,10 @@ ADR-054 §7.2 把 Android 的插件执行能力留给 Phase 5：「`executablePl
   entry（`PLUGIN_EXECUTION_PROBE_ENTRY`），因此同时覆盖：
   - `worker-src 'self' blob:`（创建 Blob Worker）；
   - `script-src 'self' blob:`（**Worker 内**对 blob entry 的动态 `import()`）。
-  语义：`ok` → `true`；Worker 创建失败 / `load-error` / 超时（默认 3000ms，经 `Clock` 端口注入，
-  单测用 Virtual Clock）→ `false`；**永不抛出**；无论结果都 `dispose()`（terminate Worker）。
-  放在 `platform-web` 而非 app 层：机制属 Web 平台（与 `plugin-remote-runtime` 同域），
-  且避免在 `apps/web` 复制 bootstrap 副本。
+    语义：`ok` → `true`；Worker 创建失败 / `load-error` / 超时（默认 3000ms，经 `Clock` 端口注入，
+    单测用 Virtual Clock）→ `false`；**永不抛出**；无论结果都 `dispose()`（terminate Worker）。
+    放在 `platform-web` 而非 app 层：机制属 Web 平台（与 `plugin-remote-runtime` 同域），
+    且避免在 `apps/web` 复制 bootstrap 副本。
 - **`packages/platform-android/src/android-capabilities.ts`**：
   - `pluginInstall: "unsupported"` → **`"upload"`**（WebView `<input type="file">` + 客户端读文件文本，
     Capacitor Android 的 `BridgeWebChromeClient.onShowFileChooser` 已实现，无需 Capacitor Filesystem）；
@@ -119,15 +119,15 @@ ADR-054 §7.2 把 Android 的插件执行能力留给 Phase 5：「`executablePl
 `pnpm test:e2e:android` = **16 passed / 2 skipped / 0 failed**（2 skipped = USB-RS485 闭环需硬件），
 其中新增 `tests/e2e-android/tests/plugin-runtime.spec.ts` **7/7**：
 
-| 用例 | 断言 |
-| --- | --- |
-| 探针证据 | 页面上下文直接跑「Blob Worker → Worker 内 `import(blob entry)`」→ `ok && hasManifest`（84ms） |
-| 安装入口 | Settings → Plugins：隐藏文件输入就位、`accept=".json,.mjs,.js"`、Install 按钮可见 |
-| 纯清单安装 | `setInputFiles(manifest.json)` → 安全确认 → `Installed` → 存储落盘（无 `entrySource`） |
-| 可执行安装 | `setInputFiles(<id>.mjs)` → 安全确认（隔离）→ `Installed` → 存储含 `entrySource` + `executionMode: "isolated"` |
-| 执行面真机可用 | reload 后启动路径（`startPlugins` → Blob Worker）仍成功加载；卸载后回收（存储删除） |
-| 同进程 + 同步贡献 | same-process 安装 → reload → **表列表出现插件分组**（codec / tableType 同步注册真机生效）→ 卸载后分组消失 |
-| console | 全程无 console 错误 |
+| 用例              | 断言                                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| 探针证据          | 页面上下文直接跑「Blob Worker → Worker 内 `import(blob entry)`」→ `ok && hasManifest`（84ms）                  |
+| 安装入口          | Settings → Plugins：隐藏文件输入就位、`accept=".json,.mjs,.js"`、Install 按钮可见                              |
+| 纯清单安装        | `setInputFiles(manifest.json)` → 安全确认 → `Installed` → 存储落盘（无 `entrySource`）                         |
+| 可执行安装        | `setInputFiles(<id>.mjs)` → 安全确认（隔离）→ `Installed` → 存储含 `entrySource` + `executionMode: "isolated"` |
+| 执行面真机可用    | reload 后启动路径（`startPlugins` → Blob Worker）仍成功加载；卸载后回收（存储删除）                            |
+| 同进程 + 同步贡献 | same-process 安装 → reload → **表列表出现插件分组**（codec / tableType 同步注册真机生效）→ 卸载后分组消失      |
+| console           | 全程无 console 错误                                                                                            |
 
 **结论：Android WebView（本机 WebView 151）在生产 CSP 下可执行可执行插件**，故按决策 4 以运行时探测
 如实翻转 `executablePlugins`（探测不可用的设备仍如实为 `false`）。`setInputFiles` 经 CDP 投递文件

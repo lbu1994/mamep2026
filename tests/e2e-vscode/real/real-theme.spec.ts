@@ -30,8 +30,7 @@ async function waitForWebviewFrame(page: Page): Promise<Frame> {
       if (!f.url().startsWith("vscode-webview://")) continue;
       try {
         const hasUi = await f.evaluate(
-          () =>
-            document.querySelector("#root .ant-app, .ant-layout") !== null,
+          () => document.querySelector("#root .ant-app, .ant-layout") !== null,
         );
         if (hasUi) return f;
       } catch {
@@ -151,7 +150,11 @@ test("VSCode 主题完整适配（UI 级）：跟随 + 实时切换 + 面板重�
     await evaluateInVSCode(async (vscode) => {
       await vscode.workspace
         .getConfiguration("workbench")
-        .update("colorTheme", "Light Modern", vscode.ConfigurationTarget.Global);
+        .update(
+          "colorTheme",
+          "Light Modern",
+          vscode.ConfigurationTarget.Global,
+        );
     });
     await expectThemeFollows(frame, {
       message: "切到浅色后 antd token 未跟随（实时更新失败？）",
@@ -188,10 +191,7 @@ test("VSCode 主题完整适配（UI 级）：跟随 + 实时切换 + 面板重�
             .filter((f) => f.url().startsWith("vscode-webview://"));
           for (const candidate of candidates) {
             const v = await themeVars(candidate);
-            if (
-              v.antBgContainer !== "" &&
-              v.antBgContainer === v.vscEditorBg
-            ) {
+            if (v.antBgContainer !== "" && v.antBgContainer === v.vscEditorBg) {
               return true;
             }
           }

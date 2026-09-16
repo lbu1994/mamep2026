@@ -15,33 +15,33 @@
   "connections": [
     {
       // RTU 连接对象
-      "id": "rtu-com4-master",        // 唯一标识（必填）
-      "name": "COM4（com0com 主站）",   // 展示名（必填）
+      "id": "rtu-com4-master", // 唯一标识（必填）
+      "name": "COM4（com0com 主站）", // 展示名（必填）
       "protocol": "rtu",
-      "port": "COM4",                  // 串口名（必填；COM10+ 亦按不透明字符串处理）
-      "baudRate": 9600,                // 波特率，默认 9600
-      "dataBits": 8,                   // 数据位 7|8，默认 8
-      "stopBits": 1,                   // 停止位 1|2，默认 1
-      "parity": "none",                // none|even|odd，默认 none
-      "flowControl": "off",            // off|rts-cts|xon-xoff，默认 off
-      "slaveAddress": 1,               // 该连接对象的默认从站地址 0~255，默认 1
-      "requestTimeoutMs": 50,         // 单次请求响应超时，默认 50
-      "retryCount": 1                  // 重试次数 0~10，默认 1
+      "port": "COM4", // 串口名（必填；COM10+ 亦按不透明字符串处理）
+      "baudRate": 9600, // 波特率，默认 9600
+      "dataBits": 8, // 数据位 7|8，默认 8
+      "stopBits": 1, // 停止位 1|2，默认 1
+      "parity": "none", // none|even|odd，默认 none
+      "flowControl": "off", // off|rts-cts|xon-xoff，默认 off
+      "slaveAddress": 1, // 该连接对象的默认从站地址 0~255，默认 1
+      "requestTimeoutMs": 50, // 单次请求响应超时，默认 50
+      "retryCount": 1, // 重试次数 0~10，默认 1
     },
     {
       // TCP 连接对象
       "id": "tcp-local-slave",
       "name": "本地 TCP 从站",
       "protocol": "tcp",
-      "host": "127.0.0.1",             // 主机/IP（原样传递，不解析）
-      "port": 1502,                    // TCP 端口 1~65535
-      "unitId": 1,                     // MBAP 单元标识 0~255，默认 0
-      "connectTimeoutMs": 5000,        // 连接超时，默认 5000
-      "requestTimeoutMs": 50,          // 单次请求响应超时，默认 50
-      "retryCount": 1,                 // 重试次数 0~10，默认 1
-      "autoReconnect": false           // 自动重连（P1，UI 灰显），默认 false
-    }
-  ]
+      "host": "127.0.0.1", // 主机/IP（原样传递，不解析）
+      "port": 1502, // TCP 端口 1~65535
+      "unitId": 1, // MBAP 单元标识 0~255，默认 0
+      "connectTimeoutMs": 5000, // 连接超时，默认 5000
+      "requestTimeoutMs": 50, // 单次请求响应超时，默认 50
+      "retryCount": 1, // 重试次数 0~10，默认 1
+      "autoReconnect": false, // 自动重连（P1，UI 灰显），默认 false
+    },
+  ],
 }
 ```
 

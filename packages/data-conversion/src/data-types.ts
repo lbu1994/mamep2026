@@ -60,8 +60,7 @@ export function isScaled(type: DataType): boolean {
  */
 export function isSigned(type: DataType): boolean {
   return (
-    type === "signed" ||
-    (type.startsWith("signed-") && isBuiltinDataType(type))
+    type === "signed" || (type.startsWith("signed-") && isBuiltinDataType(type))
   );
 }
 

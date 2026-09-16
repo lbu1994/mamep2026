@@ -54,7 +54,9 @@ test("移动布局：侧栏收起为左抽屉，选中表后自动关闭", async
   );
   await expect(sidebarDrawer).toHaveClass(/ant-drawer-open/);
   await expect(
-    sidebarDrawer.locator(".mamep-mobile-drawer--sidebar .sheet-sidebar--drawer"),
+    sidebarDrawer.locator(
+      ".mamep-mobile-drawer--sidebar .sheet-sidebar--drawer",
+    ),
   ).toBeVisible();
   const sheetItems = sidebarDrawer.locator(".ant-menu-item");
   await expect(sheetItems.first()).toBeVisible();
@@ -74,7 +76,9 @@ test("移动布局：底部面板成为底部抽屉", async ({ page }) => {
   await expect(page.locator(".bottom-panel")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Open panel" }).click();
-  const panelDrawer = page.locator(".ant-drawer:has(.mamep-mobile-drawer--panel)");
+  const panelDrawer = page.locator(
+    ".ant-drawer:has(.mamep-mobile-drawer--panel)",
+  );
   await expect(panelDrawer).toHaveClass(/ant-drawer-open/);
   // drawer 形态：不套折叠类，也不渲染折叠按钮（高度由抽屉控制）。
   await expect(panelDrawer.locator(".bottom-panel--drawer")).toBeVisible();
@@ -101,7 +105,9 @@ test("移动表格：横向滚动 + 无固定列 + 行高 44", async ({ page }) 
   await expect(sheet.locator('[class*="ant-table-cell-fix"]')).toHaveCount(0);
 
   // 移动端行高 44px（触摸目标；桌面为 29px）。
-  const firstCell = sheet.locator(".ant-table-tbody > tr.ant-table-row > td").first();
+  const firstCell = sheet
+    .locator(".ant-table-tbody > tr.ant-table-row > td")
+    .first();
   await expect(firstCell).toHaveCSS("height", "44px");
 });
 
@@ -120,9 +126,7 @@ test("移动工具栏：次要控件收进「更多」面板，主操作仍在�
   // 次要控件不在工具栏内（未展开时）。
   await expect(toolbar.locator(".table-toolbar__radix")).toHaveCount(0);
 
-  await toolbar
-    .getByRole("button", { name: "More toolbar actions" })
-    .click();
+  await toolbar.getByRole("button", { name: "More toolbar actions" }).click();
   const panel = page.locator(".table-toolbar__more");
   await expect(panel).toBeVisible();
   // 同一份控件在面板内可用：地址进制 / 从站地址 / 写后回读 / 地址变换 / 恢复列布局。

@@ -8,10 +8,7 @@
  */
 import { useTranslation } from "react-i18next";
 import { Flex, Tag, Typography, theme } from "antd";
-import {
-  CheckCircleFilled,
-  ExclamationCircleFilled,
-} from "@ant-design/icons";
+import { CheckCircleFilled, ExclamationCircleFilled } from "@ant-design/icons";
 import type { BatchReadSummary } from "@mamep2026/communication";
 
 export interface ReadAllResultMessageProps {
@@ -46,16 +43,11 @@ export function ReadAllResultMessage({
         <Tag color={summary.failureCount > 0 ? "error" : "default"}>
           {t("table.readAllFailed", { count: summary.failureCount })}
         </Tag>
-        <Tag>
-          {t("table.readAllSkipped", { count: summary.skippedCount })}
-        </Tag>
+        <Tag>{t("table.readAllSkipped", { count: summary.skippedCount })}</Tag>
         <Tag>
           {t("table.readAllCancelled", { count: summary.cancelledCount })}
         </Tag>
-        <Typography.Text
-          type="secondary"
-          className="read-all-result__duration"
-        >
+        <Typography.Text type="secondary" className="read-all-result__duration">
           {t("table.readAllDuration", { ms: summary.durationMs })}
         </Typography.Text>
       </Flex>

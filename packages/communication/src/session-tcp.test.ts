@@ -67,17 +67,15 @@ function readResponse(tid: number, unitId: number, value: number): Uint8Array {
   );
 }
 
-function writeResponse(tid: number, unitId: number, address: number): Uint8Array {
+function writeResponse(
+  tid: number,
+  unitId: number,
+  address: number,
+): Uint8Array {
   return tcpFrame(
     tid,
     unitId,
-    Uint8Array.from([
-      0x10,
-      (address >> 8) & 0xff,
-      address & 0xff,
-      0x00,
-      0x01,
-    ]),
+    Uint8Array.from([0x10, (address >> 8) & 0xff, address & 0xff, 0x00, 0x01]),
   );
 }
 

@@ -356,7 +356,9 @@ describe("MockTransport 成功/失败场景（按地址区间规则）", () => {
     expect(transport.getRegister(0x0800)).toBeNull();
     // 多读 → 正常（未设置返回 0）
     await readMany(transport, 0x0800, 2);
-    expect(body(received[2])).toEqual([0x01, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]);
+    expect(body(received[2])).toEqual([
+      0x01, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00,
+    ]);
     // 多写 → 正常
     await writeMany(transport, 0x0800, [0x1234, 0x5678]);
     expect(transport.getRegister(0x0800)).toBe(0x1234);
@@ -420,16 +422,16 @@ describe("MockTransport 基础表（ADR-043 E-1: FC01/FC02/FC04/FC0F）", () => 
       appendCrc(Uint8Array.from([0x01, 0x04, 0x00, 0x00, 0x00, 0x02])),
     );
     await flush();
-    expect(body(received[0])).toEqual([0x01, 0x04, 0x04, 0x12, 0x34, 0xab, 0xcd]);
+    expect(body(received[0])).toEqual([
+      0x01, 0x04, 0x04, 0x12, 0x34, 0xab, 0xcd,
+    ]);
   });
 
   it("FC0F 写多线圈：位解包写入并回执", async () => {
     const { transport, received } = await openTransport();
     await transport.write(
       appendCrc(
-        Uint8Array.from([
-          0x01, 0x0f, 0x00, 0x00, 0x00, 0x08, 0x01, 0x8d,
-        ]),
+        Uint8Array.from([0x01, 0x0f, 0x00, 0x00, 0x00, 0x08, 0x01, 0x8d]),
       ),
     );
     await flush();
@@ -444,9 +446,7 @@ describe("MockTransport 基础表（ADR-043 E-1: FC01/FC02/FC04/FC0F）", () => 
     const { transport, received } = await openTransport();
     await transport.write(
       appendCrc(
-        Uint8Array.from([
-          0x01, 0x0f, 0x00, 0x00, 0x00, 0x09, 0x02, 0x00, 0x01,
-        ]),
+        Uint8Array.from([0x01, 0x0f, 0x00, 0x00, 0x00, 0x09, 0x02, 0x00, 0x01]),
       ),
     );
     await flush();
@@ -462,9 +462,7 @@ describe("MockTransport 基础表（ADR-043 E-1: FC01/FC02/FC04/FC0F）", () => 
     );
     await transport.write(
       appendCrc(
-        Uint8Array.from([
-          0x01, 0x0f, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01,
-        ]),
+        Uint8Array.from([0x01, 0x0f, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01]),
       ),
     );
     await flush();

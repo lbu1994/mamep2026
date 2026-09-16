@@ -32,16 +32,16 @@ Header 主「Connect」按钮：Modbus RTU 若已选择 Port、或 Modbus TCP �
 
 ## 影响模块
 
-| 包/端 | 文件 | 改动原因 |
-|------|------|---------|
-| packages/domain | `src/workspace-model.ts` | `createDefaultTcpProfile()` 默认 `host` 置空（删除默认占位，决策 2） |
-| packages/ui | `src/app-store.ts` | 新增会话内串口选择/错误状态与 setter（决策 1/5） |
-| packages/ui | `src/connection-actions.ts`（新增） | 共享「直连条件判定 + 连接执行」纯逻辑 |
-| packages/ui | `src/components/ConnectionSettingsModal.tsx` | 串口/错误态改读写 store；复用共享 connect |
-| packages/ui | `src/MamepApp.tsx` | Header `handleConnectToggle` 直连分流 |
-| packages/ui | `src/i18n` | 如需新增提示文案（优先复用既有 `errors.*` key） |
-| packages/ui | 相关测试 | `MamepApp.test` / `connection-actions.test` / `ConnectionSettingsModal` 相关 |
-| docs | `docs/features/2026-09-06-HeaderConnect直连.md` | 本文件 |
+| 包/端           | 文件                                            | 改动原因                                                                     |
+| --------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| packages/domain | `src/workspace-model.ts`                        | `createDefaultTcpProfile()` 默认 `host` 置空（删除默认占位，决策 2）         |
+| packages/ui     | `src/app-store.ts`                              | 新增会话内串口选择/错误状态与 setter（决策 1/5）                             |
+| packages/ui     | `src/connection-actions.ts`（新增）             | 共享「直连条件判定 + 连接执行」纯逻辑                                        |
+| packages/ui     | `src/components/ConnectionSettingsModal.tsx`    | 串口/错误态改读写 store；复用共享 connect                                    |
+| packages/ui     | `src/MamepApp.tsx`                              | Header `handleConnectToggle` 直连分流                                        |
+| packages/ui     | `src/i18n`                                      | 如需新增提示文案（优先复用既有 `errors.*` key）                              |
+| packages/ui     | 相关测试                                        | `MamepApp.test` / `connection-actions.test` / `ConnectionSettingsModal` 相关 |
+| docs            | `docs/features/2026-09-06-HeaderConnect直连.md` | 本文件                                                                       |
 
 ## 计划（Plan 摘要）
 

@@ -19,7 +19,9 @@ describe("CustomFunctionCodec (ADR-043 E-4)", () => {
 
   it("编码 0x65 读请求", () => {
     const frame = codec.encodeRead({ slaveAddress: 1, addresses: [0, 1] });
-    expect(Array.from(frame.slice(0, 6))).toEqual([0x01, 0x65, 0x00, 0x00, 0x00, 0x02]);
+    expect(Array.from(frame.slice(0, 6))).toEqual([
+      0x01, 0x65, 0x00, 0x00, 0x00, 0x02,
+    ]);
   });
 
   it("编码 0x66 写请求（大端值）", () => {
@@ -30,7 +32,9 @@ describe("CustomFunctionCodec (ADR-043 E-4)", () => {
         { address: 1, value: 0xabcd },
       ],
     });
-    expect(Array.from(frame.slice(0, 7))).toEqual([0x01, 0x66, 0x00, 0x00, 0x00, 0x02, 0x04]);
+    expect(Array.from(frame.slice(0, 7))).toEqual([
+      0x01, 0x66, 0x00, 0x00, 0x00, 0x02, 0x04,
+    ]);
     expect(frame[7]).toBe(0x12);
     expect(frame[8]).toBe(0x34);
     expect(frame[9]).toBe(0xab);
@@ -39,62 +43,52 @@ describe("CustomFunctionCodec (ADR-043 E-4)", () => {
 
   it("解码 0x65 读响应", () => {
     const frame = withCrc([0x01, 0x65, 0x04, 0x12, 0x34, 0xab, 0xcd]);
-    const result = codec.decodeResponse(
-      frame,
-      {
-        protocolId: "custom-function-code",
-        kind: "read",
-        request: { slaveAddress: 1, addresses: [0, 1] },
-      },
-    );
+    const result = codec.decodeResponse(frame, {
+      protocolId: "custom-function-code",
+      kind: "read",
+      request: { slaveAddress: 1, addresses: [0, 1] },
+    });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ kind: "read", values: [0x1234, 0xabcd] });
+    if (result.ok)
+      expect(result.value).toEqual({ kind: "read", values: [0x1234, 0xabcd] });
   });
 
   it("解码 0x66 写回执（echo address+quantity）", () => {
     const frame = withCrc([0x01, 0x66, 0x00, 0x01, 0x00, 0x02]);
-    const result = codec.decodeResponse(
-      frame,
-      {
-        protocolId: "custom-function-code",
-        kind: "write",
-        request: {
-          slaveAddress: 1,
-          entries: [
-            { address: 1, value: 1 },
-            { address: 2, value: 2 },
-          ],
-        },
+    const result = codec.decodeResponse(frame, {
+      protocolId: "custom-function-code",
+      kind: "write",
+      request: {
+        slaveAddress: 1,
+        entries: [
+          { address: 1, value: 1 },
+          { address: 2, value: 2 },
+        ],
       },
-    );
+    });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ kind: "write" });
   });
 
   it("解码异常响应（0x65|0x80）", () => {
     const frame = withCrc([0x01, 0xe5, 0x02]);
-    const result = codec.decodeResponse(
-      frame,
-      {
-        protocolId: "custom-function-code",
-        kind: "read",
-        request: { slaveAddress: 1, addresses: [0] },
-      },
-    );
+    const result = codec.decodeResponse(frame, {
+      protocolId: "custom-function-code",
+      kind: "read",
+      request: { slaveAddress: 1, addresses: [0] },
+    });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual({ kind: "exception", exceptionCode: 0x02 });
+    if (result.ok)
+      expect(result.value).toEqual({ kind: "exception", exceptionCode: 0x02 });
   });
 
   it("函数不匹配返回失败", () => {
     const frame = withCrc([0x01, 0x03, 0x02, 0x12, 0x34]);
-    const result = codec.decodeResponse(
-      frame,
-      {
-        protocolId: "custom-function-code",
-        kind: "read",
-        request: { slaveAddress: 1, addresses: [0] },
-      },
-    );
+    const result = codec.decodeResponse(frame, {
+      protocolId: "custom-function-code",
+      kind: "read",
+      request: { slaveAddress: 1, addresses: [0] },
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("CUSTOM_FUNCTION_MISMATCH");
   });
@@ -117,6 +111,8 @@ describe("CustomFunctionCodec (ADR-043 E-4)", () => {
   });
 
   it("数量越界抛错", () => {
-    expect(() => codec.encodeRead({ slaveAddress: 1, addresses: [] })).toThrow();
+    expect(() =>
+      codec.encodeRead({ slaveAddress: 1, addresses: [] }),
+    ).toThrow();
   });
 });

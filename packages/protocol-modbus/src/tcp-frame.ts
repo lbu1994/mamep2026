@@ -12,10 +12,7 @@
 import { createMamepError, type MamepError } from "@mamep2026/domain";
 import type { Result } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
-import {
-  FUNCTION_READ_HOLDING,
-  FUNCTION_WRITE_MULTIPLE,
-} from "./rtu-frame";
+import { FUNCTION_READ_HOLDING, FUNCTION_WRITE_MULTIPLE } from "./rtu-frame";
 
 export const PROTOCOL_IDENTIFIER = 0x0000;
 
@@ -304,6 +301,7 @@ export function decodeTcpResponse(
     );
   }
   return ok({
-    kind: expected.kind === "write-multiple" ? "write-multiple" : "write-single",
+    kind:
+      expected.kind === "write-multiple" ? "write-multiple" : "write-single",
   });
 }

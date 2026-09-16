@@ -60,7 +60,10 @@ async function callBridge<T>(
     ({ method: m, args: a }) => {
       const host = (
         window as unknown as {
-          mamepHost?: Record<string, (...callArgs: unknown[]) => Promise<unknown>>;
+          mamepHost?: Record<
+            string,
+            (...callArgs: unknown[]) => Promise<unknown>
+          >;
         }
       ).mamepHost;
       if (host === undefined) throw new Error("mamepHost missing");
@@ -136,7 +139,10 @@ test("能力矩阵翻转：filesystem === full（主进程文件仓储）", asyn
     const result = (await callBridge<{
       ok: boolean;
       value?: { filesystem: string };
-    }>(page, "getCapabilities")) as { ok: boolean; value: { filesystem: string } };
+    }>(page, "getCapabilities")) as {
+      ok: boolean;
+      value: { filesystem: string };
+    };
     expect(result.ok).toBe(true);
     expect(result.value.filesystem).toBe("full");
   } finally {
@@ -151,9 +157,7 @@ test("修改工作区 → 主进程自动保存落盘为 userData/workspace.json
     // 非 mock 启动自动弹出 Connection Settings：先关闭再操作表格。
     await closeConnectionModal(page);
     // 结构性操作：新增表（侧边栏 New Table）→ 触发自动保存。
-    await page
-      .getByRole("button", { name: "New Table", exact: true })
-      .click();
+    await page.getByRole("button", { name: "New Table", exact: true }).click();
     await expect(
       page.locator(".register-table-tabs .ant-tabs-tab-active"),
     ).toContainText("Sheet 2", { timeout: 5000 });
@@ -192,9 +196,10 @@ test("关闭后同 userData 重启 → 会话恢复（新表仍在）", async ()
   // 第二会话：同 userData 重启，工作区从文件恢复。
   const second = await launchApp(userDataDir);
   try {
-    await expect(
-      second.page.locator(".ant-layout-sider"),
-    ).toContainText("Sheet 2", { timeout: 5000 });
+    await expect(second.page.locator(".ant-layout-sider")).toContainText(
+      "Sheet 2",
+      { timeout: 5000 },
+    );
     await expect(
       second.page.locator(".register-table-tabs .ant-tabs-tab-active"),
     ).toContainText("Sheet 2");

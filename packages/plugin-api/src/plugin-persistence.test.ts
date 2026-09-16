@@ -82,8 +82,9 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
     registry.setEnabled("installed-a", false);
     await vi.waitFor(() => expect(store.save).toHaveBeenCalled());
     expect(
-      saves[saves.length - 1]?.plugins.find((p) => p.manifest.id === "installed-a")
-        ?.enabled,
+      saves[saves.length - 1]?.plugins.find(
+        (p) => p.manifest.id === "installed-a",
+      )?.enabled,
     ).toBe(false);
   });
 
@@ -107,7 +108,9 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
       load: vi.fn(async () => ok(createEmptyPluginStoreData())),
       save: vi.fn(async () =>
         fail(
-          Object.assign(new Error("write failed"), { code: "PERSISTENCE" }) as never,
+          Object.assign(new Error("write failed"), {
+            code: "PERSISTENCE",
+          }) as never,
         ),
       ),
     };

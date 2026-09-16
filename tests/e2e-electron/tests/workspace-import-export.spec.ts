@@ -79,7 +79,10 @@ function callBridge(
     ({ method: m, args: a }) => {
       const host = (
         window as unknown as {
-          mamepHost?: Record<string, (...callArgs: unknown[]) => Promise<unknown>>;
+          mamepHost?: Record<
+            string,
+            (...callArgs: unknown[]) => Promise<unknown>
+          >;
         }
       ).mamepHost;
       if (host === undefined) throw new Error("mamepHost missing");

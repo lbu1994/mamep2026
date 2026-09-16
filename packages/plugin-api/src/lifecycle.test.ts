@@ -64,9 +64,9 @@ describe("PluginRegistry 生命周期骨架（ADR-039）", () => {
       },
     );
     expect(registry.getLifecycleState("lifecycle-plugin")).toBe("failed");
-    expect(registry.getLoadErrors().some((e) => e.errorCode === PLUGIN_HOOK_FAILED)).toBe(
-      true,
-    );
+    expect(
+      registry.getLoadErrors().some((e) => e.errorCode === PLUGIN_HOOK_FAILED),
+    ).toBe(true);
     // 故障插件贡献被禁用。
     expect(registry.getContributions("panels")).toHaveLength(0);
     expect(registry.list()).toHaveLength(1);
@@ -88,9 +88,9 @@ describe("PluginRegistry 生命周期骨架（ADR-039）", () => {
     await vi.waitFor(() => {
       expect(registry.getLifecycleState("lifecycle-plugin")).toBe("failed");
     });
-    expect(registry.getLoadErrors().some((e) => e.errorCode === PLUGIN_HOOK_FAILED)).toBe(
-      true,
-    );
+    expect(
+      registry.getLoadErrors().some((e) => e.errorCode === PLUGIN_HOOK_FAILED),
+    ).toBe(true);
     expect(registry.getContributions("panels")).toHaveLength(0);
   });
 

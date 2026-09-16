@@ -39,9 +39,10 @@ export async function loadWebPluginEntry(
       new Blob([entrySource], { type: "text/javascript" }),
     );
     // 动态 import Blob URL：Vite 无法静态分析该说明符（运行时产物），显式忽略。
-    const module = (await import(
-      /* @vite-ignore */ scriptUrl
-    )) as Record<string, unknown>;
+    const module = (await import(/* @vite-ignore */ scriptUrl)) as Record<
+      string,
+      unknown
+    >;
     const activate = module.activate;
     if (typeof activate !== "function" || module.manifest === undefined) {
       return fail(
@@ -59,9 +60,9 @@ export async function loadWebPluginEntry(
       activate: (activate as PluginLocalEntry["activate"]).bind(module),
       ...(typeof deactivate === "function"
         ? {
-            deactivate: (deactivate as NonNullable<
-              PluginLocalEntry["deactivate"]
-            >).bind(module),
+            deactivate: (
+              deactivate as NonNullable<PluginLocalEntry["deactivate"]>
+            ).bind(module),
           }
         : {}),
       ...(typeof handleToolbarAction === "function"

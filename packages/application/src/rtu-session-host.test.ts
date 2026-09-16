@@ -23,7 +23,11 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
-import { FakeTransport, ScriptedModbusRtuDevice, VirtualClock } from "@mamep2026/test-kit";
+import {
+  FakeTransport,
+  ScriptedModbusRtuDevice,
+  VirtualClock,
+} from "@mamep2026/test-kit";
 
 /** 多轮微任务冲刷：异步链路每层 await 需一次冲刷（仓库 advanceUntil 惯例）。 */
 async function flushMicrotasks(times = 8): Promise<void> {
@@ -58,9 +62,8 @@ function createHarness(): Harness {
   const events: Record<keyof RtuSessionHostEvents, MockedEvent> = {
     onLog: vi.fn<(event: CommunicationLogEvent) => void>(),
     onStateChange: vi.fn<(state: ConnectionState) => void>(),
-    onPollResult: vi.fn<
-      (key: string, address: number, result: Result<number>) => void
-    >(),
+    onPollResult:
+      vi.fn<(key: string, address: number, result: Result<number>) => void>(),
     onTraceSample: vi.fn<(sample: TraceSample) => void>(),
     onMessage: vi.fn<(message: ApplicationMessage) => void>(),
   };
@@ -92,7 +95,10 @@ function createHarness(): Harness {
   return { host, clock, transport, device, events };
 }
 
-async function connect(h: Harness, profile = createDefaultRtuProfile()): Promise<boolean> {
+async function connect(
+  h: Harness,
+  profile = createDefaultRtuProfile(),
+): Promise<boolean> {
   const result = await h.host.connect({
     profile,
     transport: h.transport,
@@ -117,7 +123,14 @@ describe("RtuSessionHost 连接/断开", () => {
     const transport = new FakeTransport();
     // 打开失败：open 返回错误。
     transport.open = vi.fn(async () =>
-      fail(createMamepError({ code: "SERIAL_OPEN_FAILED", category: "transport", userMessageKey: "errors.serialOpenFailed", technicalMessage: "open failed" })),
+      fail(
+        createMamepError({
+          code: "SERIAL_OPEN_FAILED",
+          category: "transport",
+          userMessageKey: "errors.serialOpenFailed",
+          technicalMessage: "open failed",
+        }),
+      ),
     );
     const result = await h.host.connect({
       profile: createDefaultRtuProfile(),
@@ -243,8 +256,16 @@ describe("RtuSessionHost 全表读取", () => {
     ]);
     const summary = await handle.promise;
     expect(summary.ok).toBe(true);
-    expect(h.events.onPollResult).toHaveBeenCalledWith("a", 0, expect.objectContaining({ ok: true }));
-    expect(h.events.onPollResult).toHaveBeenCalledWith("b", 0, expect.objectContaining({ ok: true }));
+    expect(h.events.onPollResult).toHaveBeenCalledWith(
+      "a",
+      0,
+      expect.objectContaining({ ok: true }),
+    );
+    expect(h.events.onPollResult).toHaveBeenCalledWith(
+      "b",
+      0,
+      expect.objectContaining({ ok: true }),
+    );
   });
 
   it("readAllRows(rows, batchId)：汇总 batchId 与传入一致（远程路径，ADR-025）", async () => {
@@ -394,7 +415,10 @@ describe("RtuSessionHost 设备拔出策略", () => {
 
     expect(h.events.onStateChange).toHaveBeenCalledWith("interrupted");
     expect(h.events.onMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ level: "error", messageKey: "messages.deviceDisconnected" }),
+      expect.objectContaining({
+        level: "error",
+        messageKey: "messages.deviceDisconnected",
+      }),
     );
     // 拔出后轮询停止：推进时钟不应再有轮询结果。
     const before = h.events.onPollResult.mock.calls.length;

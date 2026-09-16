@@ -8,10 +8,7 @@
  */
 import type { Result } from "@mamep2026/domain";
 import { ok } from "@mamep2026/domain";
-import type {
-  PluginStoreData,
-  PluginStorePort,
-} from "@mamep2026/plugin-api";
+import type { PluginStoreData, PluginStorePort } from "@mamep2026/plugin-api";
 import type { MamepHostApi } from "@mamep2026/platform-api";
 
 export class BridgePluginStore implements PluginStorePort {

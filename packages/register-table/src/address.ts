@@ -51,8 +51,7 @@ export function commitAddress(
     addressValue: addressResult === null ? null : addressResult.value,
     registerCount: count,
     // 范围长度变化时旧读值不再对齐，清空 registerValues（ADR-030）。
-    registerValues:
-      count === row.registerCount ? row.registerValues : null,
+    registerValues: count === row.registerCount ? row.registerValues : null,
     // 子行元数据按索引保留/截断/补齐（2026-08-27，不随值清空）。
     registers: resizeRegisters(row, count),
     // 位级注释/名称按寄存器序号保留/截断/补齐（ADR-052，不随值清空）。

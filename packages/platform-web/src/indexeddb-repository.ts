@@ -180,7 +180,8 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
   async export(): Promise<Result<string>> {
     try {
       const raw = await this.store.get(MAIN_KEY);
-      if (raw === undefined) return ok(serializeWorkspace(createEmptyWorkspace()));
+      if (raw === undefined)
+        return ok(serializeWorkspace(createEmptyWorkspace()));
       const parsed = parseWorkspace(raw);
       if (!parsed.ok) return parsed;
       return ok(serializeWorkspace(parsed.value));
@@ -200,7 +201,10 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
     try {
       const parsed = parseWorkspace(JSON.parse(serialized));
       if (!parsed.ok) return parsed;
-      await this.store.put(MAIN_KEY, JSON.parse(serializeWorkspace(parsed.value)));
+      await this.store.put(
+        MAIN_KEY,
+        JSON.parse(serializeWorkspace(parsed.value)),
+      );
       return ok(undefined);
     } catch (cause) {
       return fail(

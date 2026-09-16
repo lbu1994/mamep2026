@@ -4,12 +4,7 @@
  * 与 `tcp-loop.spec.ts` 中内联的实现**语义一致**，只是抽出来供新的 RTU 用例复用；
  * 既有 TCP 用例保持原样（已全绿，不做无谓改动）。
  */
-import {
-  chromium,
-  expect,
-  type Browser,
-  type Page,
-} from "@playwright/test";
+import { chromium, expect, type Browser, type Page } from "@playwright/test";
 import {
   CDP_PORT,
   clearAppData,
@@ -59,7 +54,9 @@ export async function openAppSession(): Promise<AppSession> {
 
   await page.waitForSelector(".register-table-tabs", { timeout: 60_000 });
   // 非 mock 启动自动弹出 Connection Settings（等动画完成再交互，防启动竞态）。
-  await page.waitForSelector(".ant-modal-container:visible", { timeout: 30_000 });
+  await page.waitForSelector(".ant-modal-container:visible", {
+    timeout: 30_000,
+  });
   await page.waitForTimeout(1000);
 
   return {
@@ -94,7 +91,10 @@ export async function dismissConnectionSettings(page: Page): Promise<void> {
 }
 
 /** 首行填地址（默认表行地址为空，不填则读请求不会生成：RegisterTableService 直接报地址为空）。 */
-export async function setRowAddress(page: Page, address: string): Promise<void> {
+export async function setRowAddress(
+  page: Page,
+  address: string,
+): Promise<void> {
   // 注意：不能用 /^Address/ 正则——会匹配到工具栏「Address format」进制切换控件与「Address Adjust」控件。
   const cell = page.getByLabel("Address", { exact: true }).first();
   await cell.click();

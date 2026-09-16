@@ -12,7 +12,8 @@ export type LogExportCapability = "download" | "save-dialog" | "unsupported";
 /** 工作区导入的文件来源（2026-08-29，PRD §8.3 P1）：file=桌面端文件对话框读取（Electron/VSCode）、upload=浏览器端文件选择后客户端读取、unsupported=不支持。 */
 export type WorkspaceImportCapability = "file" | "upload" | "unsupported";
 /** 工作区导出的落盘方式（2026-08-29，PRD §8.3 P1）：download=浏览器 Blob 下载、save-dialog=桌面端保存对话框、unsupported=不支持。 */
-export type WorkspaceExportCapability = "save-dialog" | "download" | "unsupported";
+export type WorkspaceExportCapability =
+  "save-dialog" | "download" | "unsupported";
 /** 插件安装的文件来源（2026-08-30，PRD §8.3 P1，ADR-038）：upload=浏览器端文件选择后客户端读取、file=桌面端文件对话框读取（Electron/VSCode）、unsupported=不支持。 */
 export type PluginInstallCapability = "file" | "upload" | "unsupported";
 
@@ -69,10 +70,5 @@ export const browserCapabilities: PlatformCapabilities = Object.freeze({
     "modbus-basic-tables:discrete-input",
     "modbus-basic-tables:input-register",
   ],
-  tableTypes: [
-    "holding-register",
-    "coil",
-    "discrete-input",
-    "input-register",
-  ],
+  tableTypes: ["holding-register", "coil", "discrete-input", "input-register"],
 });

@@ -91,8 +91,13 @@ function rtuConfig(): { port: string; baudRate: number; slaveAddress: number } {
   const conn = raw.connections.find(
     (c: { id: string }) => c.id === "rtu-com4-master",
   );
-  if (conn === undefined) throw new Error("config/connections.json 缺少 rtu-com4-master");
-  return { port: conn.port, baudRate: conn.baudRate, slaveAddress: conn.slaveAddress };
+  if (conn === undefined)
+    throw new Error("config/connections.json 缺少 rtu-com4-master");
+  return {
+    port: conn.port,
+    baudRate: conn.baudRate,
+    slaveAddress: conn.slaveAddress,
+  };
 }
 
 let app: ElectronApplication;
@@ -114,9 +119,9 @@ async function setRadixHex(p: Page): Promise<void> {
 }
 /**
  * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时已改为 50ms
- * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式手动输入 Select 上限 100ms。
- * 通过 showSearch 的手动输入（键入数值 + Enter）选中，避免点击下拉选项的脆弱性。
- * 应用默认维持 50ms 不变，仅测试连接放宽。
+ * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
+ * 2026-09-16 增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
+ * 改为「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
  */
 async function setRtuTimeoutSelect(
   p: Page,
@@ -129,12 +134,16 @@ async function setRtuTimeoutSelect(
     .locator(".ant-select")
     .first();
   await select.click();
-  // 清空搜索框内容（若已预填充）后键入目标值并按 Enter 选中。
+  // 清空搜索框内容（若已预填充）后键入目标值，收窄下拉列表。
   await p.keyboard.press("Control+a");
   await p.keyboard.type(String(timeoutMs));
-  await p.keyboard.press("Enter");
-  // 确认 Select 回显选中值。
-  await expect(modal).toContainText(`${timeoutMs} ms`, { timeout: 5000 });
+  // 锚定正则只命中目标档位（避免前缀匹配到 "1000 ms"）。
+  await p
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: new RegExp(`^${timeoutMs} ms$`) })
+    .click();
+  // 确认 Select 回显值精确等于目标档位。
+  await expect(select).toHaveText(new RegExp(`^${timeoutMs} ms$`));
 }
 /**
  * 活动表内容面板（多 Sheet 时限定到当前活动表，避免命中隐藏表单元格/工具栏）。
@@ -213,9 +222,12 @@ async function reconnectAsActiveSheet(p: Page): Promise<void> {
   await p
     .getByRole("button", { name: /Disconnect/i })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(p.locator(".ant-layout-header")).not.toContainText("Disconnect", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(p.locator(".ant-layout-header")).not.toContainText(
+    "Disconnect",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
   // 2) 打开 Connection Settings → 端口下拉枚举 → 选择 COM4 → Connect。
   await p
     .getByRole("button", { name: "Connection" })
@@ -248,13 +260,10 @@ async function reconnectAsActiveSheet(p: Page): Promise<void> {
  * 桩替换对话框；该插件贡献 codec / dataType（同步纯函数），确认框中须选「同进程执行」。
  */
 async function installCustomFunctionCodePlugin(): Promise<void> {
-  await app.evaluate(
-    async ({ dialog }, entryPath) => {
-      (dialog as unknown as { showOpenDialog: unknown }).showOpenDialog =
-        async () => ({ canceled: false, filePaths: [entryPath] });
-    },
-    CUSTOM_FC_ENTRY_PATH,
-  );
+  await app.evaluate(async ({ dialog }, entryPath) => {
+    (dialog as unknown as { showOpenDialog: unknown }).showOpenDialog =
+      async () => ({ canceled: false, filePaths: [entryPath] });
+  }, CUSTOM_FC_ENTRY_PATH);
 
   await page
     .getByRole("button", { name: "Settings" })
@@ -299,7 +308,9 @@ test.beforeAll(async () => {
   page.on("console", (msg) => {
     if (msg.type() === "error") consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
-  page.on("pageerror", (err) => consoleErrors.push(`PAGEERROR: ${String(err)}`));
+  page.on("pageerror", (err) =>
+    consoleErrors.push(`PAGEERROR: ${String(err)}`),
+  );
 
   // 清理 IndexedDB 避免跨运行残留工作区，随后重载生效。
   await page.evaluate(async () => {

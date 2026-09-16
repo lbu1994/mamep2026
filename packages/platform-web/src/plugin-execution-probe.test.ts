@@ -82,7 +82,10 @@ describe("probePluginExecutionSupport（ADR-056）", () => {
     const clock = manualClock();
 
     await expect(
-      probePluginExecutionSupport({ workerFactory: factory, clock: clock.clock }),
+      probePluginExecutionSupport({
+        workerFactory: factory,
+        clock: clock.clock,
+      }),
     ).resolves.toBe(true);
     expect(workerRef.current?.terminate).toHaveBeenCalledTimes(1);
     // 探测用 entry 经 init 消息下发（与生产同一加载路径）。

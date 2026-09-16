@@ -60,10 +60,10 @@ describe("ReadAllResultMessage", () => {
       />,
     );
     // （antd 图标 class 用 icon.name：ExclamationCircleFilled → anticon-exclamation-circle）
+    expect(document.querySelector(".anticon-exclamation-circle")).toBeTruthy();
     expect(
-      document.querySelector(".anticon-exclamation-circle"),
+      document.querySelector(".read-all-result .ant-tag-error"),
     ).toBeTruthy();
-    expect(document.querySelector(".read-all-result .ant-tag-error")).toBeTruthy();
     expect(document.querySelector(".read-all-result")?.textContent).toContain(
       "2 Failed",
     );

@@ -130,7 +130,10 @@ class DevFakeSerialPort implements SerialPortLike {
         );
       }
       for (let i = 0; i < quantity; i += 1) {
-        devFakeSerialState.registers.set((address + i) & 0xffff, values[i] ?? 0);
+        devFakeSerialState.registers.set(
+          (address + i) & 0xffff,
+          values[i] ?? 0,
+        );
       }
       return appendCrc(
         Uint8Array.from([
@@ -155,9 +158,7 @@ class DevFakeSerialPort implements SerialPortLike {
           data[byteIndex] = current | (1 << (i % 8));
         }
       }
-      return appendCrc(
-        Uint8Array.from([slave, 0x01, byteCount, ...data]),
-      );
+      return appendCrc(Uint8Array.from([slave, 0x01, byteCount, ...data]));
     }
     if (functionCode === 0x0f) {
       // 写多线圈（FC0F）：请求体 字节数 + 位打包数据（字节内 LSB 在前）。

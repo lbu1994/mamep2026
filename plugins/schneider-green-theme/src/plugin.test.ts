@@ -24,8 +24,12 @@ describe("schneider-green-theme 插件（2026-09-08）", () => {
     const registry = makeRegistry();
     const result = registerSchneiderGreenThemePlugin(registry);
     expect(result.ok).toBe(true);
-    expect(registry.getSource(SCHNEIDER_GREEN_THEME_PLUGIN_ID)).toBe("installed");
-    expect(registry.getRuntime(SCHNEIDER_GREEN_THEME_PLUGIN_ID)).toBeUndefined();
+    expect(registry.getSource(SCHNEIDER_GREEN_THEME_PLUGIN_ID)).toBe(
+      "installed",
+    );
+    expect(
+      registry.getRuntime(SCHNEIDER_GREEN_THEME_PLUGIN_ID),
+    ).toBeUndefined();
     expect(registry.getLifecycleState(SCHNEIDER_GREEN_THEME_PLUGIN_ID)).toBe(
       "registered",
     );
@@ -37,7 +41,9 @@ describe("schneider-green-theme 插件（2026-09-08）", () => {
     );
     expect(theme.colors).toHaveLength(1);
     expect(theme.colors?.[0]?.id).toBe("green");
-    expect(theme.colors?.[0]?.titleKey).toBe("plugins.schneiderGreenThemeColor");
+    expect(theme.colors?.[0]?.titleKey).toBe(
+      "plugins.schneiderGreenThemeColor",
+    );
     // 方案 A（2026-09-03）：插件自带 i18n title；缺失语言回退英文。
     expect(theme.colors?.[0]?.title?.["en-US"]).toBe("Schneider Green");
     expect(theme.colors?.[0]?.title?.["zh-CN"]).toBe("施耐德绿");

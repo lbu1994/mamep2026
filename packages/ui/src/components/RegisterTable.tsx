@@ -72,7 +72,10 @@ import type {
 } from "@mamep2026/domain";
 import { defaultConfig, sheetTypeWritable } from "@mamep2026/domain";
 import { formatRegisterAddress } from "@mamep2026/data-conversion";
-import { applyColumnOrder, isRowTypeCountValid } from "@mamep2026/register-table";
+import {
+  applyColumnOrder,
+  isRowTypeCountValid,
+} from "@mamep2026/register-table";
 import {
   combineRadixScale,
   dataTypeToRadix,
@@ -110,10 +113,7 @@ import {
   isArrowNavigationBlocked,
   isTextInputTarget,
 } from "../keyboard/guards";
-import {
-  matchesShortcut,
-  tableShortcut,
-} from "../keyboard/shortcuts";
+import { matchesShortcut, tableShortcut } from "../keyboard/shortcuts";
 import { readRowById, writeRowById } from "../row-io";
 import { runPluginToolbarAction } from "../plugin-toolbar-actions";
 
@@ -131,7 +131,9 @@ const WRITE_VERIFY_OPTIONS: Array<{
   { value: "500", settings: { mode: "delayed", delayMs: 500 } },
 ];
 
-function writeVerifyToValue(settings: ReadVerifySettings): WriteVerifyOptionValue {
+function writeVerifyToValue(
+  settings: ReadVerifySettings,
+): WriteVerifyOptionValue {
   if (settings.mode === "off") return "off";
   if (settings.mode === "immediate") return "immediate";
   return String(settings.delayMs) as WriteVerifyOptionValue;
@@ -878,9 +880,13 @@ const ChildScaleCell = memo(function ChildScaleCell({
         variant="borderless"
         disabled={!applicable}
         onChange={(value: ScaleValue) =>
-          setChildMeta(row.__virtualChild.parentRowId, row.__virtualChild.index, {
-            dataType: combineRadixScale(radix, value),
-          })
+          setChildMeta(
+            row.__virtualChild.parentRowId,
+            row.__virtualChild.index,
+            {
+              dataType: combineRadixScale(radix, value),
+            },
+          )
         }
         options={SCALE_OPTIONS.map((s) => ({ value: s, label: s }))}
       />
@@ -1325,7 +1331,8 @@ export const RegisterTable = memo(function RegisterTable({
     .filter((action) => {
       const target = action.payload.targetTableType;
       if (target === undefined) return true;
-      if (sheetType === "holding-register") return target === "holding-register";
+      if (sheetType === "holding-register")
+        return target === "holding-register";
       return sheetType === `${action.pluginId}:${target}`;
     });
   // 连接状态订阅：连接/断开时刷新（工具栏「从站地址 / Unit ID」label 按活动协议切换，
@@ -1378,9 +1385,7 @@ export const RegisterTable = memo(function RegisterTable({
       if (action.payload.requiresConfirm) {
         modal.confirm({
           title: t(action.payload.titleKey),
-          content: t(
-            action.payload.confirmKey ?? action.payload.titleKey,
-          ),
+          content: t(action.payload.confirmKey ?? action.payload.titleKey),
           okText: t("table.confirm"),
           cancelText: t("connection.cancel"),
           onOk: run,
@@ -1494,26 +1499,30 @@ export const RegisterTable = memo(function RegisterTable({
   );
   const setSheetSlaveAddress = useAppStore((s) => s.setSheetSlaveAddress);
   // 本表写后回读配置（每表独立，2026-08-26）：默认立即回读。
-  const writeVerifyValue = useAppStore(
-    (s) =>
-      writeVerifyToValue(
-        s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.writeVerify ??
-          { mode: "immediate" as const, delayMs: null },
-      ),
+  const writeVerifyValue = useAppStore((s) =>
+    writeVerifyToValue(
+      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.writeVerify ?? {
+        mode: "immediate" as const,
+        delayMs: null,
+      },
+    ),
   );
   const setSheetWriteVerify = useAppStore((s) => s.setSheetWriteVerify);
   // 本表地址变换配置（每表独立，ADR-042）：默认不调整（null）。
   const sheetAddressTransform = useAppStore(
     (s) =>
-      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.addressTransform ??
-      null,
+      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)
+        ?.addressTransform ?? null,
   );
   const setSheetAddressTransform = useAppStore(
     (s) => s.setSheetAddressTransform,
   );
   // 地址变换贡献（ADR-042）：内置 builtin.address-adjust 恒在；工具栏按贡献渲染 OFF/ON。
   const addressTransformContributions =
-    usePluginContributions<AddressTransformContribution>(host, "addressTransform");
+    usePluginContributions<AddressTransformContribution>(
+      host,
+      "addressTransform",
+    );
   // 活动协议（2026-08-25）：TCP 连接时工具栏值语义为 Unit ID（label 随之切换）；
   // 未连接/RTU 时恒为从站地址。
   const activeProtocol =
@@ -2202,7 +2211,8 @@ export const RegisterTable = memo(function RegisterTable({
               ? column.width
               : undefined;
           // 移动端禁用列宽调整（触摸下 mouse-only 手柄不可用且易误触，ADR-050 Phase 3）。
-          const resizable = !fixed && cellWidth !== undefined && !isMobileLayout;
+          const resizable =
+            !fixed && cellWidth !== undefined && !isMobileLayout;
           const onResize =
             resizable && column.key !== undefined
               ? handleResize(column.key)
@@ -2458,132 +2468,130 @@ export const RegisterTable = memo(function RegisterTable({
    */
   const secondaryToolbarGroup = (
     <div className="table-toolbar__group">
-          <Tooltip title={t("table.addressFormatHint")}>
-            <span className="table-toolbar__radix">
-              <span className="table-toolbar__radix-label">
-                {t("table.addressRadixLabel")}
-              </span>
-              <Segmented
-                size="small"
-                aria-label={t("table.addressFormat")}
-                options={[
-                  { label: "DEC", value: "dec" },
-                  { label: "HEX", value: "hex" },
-                ]}
-                value={registerRadix}
-                onChange={(value) => {
-                  if (value === "hex" || value === "dec") {
-                    setSheetRegisterRadix(sheetId, value);
-                  }
-                }}
-              />
-            </span>
-          </Tooltip>
-          <Tooltip
-            title={
-              activeProtocol === "tcp"
-                ? t("table.unitIdHint")
-                : t("table.slaveAddressHint")
-            }
-          >
-            <span className="table-toolbar__slave">
-              <span className="table-toolbar__slave-label">
-                {activeProtocol === "tcp"
-                  ? t("table.unitId")
-                  : t("table.slaveAddress")}
-              </span>
-              <InputNumber
-                size="small"
-                aria-label={
-                  activeProtocol === "tcp"
-                    ? t("table.unitId")
-                    : t("table.slaveAddress")
-                }
-                min={0}
-                max={255}
-                value={slaveAddress}
-                onChange={(v) => setSheetSlaveAddress(sheetId, v ?? 1)}
-                style={{ width: 64 }}
-              />
-            </span>
-          </Tooltip>
-          <Tooltip title={t("table.writeVerifyHint")}>
-            <span className="table-toolbar__verify">
-              <span className="table-toolbar__verify-label">
-                {t("table.writeVerifyLabel")}
-              </span>
-              <Select
-                size="small"
-                aria-label={t("table.writeVerify")}
-                style={{ width: 116 }}
-                value={writeVerifyValue}
-                onChange={(value) => {
-                  const option = WRITE_VERIFY_OPTIONS.find(
-                    (o) => o.value === value,
-                  );
-                  if (option !== undefined) {
-                    setSheetWriteVerify(sheetId, option.settings);
-                  }
-                }}
-                options={WRITE_VERIFY_OPTIONS.map((o) => ({
-                  value: o.value,
-                  label:
-                    o.value === "off" || o.value === "immediate"
-                      ? t(writeVerifyOptionLabel(o.value))
-                      : t(writeVerifyOptionLabel(o.value), {
-                          ms: writeVerifyOptionMs(o.value),
-                        }),
-                }))}
-              />
-            </span>
-          </Tooltip>
-          {/* 表级 Address Adjust（2026-09-01，ADR-042）：每表独立 OFF/ON；
-              选项来自 addressTransform 贡献（内置恒在），仅 RTU 显示。 */}
-          {activeProtocol === "rtu" &&
-          addressTransformContributions.length > 0 ? (
-            <Tooltip title={t("table.addressAdjustHint")}>
-              <span className="table-toolbar__adjust">
-                <span className="table-toolbar__adjust-label">
-                  {t("table.addressAdjust")}
-                </span>
-                <Segmented
-                  size="small"
-                  aria-label={t("table.addressAdjust")}
-                  value={sheetAddressTransform?.enabled ? "on" : "off"}
-                  onChange={(value) => {
-                    const transform =
-                      addressTransformContributions[0]?.payload;
-                    setSheetAddressTransform(
-                      sheetId,
-                      value === "on" && transform !== undefined
-                        ? {
-                            transformId: transform.id,
-                            enabled: true,
-                          }
-                        : null,
-                    );
-                  }}
-                  options={[
-                    { value: "off", label: t("table.addressAdjustOff") },
-                    { value: "on", label: t("table.addressAdjustOn") },
-                  ]}
-                />
-              </span>
-            </Tooltip>
-          ) : null}
-          <Tooltip title={t("table.restoreColumnLayoutHint")}>
-            <Button
-              size="small"
-              icon={<ColumnWidthOutlined />}
-              disabled={!hasCustomColumnLayout}
-              onClick={handleRestoreColumnLayout}
-            >
-              {t("table.restoreColumnLayout")}
-            </Button>
-          </Tooltip>
-          <span className="table-toolbar__info">
-            {t("table.rowCount", { count: rows.length })}
+      <Tooltip title={t("table.addressFormatHint")}>
+        <span className="table-toolbar__radix">
+          <span className="table-toolbar__radix-label">
+            {t("table.addressRadixLabel")}
           </span>
+          <Segmented
+            size="small"
+            aria-label={t("table.addressFormat")}
+            options={[
+              { label: "DEC", value: "dec" },
+              { label: "HEX", value: "hex" },
+            ]}
+            value={registerRadix}
+            onChange={(value) => {
+              if (value === "hex" || value === "dec") {
+                setSheetRegisterRadix(sheetId, value);
+              }
+            }}
+          />
+        </span>
+      </Tooltip>
+      <Tooltip
+        title={
+          activeProtocol === "tcp"
+            ? t("table.unitIdHint")
+            : t("table.slaveAddressHint")
+        }
+      >
+        <span className="table-toolbar__slave">
+          <span className="table-toolbar__slave-label">
+            {activeProtocol === "tcp"
+              ? t("table.unitId")
+              : t("table.slaveAddress")}
+          </span>
+          <InputNumber
+            size="small"
+            aria-label={
+              activeProtocol === "tcp"
+                ? t("table.unitId")
+                : t("table.slaveAddress")
+            }
+            min={0}
+            max={255}
+            value={slaveAddress}
+            onChange={(v) => setSheetSlaveAddress(sheetId, v ?? 1)}
+            style={{ width: 64 }}
+          />
+        </span>
+      </Tooltip>
+      <Tooltip title={t("table.writeVerifyHint")}>
+        <span className="table-toolbar__verify">
+          <span className="table-toolbar__verify-label">
+            {t("table.writeVerifyLabel")}
+          </span>
+          <Select
+            size="small"
+            aria-label={t("table.writeVerify")}
+            style={{ width: 116 }}
+            value={writeVerifyValue}
+            onChange={(value) => {
+              const option = WRITE_VERIFY_OPTIONS.find(
+                (o) => o.value === value,
+              );
+              if (option !== undefined) {
+                setSheetWriteVerify(sheetId, option.settings);
+              }
+            }}
+            options={WRITE_VERIFY_OPTIONS.map((o) => ({
+              value: o.value,
+              label:
+                o.value === "off" || o.value === "immediate"
+                  ? t(writeVerifyOptionLabel(o.value))
+                  : t(writeVerifyOptionLabel(o.value), {
+                      ms: writeVerifyOptionMs(o.value),
+                    }),
+            }))}
+          />
+        </span>
+      </Tooltip>
+      {/* 表级 Address Adjust（2026-09-01，ADR-042）：每表独立 OFF/ON；
+              选项来自 addressTransform 贡献（内置恒在），仅 RTU 显示。 */}
+      {activeProtocol === "rtu" && addressTransformContributions.length > 0 ? (
+        <Tooltip title={t("table.addressAdjustHint")}>
+          <span className="table-toolbar__adjust">
+            <span className="table-toolbar__adjust-label">
+              {t("table.addressAdjust")}
+            </span>
+            <Segmented
+              size="small"
+              aria-label={t("table.addressAdjust")}
+              value={sheetAddressTransform?.enabled ? "on" : "off"}
+              onChange={(value) => {
+                const transform = addressTransformContributions[0]?.payload;
+                setSheetAddressTransform(
+                  sheetId,
+                  value === "on" && transform !== undefined
+                    ? {
+                        transformId: transform.id,
+                        enabled: true,
+                      }
+                    : null,
+                );
+              }}
+              options={[
+                { value: "off", label: t("table.addressAdjustOff") },
+                { value: "on", label: t("table.addressAdjustOn") },
+              ]}
+            />
+          </span>
+        </Tooltip>
+      ) : null}
+      <Tooltip title={t("table.restoreColumnLayoutHint")}>
+        <Button
+          size="small"
+          icon={<ColumnWidthOutlined />}
+          disabled={!hasCustomColumnLayout}
+          onClick={handleRestoreColumnLayout}
+        >
+          {t("table.restoreColumnLayout")}
+        </Button>
+      </Tooltip>
+      <span className="table-toolbar__info">
+        {t("table.rowCount", { count: rows.length })}
+      </span>
     </div>
   );
 

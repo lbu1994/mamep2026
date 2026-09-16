@@ -173,7 +173,10 @@ describe("PollingCoordinator", () => {
 
     // 恢复 a：下一周期恢复轮询。
     coordinator.resume("a");
-    await advanceUntil(clock, () => transport.sentFrames.length === countAtDefer + 1);
+    await advanceUntil(
+      clock,
+      () => transport.sentFrames.length === countAtDefer + 1,
+    );
     transport.simulateData(readResponse(1, 2));
     await advanceUntil(clock, () => results.length === 2);
     coordinator.stop();

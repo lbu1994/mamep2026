@@ -118,11 +118,9 @@ export function createTcpConnectionProfile(
 
   const defaults = defaultConfig.tcp;
   return ok({
-    id: (
-      typeof candidate.id === "string" && candidate.id.length > 0
-        ? candidate.id
-        : ""
-    ) as ConnectionProfileId,
+    id: (typeof candidate.id === "string" && candidate.id.length > 0
+      ? candidate.id
+      : "") as ConnectionProfileId,
     name:
       typeof candidate.name === "string" && candidate.name.length > 0
         ? candidate.name

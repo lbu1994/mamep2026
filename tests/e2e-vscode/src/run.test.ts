@@ -131,7 +131,11 @@ async function runRtuLoop(): Promise<void> {
     profile: rtuProfile(),
     slaveAddress: 1,
   });
-  assert.strictEqual(connect.type, "response", "session-connect should succeed");
+  assert.strictEqual(
+    connect.type,
+    "response",
+    "session-connect should succeed",
+  );
 
   // 2.5 会话通信统计基线（连接后；sessionStats 为 dev 探针 comm-log 帧计数）。
   const baseline = await sessionStats();
@@ -140,7 +144,11 @@ async function runRtuLoop(): Promise<void> {
   const write = await rpcEnvelope("session-write-row", {
     row: registerRow(1, "1234"),
   });
-  assert.strictEqual(write.type, "response", "session-write-row should succeed");
+  assert.strictEqual(
+    write.type,
+    "response",
+    "session-write-row should succeed",
+  );
   assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
   // 一次写入 = 恰好一次发送 + 一次收到（从站只收到一次）。
   const afterWrite = await sessionStats();
@@ -190,7 +198,11 @@ async function runRtuLoop(): Promise<void> {
 
   // 6. session-disconnect → disconnected。
   const disconnect = await rpcEnvelope("session-disconnect");
-  assert.strictEqual(disconnect.type, "response", "session-disconnect should succeed");
+  assert.strictEqual(
+    disconnect.type,
+    "response",
+    "session-disconnect should succeed",
+  );
   const stateAfter = await rpcEnvelope("session-get-state");
   assert.strictEqual(
     (stateAfter.payload as { connectionState: string }).connectionState,
@@ -450,9 +462,8 @@ async function runBatchCancelLoop(): Promise<void> {
     "response",
     "session-batch-read should return summary",
   );
-  const summary = (
-    batch.payload as { summary: { cancelledCount: number } }
-  ).summary;
+  const summary = (batch.payload as { summary: { cancelledCount: number } })
+    .summary;
   assert.ok(
     summary.cancelledCount > 0,
     `cancelled batch should count cancelled rows, got ${summary.cancelledCount}`,
@@ -754,7 +765,9 @@ async function runPluginHostLoop(): Promise<void> {
     "plugin artifact env paths should be set by run-e2e.mjs (pnpm build:plugins)",
   );
   const entrySource = await fs.readFile(entryPath, "utf8");
-  const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as unknown;
+  const manifest = JSON.parse(
+    await fs.readFile(manifestPath, "utf8"),
+  ) as unknown;
   const TRANSFORM_ID = "builtin.address-adjust";
 
   const readAt = async (address: number): Promise<unknown> => {
@@ -775,7 +788,11 @@ async function runPluginHostLoop(): Promise<void> {
       transformId: TRANSFORM_ID,
       enabled,
     });
-    assert.strictEqual(result.type, "response", "session-set-address-transform");
+    assert.strictEqual(
+      result.type,
+      "response",
+      "session-set-address-transform",
+    );
   };
 
   // 1. 安装同进程可执行插件（渲染端 plugin-store-save 的等价载荷）。
@@ -792,7 +809,11 @@ async function runPluginHostLoop(): Promise<void> {
       ],
     },
   });
-  assert.strictEqual(saved.type, "response", "plugin-store-save should succeed");
+  assert.strictEqual(
+    saved.type,
+    "response",
+    "plugin-store-save should succeed",
+  );
   // 宿主侧插件执行面经 ipc 回调异步同步（onPluginStoreSaved → HostPluginRuntime.sync）。
   await sleep(1500);
 
@@ -848,7 +869,11 @@ async function runPluginHostLoop(): Promise<void> {
       profile: rtuProfile(),
       slaveAddress: 1,
     });
-    assert.strictEqual(reconnect.type, "response", "session-connect (after uninstall)");
+    assert.strictEqual(
+      reconnect.type,
+      "response",
+      "session-connect (after uninstall)",
+    );
     await setTransform(true);
     assert.strictEqual(
       await readAt(1),
