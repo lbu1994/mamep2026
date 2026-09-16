@@ -493,11 +493,23 @@ body {
   color: var(--ant-color-text-tertiary);
 }
 
-/* 折叠窄条分组 Menu（36px）：收缩为图标入口，悬停弹出该组表项 */
+/* 折叠窄条分组 Menu：收缩为图标入口，悬停弹出该组表项。
+   2026-09-16 修复「图标不居中 + 窄条横向溢出」，两条独立成因：
+   1) 原 `width: 36px` 与 `.sheet-sidebar__list` 的 4px 水平 margin 叠加 = 实占 44px，
+      塞进 36px 窄条（内容区 35px，含 1px 右边框）→ 撑出横向滚动条。
+      改为 `width: 100%` + 去掉水平 margin（宽度自适应，不再写死数值）。
+   2) antd v6 经 css 变量给 inline 菜单项/子菜单标题留缩进：
+      `--ant-menu-item-width: calc(100% - 4px)`、`--ant-menu-item-margin-inline: 2px`，
+      使标题盒比窄条窄 4px、左侧偏移 2px，图标即便在盒内居中也不在窄条中线上。
+      折叠态覆盖为满宽无边距。预期：图标中心 = 窄条内容区中线（与顶部折叠按钮同竖轴）。
+   注：折叠态菜单根类名不含 `ant-menu-inline`，故展开态规则不会误伤此处。 */
 .sheet-sidebar__menu.ant-menu-root.ant-menu-inline-collapsed {
-  width: 36px;
+  width: 100%;
+  margin-inline: 0;
   border-inline-end: 0;
   background: transparent;
+  --ant-menu-item-width: 100%;
+  --ant-menu-item-margin-inline: 0;
 }
 
 .sheet-sidebar__menu.ant-menu-inline-collapsed .ant-menu-submenu-title {
@@ -507,6 +519,18 @@ body {
   height: 36px;
   line-height: 36px;
   padding-inline: 0;
+}
+
+/* 折叠态分组头（分组名 + 「＋」）被 antd 置 opacity:0，但**仍在 flex 流中**，
+   而本文件为「分组头可收缩/长标题省略号」强制其 `flex: 1 1 auto` → 它占满剩余宽度，
+   把图标挤到左侧（`justify-content: center` 失效）。折叠态直接从布局移除：
+   该内容本就不可见且无交互，悬停弹出子菜单由标题行本身触发，不受影响。
+   必须 `!important`：antd 的折叠态规则 `.anticon + span { display: inline-block }` 含元素选择器
+   （特异性 0,4,1 > 本规则 0,4,0），不加会被它压过——本仓对 antd Menu 的覆盖沿用 `!important` 做法。 */
+.sheet-sidebar__menu.ant-menu-inline-collapsed
+  .ant-menu-submenu-title
+  .sheet-sidebar__group-head {
+  display: none !important;
 }
 
 .sheet-sidebar__menu.ant-menu-inline-collapsed
@@ -529,10 +553,10 @@ body {
   font-weight: 600;
 }
 
-/* 折叠窄条：分组 Menu 收缩为图标入口（悬停弹出子项） */
-
-/* 折叠窄条：隐藏分组头「＋」按钮（折叠态新建由窄条顶部按钮承担，
-   避免其 Tooltip/热区干扰折叠图标入口的悬停弹出）。 */
+/* 折叠窄条：隐藏分组头「＋」按钮。
+   折叠态侧栏**不提供新建表入口**（按设计，2026-09-16 确认）：窄条只保留折叠按钮与各分组图标；
+   新建表请展开侧栏后用分组头「＋」，或直接按 Ctrl+Alt+N。
+   此处隐藏同时避免其 Tooltip/热区干扰折叠图标入口的悬停弹出。 */
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__group-action {
   display: none;
 }

@@ -66,3 +66,66 @@ test("collapsed sidebar pops up group submenu and switches table", async ({
   // 全程无 console 错误。
   expect(errors).toEqual([]);
 });
+
+test("collapsed sidebar centers group icons and does not overflow horizontally", async ({
+  page,
+}) => {
+  const errors = collectConsoleErrors(page);
+  await openApp(page);
+
+  await page
+    .getByRole("button", { name: "Toggle sidebar" })
+    .first()
+    .evaluate((el) => (el as HTMLElement).click());
+  await expect(page.locator(".ant-layout-sider")).toHaveClass(
+    /ant-layout-sider-collapsed/,
+  );
+
+  // 折叠窄条几何（2026-09-16 修复守护）：
+  //  - 分组图标中心须与顶部折叠按钮中心同一竖轴（= 窄条内容区中线；修复前偏左 4px）；
+  //  - `.sheet-sidebar__groups` 不得横向溢出（修复前 scrollWidth 44 > clientWidth 35，出横向滚动条）。
+  const geometry = await page.evaluate(() => {
+    const strip = document.querySelector<HTMLElement>(".sheet-sidebar");
+    const button = document.querySelector<HTMLElement>(
+      ".sheet-sidebar__collapse",
+    );
+    const groups = document.querySelector<HTMLElement>(
+      ".sheet-sidebar__groups",
+    );
+    if (strip === null || button === null || groups === null) return null;
+    const stripRect = strip.getBoundingClientRect();
+    const centerOf = (rect: DOMRect): number =>
+      rect.left - stripRect.left + rect.width / 2;
+    const titleSelector =
+      ".sheet-sidebar__menu.ant-menu-inline-collapsed .ant-menu-submenu-title";
+    return {
+      axisCenter: centerOf(button.getBoundingClientRect()),
+      titleCount: document.querySelectorAll(titleSelector).length,
+      iconCenters: [
+        ...document.querySelectorAll<HTMLElement>(`${titleSelector} .anticon`),
+      ].map((icon) => centerOf(icon.getBoundingClientRect())),
+      scrollWidth: groups.scrollWidth,
+      clientWidth: groups.clientWidth,
+    };
+  });
+
+  expect(geometry).not.toBeNull();
+  const { axisCenter, titleCount, iconCenters, scrollWidth, clientWidth } =
+    geometry ?? {
+      axisCenter: 0,
+      titleCount: 0,
+      iconCenters: [],
+      scrollWidth: 0,
+      clientWidth: 0,
+    };
+  // 每个分组都有图标入口（防空数组「假通过」）。
+  expect(titleCount).toBeGreaterThan(0);
+  expect(iconCenters).toHaveLength(titleCount);
+  for (const iconCenter of iconCenters) {
+    expect(Math.abs(iconCenter - axisCenter)).toBeLessThanOrEqual(1);
+  }
+  expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+
+  // 无 console 错误。
+  expect(errors).toEqual([]);
+});
