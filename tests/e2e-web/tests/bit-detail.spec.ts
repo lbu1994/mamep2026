@@ -1,14 +1,14 @@
 /**
  * 寄存器位明细展开（ADR-052，2026-09-11）E2E：
  * - 单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）：Address 列「寄存器地址 + Bit 序号」、
- *   位掩码 hover 提示、0/1、位名称（Name 列，可编辑）、位注释（Comment 列，可编辑）；
- * - 点击切换控件改位值 → 父行 Data 立即更新（只改当前值，不写设备）；
- * - 位行 Data 文本可输入 0/1；
+ *   位掩码 hover 提示、位值开关（`1`/`0`）、位名称（Name 列，可编辑）、位注释（Comment 列，可编辑）；
+ * - 位行 Data 只有开关、**没有输入框**（2026-09-16 交互简化）；未读取时开关内显示 `—` 代替 `0`；
+ * - 点击开关改位值 → 父行 Data 立即更新（只改当前值，不写设备）；
  * - 范围行寄存器子行可再展开位明细（两层嵌套）；
  * - 位名称/位注释编辑后随工作区持久化（reload 恢复）；
  * - 全程无 console 错误。
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
@@ -69,6 +69,30 @@ async function setBinaryType(
   await page.locator(".ant-select-dropdown:visible [title='Binary']").click();
 }
 
+/**
+ * 断言位行开关状态与当前显示的文字。
+ * antd Switch 的 `1`/`0` 是两个**恒在 DOM 的兄弟 span**（靠 CSS 滑动切换），所以：
+ * 状态一律看 `aria-checked`，显示文字看「当前该显示哪一侧」的 span（未读取时未选中侧为 `—`）。
+ */
+async function expectBit(
+  row: Locator,
+  bit: number,
+  label: "1" | "0" | "—",
+): Promise<void> {
+  const toggle = row.getByLabel(`Toggle bit ${bit}`);
+  await expect(toggle).toHaveAttribute(
+    "aria-checked",
+    label === "1" ? "true" : "false",
+  );
+  await expect(
+    toggle.locator(
+      label === "1"
+        ? ".ant-switch-inner-checked"
+        : ".ant-switch-inner-unchecked",
+    ),
+  ).toHaveText(label);
+}
+
 /** 填入地址（点击进入编辑态后填写）。 */
 async function setAddress(
   target: ReturnType<typeof parentRow>,
@@ -106,15 +130,23 @@ test("单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）", asy
   const bit15 = bitRows(page).nth(0);
   await expect(bit15).toContainText("0 Bit 15");
   await expect(bit15.locator("span[title='0x8000']")).toHaveCount(1);
-  await expect(bit15.getByLabel("Bit 15 value")).toHaveText("1");
+  await expectBit(bit15, 15, "1");
 
   const bit0 = bitRows(page).nth(15);
   await expect(bit0).toContainText("0 Bit 0");
   await expect(bit0.locator("span[title='0x0001']")).toHaveCount(1);
-  await expect(bit0.getByLabel("Bit 0 value")).toHaveText("1");
+  await expectBit(bit0, 0, "1");
 
   // 中间位为 0。
-  await expect(bitRows(page).nth(1).getByLabel("Bit 14 value")).toHaveText("0");
+  await expectBit(bitRows(page).nth(1), 14, "0");
+
+  // 位行 Data 只有开关、没有输入框（2026-09-16 交互简化）。
+  await expect(bitRows(page).locator(".register-table__bit-value")).toHaveCount(
+    16,
+  );
+  await expect(
+    bitRows(page).locator(".register-table__bit-value input"),
+  ).toHaveCount(0);
 
   expect(errors).toEqual([]);
 });
@@ -136,14 +168,11 @@ test("点击切换位值同步父行当前值（不写设备、不进入编辑�
   // bit15 由 1 → 0：父行 Data 随之更新（当前值，未下发设备）。
   await bitRows(page).nth(0).getByLabel("Toggle bit 15").click();
   await expect(first.getByLabel("Data")).toHaveText("00000000 00000001");
-  await expect(bitRows(page).nth(0).getByLabel("Bit 15 value")).toHaveText("0");
+  await expectBit(bitRows(page).nth(0), 15, "0");
 
-  // 位行 Data 文本可输入（bit0 0 → 1）。
-  const bit0Value = bitRows(page).nth(15).getByLabel("Bit 0 value");
-  await expect(bit0Value).toHaveText("1");
-  await bit0Value.click();
-  await bit0Value.fill("0");
-  await bit0Value.press("Enter");
+  // 位值只由开关操作（bit0 1 → 0）；位行 Data 无输入框可编辑。
+  await bitRows(page).nth(15).getByLabel("Toggle bit 0").click();
+  await expectBit(bitRows(page).nth(15), 0, "0");
   await expect(first.getByLabel("Data")).toHaveText("00000000 00000000");
 });
 
@@ -171,8 +200,8 @@ test("范围行寄存器子行可再展开位明细（两层嵌套）", async ({
   const bit15 = bitRows(page).nth(0);
   // 范围行：Address 列显示该寄存器实际地址（第 1 个寄存器 = 0）+ Bit 序号。
   await expect(bit15).toContainText("0 Bit 15");
-  await expect(bit15.getByLabel("Bit 15 value")).toHaveText("1");
-  await expect(bitRows(page).nth(15).getByLabel("Bit 0 value")).toHaveText("1");
+  await expectBit(bit15, 15, "1");
+  await expectBit(bitRows(page).nth(15), 0, "1");
 
   // 切换该位（1 → 0）：父行组合文本只更新该寄存器。
   await bit15.getByLabel("Toggle bit 15").click();
@@ -220,6 +249,33 @@ test("位名称/位注释可编辑并随工作区持久化（reload 恢复）", 
   await expect(bitRows(page)).toHaveCount(16);
   await expect(bitRows(page).nth(0).getByLabel("Name")).toHaveText("Alarm bit");
   await expect(bitRows(page).nth(0).getByLabel("Comment")).toHaveText("alarm");
+
+  expect(errors).toEqual([]);
+});
+
+test("未读取时开关内显示 — 代替 0，切换后出现 1/0", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
+  });
+
+  await openApp(page);
+  const first = parentRow(page, 0);
+  await setBinaryType(page, first);
+  await setAddress(first, "0");
+  // 不读取：位值未知 → 16 行位明细的开关内均显示 —（不再使用开关外侧占位）。
+  await first.locator('button[aria-label="Expand row"]').click();
+  await expect(bitRows(page)).toHaveCount(16);
+  await expect(
+    bitRows(page).locator(".register-table__bit-value-placeholder"),
+  ).toHaveCount(0);
+  await expectBit(bitRows(page).nth(15), 0, "—");
+
+  // 切换 bit0（按全 0 基准 → 1）：父行 Data 同步，未选中侧恢复为 0。
+  await bitRows(page).nth(15).getByLabel("Toggle bit 0").click();
+  await expectBit(bitRows(page).nth(15), 0, "1");
+  await expect(first.getByLabel("Data")).toHaveText("00000000 00000001");
 
   expect(errors).toEqual([]);
 });

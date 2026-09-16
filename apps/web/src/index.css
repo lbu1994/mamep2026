@@ -908,9 +908,45 @@ body {
   background: var(--ant-table-row-hover-bg);
 }
 
-/* 位行 Data 列的切换控件：右对齐、紧凑；移动端保证触摸命中区 ≥32px（ADR-050 Phase 3）。 */
+/* 位行 Data 列：仅一个开关（1/0），未读取时开关内显示「—」代替 0（2026-09-17 起在开关**内部**，
+   不再用开关外侧的占位；由 `unCheckedChildren` 动态切换）。
+   - 开关在单元格内**水平居中**；
+   - 用 antd **默认尺寸**（不传 `size`）而非 `size="small"`：高度 = `fontSize × lineHeight`
+     = 21px（small 为 `controlHeight / 2` = 14px），比 small 更清晰；
+   - 默认尺寸的内边距随滑块变大（`innerMaxMargin = 滑块 + 6`、`innerMinMargin = 滑块 / 2`），
+     轨道太窄文字会被 `overflow: hidden` 裁掉，故 `min-width: 44px`（antd 默认 ≈ 40.9px）；
+   - `1`/`0` 字号与 Data 列普通数据一致 = **13px**（表格单元格继承主题 `fontSize: 13`；antd 給开关文字的
+     默认也是 13px，但因 `:where()` 优先级低可被直接覆盖）；
+   - 行高约束：本行单元格内容区 = 29px − padding 2×2 − 底边框 1px = **24px**（由固定 24px 高的
+     `.register-table__editable-cell-value-wrap` 决定），开关高度 ≤ 24px 不会撑高行（实测 25px 起行高 = 开关高 + 5px）；
+   - 移动端保证触摸命中区 ≥32px（ADR-050 Phase 3）。 */
+.register-table__bit-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .register-table__bit-toggle {
   flex: 0 0 auto;
+}
+
+/* 选择器保留 2 个类，稳压 antd 的 `.ant-switch`（1 类）。 */
+.register-table__bit-value .ant-switch {
+  min-width: 44px;
+}
+
+/* 文字字号必须写在两个文字 span 上（antd 直接给它们设了 font-size，父级继承无效）；
+   选择器用 4 个类，高于 antd 的 `.ant-switch .ant-switch-inner .ant-switch-inner-checked`（3 类）。
+   13px = Data 列普通数据字号（表格单元格继承主题 `fontSize: 13`），与旁列数据视觉一致。 */
+.register-table__bit-value
+  .ant-switch
+  .ant-switch-inner
+  .ant-switch-inner-checked,
+.register-table__bit-value
+  .ant-switch
+  .ant-switch-inner
+  .ant-switch-inner-unchecked {
+  font-size: 13px;
 }
 
 @media (pointer: coarse) {

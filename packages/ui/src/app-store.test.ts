@@ -29,6 +29,61 @@ function sheetNames(): string[] {
   return useAppStore.getState().workspace.sheets.map((s) => s.name);
 }
 
+describe("setWorkspace 失效指向兜底（2026-09-17：刷新/导入后首帧不得落到空态）", () => {
+  beforeEach(() => {
+    // setWorkspace 会同步界面语言（applyLanguage），需先初始化 i18n。
+    initI18n();
+  });
+
+  it("activeSheetId 指向未打开的表 → 回退首个打开的表", () => {
+    const base = createEmptyWorkspace();
+    const openSheet = base.sheets[0]!;
+    const closedSheet = {
+      ...openSheet,
+      sheetId: "sheet-closed" as SheetId,
+      name: "Closed",
+      open: false,
+    };
+
+    useAppStore.getState().setWorkspace({
+      ...base,
+      sheets: [openSheet, closedSheet],
+      activeSheetId: closedSheet.sheetId,
+    });
+
+    expect(useAppStore.getState().workspace.activeSheetId).toBe(
+      openSheet.sheetId,
+    );
+  });
+
+  it("activeSheetId 指向不存在的表 → 回退首个打开的表", () => {
+    const base = createEmptyWorkspace();
+    useAppStore.getState().setWorkspace({
+      ...base,
+      activeSheetId: "sheet-missing" as SheetId,
+    });
+
+    expect(useAppStore.getState().workspace.activeSheetId).toBe(
+      base.sheets[0]!.sheetId,
+    );
+  });
+
+  it("清空会话态 activeSheetId（避免导入后残留旧表指针）", () => {
+    useAppStore.setState({ activeSheetId: "sheet-old" as SheetId });
+
+    useAppStore.getState().setWorkspace(createEmptyWorkspace());
+
+    expect(useAppStore.getState().activeSheetId).toBeNull();
+  });
+
+  it("activeSheetId 有效时不新建工作区对象（不产生多余的自动保存）", () => {
+    const base = createEmptyWorkspace();
+    useAppStore.getState().setWorkspace(base);
+
+    expect(useAppStore.getState().workspace).toBe(base);
+  });
+});
+
 function firstSheetId(): SheetId {
   const sheet = useAppStore.getState().workspace.sheets[0];
   if (sheet === undefined) throw new Error("missing sheet");

@@ -101,9 +101,15 @@ test("collapsed sidebar centers group icons and does not overflow horizontally",
     return {
       axisCenter: centerOf(button.getBoundingClientRect()),
       titleCount: document.querySelectorAll(titleSelector).length,
+      // 每个分组标题的 DOM 里除**分组图标**外还有一个隐藏的展开箭头（同为 `.anticon`、零尺寸），
+      // 故只统计可见图标（宽高 > 0）——此前按全部 `.anticon` 计数会把箭头算进来（4 组 → 8 个），
+      // 断言必然失败（2026-09-17 修正；与「首帧闪烁」修复无关，属用例自身度量缺陷）。
       iconCenters: [
         ...document.querySelectorAll<HTMLElement>(`${titleSelector} .anticon`),
-      ].map((icon) => centerOf(icon.getBoundingClientRect())),
+      ]
+        .map((icon) => icon.getBoundingClientRect())
+        .filter((rect) => rect.width > 0 && rect.height > 0)
+        .map(centerOf),
       scrollWidth: groups.scrollWidth,
       clientWidth: groups.clientWidth,
     };

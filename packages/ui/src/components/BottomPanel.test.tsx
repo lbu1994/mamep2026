@@ -78,6 +78,59 @@ describe("BottomPanel messages", () => {
   });
 });
 
+describe("BottomPanel activeBottomTab 失效指向兜底（2026-09-17）", () => {
+  beforeEach(() => {
+    initI18n();
+    useAppStore.setState({ host: null, messages: [], commLog: [] });
+  });
+
+  it("指向已不存在的页签（如插件卸载后残留 plugins）→ 回退 Messages 并纠正持久化", async () => {
+    useAppStore.setState({
+      workspace: {
+        ...useAppStore.getState().workspace,
+        panelLayout: {
+          ...useAppStore.getState().workspace.panelLayout,
+          activeBottomTab: "plugins",
+        },
+      },
+    });
+
+    renderPanel();
+
+    // 不出现空内容区：活动页签回到 Messages。
+    expect(
+      screen.getByRole("tab", { selected: true }).textContent,
+    ).toContain("Messages");
+    // 纠正写回持久化（不残留无效值）。
+    await waitFor(() => {
+      expect(
+        useAppStore.getState().workspace.panelLayout.activeBottomTab,
+      ).toBe("messages");
+    });
+  });
+
+  it("指向有效页签时不改动持久化值", () => {
+    useAppStore.setState({
+      workspace: {
+        ...useAppStore.getState().workspace,
+        panelLayout: {
+          ...useAppStore.getState().workspace.panelLayout,
+          activeBottomTab: "properties",
+        },
+      },
+    });
+
+    renderPanel();
+
+    expect(
+      screen.getByRole("tab", { selected: true }).textContent,
+    ).toContain("Comm Properties");
+    expect(useAppStore.getState().workspace.panelLayout.activeBottomTab).toBe(
+      "properties",
+    );
+  });
+});
+
 describe("BottomPanel unseen error dot", () => {
   const errorMessage = (): ApplicationMessage => ({
     timestamp: Date.now(),

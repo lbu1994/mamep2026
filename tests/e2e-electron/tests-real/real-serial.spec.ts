@@ -122,6 +122,8 @@ async function setRadixHex(p: Page): Promise<void> {
  * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
  * 2026-09-16 增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
  * 改为「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
+ * 2026-09-17：收窄方式由 `keyboard.type` 改为**直接 fill 搜索框**（与 e2e-vscode 同源）——
+ * 键盘输入依赖窗口焦点，失焦时列表不收敛 → 虚拟列表不渲染目标档位 → 点选超时。
  */
 async function setRtuTimeoutSelect(
   p: Page,
@@ -134,14 +136,14 @@ async function setRtuTimeoutSelect(
     .locator(".ant-select")
     .first();
   await select.click();
-  // 清空搜索框内容（若已预填充）后键入目标值，收窄下拉列表。
-  await p.keyboard.press("Control+a");
-  await p.keyboard.type(String(timeoutMs));
+  // 直接写入 Select 的搜索框（focus + input 事件），不依赖窗口键盘焦点。
+  await select.locator("input").fill(String(timeoutMs));
   // 锚定正则只命中目标档位（避免前缀匹配到 "1000 ms"）。
-  await p
+  const option = p
     .locator(".ant-select-dropdown:visible .ant-select-item-option")
-    .filter({ hasText: new RegExp(`^${timeoutMs} ms$`) })
-    .click();
+    .filter({ hasText: new RegExp(`^${timeoutMs} ms$`) });
+  await option.waitFor({ state: "visible", timeout: 10_000 });
+  await option.click();
   // 确认 Select 回显值精确等于目标档位。
   await expect(select).toHaveText(new RegExp(`^${timeoutMs} ms$`));
 }

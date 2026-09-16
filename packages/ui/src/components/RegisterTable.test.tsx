@@ -863,18 +863,28 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
 });
 
 describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
-  function setupBinaryRow(options: { sheetType?: string } = {}): void {
+  function setupBinaryRow(
+    options: {
+      sheetType?: string;
+      /** 覆盖父行原始值（传 null 模拟「未读取」）；省略时用 0x8001。 */
+      registerValues?: { value: number }[] | null;
+    } = {},
+  ): void {
     initI18n();
     const workspace = createEmptyWorkspace();
     const sheet = workspace.sheets[0];
     if (sheet === undefined) throw new Error("missing sheet");
+    const values =
+      "registerValues" in options
+        ? options.registerValues
+        : [{ value: 0x8001 }];
     const rows = sheet.rows.map((row, index) =>
       index === 0
         ? {
             ...row,
             dataType: "binary" as const,
-            registerValues: [{ value: 0x8001 }],
-            cellText: "10000000 00000001",
+            registerValues: values,
+            cellText: values === null ? "" : "10000000 00000001",
             bitComments: [
               Array.from({ length: 16 }, (_, bit) =>
                 bit === 15 ? "alarm" : "",
@@ -940,34 +950,60 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     expect(useAppStore.getState().undoStack).toHaveLength(1);
   });
 
-  it("位行 Data 文本可输入 0/1（非法输入报错不改值）", () => {
+  it("位行 Data 只提供开关（1/0），不提供输入框", () => {
     setupBinaryRow();
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
-    const cell = screen.getAllByLabelText("Bit 0 value")[0];
-    if (cell === undefined) throw new Error("missing bit 0 cell");
-    fireEvent.click(cell);
-    const input = screen.getAllByLabelText("Bit 0 value")[0];
-    if (input === undefined) throw new Error("missing bit 0 input");
-    fireEvent.change(input, { target: { value: "2" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    // 非法输入：保留草稿 + 错误态，不改当前值。
+    // 16 行位明细各一个开关；位行内不存在输入框（2026-09-16 交互简化）。
+    expect(document.querySelectorAll(".register-table__bit-value").length).toBe(
+      16,
+    );
     expect(
-      useAppStore.getState().workspace.sheets[0]?.rows[0]?.registerValues?.[0]
-        ?.value,
-    ).toBe(0x8001);
+      document.querySelectorAll(".register-table__bit-value input").length,
+    ).toBe(0);
+    expect(screen.getAllByLabelText(/^Toggle bit \d+$/)).toHaveLength(16);
+    // 开关自带 1/0 文字（checkedChildren / unCheckedChildren）。
+    const bit15 = screen.getByLabelText("Toggle bit 15");
+    expect(bit15.querySelector(".ant-switch-inner-checked")?.textContent).toBe(
+      "1",
+    );
+    expect(
+      bit15.querySelector(".ant-switch-inner-unchecked")?.textContent,
+    ).toBe("0");
+    // 开关状态与位值一致（0x8001：bit15 = 1、bit14 = 0）。
+    expect(bit15.getAttribute("aria-checked")).toBe("true");
+    expect(
+      screen.getByLabelText("Toggle bit 14").getAttribute("aria-checked"),
+    ).toBe("false");
+  });
 
-    // 重新进入编辑（非法提交后回到展示态）并输入合法值。
-    const retryCell = screen.getAllByLabelText("Bit 0 value")[0];
-    if (retryCell === undefined) throw new Error("missing bit 0 cell");
-    fireEvent.click(retryCell);
-    const retry = screen.getAllByLabelText("Bit 0 value")[0];
-    if (retry === undefined) throw new Error("missing bit 0 input");
-    fireEvent.change(retry, { target: { value: "0" } });
-    fireEvent.keyDown(retry, { key: "Enter" });
+  it("未读取时开关内显示 —（替代 0）且仍可切换（按全 0 基准）", () => {
+    setupBinaryRow({ registerValues: null });
+    render(<RegisterTable sheetId={sheetId()} />);
+    expandBitRow();
+    // 未读取：未选中侧文字为 —（不再是 0），且不再使用开关外侧占位。
+    const bit0 = screen.getByLabelText("Toggle bit 0");
+    expect(bit0.getAttribute("aria-checked")).toBe("false");
+    expect(bit0.querySelector(".ant-switch-inner-unchecked")?.textContent).toBe(
+      "—",
+    );
+    expect(
+      document.querySelectorAll(".register-table__bit-value-placeholder")
+        .length,
+    ).toBe(0);
+    fireEvent.click(bit0);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
-    expect(row?.registerValues?.[0]?.value).toBe(0x8000);
-    expect(row?.cellText).toBe("10000000 00000000");
+    expect(row?.registerValues?.map((v) => v.value)).toEqual([0x0001]);
+    expect(row?.cellText).toBe("00000000 00000001");
+    // 已有当前值：未选中侧恢复为 0（该位此时为 1 → 显示在选中侧）。
+    const after = screen.getByLabelText("Toggle bit 0");
+    expect(after.getAttribute("aria-checked")).toBe("true");
+    expect(after.querySelector(".ant-switch-inner-checked")?.textContent).toBe(
+      "1",
+    );
+    expect(
+      after.querySelector(".ant-switch-inner-unchecked")?.textContent,
+    ).toBe("0");
   });
 
   it("点击切换控件改位值并同步父行当前值（不入撤销栈、不进入编辑态）", () => {
@@ -980,10 +1016,10 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
     expect(row?.registerValues?.[0]?.value).toBe(0x8000);
     expect(row?.cellText).toBe("10000000 00000000");
-    // 位值=当前值变更：不入撤销栈；且点击切换不进入编辑态。
+    // 位值=当前值变更：不入撤销栈；位行 Data 不进入编辑态（只有开关、无输入框）。
     expect(useAppStore.getState().undoStack).toHaveLength(0);
     expect(
-      document.querySelectorAll("input[aria-label='Bit 0 value']").length,
+      document.querySelectorAll(".register-table__bit-value input").length,
     ).toBe(0);
   });
 
@@ -1063,6 +1099,10 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     const toggle = screen.getAllByLabelText("Toggle bit 15")[0];
     if (toggle === undefined) throw new Error("missing toggle");
     expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    // 只读表同样只有开关、无输入框。
+    expect(
+      document.querySelectorAll(".register-table__bit-value input").length,
+    ).toBe(0);
     // 只读：Name/Comment 单元格不进入编辑（无 role=button）。
     const bitComment = screen.getAllByLabelText("Comment")[1];
     expect(bitComment?.getAttribute("role")).toBeNull();

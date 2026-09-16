@@ -123,7 +123,24 @@ export function BottomPanel({
   // drawer 形态下抽屉自身控制高度，忽略持久化的折叠态（否则抽屉内会出现“只剩标签栏”的空白）。
   const collapsed =
     variant === "drawer" ? false : panelLayout.bottomPanelCollapsed;
-  const activeTab = panelLayout.activeBottomTab;
+  // 可用页签集合（2026-09-17）：`plugins` 仅在有插件面板贡献时存在。
+  const tabKeys = [
+    "messages",
+    "commlog",
+    "properties",
+    "notes",
+    ...(pluginPanels.length > 0 ? ["plugins"] : []),
+  ];
+  // 失效指向兜底（2026-09-17）：持久化的 activeBottomTab 可能指向已不存在的页签（典型：插件
+  // 卸载后残留 `plugins`）→ 回退 Messages，避免空内容区；并把纠正写回持久化，不残留无效值。
+  const activeTab = tabKeys.includes(panelLayout.activeBottomTab)
+    ? panelLayout.activeBottomTab
+    : "messages";
+  useEffect(() => {
+    if (activeTab !== panelLayout.activeBottomTab) {
+      setPanelLayout({ activeBottomTab: activeTab });
+    }
+  }, [activeTab, panelLayout.activeBottomTab, setPanelLayout]);
   // 折叠时新错误到达 → Messages 标签红点（事件驱动，避免在 effect 中 setState）。
   const [seenCount, setSeenCount] = useState(0);
   const lastErrorIndex = useMemo(() => {

@@ -784,6 +784,9 @@ export function MamepApp(): React.ReactNode {
   // 启动骨架（2026-09-13）：Host 按运行时平台动态加载（含失败兜底）完成前显示占位——
   // 仍包 ConfigProvider/AntApp，保证主题（含 VSCode 完整令牌/暗色）与 antd 上下文一致，
   // 避免深色主题下白屏闪烁。`failed` 状态不占位：应用以「无 Host」保持可操作。
+  // 2026-09-17：骨架窗口扩展为「宿主装配 + 工作区加载 + 插件就绪」——外壳的侧栏/底部面板/
+  // 已打开 Tab/表与行/插件贡献全部派生自工作区与插件存储，必须等它们就位再渲染（见
+  // apps/web/src/host-assembly.ts 的启动就绪门），否则首屏会出现「先默认后切换」的闪烁。
   // 注意：必须位于全部 hook 调用之后（上方 hook 均无条件执行）。
   if (hostStatus === "assembling") {
     return (

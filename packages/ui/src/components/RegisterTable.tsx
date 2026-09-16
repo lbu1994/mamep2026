@@ -915,11 +915,11 @@ const ChildCommentCell = memo(function ChildCommentCell({
 });
 
 // ---- 位明细虚拟行（ADR-052，2026-09-11）----
-// 位行 = 一个 16 位寄存器展开出的 16 行之一（bit15 → bit0）：Name 列只读展示位号，
-// Address 列只读展示位掩码 `0x8000`，Data 列可输入 0/1 + 右侧独立「切换」控件
-// （两者只改当前值、**不写设备**），Comment 列可编辑位注释（入撤销栈）。
+// 位行 = 一个 16 位寄存器展开出的 16 行之一（bit15 → bit0）：Name 列位名称（可编辑，同 Comment 列），
+// Address 列显示「寄存器地址 + Bit 序号」（掩码作为 hover 提示），Data 列**只有开关 1/0**
+// （未读取时开关内显示 `—` 代替 `0`；只改当前值、**不写设备**），Comment 列可编辑位注释（入撤销栈）。
 // 其余列（No/TM/WP/Read/Write/Type/Scale/拖拽/多选/右键菜单）维持不可用；
-// 只读表（discrete-input/input-register）可展开查看但切换与注释编辑禁用。
+// 只读表（discrete-input/input-register）可展开查看但开关与 Name/注释编辑禁用。
 
 /** 位行 Name 列：位名称（可编辑，语义同 Comment 列；只读表禁用）。 */
 const BitNameCell = memo(function BitNameCell({
@@ -974,69 +974,44 @@ const BitRegisterCell = memo(function BitRegisterCell({
 });
 
 /**
- * 位行 Data 列：文本可编辑（输入 0/1）+ 右侧切换控件。
- * 切换控件必须 `stopPropagation`：否则点击会同时触发外层「进入编辑」（ADR-052 决策 7）。
+ * 位行 Data 列：仅一个开关（`1`/`0`），不再提供输入框（2026-09-16 交互简化）。
+ * 未读取（值为 null）时开关**内部**显示「—」代替 `0`（与「读到 0」区分，2026-09-17）；开关仍可切换
+ * （按「cellText 派生、失败即全 0」基准，ADR-052 决策 4）。
+ * 只改当前值、**不写设备**、不入撤销栈（ADR-052 决策 3/6）；只读表的开关禁用。
  */
 const BitDataCell = memo(function BitDataCell({
   row,
   writable,
 }: {
   row: VirtualBitRow;
-  /** 本表可写（只读表禁用切换与输入）。 */
+  /** 本表可写（只读表禁用切换）。 */
   writable: boolean;
 }) {
   const { t } = useTranslation();
   const setRegisterBitValue = useAppStore((s) => s.setRegisterBitValue);
-  const [invalid, setInvalid] = useState(false);
   const value = row.__virtualBit.value;
-  const text = value === null ? "" : String(value);
-  const commit = (draft: string): void => {
-    const trimmed = draft.trim();
-    if (trimmed !== "0" && trimmed !== "1") {
-      // 非法输入：保留草稿 + 错误提示，不写坏当前值（与 Data 单元格同语义）。
-      setInvalid(true);
-      return;
-    }
-    setInvalid(false);
-    setRegisterBitValue(
-      // 必须用**真实**父行 rowId（范围行的寄存器子行 id 是派生的虚拟 id，store 中不存在）。
-      row.__virtualBit.parentRowId,
-      row.__virtualBit.registerIndex,
-      row.__virtualBit.bit,
-      trimmed === "1" ? 1 : 0,
-    );
-  };
-  const toggle = (
-    <Switch
-      size="small"
-      className="register-table__bit-toggle"
-      disabled={!writable}
-      checked={value === 1}
-      aria-label={t("table.bitToggle", { bit: row.__virtualBit.bit })}
-      onClick={(_, event) => event.stopPropagation()}
-      onChange={(checked) => {
-        if (!writable) return;
-        setRegisterBitValue(
-          // 同上：真实父行 rowId + 寄存器序号（范围行子行 id 不入 store）。
-          row.__virtualBit.parentRowId,
-          row.__virtualBit.registerIndex,
-          row.__virtualBit.bit,
-          checked ? 1 : 0,
-        );
-      }}
-    />
-  );
   return (
-    <EditableCellValue
-      value={text}
-      ariaLabel={t("table.bitValueAria", { bit: row.__virtualBit.bit })}
-      emptyText="—"
-      error={invalid}
-      errorTip={t("table.bitValueInvalid")}
-      disabled={!writable}
-      trailing={toggle}
-      onCommit={commit}
-    />
+    <div className="register-table__bit-value">
+      <Switch
+        className="register-table__bit-toggle"
+        checkedChildren="1"
+        // 未读取：未选中侧显示「—」而非 `0`（读到 0 时仍为 `0`）。
+        unCheckedChildren={value === null ? "—" : "0"}
+        disabled={!writable}
+        checked={value === 1}
+        aria-label={t("table.bitToggle", { bit: row.__virtualBit.bit })}
+        onChange={(checked) => {
+          if (!writable) return;
+          setRegisterBitValue(
+            // 必须用**真实**父行 rowId（范围行的寄存器子行 id 是派生的虚拟 id，store 中不存在）。
+            row.__virtualBit.parentRowId,
+            row.__virtualBit.registerIndex,
+            row.__virtualBit.bit,
+            checked ? 1 : 0,
+          );
+        }}
+      />
+    </div>
   );
 });
 

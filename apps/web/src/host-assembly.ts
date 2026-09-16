@@ -67,7 +67,9 @@ export type PlatformHostFactoryLoader = (
 
 /** 装配编排写入 UI 的唯一端口（由 composition root 用 store 动作实现，见 `store-sinks.ts`）。 */
 export interface HostAssemblySinks {
-  /** 置 Host 装配状态（`"ready"` / `"failed"`；启动骨架据此切换）。 */
+  /** 置 Host 装配状态（`"ready"` / `"failed"`；启动骨架据此切换）。
+   * 2026-09-17 起 `"ready"` 的含义是「宿主装配 + 工作区加载 + 插件就绪」（见 `wireHost` 的就绪门）：
+   * 外壳的侧栏 / 底部面板 / 已打开 Tab / 表与行全部派生自工作区，必须等它就位再渲染，否则首屏闪烁。 */
   setHostStatus(status: HostStatus): void;
   /**
    * 置插件注册表就绪（`host.startPlugins()` 落定后调用，2026-09-16）。
@@ -103,6 +105,11 @@ export interface HostAssemblyDeps {
   bridge: MamepHostApi | VscodeHostApi | undefined;
   /** 工厂加载器（默认真实动态 import）。 */
   loadHostFactory?: PlatformHostFactoryLoader;
+  /**
+   * 启动外壳就绪门超时（ms，默认 5000）：仓储 / 桥异常挂起时强制切换到真实外壳，
+   * 避免骨架常驻（2026-09-17）。供单测注入短超时。
+   */
+  shellReadyTimeoutMs?: number;
   /** visibilitychange 监听目标（默认 `document`；测试注入，node 环境无 DOM）。 */
   documentRef?: VisibilityDocument;
 }
@@ -187,8 +194,12 @@ function wireHost(
   // 插件系统启动（ADR-054）：加载用户手动安装的插件并装配执行面。
   // 落定后置「插件就绪」（2026-09-16 插件主题色首帧修复）：就绪前主题装配链用启动缓存里的色种子
   // 过渡（避免一帧默认蓝），就绪后以注册表为准。**fail-open**：失败也置位，否则陈旧种子会长期生效。
+  // 该 promise 同时是启动就绪门的一半（见末尾）。
   const markPluginsReady = (): void => sinks.setPluginsReady(true);
-  void host.startPlugins().then(markPluginsReady, markPluginsReady);
+  const pluginsSettled = host.startPlugins().then(
+    markPluginsReady,
+    markPluginsReady,
+  );
   // 数据类型解析器注入 store，单元格解析/读取格式化/CSV 白名单经它转发。
   sinks.setDataTypeResolver(context.dataTypeResolver);
   sinks.setHost(host);
@@ -245,67 +256,111 @@ function wireHost(
     { once: true },
   );
 
-  // 启动骨架只覆盖 Host 装配阶段：接线完成即切换真实外壳，工作区仍随后异步加载。
-  sinks.setHostStatus("ready");
+  // 启动外壳就绪门（2026-09-17）：**工作区加载完成 + 插件注册表就绪**之后才切换真实外壳。
+  // 外壳的侧栏折叠/宽度、底部面板、已打开 Tab、表与行、插件贡献全部派生自这两处异步加载，
+  // 若在工作区就位前渲染，必然「先默认后切换」（首屏闪烁）。超时兜底：仓储/桥挂起时按上限强制
+  // 切换（退回「可操作但可能跳变一次」的旧行为），避免骨架常驻。取消后不再写 UI。
+  const workspaceSettled = applyWorkspace(host, sinks);
+  void gateWithTimeout(
+    Promise.allSettled([workspaceSettled, pluginsSettled]),
+    deps.shellReadyTimeoutMs ?? SHELL_READY_TIMEOUT_MS,
+  ).then((timedOutAfterMs) => {
+    if (signal.aborted) return;
+    sinks.setHostStatus("ready");
+    if (timedOutAfterMs !== null) {
+      sinks.appendMessage({
+        timestamp: Date.now(),
+        level: "warning",
+        messageKey: "messages.startupTimeout",
+        detail: `timeout=${timedOutAfterMs}ms`,
+      });
+    }
+  });
+}
 
-  // 启动：加载工作区。
-  void host
-    .loadWorkspace()
-    .then((result) => {
-      if (result.ok) {
-        sinks.setWorkspace(result.value);
-      } else {
-        // 恢复失败给出明确提示（§16.5.6），应用以空工作区保持可操作。
+/** 启动外壳就绪门超时（ms）：仓储 / 桥异常挂起时强制切换外壳，避免骨架常驻。 */
+const SHELL_READY_TIMEOUT_MS = 5000;
+
+/**
+ * 就绪门竞速：`settled` 落定返回 `null`；超时返回超时毫秒数（调用方据此提示）。
+ * 落定后清除计时器，不留悬挂 timer。
+ */
+function gateWithTimeout(
+  settled: Promise<unknown>,
+  timeoutMs: number,
+): Promise<number | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(timeoutMs), timeoutMs);
+    void settled.then(() => {
+      clearTimeout(timer);
+      resolve(null);
+    });
+  });
+}
+
+/**
+ * 加载并应用工作区（启动外壳就绪门的一半）：成功 / 失败 / 异常**都必须落定**，否则骨架常驻
+ * （由 `wireHost` 的超时兜底）。包含 mock 模式的自动连接（等它落定，否则首帧是 Connect
+ * 随后跳 Disconnect）与非 mock 的启动弹窗（与外壳同一批更新，不再「外壳先出现、弹窗后弹」）。
+ */
+async function applyWorkspace(
+  host: AppHost,
+  sinks: HostAssemblySinks,
+): Promise<void> {
+  try {
+    const result = await host.loadWorkspace();
+    if (result.ok) {
+      sinks.setWorkspace(result.value);
+    } else {
+      // 恢复失败给出明确提示（§16.5.6），应用以空工作区保持可操作。
+      sinks.appendMessage({
+        timestamp: Date.now(),
+        level: "error",
+        messageKey: "messages.loadFailed",
+        params: { detail: result.error.code },
+        detail: result.error.code,
+      });
+      if (host.isMockMode && host instanceof BrowserAppHost) {
+        // mock 模式：恢复失败同样预填分类寄存器，保证测试环境一致。
+        sinks.setWorkspace(host.createFreshWorkspace());
+      }
+    }
+    // 恢复提示（ADR-049）：加载后把恢复元数据写入 store，供主体顶部横幅展示。
+    sinks.setWorkspaceRecovery(host.getWorkspaceRecoveryInfo());
+    sinks.setLoaded();
+    sinks.appendMessage({
+      timestamp: Date.now(),
+      level: "info",
+      messageKey: "messages.appStarted",
+      detail: null,
+    });
+    if (host.isMockMode) {
+      // Mock 模式：跳过 Connection Settings，用默认 RTU 配置直接连接模拟设备。
+      const profile =
+        (result.ok ? result.value.connectionProfiles[0] : undefined) ??
+        createDefaultRtuProfile();
+      // Mock 模式仅浏览器（RTU 连接）；工作区若存了 TCP profile 则回退默认 RTU。
+      const rtuProfile =
+        profile.protocol === "rtu" ? profile : createDefaultRtuProfile();
+      const connectResult = await host.connect(rtuProfile, null);
+      if (!connectResult.ok) {
         sinks.appendMessage({
           timestamp: Date.now(),
           level: "error",
-          messageKey: "messages.loadFailed",
-          params: { detail: result.error.code },
-          detail: result.error.code,
+          messageKey: "messages.connectFailed",
+          detail: connectResult.error.technicalMessage,
         });
-        if (host.isMockMode && host instanceof BrowserAppHost) {
-          // mock 模式：恢复失败同样预填分类寄存器，保证测试环境一致。
-          sinks.setWorkspace(host.createFreshWorkspace());
-        }
       }
-      // 恢复提示（ADR-049）：加载后把恢复元数据写入 store，供主体顶部横幅展示。
-      sinks.setWorkspaceRecovery(host.getWorkspaceRecoveryInfo());
-      sinks.setLoaded();
-      sinks.appendMessage({
-        timestamp: Date.now(),
-        level: "info",
-        messageKey: "messages.appStarted",
-        detail: null,
-      });
-      if (host.isMockMode) {
-        // Mock 模式：跳过 Connection Settings，用默认 RTU 配置直接连接模拟设备。
-        const profile =
-          (result.ok ? result.value.connectionProfiles[0] : undefined) ??
-          createDefaultRtuProfile();
-        // Mock 模式仅浏览器（RTU 连接）；工作区若存了 TCP profile 则回退默认 RTU。
-        const rtuProfile =
-          profile.protocol === "rtu" ? profile : createDefaultRtuProfile();
-        void host.connect(rtuProfile, null).then((connectResult) => {
-          if (!connectResult.ok) {
-            sinks.appendMessage({
-              timestamp: Date.now(),
-              level: "error",
-              messageKey: "messages.connectFailed",
-              detail: connectResult.error.technicalMessage,
-            });
-          }
-        });
-      } else {
-        // 非 Mock 模式：启动自动弹出 Connection Settings。
-        sinks.setConnectionModalOpen(true);
-      }
-    })
-    .catch(() => {
-      sinks.setLoaded();
-      if (!host.isMockMode) {
-        sinks.setConnectionModalOpen(true);
-      }
-    });
+    } else {
+      // 非 Mock 模式：启动自动弹出 Connection Settings。
+      sinks.setConnectionModalOpen(true);
+    }
+  } catch {
+    sinks.setLoaded();
+    if (!host.isMockMode) {
+      sinks.setConnectionModalOpen(true);
+    }
+  }
 }
 
 /** 装配失败：提示可读原因 + 置失败态（应用继续以「无 Host」运行，连接等入口自然不可用）。 */

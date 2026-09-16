@@ -446,14 +446,16 @@ function commitRowEdit(
   }
 }
 
-/** 活动表修复：activeSheetId 指向不存在的表时回退到首个打开的表。 */
+/** 活动表修复：activeSheetId 指向**不存在或未打开**的表时回退到首个打开的表。
+ * 2026-09-17 起要求目标表已打开：未打开的表不出现在 Tab 栏，指针落在它上面会让界面卡在
+ * 「没有打开的表」空态（导入 / 外部编辑工作区文件 / 插件卸载均可能造出这种指针）。 */
 function fixActiveSheetId(
   sheets: RegisterSheet[],
   activeSheetId: SheetId | null,
 ): SheetId | null {
   if (
     activeSheetId !== null &&
-    sheets.some((s) => s.sheetId === activeSheetId)
+    sheets.some((s) => s.sheetId === activeSheetId && s.open)
   ) {
     return activeSheetId;
   }
@@ -598,8 +600,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setWorkspace: (workspace) => {
     // 加载/重置工作区时恢复持久化的语言偏好（刷新后保持上次选择）。
     applyLanguage(workspace.preferences.language);
+    // 失效指向兜底（2026-09-17）：仅在确有修正时新建对象（否则不产生多余的自动保存）。
+    const correctedActiveSheetId = fixActiveSheetId(
+      workspace.sheets,
+      workspace.activeSheetId,
+    );
+    const nextWorkspace =
+      correctedActiveSheetId === workspace.activeSheetId
+        ? workspace
+        : { ...workspace, activeSheetId: correctedActiveSheetId };
     return set((state) => ({
-      workspace,
+      workspace: nextWorkspace,
+      // 会话态活动表让位给新加载的工作区（否则导入后可能残留指向旧表的 id）。
+      activeSheetId: null,
       // 加载工作区时回填持久化的主题，避免刷新后恒为浅色。
       theme: workspace.preferences.theme ?? state.theme,
       // 加载工作区时回填用户自定义主题主色（ADR-042；null=默认品牌蓝）。

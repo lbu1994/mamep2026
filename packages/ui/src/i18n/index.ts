@@ -138,8 +138,6 @@ export const en = {
     comment: "Comment",
     bitLabel: "Bit {{bit}}",
     bitToggle: "Toggle bit {{bit}}",
-    bitValueAria: "Bit {{bit}} value",
-    bitValueInvalid: "Enter 0 or 1.",
     emptyAddressTooltip:
       "Set a valid register address first to enable this control.",
     addressFormatHint:
@@ -486,6 +484,8 @@ export const en = {
     resetFailed: "Workspace reset failed: {{detail}}",
     loadFailed: "Workspace restore failed: {{detail}}",
     hostLoadFailed: "Application host failed to load: {{detail}}",
+    startupTimeout:
+      "Startup is taking longer than expected; the workspace may still be loading.",
     pluginLoadFailed: "Plugin load error: {{detail}}",
   },
   rowStatus: {
@@ -688,8 +688,6 @@ export const zh: TranslationResources = {
     comment: "备注",
     bitLabel: "位 {{bit}}",
     bitToggle: "切换位 {{bit}}",
-    bitValueAria: "位 {{bit}} 数值",
-    bitValueInvalid: "请输入 0 或 1。",
     emptyAddressTooltip: "请先填写合法寄存器地址以启用该控件。",
     addressFormatHint: "仅影响地址的显示与输入进制，不影响 Data 值格式。",
     addRow: "新增行",
@@ -1019,6 +1017,7 @@ export const zh: TranslationResources = {
     resetFailed: "工作区重置失败：{{detail}}",
     loadFailed: "工作区恢复失败：{{detail}}",
     hostLoadFailed: "应用宿主加载失败：{{detail}}",
+    startupTimeout: "启动耗时超出预期，工作区可能仍在加载。",
     pluginLoadFailed: "插件加载错误：{{detail}}",
   },
   rowStatus: {

@@ -196,6 +196,11 @@ async function writeRow(frame: Frame, valueHex: string): Promise<void> {
  * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
  * 2026-09-16 增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
  * 改为「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
+ * 2026-09-17 两处修正：
+ * 1. **下拉必须用 `frame` 作用域定位**（不是 `frame.page()`）——VSCode 是「窗口 → 容器 iframe →
+ *    内容 iframe」两层嵌套，页面级定位器只在顶层文档查找，永远命中不到 webview 内的下拉
+ *    （2026-09-16 改成精确点选时引入，浏览器 / Electron 无嵌套故一直绿，VSCode 一直超时）。
+ * 2. 收窄方式用**直接 fill 搜索框**（元素级事件），不依赖窗口 / iframe 键盘焦点。
  */
 async function setRtuTimeoutSelect(
   frame: Frame,
@@ -208,14 +213,14 @@ async function setRtuTimeoutSelect(
     .locator(".ant-select")
     .first();
   await select.click();
-  await frame.page().keyboard.press("Control+a");
-  await frame.page().keyboard.type(String(timeoutMs));
+  // 直接写入 Select 的搜索框（focus + input 事件），收窄下拉列表。
+  await select.locator("input").fill(String(timeoutMs));
   // 锚定正则只命中目标档位（避免前缀匹配到 "1000 ms"）。
-  await frame
-    .page()
+  const option = frame
     .locator(".ant-select-dropdown:visible .ant-select-item-option")
-    .filter({ hasText: new RegExp(`^${timeoutMs} ms$`) })
-    .click();
+    .filter({ hasText: new RegExp(`^${timeoutMs} ms$`) });
+  await option.waitFor({ state: "visible", timeout: 10_000 });
+  await option.click();
   await expect(select).toHaveText(new RegExp(`^${timeoutMs} ms$`));
 }
 

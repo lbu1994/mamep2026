@@ -12,7 +12,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEmptyWorkspace } from "@mamep2026/domain";
 import type { Result } from "@mamep2026/domain";
-import type { AppHost } from "@mamep2026/ui";
+import type { AppHost, HostStatus } from "@mamep2026/ui";
 import {
   startAppHost,
   type HostAssemblyDeps,
@@ -154,17 +154,85 @@ describe("startAppHost", () => {
     expect(host.subscribeSaveStatus).toHaveBeenCalledTimes(1);
     expect(host.subscribeConnectionState).toHaveBeenCalledTimes(1);
     expect(host.subscribePollResult).toHaveBeenCalledTimes(1);
-    // 骨架只覆盖装配阶段：接线完成即 ready，工作区随后异步加载。
-    expect(deps.sinks.setHostStatus).toHaveBeenLastCalledWith("ready");
 
     await vi.waitFor(() => {
       expect(deps.sinks.setLoaded).toHaveBeenCalledTimes(1);
     });
     expect(deps.sinks.setWorkspace).toHaveBeenCalledTimes(1);
     expect(deps.sinks.setWorkspaceRecovery).toHaveBeenCalledWith(null);
-    // 非 mock：启动自动弹出 Connection Settings。
+    // 非 mock：启动自动弹出 Connection Settings（与外壳同一批更新，不再「外壳先出现、弹窗后弹」）。
     expect(deps.sinks.setConnectionModalOpen).toHaveBeenCalledWith(true);
     expect(host.connect).not.toHaveBeenCalled();
+    // 就绪门（2026-09-17）：工作区加载落定后才切换外壳（此前不得 ready —— 否则外壳会先渲染
+    // 默认工作区，出现「侧栏/Tab/底部面板先默认后切换」的首屏闪烁）。
+    await vi.waitFor(() => {
+      expect(deps.sinks.setHostStatus).toHaveBeenLastCalledWith("ready");
+    });
+  });
+
+  it("外壳就绪门：ready 必在 setWorkspace 之后（外壳首帧即持久化状态）", async () => {
+    const { host } = makeFakeHost();
+    const order: string[] = [];
+    const deps = makeDeps({
+      loadHostFactory: async () => () => asHost(host),
+    });
+    deps.sinks.setWorkspace = vi.fn(() => {
+      order.push("workspace");
+    });
+    deps.sinks.setHostStatus = vi.fn((status: HostStatus) => {
+      order.push(`status:${status}`);
+    });
+    const controller = new AbortController();
+
+    await startAppHost(deps, controller.signal);
+    // 接线完成时不得已经 ready（工作区仍在加载）。
+    expect(order).not.toContain("status:ready");
+
+    await vi.waitFor(() => {
+      expect(order).toContain("status:ready");
+    });
+    expect(order.indexOf("workspace")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("workspace")).toBeLessThan(
+      order.indexOf("status:ready"),
+    );
+  });
+
+  it("超时兜底：工作区加载挂起时按上限置 ready 并提示（不常驻骨架）", async () => {
+    const { host } = makeFakeHost();
+    // 永不落定的仓储读取（模拟挂起）。
+    host.loadWorkspace = vi.fn(() => new Promise<never>(() => {}));
+    const deps = makeDeps({
+      loadHostFactory: async () => () => asHost(host),
+      shellReadyTimeoutMs: 5,
+    });
+    const controller = new AbortController();
+
+    await startAppHost(deps, controller.signal);
+
+    await vi.waitFor(() => {
+      expect(deps.sinks.setHostStatus).toHaveBeenLastCalledWith("ready");
+    });
+    expect(deps.sinks.appendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ messageKey: "messages.startupTimeout" }),
+    );
+  });
+
+  it("工作区加载抛错也置 ready（应用以无 Host 外的空态保持可操作）", async () => {
+    const { host } = makeFakeHost();
+    host.loadWorkspace = vi.fn(async () => {
+      throw new Error("repository failed");
+    });
+    const deps = makeDeps({
+      loadHostFactory: async () => () => asHost(host),
+    });
+    const controller = new AbortController();
+
+    await startAppHost(deps, controller.signal);
+
+    await vi.waitFor(() => {
+      expect(deps.sinks.setHostStatus).toHaveBeenLastCalledWith("ready");
+    });
+    expect(deps.sinks.setLoaded).toHaveBeenCalledTimes(1);
   });
 
   it("插件启动失败也置「插件就绪」（fail-open：以注册表为准，避免陈旧色种子长期生效）", async () => {
