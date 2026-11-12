@@ -67,7 +67,7 @@ user-invocable: true
 ### 3. 文档记录
 
 - 轻量需求记录：`docs/features/YYYY-MM-DD-描述.md`（新功能）或 `docs/bugs/YYYY-MM-DD-描述.md`（缺陷），套用 `docs/templates/feature-request.md` / `docs/templates/bug-report.md`。
-- 架构/产品级决策：按项目惯例补 `docs/adr/ADR-XXX-...md`（参考既有 ADR 风格），并把进度写进根 `AGENTS.md`「开发进度」。
+- 架构/产品级决策：按项目惯例补 `docs/adr/ADR-XXX-...md`（参考既有 ADR 风格），并把进度写进 `docs/PROJECT_STATUS.md`。
 
 ### 4. 代码变更
 
@@ -77,7 +77,8 @@ user-invocable: true
 
 ### 5. 测试（轻量 TDD，兼顾速度）
 
-项目约定：**测试执行时机由用户决定**（根 `AGENTS.md`「测试约定」/ docs/AGENTS.md §27，2026-08-19）。先列测试策略征求用户；用户同意后才跑；**不得谎报**。
+项目约定：**测试执行时机由用户决定**（根 `AGENTS.md`「开发工作流」第 5 步 /
+docs/AGENTS.md §27，2026-08-19）。先列测试策略征求用户；用户同意后才跑；**不得谎报**。
 
 - **核心算法/协议/调度**：先写失败测试 → 实现 → 全绿（项目已有 TDD 传统）。
 - **Bug 修复**：先写复现测试（红）→ 修复（绿）→ 防回归。
@@ -98,5 +99,5 @@ user-invocable: true
 
 ## 引用资源
 
-- 测试约定：根 `AGENTS.md`「测试约定」、docs/AGENTS.md §27。
-- 红线：根 `AGENTS.md`「关键红线」、docs/AGENTS.md §32。
+- 测试约定：根 `AGENTS.md`「开发工作流」第 5 步、docs/AGENTS.md §27。
+- 红线：根 `AGENTS.md`「强制约束」、docs/AGENTS.md §32。
