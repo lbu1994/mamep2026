@@ -22,6 +22,48 @@
 - [x] [verify] 四端构建产物代码分割的 **Android 端验证**（2026-09-13 完成，**无线调试真机** vivo V2303A / Android 16）：`pnpm build:android`（web `--mode android` → `cap sync` → `gradlew assembleDebug`，需 JDK ≤24）后用真机跑 `pnpm test:e2e:android`，确认 `apps/web/dist-android`（与其它三端共用同一 `apps/web/vite.config.ts`、不自定义 `codeSplitting.groups`）在 Capacitor WebView（`https://localhost`）下：① 入口与 25 个 chunk（入口 393.64 kB / 最大 482.95 kB）加载正常、React 挂载正常（无 `Class extends value undefined` 类循环依赖症状）；② 5 个懒加载弹窗/抽屉（Help / Plugin Manager / Settings / Workspace Import / Trace Window）按需加载、无 console 错误；③ `ConnectionSettingsModal` 启动自动弹出与 TCP / USB-RS485 闭环不回归 —— 四端共用同一套「懒加载 + rolldown 默认分包」方案，其中浏览器（dev/http 经 `pnpm test:e2e:web` 155/155、生产产物经 `vite preview` + 系统 Edge 实测）、Electron（生产 `file://`，`pnpm test:e2e:electron` 30/30）、VSCode（生产 webview，`pnpm test:e2e:vscode` 全绿）已验证；**Android 端已于 2026-09-13 真机验证**（`test:e2e:android` 不进 `test:all`）— 关联上条「构建产物代码分割」、ADR-050 Android 端接入 / `apps/android/README.md`。**结果**：`pnpm test:e2e:android` **9 passed / 2 skipped**（2 skipped = USB-RS485 闭环需硬件）。① 首屏 **22 个 chunk**、入口 `index-*.js` **7713 B**、最大 `jsx-runtime-*.js` **484721 B**（< 500 kB）、React 挂载正常、无类循环依赖症状；② 4 个懒加载 chunk（HelpDrawer / SettingsDrawer / TraceWindow / WorkspaceImportModal）**首屏均未预加载**，打开后按需加载（`WorkspaceImportModal` 在 Android 不可达，断能力提示 + 不加载；原文的 Plugin Manager 已于 2026-09-12 并入 Settings）；③ 启动弹窗不回归、**TCP 闭环全绿**（5.2s）、无 console 错误。**顺带修复**：① 工作区导入/导出在能力 unsupported 时**不再静默无操作**（补能力提示 + 2 单测）；② Android 版本号改取根 `package.json`（安装后 `versionName=0.4.2` / `versionCode=402`，原模板占位 1.0）。**基建**：`MAMEP_ANDROID_ADB_TARGET` 自动 `adb connect` + `ANDROID_SERIAL` 固定设备（无线调试下有两个 transport）、`actionTimeout`（Playwright 默认无动作超时 → 无限「卡住」）、`ensureScreenAwake`；`mobile-ui.spec.ts` 返回键用例首次真机运行暴露断言不可用（CDP 强制页面 visible）已改用系统前台窗口判定。详见 [docs/features/2026-09-13-Android端构建产物代码分割验证.md](docs/features/2026-09-13-Android端构建产物代码分割验证.md)
 - [x] [refactor] `apps/web/src/App.tsx` 按运行时平台动态 `import()` 三端 Host（`ElectronAppHost`/`VscodeAppHost`/`AndroidAppHost`）—— 这些当前全部进首屏 chunk；按平台懒加载可进一步减小首屏体积，但会改变装配时序（VSCode dev bridge 先于 App 装配、插件加载时序敏感），需独立评估 + 三端回归（关联上条「构建产物代码分割」；2026-09-12 ADR-054 后 `App.tsx` 已不再静态 import 插件包）。**2026-09-13 完成（保留，但字节收益低于门槛——用户确认）**：① **装配重构**：`App.tsx` 收敛为组合根（345 → ~130 行），抽 `platform-detect.ts`（纯函数平台判定，桥优先 → Capacitor → 浏览器）/ `platform-context.ts`（注册表 + mock + 兼容性 + KV 惰性工厂）/ `host-factories/{browser,electron,vscode,android}.ts` / `host-assembly.ts`（装配 → 接线 → 启动 → 释放，含 `AbortSignal` 取消竞态守卫与失败兜底，**不依赖 store/React 故可 node 单测**）/ `store-sinks.ts`；**浏览器路径保持静态**（`BrowserAppHost` 是三端 inner），**`vscode-dev-bridge.ts` 不动态化**（须先于 render 同步安装）；`@capacitor/core` / `@capacitor/app` 只从 Android 工厂（`platform-android/capacitor(-app)`）可达。② **配套 UI**：`hostStatus` 三态（默认 `ready`；`main.tsx` 渲染前置 `assembling`）+ 新 `AppStartupPlaceholder` 启动骨架（在 `ConfigProvider`+`AntApp` 内，暗色不闪白）+ 装配失败 `messages.hostLoadFailed` 提示后以「无 Host」保持可操作（不再白屏）+ i18n 双语。③ **实测（浏览器构建）**：入口 chunk **384.54 → 7.78 kB**（应用代码重新分入共享 chunk）；**首屏 JS 合计 1663.21 → 1630.45 kB（−2.0%）/ gzip 518.16 → 513.91（−0.8%）**；`@capacitor/core` chunk 7.74 kB 从「首屏 modulepreload」变为「仅 Android 按需」；三端 Host 成为懒 chunk（electron 9.81 / vscode 11.67 / android 9.23 kB）；chunk 22 → 33。**门槛（<5% 则不做）未达**——桩替换预测的「入口 −13%」高估了净收益（基线首屏本就含几乎全部代码，被移出者仅 ~38 kB）；经用户确认后**保留**，价值在「平台隔离 + 装配失败兜底 + 骨架屏 + 装配编排可单测」。④ **回归**：`apps/web` 121/121、`ui` 403/403（新增 platform-detect 6 + host-assembly 9 + 骨架 2 + MamepApp 2）、`pnpm typecheck` 32/32、`pnpm lint` 0、**`test:e2e:electron` 34/34（生产 `file://`）**、**`test:e2e:vscode` 全绿（生产 webview）**、`test:e2e:web` **156/156 全绿**、`--mode android` 产物构建成功；**Android 真机 e2e 仍属上条待办**。边界零改动（能力矩阵 / HostMessage v1 / 工作区 schema / CSP / 插件机制）。详见 [docs/features/2026-09-13-App装配按平台懒加载.md](docs/features/2026-09-13-App装配按平台懒加载.md)
 
+## 独立待办组：架构与安全（2026-11-12）
+
+> 来源：2026-11-12 架构审计。`P0 / P1 / P2` 仅表示本组实施顺序，不改写 PRD §8.2–8.6 的既定义务优先级。
+
+### P0（正确性优先）
+
+- [ ] [bug] **请求没有绑定自己的通信路由** — 当前轮询目标、批量读取和 Trace 只携带地址；实际组帧时仍读取 `CommunicationSession` 的全局可变 `slaveAddress` / `unitId`。活动表切换或延迟响应期间，已入队请求可能使用新表的从站地址/Unit ID，极端情况下可能把写入发到错误从站。修复方向：将 `unitAddress` 以及必要的 `protocol/codec` 作为不可变请求上下文，在操作创建或入队时快照，调度器按快照执行；不支持混协议轮询时必须显式跳过或阻止并提示。涉及 `packages/communication`、`packages/register-table`、`packages/application`、`apps/web/src/App.tsx` 及 Host API 适配。验收：不同 Unit ID/从站地址的多表轮询、批量读取、Trace、写入在切表/延迟响应下帧路由保持正确；跨协议轮询行为有明确能力提示。测试时机待确认。
+
+
+### P1（结构治理）
+
+- [ ] [refactor] **`AppHost` 已经变成聚合型上帝接口** — 当前接口同时覆盖通信会话、工作区持久化、文件/剪贴板、插件运行时、日志、轮询、Trace 和移动端生命周期，四个平台 Host 与 UI 测试都需要维护整套契约。建议按用途拆成可组合的 `WorkspaceHost`、`CommunicationHost`、`PluginHost`、`PlatformLifecycleHost` 等接口，`AppHost` 只负责组合；优先做增量拆分，避免一次性大重构。验收：新增一项平台能力时不需要同时修改所有无关 Host；各子接口有独立契约测试。
+- [ ] [docs] **明确插件同进程执行的安全边界（已确认取舍）** — 本工具仅为自用，不会支持插件市场；第三方上传插件的品质由插件开发者以及插件使用者自行承担。插件尽量运行在沙箱环境中，但为实现某些功能不得不在同进程内运行，这属于已确认的取舍，不应再作为产品安全缺陷重复记录。同步更新插件开发文档、ADR 和安装确认提示，明确“默认隔离、显式授权同进程、可信插件自担风险”的边界。涉及 `docs/`、`plugin-api`、Electron/VSCode 宿主装配及 UI 风险提示。
+
+
+### P2（工程卫生）
+
+- [ ] [refactor] **平台 Host 集中在 `apps/web`，依赖清单有漂移** — `apps/web` 同时承载浏览器 UI、Electron/VSCode/Android Host 工厂及平台装配职责，平台边界依赖动态 `import()` 和构建模式维持；同时部分 `package.json` 依赖与实际静态导入/最终打包内容不一致。近期可通过运行时边界测试和依赖清单审计控制风险；中期再评估将平台 Host 拆到独立包，避免为了目录整洁做无收益的大规模迁移。验收：各平台构建只加载所需 Host；工作区依赖清单与实际导入一致；不引入循环依赖或平台 API 泄漏。
+
+
+## 独立待办组：UI/UX 改进（2026-11-12）
+
+> 来源：2026-11-12 当前界面截图审查。以下 `UX-P0 / UX-P1` 仅表示本轮界面改进的实施顺序，不改写 PRD §8.2–8.6 的既有阶段优先级。最小首批建议：`UX-P0-1` → `UX-P0-3` → `UX-P0-4`。
+
+### UX-P0（优先改进）
+
+- [ ] [bug] **离线状态统一通信操作门控** — 当前断开连接时单行 Read / Write 已禁用，但 Read All 仍是可点击的主按钮，用户需要先触发一次失败才知道不能读取。离线时应禁用 Read All 并提供“先连接设备”的原因提示，或将顶部主操作切换为 Connect；不得发起无效的通信请求。涉及 `packages/ui/src/components/RegisterTable.tsx`。验收：未连接、连接失败和连接中断状态下，所有通信操作的门控语义一致，鼠标、键盘和辅助技术均能获知禁用原因。
+- [ ] [feat] **明确区分连接状态、连接操作与连接设置** — 左上角连接控件应直接表达状态与动作（如 `Offline · Connect` / `Online · Disconnect`），右上角入口改为 `Connection settings` 或 `Device setup`，并使用不同语义图标，避免 `Connect` 与 `Connection` 看起来像同一功能。保留现有的 RTU/TCP 直连分流、连接失败回退弹窗和窄窗口行为。涉及 `packages/ui/src/MamepApp.tsx`、`connection-button.ts` 与双语 i18n。验收：桌面、窄窗口和移动布局下均能明确区分“当前状态”“连接/断开”和“修改连接配置”。
+- [ ] [refactor] **表格工具栏按使用频率分层** — 第一层只保留高频操作（Undo / Redo、Add Row、Read All）；Address format、Slave Address / Unit ID、Write verification、Reset layout 等低频配置收进 `Table settings` Popover 或列头菜单；行数移到更接近表格的位置。中等桌面宽度（约 1024–1440px）应避免控件挤压或难以发现。涉及 `packages/ui/src/components/RegisterTable.tsx`、`apps/web/src/index.css` 及相关响应式样式。验收：常见桌面宽度下首层工具栏不横向溢出，高频操作与配置项分组稳定，键盘可完整访问设置弹层。
+- [ ] [feat] **底部面板按空态自适应并减少无效占位** — 无错误且无通信日志时默认折叠为 32–40px 状态条（显示连接状态和最近一条关键消息），有新错误或用户主动展开时再显示完整面板；保留用户手动调整的高度、活动页签和折叠状态。需在实施前确认首次无日志场景是否默认折叠，已保存的用户布局必须优先。涉及 `packages/ui/src/MamepApp.tsx`、`components/BottomPanel.tsx`、工作区 `panelLayout` 默认值及持久化兼容。验收：仅有一条启动消息时不再占用约四分之一屏幕；错误到达时可发现；用户布局刷新后可恢复。
+
+### UX-P1（第二优先级）
+
+- [ ] [refactor] **降低重复行操作的视觉权重** — 行级 Read / Write 当前使用主按钮样式，配置较多行后会形成大量重复蓝色按钮。建议改为默认或描边样式，将主色留给 Read All、当前聚焦操作或真正的批量操作；按 PRD §25.4 继续保留完整文字，不得退化为纯图标。涉及 `packages/ui/src/components/RegisterTable.tsx` 与主题/样式覆盖。验收：连接后 50 行仍能快速定位读、写操作，但主色不再被重复控件淹没。
+- [ ] [feat] **降低 WP 关闭态的视觉噪声** — WP 开关关闭时使用中性灰轨道，开启或正在轮询时再使用品牌色/成功色；保留文字提示、`aria-label` 和非纯颜色状态表达。涉及 RegisterTable 的 WP 单元格样式及存量为轮询状态。验收：长表中大量关闭状态不再比数据内容更醒目，开启和轮询状态仍需清晰可辨。
+- [ ] [feat] **补充空白表的轻量首次使用引导** — 当工作区或当前表尚无有效寄存器配置时，在首行附近给出一次性的低干扰操作提示（例如填写 Address、可选 Name，然后连接并 Read），支持关闭且不使用阻塞式向导或大卡片。涉及 RegisterTable 空态/首次使用提示与双语 i18n。验收：新用户能理解最短操作路径，已有用户和自动化流程不被额外弹窗打断。
+- [ ] [feat] **增强宽表横向扫读与区域层级** — 适度增强表头、斑马纹、hover、选中行之间的差异，并让顶栏、侧栏、表格和底部面板的层次更容易辨认；保持当前高密度工程工具方向，不引入大面积卡片化或强对比装饰。Address / Data 继续使用等宽字体。涉及 `apps/web/src/index.css`、主题令牌与必要的表格状态样式。验收：在 1366px 和宽屏下均能追踪同一行跨列数据，深浅主题都保持可读且不产生“网格纸”压迫感。
+- [ ] [bug] **补齐重复控件的行级可访问名称** — WP、Read、Write 等逐行重复控件的辅助名称应带行号或寄存器地址，例如 “Poll row 3, address 1000”，避免屏幕阅读器只听到多个相同的 “WP” 或 “Read”。优先使用关联表头/行语义或上下文 `aria-label`，同时检查虚拟滚动和范围行/位子行的焦点顺序。涉及 `packages/ui/src/components/RegisterTable.tsx` 与相关可访问性测试。验收：键盘与屏幕阅读器能区分同一列中的不同行操作。
+- [ ] [docs] **统一工具栏和小标签文案格式** — 统一 `Address:`、`Verify:`、`Slave Address` 等标签的大小写与冒号规则；为侧栏中因宽度被截断的分组标题增加完整名称 Tooltip；同步 en-US / zh-CN 文案。涉及 `packages/ui/src/i18n/index.ts`、侧栏菜单标题和帮助文档中引用这些名称的内容。验收：两种语言下标签风格一致，截断项可通过鼠标悬停和键盘获得完整名称。
+
+> 实施要求：每项按需同步 en-US / zh-CN、键盘操作和可访问名称；界面改动需覆盖深色/浅色主题及桌面/窄窗口状态。测试范围与执行时机在具体实施前按仓库测试约定确认。
+
 ## 阶段二：V1.0 正式版（PRD §8.3 P1）
 
 - [x] [feat] 崩溃后的状态恢复 — PRD §8.3（依赖已落地的工作区持久化：浏览器 IndexedDB / Electron `filesystem:"full"`（ADR-036）；§21.2「状态恢复依赖工作区持久化」）— 2026-09-04，ADR-049：关闭/崩溃时 flush（**visibilitychange→hidden**，pagehide 会中断异步写入且破坏「清工作区→reload」测试隔离）+ 恢复提示（RecoveryBanner 无按钮）+ §19.1 仓储接口补齐（reset/export/import/createBackup/getRecoveryInfo）；跨端 HostMessage 契约（workspace-load 响应 recoveryInfo + 新 kind workspace-create-backup）。**回归全绿**：typecheck 27/27、lint 0、受影响包单测、浏览器新 e2e 2/2、**Electron e2e 30/30**。**已知限制**：浏览器 unload 中断异步 IndexedDB 写入，flush 为 best-effort（autosave 500ms 兜底）；「模拟崩溃」e2e 未做（进程杀伐基建成本高）
@@ -110,7 +152,7 @@
 - [ ] [feat] 脚本化调试（脚本化调试基础设施）
 - [ ] [feat] 自动化测试序列（依赖脚本化调试/序列执行能力）
 - [ ] [plugin] 厂商私有协议（插件化协议扩展，复用已落地的插件/自定义功能码(codec/dataType)基础设施（ADR-043/044））
-- [ ] [plugin] 插件市场（TECH_DESIGN：待插件 API/签名/权限/隔离机制成熟后再开放；基于已落地的插件安装/持久化（ADR-038））
+- [x] [docs] 插件市场明确不实现 — 本工具仅为自用，不提供插件市场；第三方上传插件的品质由插件开发者及插件使用者自行承担。插件优先在沙箱环境运行，仅为必要功能经用户显式授权后允许同进程执行；后续同步插件开发文档、ADR 与安装提示的信任边界。
 - [ ] [feat] Memory Access（设备内存访问）
 - [ ] [feat] 设备描述文件（设备描述/配置文件）
 - [ ] [feat] 团队配置共享（配置共享，基于工作区/配置基础设施）

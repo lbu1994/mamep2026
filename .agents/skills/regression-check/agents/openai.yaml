@@ -1,0 +1,7 @@
+interface:
+  display_name: "Mamep Regression Check"
+  short_description: "Assess and run approved Mamep2026 regression checks"
+  default_prompt: "Use $regression-check to assess regression coverage for this change."
+
+policy:
+  allow_implicit_invocation: false

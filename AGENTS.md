@@ -12,7 +12,14 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 
 ## AI 开发工作流（固化，2026-09-03）
 
-日常开发默认按以下固定流程执行（**除非用户明确跳过某步**）；完整版固化在 `.agents/skills/dev-workflow/SKILL.md`（技能会自动触发，无需输入提示词），分步快捷指令在 `.github/prompts/`：
+执行前先判断任务是否属于开发任务：
+
+- **开发任务**：会修改产品实现、应用/共享包代码、测试、构建配置、运行时会话/协议/数据行为或交付产物。此类任务进入下方开发工作流。
+- **非开发任务**：只读分析、信息盘点、解释问答、普通文档整理，以及 AI 提示词/技能/工具链配置。此类任务直接执行，不强制进入澄清、计划、特性文档等开发门禁。
+- **混合任务**：只对被判定为开发的部分执行开发工作流；其余部分直接处理，并在汇报时说明边界。
+- 任务类型不明确时，按“是否改变产品行为或交付物”判断；仍无法判断且会显著影响执行方式时再询问用户。
+
+开发任务默认按以下固定流程执行（**除非用户明确跳过某步**）；完整版固化在 `.agents/skills/dev-workflow/SKILL.md`（只对开发任务自动触发）：
 
 1. **需求澄清** → 输出《需求澄清清单》（边界/异常/性能/影响/未确认项），暂停等确认。
 2. **计划（Plan）** → 输出实施计划（影响文件/变更点/测试策略/风险回滚），等「计划通过」再写代码。
@@ -21,7 +28,11 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 5. **测试（轻量 TDD，兼顾速度）** → 先列测试策略征求用户；**测试执行时机由用户决定**（见「测试约定」），同意后才跑，不得谎报；核心算法/协议/调度与 Bug 修复遵循「先写失败测试（红）→ 实现（绿）」，UI/胶水实现+测试同轮。
 6. **回归验证** → 受影响包单测 + `pnpm typecheck` + `pnpm lint`；涉及界面/传输提醒冒烟或相关 e2e，先征得同意。
 
-快捷指令：`/plan-feature`、`/fix-bug`、`/write-tests`、`/regression-check`；模板 `docs/templates/feature-request.md`、`docs/templates/bug-report.md`。
+工具入口：
+
+- Codex：显式调用 `$plan-feature`、`$fix-bug`、`$write-tests`、`$regression-check`；定义在 `.agents/skills/`。
+- Copilot：使用 `/plan-feature`、`/fix-bug`、`/write-tests`、`/regression-check`；定义在 `.github/prompts/`。
+- 两套入口共用 `.agents/skills/dev-workflow/SKILL.md` 的项目约束；模板为 `docs/templates/feature-request.md`、`docs/templates/bug-report.md`。
 
 ## 当前实际工程结构（重要）
 

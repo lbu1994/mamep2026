@@ -42,3 +42,7 @@ _screenshots
 
 .venv/*
 .github/prompts/*
+!.github/prompts/plan-feature.prompt.md
+!.github/prompts/fix-bug.prompt.md
+!.github/prompts/write-tests.prompt.md
+!.github/prompts/regression-check.prompt.md
