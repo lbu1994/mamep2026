@@ -31,7 +31,7 @@ Mamep2026：三端（浏览器 / Electron / VSCode 插件）Modbus 调试工具�
 工具入口：
 
 - Codex：显式调用 `$plan-feature`、`$fix-bug`、`$write-tests`、`$regression-check`；定义在 `.agents/skills/`。
-- Copilot：使用 `/plan-feature`、`/fix-bug`、`/write-tests`、`/regression-check`；定义在 `.github/prompts/`。
+- Copilot prompt 存档：位于 `docs/prompts/`，仅在复制回 `.github/prompts/` 后才会被 Copilot 自动发现。
 - 两套入口共用 `.agents/skills/dev-workflow/SKILL.md` 的项目约束；模板为 `docs/templates/feature-request.md`、`docs/templates/bug-report.md`。
 
 ## 当前实际工程结构（重要）

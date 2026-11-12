@@ -6,7 +6,7 @@ agent: "agent"
 ---
 # 生成测试用例：${input:description}
 
-> Copilot 入口：`/write-tests`；Codex 对应入口：`$write-tests`。
+> Codex 入口：`$write-tests`。本文件是迁出存档的 Copilot prompt 模板；如需 Copilot 自动发现，请复制回 `.github/prompts/`。
 
 为选中的代码/功能生成 vitest 测试，遵循项目既有测试风格：
 

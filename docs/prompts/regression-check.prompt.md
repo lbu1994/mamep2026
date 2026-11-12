@@ -6,7 +6,7 @@ agent: "agent"
 ---
 # 回归验证：${input:description}
 
-> Copilot 入口：`/regression-check`；Codex 对应入口：`$regression-check`。
+> Codex 入口：`$regression-check`。本文件是迁出存档的 Copilot prompt 模板；如需 Copilot 自动发现，请复制回 `.github/prompts/`。
 
 对当前变更做回归检查，**执行前先征求用户同意**（测试执行时机由用户决定，docs/AGENTS.md §27）：
 

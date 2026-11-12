@@ -93,7 +93,7 @@ user-invocable: true
 ## 工具入口
 
 - Codex：显式调用 `$plan-feature`、`$fix-bug`、`$write-tests`、`$regression-check`，定义在 `.agents/skills/`。
-- Copilot：使用 `/plan-feature`、`/fix-bug`、`/write-tests`、`/regression-check`，定义在 `.github/prompts/`。
+- Copilot prompt 存档：位于 `docs/prompts/`，仅在复制回 `.github/prompts/` 后才会被 Copilot 自动发现。
 - 模板在 `docs/templates/`。
 
 ## 引用资源

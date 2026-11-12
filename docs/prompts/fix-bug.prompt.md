@@ -6,7 +6,7 @@ agent: "agent"
 ---
 # Bug 修复：${input:description}
 
-> Copilot 入口：`/fix-bug`；Codex 对应入口：`$fix-bug`。
+> Codex 入口：`$fix-bug`。本文件是迁出存档的 Copilot prompt 模板；如需 Copilot 自动发现，请复制回 `.github/prompts/`。
 
 按 Mamep2026 固定工作流执行（见 `.agents/skills/dev-workflow/SKILL.md`）：
 
