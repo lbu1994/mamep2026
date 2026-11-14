@@ -33,6 +33,10 @@
 
 > 经验：fake `navigator.serial` 的 e2e 走不到真实权限/手势路径，单测/e2e 全绿 ≠ 真机可用；串口权限类问题必须真机验证（详见仓库 memory `electron-serial-debug-2026-08-22`）。
 
+Electron 的串口选择是明确的应用交互，不默认选择第一个端口。只有测试或受控无人值守场景可以显式启用自动选择策略。每次重新枚举前必须取消旧的挂起选择，保证同一时刻最多一个 `requestPort()` 等待主进程回调。
+
+未来替换为 Node Serial Adapter 时，变更点是 `AppHost` 的串口打开与枚举实现以及能力矩阵，不是协议、调度或 UI。Renderer 始终只使用 `SerialPortOption` 和 `TransportPort` 契约，不取得串口库对象。
+
 浏览器持久化时只保存：
 
 - 非设备标识类通信参数；

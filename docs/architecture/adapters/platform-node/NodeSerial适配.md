@@ -5,11 +5,36 @@
 > 实现状态（2026-08-23，ADR-020）：Node 串口原型已通过并产出选型 ADR——`packages/platform-node`
 > 落地 `NodeSerialTransport` + `NodePlatformHost` + 错误映射 + 能力描述 + 注入式 `SerialPortLike` 隔离面
 >
-> - Fake 测试与 com0com COM4↔COM5 虚拟串口闭环全绿，详见本文 §3；
+> - Fake 测试与 com0com COM4↔COM5 虚拟串口闭环全绿，详见本文 §4；
 > - VSCode 已使用 Node Serial Adapter；
 > - Electron 当前仍使用 Web Serial API，后续版本再替换为本适配器（ADR-017）。
 
 Electron（后续版本替换 Web Serial）和 VSCode 共用 Node Serial Adapter。
+
+## 2. 选型与封装边界
+
+确定使用 `serialport@13`，由 `serialport`、`@serialport/bindings-cpp` 和 `@serialport/stream` 提供跨平台枚举、打开、读写与原生绑定。选择依据是：
+
+- MIT 许可证，支持 Windows、macOS 和 Linux；
+- TypeScript 类型和 Node.js 流接口完整；
+- 端口信息包含原始 path，并可携带厂商、序列号、PnP 和 USB 元数据；
+- 具备 `DisconnectedError` 和关闭事件，可映射设备拔出；
+- 可封装为业务无关适配器，不让库类型进入 Domain、Application、UI、工作区或插件 API；
+- 现有 pnpm workspace 已允许其原生绑定构建。
+
+具体依赖只在 `packages/platform-node` 的串口适配器内出现。测试通过注入式 `SerialPortLike` / `SerialPortFactoryLike` 隔离真实库，真实实现只在 `real-serial-port.ts`；`NodeSerialTransport` 只处理字节、连接状态和结构化错误。
+
+Electron Main 与 VSCode Extension Host 可以共享：
+
+- `SerialPortLike` 与工厂契约；
+- `NodeSerialTransport`；
+- `NodePlatformHost` 串口部分；
+- 错误映射与 `NodeSerialCapabilities`；
+- Fake/虚拟串口测试和连接释放逻辑。
+
+不得共享 Electron IPC、VSCode Webview RPC、Host 生命周期、打包配置或已编译原生模块。Electron 与 VSCode 的 Node ABI 不同，必须在各自宿主环境中安装、重建和打包绑定。
+
+该适配器在 `TransportPort.kind` 中使用 `"node-serial"`，上层通信会话只依赖统一 TransportPort。能力声明只能帮助 UI 展示和参数预校验，实际打开结果仍是最终事实；未知底层错误保留技术信息并映射为通用串口错误。
 
 职责：
 
@@ -29,7 +54,7 @@ COM10 以上不得通过手工拼接不完整路径实现。应直接使用成�
 Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在领域层解析其命名格式。
 
 
-## 2. Node 串口原型
+## 3. Node 串口原型
 
 > 适用范围（ADR-017）：本原型服务于后续版本 Node 串口库替换阶段（Electron 替换 Web Serial、VSCode 自始使用），进入该阶段前完成。Electron MVP 串口走 Web Serial（§34.2 原型已覆盖浏览器路径，Electron 复用）。
 
@@ -40,7 +65,7 @@ Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在
 
 目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、原生模块兼容、资源释放及异常处理能力。
 
-### 2.1 串口库验证
+### 3.1 串口库验证
 
 对候选 Node.js 串口库验证以下内容：
 
@@ -61,7 +86,7 @@ Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在
 
 候选库必须由 platform-node 中的适配器封装，不允许其类型或对象进入 Domain、Application、UI、工作区数据或插件公开 API。
 
-### 2.2 串口枚举
+### 3.2 串口枚举
 
 验证系统串口枚举结果是否能够完整提供：
 
@@ -92,7 +117,7 @@ Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在
 
 推荐将系统返回的原始端口路径作为运行时连接标识，将显示名称作为独立字段提供给 UI。
 
-### 2.3 跨平台端口路径
+### 3.3 跨平台端口路径
 
 验证不同平台的端口路径，包括但不限于：
 
@@ -111,7 +136,7 @@ Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在
 7. 不将 /dev 路径规则应用于 Windows；
 8. 端口显示名称与用于打开的真实路径分离。
 
-### 2.4 串口参数支持
+### 3.4 串口参数支持
 
 验证以下基础参数：
 
@@ -146,7 +171,7 @@ Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在
 
 平台或驱动不支持的参数必须通过能力检测或连接错误反馈给上层，不得自动替换为其他值。
 
-### 2.5 串口打开
+### 3.5 串口打开
 
 验证以下打开场景：
 
@@ -175,7 +200,7 @@ Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在
 9. 不启动通信请求队列；
 10. 不创建遗留的 Reader、Writer、监听器或 Timer。
 
-### 2.6 串口读取
+### 3.6 串口读取
 
 验证底层串口数据事件能够被稳定转换为 Uint8Array。
 
@@ -204,7 +229,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 
 这些职责分别属于协议层和通信会话层。
 
-### 2.7 串口写入
+### 3.7 串口写入
 
 验证以下写入场景：
 
@@ -232,7 +257,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 
 传输层写入成功后，协议请求仍需等待并校验设备响应。
 
-### 2.8 端口占用
+### 3.8 端口占用
 
 验证端口已被其他程序占用时：
 
@@ -249,7 +274,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 
 由于不同操作系统和驱动返回的原始错误不同，错误映射层应保留底层技术信息，同时向上层返回统一错误类别。
 
-### 2.9 权限不足
+### 3.9 权限不足
 
 验证：
 
@@ -268,7 +293,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 - 不执行未经用户允许的系统配置修改；
 - 保留底层错误码用于诊断。
 
-### 2.10 设备拔出
+### 3.10 设备拔出
 
 连接成功后拔出设备，验证：
 
@@ -289,7 +314,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 
 如果操作系统没有及时提供拔出事件，应通过读写错误和连接健康状态识别中断。
 
-### 2.11 正常关闭
+### 3.11 正常关闭
 
 验证以下关闭场景：
 
@@ -321,7 +346,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 
 关闭失败时仍应尽可能清理本地引用，记录诊断错误，并避免 UI 永久停留在 disconnecting 状态。
 
-### 2.12 重复连接与监听器泄漏
+### 3.12 重复连接与监听器泄漏
 
 执行多轮连接和断开测试，例如连续执行 100 次：
 
@@ -347,7 +372,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 
 每次连接创建新的 connectionId。旧连接产生的迟到事件不得影响新连接。
 
-### 2.13 Electron 原型
+### 3.13 Electron 原型
 
 在 Electron 中验证：
 
@@ -374,7 +399,7 @@ Electron 原型还应验证：
 - Renderer 无法传入任意模块名或任意系统命令；
 - 串口错误经过 Main Process 映射后再发送到 UI。
 
-### 2.14 VSCode 原型
+### 3.14 VSCode 原型
 
 在 VSCode Extension Host 中验证：
 
@@ -394,7 +419,7 @@ Electron 原型还应验证：
 - 串口异常不会阻塞 Extension Host；
 - 长时间轮询不会影响 VSCode 编辑器响应。
 
-### 2.15 Electron 与 VSCode 共享边界
+### 3.15 Electron 与 VSCode 共享边界
 
 验证 Electron 和 VSCode 可以共享：
 
@@ -420,7 +445,7 @@ Electron 原型还应验证：
 
 共享源代码不等于共享已编译原生模块。Electron 和 VSCode 应针对各自运行环境分别安装、构建和打包原生依赖。
 
-### 2.16 串口错误映射
+### 3.16 串口错误映射
 
 原型需要建立底层错误到统一错误模型的映射，至少覆盖：
 
@@ -449,7 +474,7 @@ Electron 原型还应验证：
 
 无法识别的错误映射为通用串口错误，同时保留原始技术信息用于诊断。
 
-### 2.17 能力检测
+### 3.17 能力检测
 
 Node Serial Adapter 应提供串口能力描述，包括：
 
@@ -466,7 +491,7 @@ Node Serial Adapter 应提供串口能力描述，包括：
 
 能力信息用于 UI 展示和配置校验，不得用于绕过真实打开结果。即使声明支持某参数，具体设备或驱动仍可能拒绝，连接流程必须处理实际失败。
 
-### 2.18 性能与稳定性
+### 3.18 性能与稳定性
 
 验证：
 
@@ -481,7 +506,7 @@ Node Serial Adapter 应提供串口能力描述，包括：
 - 串口关闭后进程能够正常退出；
 - 串口通信不在 Renderer 或 Webview UI 线程执行。
 
-### 2.19 测试方式
+### 3.19 测试方式
 
 Node 串口原型采用三层测试。
 
@@ -531,7 +556,7 @@ Node 串口原型采用三层测试。
 - 长时间轮询；
 - Electron 和 VSCode。
 
-### 2.20 原型输出物
+### 3.20 原型输出物
 
 原型完成后应产出：
 
@@ -549,7 +574,7 @@ Node 串口原型采用三层测试。
 
 原型代码如果不满足正式架构边界，不应直接复制进入生产代码。
 
-### 2.21 通过标准
+### 3.21 通过标准
 
 Node 串口原型满足以下条件后，才可进入正式实现：
 
@@ -571,7 +596,7 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 16. 长时间轮询不存在阻断性稳定问题；
 17. 原型结论和已知限制已记录到 ADR 或技术文档。
 
-## 3. 验证状态与平台限制
+## 4. 验证状态与平台限制
 
 已验证：
 

@@ -2,7 +2,32 @@
 
 ## 1. apps/vscode-extension
 
-> 当前状态（2026-08-23，[ADR-019](adr/ADR-019-vscode骨架与安全RPC.md)、[ADR-021](adr/ADR-021-vscode-rtu接线.md)）：扩展已迁移到 `apps/vscode-extension/`——命令 `mamep2026.openMainPanel` 打开 Webview 加载共享 UI；生产模式加载 `dist/media/` 本地静态资源（`asWebviewUri()` + 构建期 CSP meta `style-src 'unsafe-inline'`，`localResourceRoots` 限定媒体目录），dev 模式 `MAMEP_DEV_URL` 覆盖为 iframe 指向 Vite dev server；Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC（新增 `get-color-theme` / `color-theme-changed` kind），能力矩阵 `vscodeCapabilities` 如实声明（`modbusRtu:false` / `modbusTcp:false` / `serialPorts:"unsupported"` / `filesystem:"unsupported"`），`select-serial-port` 返回 `SERIAL_UNSUPPORTED`；`tests/e2e-vscode` 真实 VSCode 集成测试已建立。**VSCode RTU 已接线（2026-08-23，ADR-021）**：通信在 Extension Host 全量承载——`NodePlatformHost`（packages/platform-node）+ 共享编排层 `RtuSessionHost`（packages/application），Renderer `VscodeAppHost` 为远程会话代理（HostMessage v1 新 kind：`serial-enumerate`/`session-connect`/`session-read-row`/`session-write-row`/`session-batch-read`/轮询/追踪/`comm-log`/`poll-result`/`trace-sample`/`app-message` 事件）；能力矩阵翻转 `modbusRtu:true` / `serialPorts:"enumerated"`（antd Select 下拉选择）；e2e 经 `MAMEP_FAKE_SERIAL=1` 宿主进程内假串口（DevFakeSerialFactory，内联 CRC16 RTU responder）走通枚举→连接→FC10 写→FC03 读→断开闭环与面板关闭释放。**VSCode Modbus TCP 已接线（2026-08-23，ADR-022）**：`VscodeSessionHost.connectTcp`（`NodePlatformHost.openTcpTransport` + `TcpSessionHost`），`ipc.ts` 分发 `session-tcp-connect`，`DevFakeTcpServer`（`MAMEP_FAKE_TCP=1`，127.0.0.1:1502），能力矩阵 `modbusTcp:true`；e2e 走通 TCP 连接→FC10 写→FC03 读→断开闭环。本节其余为设计目标。
+扩展位于 `apps/vscode-extension/`，命令 `mamep2026.openMainPanel` 打开单实例 Webview。Extension Host 承载 RTU、TCP、工作区、插件和颜色主题桥；Webview 只承载共享 UI，经 HostMessage v1 与宿主通信。能力矩阵如实声明当前 RTU/TCP 与串口枚举能力，UI 按能力隐藏或禁用入口。
+
+### 工程结构与加载模式
+
+- `src/extension.ts` 是扩展激活、面板和生命周期入口；
+- `src/ipc.ts` 是可测试的 RPC 分发核心，外部能力通过 `IpcDeps` 注入；
+- `src/webview/vscode-bridge.ts` 是 Webview 侧类型化桥；
+- 构建任务先用 Vite 生成共享 UI，再复制到 `dist/media/`，最后用 esbuild 生成 Extension Host bundle 和 Webview bridge。
+
+生产模式从 `dist/media/` 加载静态资源，所有资源 URI 经 `asWebviewUri()` 重写，`localResourceRoots` 只允许 media 目录。构建期 CSP 使用 `webview.cspSource`，禁止 inline script 和远程脚本，只为 Ant Design CSS-in-JS 放行 `style-src 'unsafe-inline'`。
+
+开发模式仅在 `MAMEP_DEV_URL` 存在时用 iframe 加载 Vite dev server，以复用热更新；生产构建不得依赖 dev server，e2e 必须验证本地资源路径、bridge 注入和 CSP 不含 dev 地址。
+
+### Webview RPC 与生命周期
+
+Extension Host 与 Webview 复用平台包中的 HostMessage v1：版本、request/response/event/error、唯一 messageId、Zod payload 和 kind 白名单。错误使用可序列化 `MamepError` 投影，不允许 Webview 传任意方法名。
+
+颜色主题桥使用：
+
+- request `get-color-theme` 查询当前浅/深主题；
+- event `color-theme-changed` 在编辑器主题变化或面板重新可见时推送；
+- VSCode 高对比度主题先映射到 dark 基础模式，再由完整主题令牌层覆盖中性色。
+
+主面板采用单实例：重复执行命令只 reveal 现有面板；注册 Webview panel serializer 以支持 VSCode 重载恢复。主题订阅、消息订阅、面板 dispose 和通信释放都必须进入扩展订阅或显式释放路径。恢复工作区后保持离线，不自动发送设备请求。
+
+调试 RPC `debug:get-state` 与扩展内命令 `mamep2026.debug:getPanel` 仅用于开发或 e2e；Webview 不得调用面板引用命令，生产构建必须关闭调试 RPC。
 
 ### extension
 

@@ -2,7 +2,18 @@
 
 ## 1. apps/electron
 
-> 当前状态（2026-08-21，ADR-016/017；2026-08-23 TCP 接线，ADR-022）：Electron 已迁移到 `apps/electron/`——主进程 `src/main/main.ts`、preload `src/preload/preload.ts`，Main/Preload/Renderer 三层落地；安全 IPC 采用 HostMessage v1 版本化 Envelope + Zod 校验 + kind 白名单，`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。MVP 串口已落地（ADR-017 扩展：Web Serial + enumerated 下拉，能力矩阵 `modbusRtu:true`/`serialPorts:"enumerated"`）；**Modbus TCP 已接线（2026-08-23，ADR-022）**：会话承载在主进程——`ElectronSessionHost`（`NodePlatformHost` + `TcpSessionHost`）处理 `session-tcp-connect` 等会话 kinds（`ipc.ts` 异步化 + 事件转发 Renderer），Renderer `ElectronAppHost` 变混合（RTU 本地 `BrowserAppHost` / TCP 主进程远程代理，按 `activeProtocol` 路由），preload 暴露完整会话 RPC 桥，能力矩阵 `modbusTcp:true`；文件持久化仍未实现；`debug:get-state` 为 dev 探针（打包后禁用）。后续版本再把串口替换为 Node Serial Adapter。
+Electron 已迁移到 `apps/electron/`，主进程 `src/main/main.ts`、preload `src/preload/preload.ts`，Renderer 复用 `apps/web` 的共享 UI。RTU 当前走 Renderer Web Serial 与主进程 `select-serial-port` 协调；TCP 会话和文件工作区由 Main 承载；Renderer 的 `ElectronAppHost` 按协议路由本地 RTU 与远程 TCP。工作区持久化使用应用数据目录中的版本化 JSON、原子替换和单份备份恢复。`debug:get-state` 是 dev 探针，打包后禁用。
+
+### 进程与产物
+
+- Renderer 不创建独立页面工程，生产模式加载 `apps/web/dist-electron/index.html`；
+- Main/Preload 产物位于 `dist-electron/`，Renderer 产物位于 `apps/web/dist-electron/`；
+- 浏览器构建使用 `base: "/"`，Electron 构建必须使用 `base: "./"`，两种产物目录不得互相覆盖；
+- Preload 在 `sandbox: true` 下以 CommonJS 输出，避免 ESM preload 与沙箱加载约束冲突；
+- 生产页面在构建期通过 CSP meta 注入策略。`file://` 页面不能依赖只对 HTTP headers 生效的 `webRequest.onHeadersReceived`；
+- Main 退出时等待有限时间完成工作区 flush、通信断开和宿主插件释放，超时后记录诊断并继续退出。
+
+开发探针和真实能力必须区分：测试可经 `debug:get-state` 读取窗口、版本和连接状态；该探针不得进入生产可用路径，也不能作为完整业务 API。
 
 ### main
 
@@ -40,6 +51,7 @@
 职责：
 
 - 暴露最小化、类型化的 IPC API；
+- 暴露 `MamepHostApi` 的查询能力、应用版本、剪贴板、串口选择和会话 RPC；
 - 隔离 Renderer 与 Node.js 能力；
 - 对外暴露稳定的 Mamep Host API；
 - 不暴露通用 ipcRenderer；
