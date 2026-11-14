@@ -1,6 +1,6 @@
 # Node TCP 适配
 
-### 9.4 Node TCP Adapter
+## 1. Node TCP Adapter
 
 Electron 和 VSCode 共用 Node TCP Adapter。
 
@@ -20,7 +20,7 @@ Electron 和 VSCode 共用 Node TCP Adapter。
 是否自动重连不由 Adapter 决定，而由 Application 层的连接策略决定。
 
 
-### 34.4 Modbus TCP 原型
+## 2. Modbus TCP 原型
 
 验证：
 

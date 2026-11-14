@@ -1,6 +1,6 @@
 # IndexedDB 工作区适配
 
-### 19.3 浏览器 IndexedDB
+## 1. 浏览器 IndexedDB
 
 浏览器使用 IndexedDB 保存：
 

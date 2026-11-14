@@ -1,6 +1,6 @@
 # Electron 平台适配
 
-### 19.4 Electron 文件持久化
+## 1. Electron 文件持久化
 
 Electron 使用应用数据目录下的版本化 JSON 文件。
 
@@ -28,7 +28,7 @@ Electron 使用应用数据目录下的版本化 JSON 文件。
 > 不直接触碰文件系统；能力矩阵 `electronCapabilities.filesystem: "full"`。
 
 
-### 22.3 Electron IPC
+## 2. Electron IPC
 
 安全要求：
 

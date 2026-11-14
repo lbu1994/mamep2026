@@ -1,6 +1,6 @@
 # VSCode 平台适配
 
-### 19.5 VSCode 持久化
+## 1. VSCode 持久化
 
 VSCode 使用两层存储：
 
@@ -24,7 +24,7 @@ workspaceState/globalState 保存：
 是否默认创建工作区文件由后续产品决策决定。技术上需要支持两种 Repository 实现。
 
 
-### 22.4 VSCode Webview RPC
+## 2. VSCode Webview RPC
 
 要求：
 

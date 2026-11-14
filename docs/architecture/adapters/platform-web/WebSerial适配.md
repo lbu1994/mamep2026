@@ -1,6 +1,6 @@
 # Web Serial 适配
 
-### 9.2 Web Serial Adapter
+## 1. Web Serial Adapter
 
 职责：
 
@@ -40,7 +40,7 @@
 - 不保存可用于自动重连的授权假设。
 
 
-### 34.2 Web Serial 原型
+## 2. Web Serial 原型
 
 验证：
 
