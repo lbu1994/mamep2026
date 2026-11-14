@@ -79,7 +79,7 @@ FC03 闭环（node 24.18.1 / electron 42.8.1），ADR-020 的 ABI 前置项解�
 - 通信位置与文档一致（§28.3），后续 Electron Node Serial 替换、两端 TCP 只需在既有共享边界加能力；
 - `RtuSessionHost` 单一事实源：会话编排、设备拔出策略不再分叉；
 - HostMessage v1 契约复用：新增 kind 全部 Zod 校验 + 白名单 + 穷尽性处理，安全边界不变；
-- e2e 确定性：假串口注入无需真实设备/COM10+，CI 稳定。
+- e2e 确定性：假串口注入无需真实设备，CI 稳定。
 
 ## 负面影响
 
@@ -102,5 +102,5 @@ FC03 闭环（node 24.18.1 / electron 42.8.1），ADR-020 的 ABI 前置项解�
 - VSCode TCP / Electron TCP：新增 `session-tcp-connect` 等 kind，`modbusTcp` 翻转；
 - VSCode 文件持久化：`filesystem` 能力翻转（workspaceState/globalState）；
 - VSCode 主题完整适配（ui-theme）：颜色映射升级；
-- 真机验证（接线后）：真实串口（含 COM10+）在 VSCode 端枚举/连接/读写；
+- 真机验证（接线后）：真实串口在 VSCode 端枚举/连接/读写；
 - VSIX 打包发布：serialport 原生模块的正式分发规则（当前 e2e 走 extensionDevelopmentPath）。

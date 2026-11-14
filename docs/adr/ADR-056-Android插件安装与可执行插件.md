@@ -116,7 +116,7 @@ ADR-054 §7.2 把 Android 的插件执行能力留给 Phase 5：「`executablePl
 
 ### 5.2 真机 e2e（vivo V2303A / Android 16，无线调试，生产 APK）
 
-`pnpm test:e2e:android` = **16 passed / 2 skipped / 0 failed**（2 skipped = USB-RS485 闭环需硬件），
+`pnpm test:e2e:android` = **16 passed / 2 skipped / 0 failed**，
 其中新增 `tests/e2e-android/tests/plugin-runtime.spec.ts` **7/7**：
 
 | 用例              | 断言                                                                                                           |

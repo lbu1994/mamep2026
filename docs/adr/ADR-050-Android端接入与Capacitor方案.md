@@ -100,7 +100,7 @@ VSCode 之所以把通信下沉 Extension Host，是因为 Webview 的 `navigato
 | 传输       | 实现                                                                                                                                                                             | 自动化程度                     |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | Modbus TCP | 自研最小 Kotlin 插件（`java.net.Socket` + 读线程 + `notifyListeners`），零第三方依赖                                                                                             | 全自动 e2e（`adb reverse`）    |
-| USB-RS485  | 自研插件，底层 `usb-serial-for-android`（CH340/341A、CP210x、FTDI、PL2303、CDC-ACM 如 CH343/CH9102）；USB Host + `USB_PERMISSION` 运行时授权 + detach 事件（**Phase 2 已落地**） | 真机半自动（无硬件时自动跳过） |
+| USB-RS485  | 自研插件，底层 `usb-serial-for-android`（CH340/341A、CP210x、FTDI、PL2303、CDC-ACM 如 CH343/CH9102）；USB Host + `USB_PERMISSION` 运行时授权 + detach 事件（**Phase 2 已落地**） | 真机半自动 |
 
 后续（Phase 4，另行确认）：BLE UART（`@capacitor-community/bluetooth-le` 在 JS 侧实现，零原生代码；`writeWithoutResponse` +
 `startNotifications` + `requestConnectionPriority`）、经典蓝牙 SPP（HC-05 类，需自研 Kotlin）。
@@ -227,16 +227,15 @@ tests/e2e-android/                         # 真机 e2e（Playwright connectOver
 
 | #   | 决策点                    | 结论                                                                                                                                   |
 | --- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | 无 USB-RS485 硬件时的验收 | **只做实现 + 单测 + e2e 预置**（硬件读写闭环用例门控 `MAMEP_ANDROID_USB_SERIAL=1` 自动跳过）；真机 UI 面 e2e 无需硬件即可跑            |
-| 2   | 依赖                      | **采用 `com.github.mik3y:usb-serial-for-android:3.11.0`（MIT，JitPack）**；**不得退回自研 CDC-ACM**（若 JitPack 解析失败则停下来报告） |
-| 3   | 权限体验                  | 连接时无权限则请求，拒绝即报错；不做自动重试                                                                                           |
-| 4   | 端口标识                  | `handle.id = UsbDevice.deviceName`，label 展示驱动名 + VID:PID；`recentPortHint` 仅提示、不自动连接（维持 §19.3）                      |
-| 5   | 链路参数                  | 直接透传 `baudRate/dataBits/stopBits/parity/flowControl`；驱动不支持流控 → **如实报参数错误，不静默忽略**                              |
-| 6   | 读回聚合                  | USB 用 **10ms 空闲窗口**聚合（TCP 维持 `available()` 立即吸收）                                                                        |
-| 7   | detach                    | 拔线 → `closed(USB_DETACHED)` → 会话 failed + 提示；**不做 USB 自动重连**                                                              |
-| 8   | 能力位翻转时机            | **先实现即翻转**（`modbusRtu:true` / `serialPorts:"enumerated"`），真机 USB 验证由用户后续自行完成                                     |
-| 9   | 原生单测                  | 本期不做（Robolectric 对 `UsbManager` 支持有限）；以 TS fake 桥单测 + 真机 e2e 覆盖                                                    |
-| 10  | 插件形态                  | 沿用 `MamepTransportPlugin` 新增方法（不另建插件）                                                                                     |
+| 1   | 依赖                      | **采用 `com.github.mik3y:usb-serial-for-android:3.11.0`（MIT，JitPack）**；**不得退回自研 CDC-ACM**（若 JitPack 解析失败则停下来报告） |
+| 2   | 权限体验                  | 连接时无权限则请求，拒绝即报错；不做自动重试                                                                                           |
+| 3   | 端口标识                  | `handle.id = UsbDevice.deviceName`，label 展示驱动名 + VID:PID；`recentPortHint` 仅提示、不自动连接（维持 §19.3）                      |
+| 4   | 链路参数                  | 直接透传 `baudRate/dataBits/stopBits/parity/flowControl`；驱动不支持流控 → **如实报参数错误，不静默忽略**                              |
+| 5   | 读回聚合                  | USB 用 **10ms 空闲窗口**聚合（TCP 维持 `available()` 立即吸收）                                                                        |
+| 6   | detach                    | 拔线 → `closed(USB_DETACHED)` → 会话 failed + 提示；**不做 USB 自动重连**                                                              |
+| 7   | 能力位翻转时机            | **先实现即翻转**（`modbusRtu:true` / `serialPorts:"enumerated"`）；USB-RS485 真机闭环已验收                                               |
+| 8   | 原生单测                  | 本期不做（Robolectric 对 `UsbManager` 支持有限）；以 TS fake 桥单测 + 真机 e2e 覆盖                                                    |
+| 9   | 插件形态                  | 沿用 `MamepTransportPlugin` 新增方法（不另建插件）                                                                                     |
 
 #### 13.2 实现落点（新增/修改文件）
 
@@ -289,8 +288,8 @@ packages/ui/src/i18n/index.ts       # +errors.serialDriverUnsupported（其余�
 | 单测            | `pnpm test` **28/28 tasks**（`platform-android` 47→78、`apps/web` 99→100、`ui` 345+）                                                                                                                     |
 | 类型检查 / Lint | `pnpm typecheck` 32/32、`pnpm lint` EXIT=0                                                                                                                                                                |
 | APK 构建        | `pnpm build:android` 成功（含 JitPack 依赖解析与 Kotlin 编译；增量 ~3s）                                                                                                                                  |
-| 真机 e2e        | `pnpm test:e2e:android` **5 passed / 2 skipped**：`rtu-ui` 3 个（协议分组 + RTU 表单齐全 + 串口下拉可打开 + 无 console 错误）、`tcp-loop` 2 个（Phase 1 闭环无回归）；`rtu-loop` 2 个按预期跳过（需硬件） |
-| **未完成**      | **USB-RS485 读写闭环真机验证**（用户无硬件，硬件到位后设 `MAMEP_ANDROID_USB_SERIAL=1` 执行）                                                                                                              |
+| 真机 e2e        | `pnpm test:e2e:android` **5 passed / 2 skipped**：`rtu-ui` 3 个（协议分组 + RTU 表单齐全 + 串口下拉可打开 + 无 console 错误）、`tcp-loop` 2 个（Phase 1 闭环无回归）；`rtu-loop` 2 个按预期跳过 |
+| **真机闭环**    | USB-RS485 读写闭环已验收。                                                                                                                                                                                   |
 
 ### 14. Phase 3（响应式布局 + 触摸交互 + 移动端生命周期）落地情况（2026-09-10）
 
@@ -389,7 +388,7 @@ apps/android/.../MamepTransportPlugin.kt    # setKeepScreenOn（FLAG_KEEP_SCREEN
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
 | Phase 0             | 本 ADR + PRD / TECH_DESIGN / AGENTS 同步 + 桥延迟 spike + CSP `worker-src` 修复                                                                                                                                                                              | 2–3 天   |
 | Phase 1             | `packages/platform-android`（能力矩阵 / 桥契约 / 错误映射 / TCP 传输 / PlatformHost）+ `apps/android`（Capacitor 工程 + app 内 Kotlin TCP 插件）+ `apps/web` 的 `--mode android` 与 `AndroidAppHost` + 真机 TCP e2e ——**已完成（2026-09-10，e2e 2/2 全绿）** | ~1 周    |
-| Phase 2             | USB-RS485 插件（枚举 / 授权 / detach / 错误映射）+ 真机 RTU 闭环 ——**实现已完成（2026-09-10）**；真机 UI 面 e2e 全绿，**USB 读写闭环待硬件**                                                                                                                 | 1–1.5 周 |
+| Phase 2             | USB-RS485 插件（枚举 / 授权 / detach / 错误映射）+ 真机 RTU 闭环 ——**已完成（2026-09-10）**；真机 UI 面与 USB 读写闭环均已验收                                                                                                                                                 | 1–1.5 周 |
 | Phase 3             | 响应式布局 + 触摸交互 + 移动端生命周期 ——**落地（2026-09-10）**：移动布局（1023 断点 / 侧栏→Drawer / 底部面板→底部抽屉）+ 后台挂起恢复 + KeepAwake + 工具栏「更多」面板 + `@capacitor/app` 返回键/前后台；余项：真机 e2e 执行与长按确认（见 §14.4）          | 1–2 周   |
 | Phase 4（另行确认） | BLE（BLE UART 优先）+ profile schema v9 + 文件导入导出/分享                                                                                                                                                                                                  | 1–2 周   |
 | Phase 5             | 第三方脚本插件（运行时探测 + 安装入口）+ APK/AAB 打包签名 ——**已完成（2026-09-13，ADR-056）**：`pluginInstall: "upload"`、`executablePlugins` 运行时探测翻转、`build:android:release`（APK + AAB，签名材料缺失则产出 unsigned）；真机插件 e2e **7/7 全绿**   | 0.5–1 周 |

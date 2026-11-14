@@ -67,7 +67,7 @@
 
 - 主题色（`theme` 贡献点 + 用户设置）与表级 Address Adjust（`addressTransform` + Connection Settings 移除 + 新 kind）——**Phase D**；
 - P3 精选（线圈/离散/输入寄存器表、自定义功能码、Memory Access、设备描述、寄存器手册、数据解析）——**Phase E**；
-- 可执行插件正式化（隔离 Worker/worker_threads/vm、安装入口扩展、插件市场预留）——**Phase F**。
+- 可执行插件正式化（隔离 Worker/worker_threads/vm、安装入口扩展）——**Phase F**。
 
 ## 影响与边界
 

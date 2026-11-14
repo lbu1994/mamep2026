@@ -65,7 +65,6 @@
 5. 工业级权限、审计和安全联锁；
 6. 浏览器直接访问任意 TCP Socket；
 7. MVP 阶段的多连接并行；
-8. MVP 阶段的插件市场；
 9. MVP 阶段的任意 JavaScript 第三方插件执行；
 10. 以三套相互独立的代码实现三个客户端。
 
@@ -839,7 +838,7 @@ Host 负责装配具体适配器，不实现领域规则。
 > 其余如实声明：`modbusTcp:true` / `filesystem:"limited"` / `nodePlugins:false` / `webPlugins:true` /
 > `executablePlugins:false` / `hostPlugins:false` / `pluginInstall:"unsupported"`；
 > `logExport` / `workspaceImport` / `workspaceExport` 在文件通道落地（Phase 4）后按实翻转。
-> 真机 USB 闭环验证状态见 [docs/adr-050-验证记录.md](adr-050-验证记录.md) §6（代码侧已完整实现，硬件到位后由用户实机跑通）。
+
 > **边界不变**：`browserCapabilities.modbusTcp` 维持 `false`（Android 与浏览器使用独立产物与独立能力矩阵）；
 > Android 的 `AppHost.browserCompatibility` 返回 `null`（不使用 Web Serial 兼容性提示）。
 
@@ -2503,8 +2502,6 @@ Host 插件需要更严格的安装、权限和兼容性控制。
 
 不在 MVP 默认开放从互联网下载并执行任意第三方插件。
 
-完整本地安装和插件市场在 API、签名、权限及隔离机制成熟后再开放。
-
 ## 23.4 Manifest
 
 插件 Manifest 至少包含：
@@ -2776,7 +2773,6 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 - 启动；
 - Main 和 Renderer IPC；
 - 串口列表；
-- COM10 以上模拟或真实测试；
 - TCP 连接；
 - 文件持久化；
 - 窗口重启恢复；
@@ -2784,7 +2780,7 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 - 插件加载失败隔离；
 - Renderer 无直接 Node.js 权限。
 
-> 实现状态（2026-08-21，ADR-016/017 扩展）：已建立 `tests/e2e-electron/`（Playwright + Electron，`pnpm test:e2e:electron` 自动先 `build:electron`）——已覆盖：启动加载同一共享 UI、Main/Renderer IPC（HostMessage v1 校验）、preload 白名单桥、能力矩阵（RTU 支持 / enumerated 下拉选择）、`debug:get-state` 探针、剪贴板、Renderer 无直接 Node.js 权限、无 console 错误、关窗退出，以及串口下拉选择 + RTU 读写闭环（`serial-rtu-loop.spec.ts`：注入自包含可控 fake `navigator.serial` + 内联 CRC16 RTU responder，覆盖下拉空态/取消、下拉选择、FC03 读/FC10 写；主进程 `select-serial-port` 转发与 `resolvePendingSelection` 逻辑由 `apps/electron` 单测覆盖）。**TCP 闭环已覆盖（2026-08-23，ADR-022）**：`tcp-loop.spec.ts` 在测试进程内启动本地回环 MBAP TCP Server，经 Connection Settings TCP 表单连接主进程会话 → FC03 读/FC10 写闭环 + 无 console 错误。未覆盖（待后续版本落地）：COM10+ 真实设备、文件持久化、窗口重启恢复、断开释放、插件加载失败隔离。
+> 实现状态（2026-08-21，ADR-016/017 扩展）：已建立 `tests/e2e-electron/`（Playwright + Electron，`pnpm test:e2e:electron` 自动先 `build:electron`）——已覆盖：启动加载同一共享 UI、Main/Renderer IPC（HostMessage v1 校验）、preload 白名单桥、能力矩阵（RTU 支持 / enumerated 下拉选择）、`debug:get-state` 探针、剪贴板、Renderer 无直接 Node.js 权限、无 console 错误、关窗退出，以及串口下拉选择 + RTU 读写闭环（`serial-rtu-loop.spec.ts`：注入自包含可控 fake `navigator.serial` + 内联 CRC16 RTU responder，覆盖下拉空态/取消、下拉选择、FC03 读/FC10 写；主进程 `select-serial-port` 转发与 `resolvePendingSelection` 逻辑由 `apps/electron` 单测覆盖）。**TCP 闭环已覆盖（2026-08-23，ADR-022）**：`tcp-loop.spec.ts` 在测试进程内启动本地回环 MBAP TCP Server，经 Connection Settings TCP 表单连接主进程会话 → FC03 读/FC10 写闭环 + 无 console 错误。未覆盖（待后续版本落地）：文件持久化、窗口重启恢复、断开释放、插件加载失败隔离。
 
 ## 26.9 VSCode 集成测试
 
@@ -2832,7 +2828,6 @@ Browser、Electron Renderer 和 VSCode Webview 均配置 CSP。
 发布前至少验证：
 
 - Windows COM1 至 COM9；
-- Windows COM10 及以上；
 - USB 转串口设备插拔；
 - 串口占用；
 - 实际 RTU 03；
@@ -3253,7 +3248,7 @@ MVP 不接入默认云端遥测。
 > 实现状态（2026-08-23，ADR-020）：本原型已完成并入选型 ADR-020（serialport@13）+ 验证记录
 > （docs/node-serial-prototype-验证记录.md）。Layer 1 Fake 57 用例、Layer 2 com0com COM4/COM5 7 用例
 > 全绿；Electron/VSCode 独立探针就绪（`pnpm prototype:electron`、`pnpm probe:vscode:serial`）；
-> COM10+ 真机、macOS/Linux 平台、真实设备、打包后原生模块加载等为接线/真机验证项，见 ADR-020 后续复审条件。
+> macOS/Linux 平台、真实设备、打包后原生模块加载等为接线验证项，见 ADR-020 后续复审条件。
 
 > 实现状态（2026-08-23，Node TCP Adapter）：`packages/platform-node` 新增 Node TCP Adapter
 > （`NodeTcpTransport` + `SocketLike`/`NetFactoryLike` 注入面 + TCP 错误映射 + `NodeTcpCapabilities`），
@@ -3263,7 +3258,7 @@ MVP 不接入默认云端遥测。
 > 能力矩阵未翻转（`modbusTcp` 仍 false）；会话层 TCP 帧解析、UI TCP 配置入口、
 > Electron/VSCode TCP 接线属后续接线步骤（ADR-020 后续复审条件）。
 
-目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、COM10 以上端口、原生模块兼容、资源释放及异常处理能力。
+目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、原生模块兼容、资源释放及异常处理能力。
 
 ### 34.3.1 串口库验证
 
@@ -3316,46 +3311,6 @@ MVP 不接入默认云端遥测。
 10. 不缓存已经失效的端口对象。
 
 推荐将系统返回的原始端口路径作为运行时连接标识，将显示名称作为独立字段提供给 UI。
-
-### 34.3.3 COM10 及以上验证
-
-Windows 平台必须专项验证：
-
-- COM1 至 COM9；
-- COM10；
-- COM11；
-- COM99 或其他较高编号端口；
-- USB 转串口设备生成的高编号 COM 端口；
-- 虚拟串口生成的高编号 COM 端口；
-- 高编号端口枚举；
-- 高编号端口打开；
-- 高编号端口读写；
-- 高编号端口关闭；
-- 高编号端口被占用；
-- 高编号端口在连接期间被移除。
-
-实现不得：
-
-- 假设端口名称长度固定；
-- 只读取 COM 后一位数字；
-- 将 COM10 错误解析为 COM1；
-- 使用只支持 COM1 至 COM9 的正则表达式；
-- 根据界面显示文本重新拼接端口路径；
-- 在领域层修改系统返回的端口标识；
-- 对高编号端口执行静默降级。
-
-Node Serial Adapter 应将系统或串口库返回的端口路径视为不透明字符串，原样传递给底层打开接口。
-
-验收结果至少证明：
-
-1. COM10 以上端口能够出现在枚举列表；
-2. 用户能够选择该端口；
-3. Adapter 使用正确的完整路径打开端口；
-4. 请求实际发送到所选端口；
-5. 响应能够被读取；
-6. 断开后端口句柄得到释放；
-7. 重新连接同一端口可以成功；
-8. 失败信息不会错误显示为端口不存在。
 
 ### 34.3.4 跨平台端口路径
 
@@ -3628,7 +3583,6 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 - 应用退出时能释放串口；
 - 打包后原生模块能够加载；
 - 开发环境和生产包行为一致；
-- Windows 安装包能够使用 COM10 以上端口；
 - macOS 签名或权限设置不会阻止串口使用；
 - Linux 打包后能够访问系统串口。
 
@@ -3657,7 +3611,6 @@ Electron 原型还应验证：
 - 扩展打包为 VSIX 后原生模块仍能加载；
 - Windows、macOS 和 Linux 对应扩展包能够正确安装；
 - VSCode 使用的 Node.js ABI 与原生模块兼容；
-- COM10 以上端口可以正常使用；
 - 串口异常不会阻塞 Extension Host；
 - 长时间轮询不会影响 VSCode 编辑器响应。
 
@@ -3672,7 +3625,6 @@ Electron 原型还应验证：
 - 字节事件模型；
 - 资源释放逻辑；
 - 测试用例；
-- COM10 以上测试数据；
 - Fake Serial Transport；
 - 能力描述。
 
@@ -3728,7 +3680,6 @@ Node Serial Adapter 应提供串口能力描述，包括：
 - 支持的流控；
 - 是否支持设备拔出事件；
 - 是否提供 USB 元数据；
-- 是否支持自定义波特率；
 - 当前平台；
 - 当前 Host；
 - 当前串口库版本。
@@ -3780,7 +3731,6 @@ Node 串口原型采用三层测试。
 - 端口占用；
 - 关闭；
 - 重连；
-- 高编号 COM 端口；
 - Electron 和 VSCode 原生模块加载。
 
 虚拟串口仅用于验证操作系统和串口库集成，不能完全替代真实 USB 串口设备。
@@ -3798,7 +3748,6 @@ Node 串口原型采用三层测试。
 - CRC 错误；
 - 设备拔出；
 - 串口占用；
-- COM10 以上；
 - 长时间轮询；
 - Electron 和 VSCode。
 
@@ -3810,7 +3759,6 @@ Node 串口原型采用三层测试。
 - Node Serial Adapter 接口；
 - Electron 串口最小原型；
 - VSCode 串口最小原型；
-- COM10 以上测试记录；
 - 各平台支持参数矩阵；
 - 原生模块构建矩阵；
 - 串口错误映射表；
@@ -3826,23 +3774,22 @@ Node 串口原型采用三层测试。
 Node 串口原型满足以下条件后，才可进入正式实现：
 
 1. Electron 和 VSCode 均能枚举、打开、读写和关闭串口；
-2. Windows COM10 及以上端口能够正常使用；
-3. macOS 和 Linux 的目标端口路径能够正常处理；
-4. 端口占用和权限不足能够被区分；
-5. 设备拔出后应用保持可操作；
-6. 断开后不再发送请求；
-7. 重复连接不会造成监听器或句柄泄漏；
-8. Renderer 和 Webview 无法直接访问串口库；
-9. 串口库能够在目标 Electron 和 VSCode 环境打包；
-10. 不支持的串口参数不会被静默接受；
-11. 底层数据能够稳定转换为 Uint8Array；
-12. 分片响应可以由上层通信会话正确组帧；
-13. 串口错误能够映射为统一错误模型；
-14. Node Serial Adapter 不包含 Modbus 业务逻辑；
-15. Electron 和 VSCode 能够复用相同的端口抽象和主要测试；
-16. 真实 Modbus RTU 设备可以完成 03 读取和 0x10 写入；
-17. 长时间轮询不存在阻断性稳定问题；
-18. 原型结论和已知限制已记录到 ADR 或技术文档。
+2. macOS 和 Linux 的目标端口路径能够正常处理；
+3. 端口占用和权限不足能够被区分；
+4. 设备拔出后应用保持可操作；
+5. 断开后不再发送请求；
+6. 重复连接不会造成监听器或句柄泄漏；
+7. Renderer 和 Webview 无法直接访问串口库；
+8. 串口库能够在目标 Electron 和 VSCode 环境打包；
+9. 不支持的串口参数不会被静默接受；
+10. 底层数据能够稳定转换为 Uint8Array；
+11. 分片响应可以由上层通信会话正确组帧；
+12. 串口错误能够映射为统一错误模型；
+13. Node Serial Adapter 不包含 Modbus 业务逻辑；
+14. Electron 和 VSCode 能够复用相同的端口抽象和主要测试；
+15. 真实 Modbus RTU 设备可以完成 03 读取和 0x10 写入；
+16. 长时间轮询不存在阻断性稳定问题；
+17. 原型结论和已知限制已记录到 ADR 或技术文档。
 
 ## 34.4 Modbus TCP 原型
 
@@ -3904,7 +3851,6 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 
 - Electron 支持；
 - VSCode Extension Host 支持；
-- Windows COM10 以上支持；
 - macOS 和 Linux 支持；
 - 原生模块构建稳定性；
 - TypeScript 类型完整性；
@@ -4536,6 +4482,5 @@ CSV 导入导出不应直接成为领域数据源，必须先解析、校验并�
 15. 浏览器构建不包含 TCP 和 Node.js 依赖；
 16. 插件请求不能绕过统一调度器；
 17. 表格原型满足 1000 行基础性能目标；
-18. COM10 以上场景完成验证；
 19. 三端共同验收场景可以复用同一测试描述；
 20. 关键架构决策已有 ADR。

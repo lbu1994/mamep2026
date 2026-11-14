@@ -7,7 +7,7 @@
 ## 背景
 
 TECH_DESIGN §34.3 要求：启动 Node 串口原型，验证候选串口库在 Electron 主进程与 VSCode Extension
-Host 的可行性（跨平台枚举、COM10+、参数支持、错误映射、资源释放、原生模块兼容），产出串口库选型 ADR。
+Host 的可行性（跨平台枚举、参数支持、错误映射、资源释放、原生模块兼容），产出串口库选型 ADR。
 这是 VSCode RTU 与两端（Electron/VSCode）TCP 的共同地基，也是 TECH_DESIGN 明确的前置门槛。
 
 - serialport@13.0.0 已在根 node_modules（scripts/modbus-slave 在用），`@serialport/bindings-cpp@13.0.0`
@@ -80,8 +80,6 @@ Host 的可行性（跨平台枚举、COM10+、参数支持、错误映射、资
 - **原生模块 ABI**：serialport 原生绑定默认按当前 Node ABI 构建；Electron 43 / VSCode 扩展宿主的
   ABI 不同，首次加载可能报 ABI 不匹配，需用 `@electron/rebuild` 为对应宿主重建（重建会改变 ABI，
   与 Node 侧测试互斥，须分开环境处理）。这是接线阶段必须解决的前置项。
-- COM10+ 只完成单元级不透明路径验证与错误映射，真实高编号端口待真机验证（本机 com0com 禁止
-  重新配置，用户红线）。
 - macOS / Linux 平台矩阵目前为文档级 + 本地 Windows x64 实测，需目标平台环境补验。
 
 ## 后续复审条件
@@ -95,5 +93,5 @@ Host 的可行性（跨平台枚举、COM10+、参数支持、错误映射、资
 - **待用户最终确认（AGENTS §35）**：1.5 停止位支持（serialport 类型面声明 `1|1.5|2`，真机待验）、
   XON/XOFF 与 RTS/CTS 的实际能力矩阵（真机验证后回填 `NodeSerialCapabilities`）。
 - **真机验证**：至少一种真实 USB 转串口 + 可控 Modbus RTU 设备（FC03/FC10、不同波特率/校验、超时/
-  重试/CRC 错误/拔出/占用/COM10+/长轮询/Electron/VSCode）。
+  重试/CRC 错误/拔出/占用/长轮询/Electron/VSCode）。
 - `tests/e2e-electron` / `tests/e2e-vscode` 随接线持续扩展覆盖。

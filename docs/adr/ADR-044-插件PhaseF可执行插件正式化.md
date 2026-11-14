@@ -7,7 +7,7 @@
 ## 背景
 
 - **Phase A~~E 已落地（ADR-039~~043）**：贡献点注册表（10 点）+ Manifest v2 + 生命周期骨架 + PluginCommunicationApi（read/write）+ 插件持久化（IndexedDB / plugins.json / globalState）+ 安装入口（仅清单注册，零代码执行）+ 可执行化扩展（builtin 同进程 runtime activate/deactivate + 错误隔离）+ P3 精选（基础表/自定义功能码/手册/dataType 开放/VSCode codec）。
-- **Phase F 预留（ADR-038/039）**：插件第三方代码隔离机制（Worker / worker_threads / vm + 能力白名单，§35 待确认）；可执行插件安装形态（单文件 JS → zip 扩展位）；插件市场预留；`executablePlugins`/`hostPlugins` 落地前维持 false（如实声明）。
+- **Phase F 预留（ADR-038/039）**：插件第三方代码隔离机制（Worker / worker_threads / vm + 能力白名单，§35 待确认）；可执行插件安装形态（单文件 JS → zip 扩展位）；`executablePlugins`/`hostPlugins` 落地前维持 false（如实声明）。
 - **ADR-043 已知限制**：插件卸载（`PluginRegistry.unregister` + UI）随 Phase F。
 
 ## 关键架构约束（决定隔离机制形态）
@@ -50,7 +50,6 @@
 - 安装入口扩展：**单文件 JS（`.mjs`）**——一个文件内 `export const manifest = {...}` + `export function activate(ctx){}`（+ 可选 `deactivate`），文件同时承载 manifest 与 entry。
 - 加载路径安全：entry 内容经 `pluginManifestSchema` 校验后，L3 隔离线程加载（浏览器 `new Worker(Blob URL)`；host `new Worker(path, {eval:false})` / `worker_threads`）。**不执行字符串 eval 于主线程**。
 - zip 多文件形态为**扩展位预留**（不实现）。
-- 插件市场：**仅结构预留**（能力矩阵/文档占位，不做联网市场）。
 
 ### 4. README 待办（用户要求）
 
@@ -67,7 +66,7 @@
 
 - L2 同步纯函数（codec/dataType）第三方化需 codec 异步化（另立 ADR）；本期 installed 插件不可贡献 codec/dataType（能力矩阵如实声明）。
 - 线程隔离下插件 UI 交互贡献（command/settings 面板）为后续扩展（本期隔离执行面 + communication 桥）。
-- 插件市场 / zip 多文件 / 签名校验均不实现（预留）。
+- zip 多文件 / 签名校验均不实现（预留）。
 
 ## 实施注记（F-1/F-2/F-3 落地，2026-09-01）
 

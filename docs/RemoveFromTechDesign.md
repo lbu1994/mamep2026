@@ -284,7 +284,6 @@ MVP 不强制引入 Web Worker。
 - Node TCP；
 - 文件持久化（已移出 MVP，后续版本）；
 - IPC；
-- COM10 验证；
 - 安全配置；
 - 桌面打包（2026-08-22 已落地免安装绿色版 `pnpm dist:portable` → `release/win-unpacked/`，ADR-018；正式安装包为后续事项）。
 
@@ -390,7 +389,6 @@ Average 计算应基于可明确定义的数值：
 | ---------------- | ----------------------------------------------------------- |
 | Modbus RTU       | protocol-modbus、communication、platform-web、platform-node |
 | Modbus TCP       | protocol-modbus、communication、platform-node               |
-| COM10 以上       | platform-node、Electron 和 VSCode 集成测试                  |
 | 单行读取         | register-table、communication、protocol-modbus              |
 | 单行写入         | register-table、communication、data-conversion              |
 | 写后回读         | WriteVerifyCoordinator、RequestScheduler                    |
@@ -478,21 +476,20 @@ AGENTS.md 说明 AI 代理如何在该工程中安全执行开发任务。
 2. Monorepo、模块和依赖方向已确认；
 3. 三端 Host 和 Adapter 边界已确认；
 4. 串口库完成原型验证（后续版本替换阶段，ADR-017；MVP Electron 使用 Web Serial）；
-5. COM10 以上完成技术验证；
-6. Web Serial 能力边界完成验证；
-7. 表格方案完成 1000 行原型验证；
-8. RTU 和 TCP 分帧方案完成测试；
-9. RequestScheduler 行为已确认；
-10. 轮询间隔语义已确认；
-11. Data 单元格单一值模型与读取结果强制覆盖方案已确认；
-12. 工作区持久化和迁移方案已确认；
-13. 插件 MVP 装载范围已确认；
-14. Electron IPC 安全边界已确认；
-15. VSCode Webview RPC 边界已确认；
-16. 自动化测试层级和模拟设备方案已确认；
-17. 关键技术风险均有应对方案；
-18. ADR 清单已经建立；
-19. TECH_DESIGN.md 与 PRD、AGENTS.md 的边界清晰；
-20. 可以依据本文档创建工程骨架并开始分阶段实现。
+5. Web Serial 能力边界完成验证；
+6. 表格方案完成 1000 行原型验证；
+7. RTU 和 TCP 分帧方案完成测试；
+8. RequestScheduler 行为已确认；
+9. 轮询间隔语义已确认；
+10. Data 单元格单一值模型与读取结果强制覆盖方案已确认；
+11. 工作区持久化和迁移方案已确认；
+12. 插件 MVP 装载范围已确认；
+13. Electron IPC 安全边界已确认；
+14. VSCode Webview RPC 边界已确认；
+15. 自动化测试层级和模拟设备方案已确认；
+16. 关键技术风险均有应对方案；
+17. ADR 清单已经建立；
+18. TECH_DESIGN.md 与 PRD、AGENTS.md 的边界清晰；
+19. 可以依据本文档创建工程骨架并开始分阶段实现。
 
 完成上述事项后，可基于本文档编写 AGENTS.md，并进入 Mamep2026 的工程初始化、测试骨架建设和功能实现阶段。
