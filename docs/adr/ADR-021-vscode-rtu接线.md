@@ -16,7 +16,9 @@ FC03 闭环（node 24.18.1 / electron 42.8.1），ADR-020 的 ABI 前置项解�
 
 ## 决策
 
-1. **通信位置：Extension Host 全量承载（RemoveFromTechDesign.md §28.3）**。Modbus 会话/调度/轮询/Trace 全部
+1. **通信位置：Extension Host 全量承载**
+   （[性能与稳定性](../architecture/quality/performance/性能与稳定性.md)）。
+   Modbus 会话/调度/轮询/Trace 全部
    在 Extension Host 执行，Renderer（Webview）的 `VscodeAppHost` 作为「远程会话代理」——connect/
    读/写/批量/轮询/Trace/日志/消息全部经 HostMessage v1 类型化 RPC 委托 Extension Host。
    与 Electron（复用 Web Serial，通信在 Renderer，ADR-017）路径不同：VSCode Webview 无
