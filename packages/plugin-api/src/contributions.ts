@@ -1,5 +1,5 @@
 /**
- * 贡献点注册表（docs/插件功能设计.md §3.2，ADR-039）——可扩展性底座（需求⑥）。
+ * 贡献点注册表（docs/architecture/ports/plugin-api/插件契约.md §3，ADR-039）——可扩展性底座（需求⑥）。
  * 核心注册贡献点（id + Zod schema），插件向贡献点提交贡献；新能力 = 核心注册新贡献点并
  * 扩展 contributes 类型，不破坏存量插件。未登记贡献点 → PLUGIN_CONTRIBUTION_UNKNOWN，
  * 错误隔离，不影响其他贡献点加载。

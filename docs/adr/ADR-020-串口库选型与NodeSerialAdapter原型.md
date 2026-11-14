@@ -56,7 +56,8 @@ Host 的可行性（跨平台枚举、参数支持、错误映射、资源释放
 
 ## 理由
 
-- §34.3.1 证据矩阵全部满足（详见《node-serial-prototype-验证记录.md》）：MIT 许可证、三平台、
+- §34.3.1 证据矩阵全部满足（详见
+  [Node Serial 适配](../architecture/adapters/platform-node/NodeSerial适配.md) §3）：MIT 许可证、三平台、
   Windows/macOS/Linux x64+arm64 构建（文档级）、Electron Main / VSCode Extension Host 目标 ABI
   （文档级 + 探针验证，见下）、API 稳定、断开检测（`DisconnectedError` / `close` 事件）、
   不要求 UI 直接依赖。

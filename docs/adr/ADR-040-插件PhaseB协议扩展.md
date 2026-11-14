@@ -3,7 +3,7 @@
 - 状态：**已确认（2026-08-31）**
 - 日期：2026-08-31
 - **修订（2026-08-31，用户决策 B）**：决策 3 承载位置由 3A（独立包 `packages/protocol-memobus`）改为**插件包 `plugins/yaskawa-memobus-67h-010dh-010eh/`**——厂商专用功能码随插件存放，软件（core）仅保留 `ProtocolCodec` 接口 / codec 注册表 / 会话注入等调用接口；`packages/protocol-memobus` 已迁移删除。Phase B 范围与其余决策不变。
-- 决策来源：用户任务（docs/插件功能设计.md §4.1 / §10 / §11；5 项确认：①通用 codec 注册表（1B）②实现 67/010D、67/010E（2）③独立包 `packages/protocol-memobus`（3A）④`SessionHostCore` codec 工厂注入（4A）⑤仅通信层改造 + 新包 + 单测，不接 UI / 不接 `protocolExtension` 贡献点消费方（5A））
+- 决策来源：用户任务（[插件契约与架构](../architecture/ports/plugin-api/插件契约.md)；5 项确认：①通用 codec 注册表（1B）②实现 67/010D、67/010E（2）③独立包 `packages/protocol-memobus`（3A）④`SessionHostCore` codec 工厂注入（4A）⑤仅通信层改造 + 新包 + 单测，不接 UI / 不接 `protocolExtension` 贡献点消费方（5A））
 
 ## 背景
 

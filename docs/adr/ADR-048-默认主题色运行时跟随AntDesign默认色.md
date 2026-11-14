@@ -74,7 +74,7 @@
   （`.ant-app` 令牌映射）、`scripts/check-contrast.mjs`（antd 运行时令牌）；
 - 行为变化（仅暗色与浅色 link hover/active）：见 D3；其余视觉零变化（当前 antd 默认值与
   原浅色主色一致）；
-- 文档：ADR-047 增修订记录、docs/插件功能设计.md §2.3/§4.4、根 AGENTS.md 进度与文档地图、
+- 文档：ADR-047 增修订记录、[样式与主题](../architecture/presentation/ui-theme/主题设计.md)、根 AGENTS.md 进度与文档地图、
   README 当前状态；
 - 测试：`packages/ui-theme` 新增 base 单测（与 antd 令牌一致 + 模拟 antd 变化跟随）、
   e2e `theme-color-presets.spec.ts` / `plugin-contributions.spec.ts` 断言改为与页面

@@ -5,7 +5,7 @@
  * - Phase 1（2026-09-10）：仅 Modbus TCP；
  * - Phase 2（2026-09-10）：追加 USB-RS485（USB Host + 枚举 + 授权 + detach），
  *   故 `modbusRtu:true` / `serialPorts:"enumerated"`。真机 USB 闭环验证状态见
- *   docs/adr-050-验证记录.md（用户自行实机测试，代码侧已完整实现）；
+ *   docs/architecture/host/android/Android宿主.md（用户自行实机测试，代码侧已完整实现）；
  * - Phase 5（2026-09-13，ADR-056）：插件安装入口（WebView `<input type="file">` 经
  *   Capacitor `BridgeWebChromeClient.onShowFileChooser` 走系统文件选择器）与插件执行能力。
  *   **执行能力不可静态声明**——Android WebView 能力随系统 WebView 版本变化，故

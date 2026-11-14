@@ -1,5 +1,5 @@
 /**
- * 内置贡献点 v1（docs/插件功能设计.md §3.2，ADR-039）。
+ * 内置贡献点 v1（docs/architecture/ports/plugin-api/插件契约.md §3，ADR-039）。
  * 贡献点 schema 是公开契约，定义于 plugin-api（不依赖 UI）；消费方由 UI 层实现。
  * Phase A：全部 10 个 ID 注册 schema；其中 panels / theme / toolbarAction / settings /
  * command / dataType 实现真实消费方，tableType / protocolExtension / addressTransform /

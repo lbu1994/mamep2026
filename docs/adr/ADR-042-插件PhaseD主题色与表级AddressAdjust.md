@@ -2,7 +2,7 @@
 
 - 状态：**已确认（2026-09-01）**
 - 日期：2026-09-01
-- 决策来源：用户任务（docs/插件功能设计.md §4.4/§4.5/§10/§11；Phase A~C 已落地 ADR-039/040/041）；用户确认：①Address Adjust 移出核心 + 内置插件开箱即用 ②VSCode 派生 token 取舍（主色存活、派生跟随 VSCode）③非活动表轮询按各自 sheet ④复制表继承 addressTransform、type 固定）
+- 决策来源：用户任务（[插件契约与架构](../architecture/ports/plugin-api/插件契约.md)；Phase A~C 已落地 ADR-039/040/041）；用户确认：①Address Adjust 移出核心 + 内置插件开箱即用 ②VSCode 派生 token 取舍（主色存活、派生跟随 VSCode）③非活动表轮询按各自 sheet ④复制表继承 addressTransform、type 固定）
 
 ## 背景
 

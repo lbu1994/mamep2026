@@ -1,5 +1,5 @@
 /**
- * 插件权限模型（docs/插件功能设计.md §6，ADR-039）。
+ * 插件权限模型（docs/architecture/ports/plugin-api/插件契约.md §4，ADR-039）。
  * Manifest v2 将 permissions 从自由 string[] 收敛为类型化枚举；未知权限直接拒绝安装。
  * 权限到消费能力的强制在 PluginCommunicationApi 落地（communication 权限门）。
  */

@@ -1,5 +1,5 @@
 /**
- * PluginCommunicationApi（docs/插件功能设计.md §3.4，ADR-039）。
+ * PluginCommunicationApi（docs/architecture/ports/plugin-api/插件契约.md §4，ADR-039）。
  * 插件唯一通信面：不暴露 Transport / socket 句柄；请求经统一调度器（RequestScheduler）执行，
  * 元数据 source:"plugin" + pluginId + 默认 RequestPriority:"plugin-background"；权限门
  * （communication）。具体工厂 createPluginCommunicationApi 落在 packages/application

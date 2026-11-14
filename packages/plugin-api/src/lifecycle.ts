@@ -1,5 +1,5 @@
 /**
- * 插件生命周期骨架（docs/插件功能设计.md §3.3，ADR-039）。
+ * 插件生命周期骨架（docs/architecture/ports/plugin-api/插件契约.md §2、§4，ADR-039）。
  * 状态机 + 错误隔离：Phase A 不加载第三方 entry 代码（隔离机制属 Phase F，另立 ADR），
  * 仅支持内置同进程 runtime（activate/deactivate）作为最小执行面；activate 抛错 →
  * PLUGIN_HOOK_FAILED → 禁用故障贡献点 → 核心保持可用。

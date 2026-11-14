@@ -1,5 +1,5 @@
 /**
- * 插件 Manifest v2（docs/插件功能设计.md §3.1、ADR-039；基线 docs/TECH_DESIGN.md §6.11、
+ * 插件 Manifest v2（docs/architecture/ports/plugin-api/插件契约.md §3、ADR-039；基线 docs/TECH_DESIGN.md §6.11、
  * docs/AGENTS.md §24）。
  * - `apiVersion`：插件 API 版本（compatibility 判定依据，语义化 major.minor）；
  * - `entry`：可执行入口模块路径（Phase A 不加载，Phase F 隔离机制落地后使用）；

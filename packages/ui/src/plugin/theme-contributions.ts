@@ -1,5 +1,5 @@
 /**
- * theme 贡献点消费方（docs/插件功能设计.md §4.4，ADR-047，逆转 ADR-042 任意取色）。
+ * theme 贡献点消费方（docs/architecture/ports/plugin-api/插件契约.md §3，ADR-047，逆转 ADR-042 任意取色）。
  * 插件经 theme 贡献点注册一个或多个可选主题色（colors[]）→ Settings 主题色选择器选项；
  * 用户选择经 workspace.preferences.themePrimary（预设 ID = `<pluginId>:<colorId>`）持久化 →
  * 装配链解析为 token 覆盖。**不再自动应用**（ADR-042「插件层最高优先」已移除）；

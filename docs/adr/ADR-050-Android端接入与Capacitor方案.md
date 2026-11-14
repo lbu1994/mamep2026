@@ -169,7 +169,8 @@ VSCode 之所以把通信下沉 Extension Host，是因为 Webview 的 `navigato
    「原生回包 → `notifyListeners` → WebView 主线程 → JS `onData`」的投递延迟**计入该 50ms 预算**。
    **实测（2026-09-10，vivo V2303A / Android 16 / WebView 151，Capacitor 8.5.1，TCP + `adb reverse`，200 次采样）**：
    桥固定开销 `write→data` **p50 2.0 ms / p99 3.3 ms**（纯桥调用往返 p50 1.1 ms、原生 `socket.write` 0.07 ms），
-   仅占 50 ms 预算的 4–7%（详见 [docs/adr-050-验证记录.md](../adr-050-验证记录.md) §2）。
+   仅占 50 ms 预算的 4–7%（详见
+   [Android 宿主](../architecture/host/android/Android宿主.md)）。
    **结论**：接缝留在 `TransportPort` 字节流即可，**不需要**把帧解析下沉原生。
    仍需注意：默认 50 ms 本身余量小（对端人为延迟 30 ms 时总耗时已达 ~47 ms p50），
    Android 端建议评估在 composition root 覆盖默认超时/重试（**不改全局 `defaultConfig`**）。

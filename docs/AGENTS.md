@@ -15,7 +15,7 @@
 - 内置插件和受信任插件
 - 测试、构建、文档及工程配置
 
-> 工程已迁移为 monorepo（2026-08-13，ADR-013）：网页端在 `apps/web/`，分层共享包在 `packages/`，测试在 `tests/`。根目录 [AGENTS.md](../AGENTS.md) 提供最小执行入口；本文件是完整规范，当前工程结构见 [PROJECT_STATUS.md](PROJECT_STATUS.md)，命令与环境排障见 [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)。
+> 工程已迁移为 monorepo（2026-08-13，ADR-013）：网页端在 `apps/web/`，分层共享包在 `packages/`，测试在 `tests/`。根目录 [AGENTS.md](../AGENTS.md) 提供最小执行入口；本文件是完整规范，当前工程结构见 [系统设计总览](architecture/总览.md)，命令与环境排障见 [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)。
 
 ---
 
@@ -144,7 +144,7 @@ MVP 交付形态为三端运行骨架加核心调试闭环：
 - 三端骨架必须符合各自安全边界：Electron 为 Main、Preload、Renderer 隔离，VSCode 为 Extension Host 与 Webview 隔离；
 - Android 客户端（2026-09-10 纳入的第四平台，ADR-050）**不属于 MVP P0 交付范围**，按 ADR-050 分期推进（Phase 1 骨架 + TCP → Phase 2 USB-RS485 → Phase 3 UI 适配）；**Phase 1/2/3 均已落地**（Phase 3 余项：真机 e2e 执行、长按行菜单确认，见 ADR-050 §14.4），Phase 4/5 按 ADR-050 继续。
 
-> 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 端骨架已落地（2026-08-23：`apps/vscode-extension/` 命令打开 Webview 加载共享 UI——生产 `asWebviewUri` 打包资源 / dev `MAMEP_DEV_URL` iframe，Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC，能力矩阵如实声明，`tests/e2e-vscode` 真实 VSCode 集成测试）；Node 串口原型已通过（2026-08-23，ADR-020：`packages/platform-node` 落地 Node Serial Adapter，serialport@13 选型，Layer 1 Fake 57 用例 + Layer 2 com0com COM4/COM5 虚拟串口 7 用例全绿，Electron/VSCode 独立探针就绪，能力矩阵未翻转，见 docs/node-serial-prototype-验证记录.md）。
+> 当前状态（2026-08-21）：浏览器侧 MVP（P0）已实现并验收；Electron 骨架已落地（2026-08-21，ADR-016：Main/Preload/Renderer 三层 + 版本化安全 IPC，Renderer 即 apps/web 共享 UI）且 MVP 串口已复用 Web Serial 打通桌面端 RTU 调试闭环（2026-08-21，ADR-017 扩展：Renderer `navigator.serial` + 主进程 `select-serial-port` 最小授权、端口列表转发 + 渲染进程 antd Select 下拉框选择，能力矩阵翻转为 `modbusRtu:true`/`serialPorts:"enumerated"`，TCP/文件持久化仍未实现）；VSCode 端骨架已落地（2026-08-23：`apps/vscode-extension/` 命令打开 Webview 加载共享 UI——生产 `asWebviewUri` 打包资源 / dev `MAMEP_DEV_URL` iframe，Extension Host ↔ Webview 复用 HostMessage v1 类型化 RPC，能力矩阵如实声明，`tests/e2e-vscode` 真实 VSCode 集成测试）；Node 串口原型已通过（2026-08-23，ADR-020：`packages/platform-node` 落地 Node Serial Adapter，serialport@13 选型，Layer 1 Fake 57 用例 + Layer 2 com0com COM4/COM5 虚拟串口 7 用例全绿，Electron/VSCode 独立探针就绪，能力矩阵未翻转，见 [Node Serial 适配](architecture/adapters/platform-node/NodeSerial适配.md)）。
 
 ### 5.1 当前核心协议范围
 
@@ -1358,7 +1358,7 @@ UI 必须：
 
 ### 25.3 连接配置
 
-连接配置使用 Modal（浏览器非 Mock 模式启动时自动弹出；dev Mock 传输模式 `?mockTransport=1` 下自动连接模拟设备、不弹出，见 [浏览器端自动化测试方法指南](浏览器端自动化测试方法指南.md)；浏览器端仅提供 Modbus RTU 配置）。Connection Settings 与 Settings 的入口统一放在顶部应用栏，不放在侧边栏；**插件管理已并入 Settings**（2026-09-12：`General` / `Plugins` 两个页签，无独立 Plugin Manager 入口）。
+连接配置使用 Modal（浏览器非 Mock 模式启动时自动弹出；dev Mock 传输模式 `?mockTransport=1` 下自动连接模拟设备、不弹出，见 [浏览器端自动化测试](architecture/quality/testing/浏览器端自动化.md)；浏览器端仅提供 Modbus RTU 配置）。Connection Settings 与 Settings 的入口统一放在顶部应用栏，不放在侧边栏；**插件管理已并入 Settings**（2026-09-12：`General` / `Plugins` 两个页签，无独立 Plugin Manager 入口）。
 
 连接失败时必须：
 

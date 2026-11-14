@@ -1,5 +1,5 @@
 /**
- * command / dataType 贡献点消费方（docs/插件功能设计.md §3.2，ADR-039）。
+ * command / dataType 贡献点消费方（docs/architecture/ports/plugin-api/插件契约.md §3，ADR-039）。
  * Phase A：聚合贡献为只读注册表（查询用）；handler / 解析接入随 Phase E/F 扩展。
  */
 import type { Contribution } from "@mamep2026/plugin-api";

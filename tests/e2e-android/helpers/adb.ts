@@ -1,7 +1,7 @@
 /**
  * adb / 设备 / WebView CDP 辅助（ADR-050 Android e2e）。
  *
- * 设计要点（来自 Phase 0 实测，见 docs/adr-050-验证记录.md）：
+ * 设计要点（来自真机实测，见 docs/architecture/host/android/Android宿主.md）：
  * - 本机部分设备 `adb logcat` 无输出 → 断言与诊断一律走 CDP，不依赖 logcat；
  * - WebView devtools socket 名随应用重启变化 → 每次启动后重新解析并重建 forward。
  */

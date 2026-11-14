@@ -1,5 +1,5 @@
 /**
- * PluginCommunicationApi 工厂（docs/插件功能设计.md §3.4，ADR-039）。
+ * PluginCommunicationApi 工厂（docs/architecture/ports/plugin-api/插件契约.md §4，ADR-039）。
  * 组装 CommunicationSession 的插件通信面：请求经统一调度器（RequestScheduler）执行，
  * 元数据 source:"plugin" + pluginId + RequestPriority:"plugin-background"，日志携带
  * pluginId（CommunicationLogEvent.pluginId）。不暴露 Transport / socket 句柄。

@@ -2,7 +2,7 @@
 
 - 状态：**已确认（2026-09-01）**
 - 日期：2026-09-01
-- 决策来源：用户任务（docs/插件功能设计.md §6/§10/§11 Phase F）；用户确认：①**完整 Phase F（含线程隔离）**（web → Web Worker，host → `worker_threads` + 能力白名单）②内置插件**不可卸载**（仅 installed 可卸载）③「内置插件后续移出为独立插件」加入 README 待办
+- 决策来源：用户任务（[插件契约与架构](../architecture/ports/plugin-api/插件契约.md)）；用户确认：①**完整 Phase F（含线程隔离）**（web → Web Worker，host → `worker_threads` + 能力白名单）②内置插件**不可卸载**（仅 installed 可卸载）③「内置插件后续移出为独立插件」加入 README 待办
 
 ## 背景
 

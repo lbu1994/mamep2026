@@ -2,7 +2,7 @@
 
 本文件只保留代理开始工作所必需的项目边界、流程、护栏和文档导航。完整规范见
 [docs/AGENTS.md](docs/AGENTS.md)；工程现状与开发历史见
-[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)；命令、环境和排障见
+[系统设计总览](architecture/总览.md)；命令、环境和排障见
 [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md)。
 
 ## 项目边界
@@ -44,7 +44,7 @@ VSCode 插件和 Android 四个平台。核心能力围绕一张表管理不连�
 1. **需求澄清**：输出边界、异常、性能/安全、影响面和未确认项，等待确认。
 2. **计划**：列出影响文件、变更点、测试策略、风险与回滚，等待“计划通过”。
 3. **文档记录**：在 `docs/features/` 或 `docs/bugs/` 记录任务；架构/产品级决策
-   另补 ADR，并更新 [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) 的开发进度。
+   另补 ADR，并更新 [系统设计总览](architecture/总览.md) 中受影响的架构说明。
 4. **代码变更**：最小化、单一职责；先读相关测试与类型定义，遵守强制约束。
 5. **测试**：先提出测试策略并等待用户决定执行时机；核心算法、协议、调度和
    Bug 修复优先采用“失败测试 → 实现 → 回归”。
@@ -80,7 +80,7 @@ VSCode 插件和 Android 四个平台。核心能力围绕一张表管理不连�
 
 - [docs/README.md](docs/README.md)：完整文档与 ADR 索引
 - [docs/AGENTS.md](docs/AGENTS.md)：43 节开发规范、架构规则与禁止行为
-- [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)：当前工程结构与开发进度
+- [系统设计总览](architecture/总览.md)：当前工程结构与系统架构
 - [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md)：常用命令、环境坑和测试
 - [README.md](README.md)：用户视角的项目介绍、启动和打包
 - [docs/PRD.md](docs/PRD.md)：产品范围、优先级和验收条件

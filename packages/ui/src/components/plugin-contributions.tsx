@@ -1,5 +1,5 @@
 /**
- * panels 贡献点消费方（docs/插件功能设计.md §3.2，ADR-039）。
+ * panels 贡献点消费方（docs/architecture/ports/plugin-api/插件契约.md §3，ADR-039）。
  * 在底部面板渲染已注册插件面板区块。贡献 payload 为声明式描述（id + titleKey + 可选自带翻译
  * title，2026-09-12 方案 A）；交互式面板组件机制属 Phase F，故当前渲染标题 + 占位内容。
  */

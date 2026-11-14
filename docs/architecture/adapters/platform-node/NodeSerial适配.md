@@ -5,9 +5,9 @@
 > 实现状态（2026-08-23，ADR-020）：Node 串口原型已通过并产出选型 ADR——`packages/platform-node`
 > 落地 `NodeSerialTransport` + `NodePlatformHost` + 错误映射 + 能力描述 + 注入式 `SerialPortLike` 隔离面
 >
-> - Fake 测试，com0com COM4↔COM5 虚拟串口闭环全绿（详见 [node-serial-prototype-验证记录.md](./node-serial-prototype-验证记录.md)）。
->   正式接线（Electron 替换 Web Serial、VSCode 接线）仍属后续版本；MVP 阶段 Electron 与浏览器一致使用
->   Web Serial API（Renderer `navigator.serial`，ADR-017）。
+> - Fake 测试与 com0com COM4↔COM5 虚拟串口闭环全绿，详见本文 §3；
+> - VSCode 已使用 Node Serial Adapter；
+> - Electron 当前仍使用 Web Serial API，后续版本再替换为本适配器（ADR-017）。
 
 Electron（后续版本替换 Web Serial）和 VSCode 共用 Node Serial Adapter。
 
@@ -33,18 +33,10 @@ Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在
 
 > 适用范围（ADR-017）：本原型服务于后续版本 Node 串口库替换阶段（Electron 替换 Web Serial、VSCode 自始使用），进入该阶段前完成。Electron MVP 串口走 Web Serial（§34.2 原型已覆盖浏览器路径，Electron 复用）。
 
-> 实现状态（2026-08-23，ADR-020）：本原型已完成并入选型 ADR-020（serialport@13）+ 验证记录
-> （docs/node-serial-prototype-验证记录.md）。Layer 1 Fake 57 用例、Layer 2 com0com COM4/COM5 7 用例
+> 实现状态（2026-08-23，ADR-020）：本原型已完成并入选型 ADR-020（serialport@13）。
+> Layer 1 Fake 57 用例、Layer 2 com0com COM4/COM5 7 用例
 > 全绿；Electron/VSCode 独立探针就绪（`pnpm prototype:electron`、`pnpm probe:vscode:serial`）；
 > macOS/Linux 平台、真实设备、打包后原生模块加载等为接线验证项，见 ADR-020 后续复审条件。
-
-> 实现状态（2026-08-23，Node TCP Adapter）：`packages/platform-node` 新增 Node TCP Adapter
-> （`NodeTcpTransport` + `SocketLike`/`NetFactoryLike` 注入面 + TCP 错误映射 + `NodeTcpCapabilities`），
-> 遵循 §34.3.16 共享边界，复用串口侧错误映射/能力描述/Fake 测试模式；`TransportPort.kind` 新增
-> `"node-tcp"`；domain 新增最小 `TcpConnectionProfile`（host/port/unitId 0~255，不入持久化）；
-> Layer 1 Fake + Layer 2 本地回环用例全绿，详见 docs/node-tcp-adapter-验证记录.md。
-> 能力矩阵未翻转（`modbusTcp` 仍 false）；会话层 TCP 帧解析、UI TCP 配置入口、
-> Electron/VSCode TCP 接线属后续接线步骤（ADR-020 后续复审条件）。
 
 目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、原生模块兼容、资源释放及异常处理能力。
 
@@ -578,5 +570,49 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 15. 真实 Modbus RTU 设备可以完成 03 读取和 0x10 写入；
 16. 长时间轮询不存在阻断性稳定问题；
 17. 原型结论和已知限制已记录到 ADR 或技术文档。
+
+## 3. 验证状态与平台限制
+
+已验证：
+
+- Layer 1 注入式 Fake Serial Port：57 用例；
+- Layer 2 Windows com0com COM4↔COM5：7 用例，覆盖真实枚举、9600/8N1、FC03/FC10、端口占用、关闭重连和原始字节双向透传；
+- Windows x64 上 `serialport@13` 原生绑定构建与加载；
+- 端口路径作为不透明字符串原样透传；
+- 端口占用、权限不足、设备拔出、参数不支持等错误可映射为结构化错误；
+- 100 轮连接、收发、关闭、重开无监听器累积；
+- VSCode Extension Host 已通过真实宿主接线；
+- Electron 独立探针能够验证宿主侧加载，生产 Electron 串口仍走 Renderer Web Serial。
+
+主要错误映射：
+
+- `DisconnectedError` → `SERIAL_DEVICE_DISCONNECTED`；
+- `ENOENT`、`ENXIO`、`ENODEV`、no such file/not found → `SERIAL_NOT_FOUND`；
+- `EACCES`、`EPERM` → `SERIAL_PERMISSION_DENIED`；
+- `EBUSY`、`EAGAIN`、Access denied/already open/in use → `SERIAL_PORT_IN_USE`；
+- canceled → `SERIAL_CANCELLED`；
+- unsupported/invalid baudRate → `SERIAL_PARAMETER_UNSUPPORTED`；
+- 打开未知错误 → `SERIAL_OPEN_FAILED`；
+- 读写未知错误 → `SERIAL_ERROR`，保留原始技术信息。
+
+支持参数：
+
+- 波特率：1200–115200 的标准档位；
+- 数据位：7/8；
+- 停止位：1/2；
+- 校验：none/even/odd；
+- 流控：OFF、RTS/CTS、XON/XOFF 的类型面已实现。
+
+仍需目标环境验证：
+
+- macOS/Linux 的实际端口枚举和真实设备；
+- 真实 USB 转串口设备的插拔、占用和长时间稳定性；
+- 1.5 停止位与三类流控的实际驱动能力；
+- Electron/VSCode 各自 ABI 下的生产打包原生模块；
+- 大量端口枚举、长轮询和内存稳定性专项。
+
+原生绑定必须按 Host 和 CPU 架构分别构建，不得把一套编译产物跨 Electron、VSCode 或平台复用。
+
+---
 
 

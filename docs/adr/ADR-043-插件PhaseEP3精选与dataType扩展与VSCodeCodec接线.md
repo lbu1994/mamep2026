@@ -2,7 +2,7 @@
 
 - 状态：**已确认（2026-09-01）**
 - 日期：2026-09-01
-- 决策来源：用户任务（docs/插件功能设计.md §4.6/§10/§11）；用户确认：①Phase E 范围=核心子集（线圈/离散/输入寄存器表 + 自定义功能码 + 寄存器手册 documentation 面板）②FC01/02/04 **直接进核心 protocol-modbus**（区别于设计文档「插件/独立包」建议）③dataType 扩展纳入 ④VSCode codec 接线纳入；插件卸载随 Phase F 处理
+- 决策来源：用户任务（[插件契约与架构](../architecture/ports/plugin-api/插件契约.md)）；用户确认：①Phase E 范围=核心子集（线圈/离散/输入寄存器表 + 自定义功能码 + 寄存器手册 documentation 面板）②FC01/02/04 **直接进核心 protocol-modbus**（区别于设计文档「插件/独立包」建议）③dataType 扩展纳入 ④VSCode codec 接线纳入；插件卸载随 Phase F 处理
 
 ## 背景
 
