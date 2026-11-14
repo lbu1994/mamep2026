@@ -25,6 +25,7 @@ import type {
   Result,
   TcpConnectionProfile,
   AddressTransform,
+  RequestRoute,
 } from "@mamep2026/domain";
 import { createMamepError, fail } from "@mamep2026/domain";
 import type { SessionHostEvents } from "./session-host-core";
@@ -172,19 +173,27 @@ export class TcpSessionHost {
     this.core.setUnitId(unitId);
   }
 
-  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
-    return this.core.readRow(row);
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
+    return this.core.readRow(row, route);
   }
 
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
-    return this.core.writeRow(row, options);
+    return this.core.writeRow(row, options, route);
   }
 
-  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {
-    return this.core.readAllRows(rows, batchId);
+  readAllRows(
+    rows: BatchReadRow[],
+    batchId?: string,
+    route?: RequestRoute,
+  ): BatchReadHandle {
+    return this.core.readAllRows(rows, batchId, route);
   }
 
   /** 按 batchId 取消活动批任务（远程路径，ADR-025）：未知/已完成为安全 no-op。 */
@@ -192,7 +201,14 @@ export class TcpSessionHost {
     this.core.cancelBatch(batchId);
   }
 
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
+  updatePollingTargets(
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
+  ): void {
     this.core.updatePollingTargets(rows);
   }
 
@@ -223,8 +239,9 @@ export class TcpSessionHost {
     address: number,
     speedMs: number,
     quantity = 1,
+    route?: RequestRoute,
   ): void {
-    this.core.traceStart(key, address, speedMs, quantity);
+    this.core.traceStart(key, address, speedMs, quantity, route);
   }
 
   traceStop(key: string): void {

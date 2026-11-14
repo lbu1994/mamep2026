@@ -4,6 +4,7 @@ export * from "./config";
 export * from "./errors";
 export * from "./raw-value";
 export * from "./register-address";
+export * from "./request-route";
 export * from "./result";
 export * from "./slave-address";
 export * from "./tcp-profile";

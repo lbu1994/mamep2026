@@ -5,13 +5,20 @@
  * 纯函数式（依赖经 deps 注入），便于单测。
  */
 import type { ApplicationMessage } from "@mamep2026/logging";
-import type { RegisterRow, Result, RowId, SheetId } from "@mamep2026/domain";
+import type {
+  RegisterRow,
+  RegisterSheet,
+  Result,
+  RowId,
+  SheetId,
+} from "@mamep2026/domain";
 import {
   applyReadValueToRow,
   applyReadValuesToRow,
 } from "@mamep2026/register-table";
 import { useAppStore } from "./app-store";
 import type { AppHost } from "./host";
+import { requestRouteForSheet } from "./request-route";
 import type { ApplyManualResultOptions } from "./row-result";
 
 export interface RowIoDeps {
@@ -25,11 +32,14 @@ export interface RowIoDeps {
   appendMessage: (message: ApplicationMessage) => void;
 }
 
-function findRow(rowId: RowId): RegisterRow | undefined {
-  return useAppStore
-    .getState()
-    .workspace.sheets.flatMap((sh) => sh.rows)
-    .find((r) => r.rowId === rowId);
+function findSheetAndRow(
+  rowId: RowId,
+): { sheet: RegisterSheet; row: RegisterRow } | null {
+  for (const sheet of useAppStore.getState().workspace.sheets) {
+    const row = sheet.rows.find((candidate) => candidate.rowId === rowId);
+    if (row !== undefined) return { sheet, row };
+  }
+  return null;
 }
 
 /**
@@ -41,9 +51,10 @@ export async function readRowById(
   rowId: RowId,
   deps: Pick<RowIoDeps, "updateRow" | "recordManualResult">,
 ): Promise<void> {
-  const row = findRow(rowId);
-  if (row === undefined) return;
-  const result = await host.readRow(row);
+  const found = findSheetAndRow(rowId);
+  if (found === null) return;
+  const { sheet, row } = found;
+  const result = await host.readRow(row, requestRouteForSheet(host, sheet));
   // 手动读结果 → 三态状态点（成功清失败态写成功点；失败写失败态并带错误码）。
   deps.recordManualResult(rowId, result, "read");
   if (result.ok) {
@@ -87,6 +98,7 @@ export async function writeRowById(
 ): Promise<void> {
   const state = useAppStore.getState();
   const sheet = state.workspace.sheets.find((sh) => sh.sheetId === sheetId);
+  if (sheet === undefined) return;
   const row = sheet?.rows.find((r) => r.rowId === rowId);
   if (row === undefined) return;
   // 本表写后回读配置（每表独立，2026-08-26）。
@@ -94,7 +106,11 @@ export async function writeRowById(
     mode: "immediate" as const,
     delayMs: null,
   };
-  const result = await host.writeRow(row, { writeVerify });
+  const result = await host.writeRow(
+    row,
+    { writeVerify },
+    requestRouteForSheet(host, sheet),
+  );
   // 手动写结果 → 三态状态点（writeOutcome 支持 §18.2 verify 结果映射）。
   deps.recordManualResult(
     rowId,

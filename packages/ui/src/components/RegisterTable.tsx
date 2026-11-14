@@ -115,6 +115,7 @@ import {
 } from "../keyboard/guards";
 import { matchesShortcut, tableShortcut } from "../keyboard/shortcuts";
 import { readRowById, writeRowById } from "../row-io";
+import { requestRouteForSheet } from "../request-route";
 import { runPluginToolbarAction } from "../plugin-toolbar-actions";
 
 /** 写后回读配置选项（PRD §6.5.12，2026-08-26）：Select value ↔ ReadVerifySettings。 */
@@ -1507,6 +1508,10 @@ export const RegisterTable = memo(function RegisterTable({
 
   const handleReadAll = async (): Promise<void> => {
     if (host === null || host === undefined) return;
+    const sheet = useAppStore
+      .getState()
+      .workspace.sheets.find((candidate) => candidate.sheetId === sheetId);
+    if (sheet === undefined) return;
     const seq = ++readAllSeqRef.current;
     setReadAllRunning(true);
     const handle = host.readAllRows(
@@ -1516,6 +1521,7 @@ export const RegisterTable = memo(function RegisterTable({
         // 多寄存器范围行（ADR-030）：一次 FC03 批量读取全部连续寄存器。
         ...(row.registerCount > 1 ? { quantity: row.registerCount } : {}),
       })),
+      requestRouteForSheet(host, sheet),
     );
     readAllHandleRef.current = handle;
     const result = await handle.promise;

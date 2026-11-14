@@ -39,6 +39,7 @@ import type {
   PluginRuntimeUnloadPayload,
   PluginStoreDataPayload,
   PluginStoreDataResponse,
+  RequestRoutePayload,
   ReadVerifySettingsPayload,
   RegisterRowPayload,
   SessionTcpConnectPayload,
@@ -172,30 +173,44 @@ export function createVscodeBridge(
       transformId: string;
       enabled: boolean;
     }) => postRequest<null>("session-set-address-transform", config),
-    sessionReadRow: (row: RegisterRowPayload) =>
-      postRequest<number>("session-read-row", { row }),
+    sessionReadRow: (row: RegisterRowPayload, route) =>
+      postRequest<number>("session-read-row", { row, route }),
     sessionWriteRow: (
       row: RegisterRowPayload,
       writeVerify?: ReadVerifySettingsPayload,
+      route?: RequestRoutePayload,
     ) =>
       postRequest<WriteOutcomePayload>("session-write-row", {
         row,
         ...(writeVerify !== undefined ? { writeVerify } : {}),
+        ...(route !== undefined ? { route } : {}),
       }),
-    sessionBatchRead: (batchId: string, rows: BatchReadRowPayload[]) =>
+    sessionBatchRead: (batchId: string, rows: BatchReadRowPayload[], route) =>
       postRequest<SessionBatchReadResponse>("session-batch-read", {
         batchId,
         rows,
+        route,
       }),
     sessionBatchCancel: (batchId: string) =>
       postRequest<null>("session-batch-cancel", { batchId }),
-    sessionUpdatePollingTargets: (
-      rows: Array<{ key: string; address: number }>,
-    ) => postRequest<null>("session-update-polling-targets", { rows }),
+    sessionUpdatePollingTargets: (rows) =>
+      postRequest<null>("session-update-polling-targets", { rows }),
     sessionPollingStart: () => postRequest<null>("session-polling-start", {}),
     sessionPollingStop: () => postRequest<null>("session-polling-stop", {}),
-    sessionTraceStart: (key: string, address: number, speedMs: number) =>
-      postRequest<null>("session-trace-start", { key, address, speedMs }),
+    sessionTraceStart: (
+      key: string,
+      address: number,
+      speedMs: number,
+      quantity?: number,
+      route?: RequestRoutePayload,
+    ) =>
+      postRequest<null>("session-trace-start", {
+        key,
+        address,
+        speedMs,
+        ...(quantity !== undefined ? { quantity } : {}),
+        ...(route !== undefined ? { route } : {}),
+      }),
     sessionTraceStop: (key: string) =>
       postRequest<null>("session-trace-stop", { key }),
     sessionTcpConnect: (payload: SessionTcpConnectPayload) =>

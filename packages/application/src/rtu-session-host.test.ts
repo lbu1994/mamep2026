@@ -329,6 +329,81 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
     h.host.stopPolling();
   });
 
+  it("skips polling targets with an incompatible protocol and warns once", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.host.updatePollingTargets([
+      {
+        key: "compatible",
+        address: 0x1000,
+        route: { unitAddress: 1, protocol: "rtu" },
+      },
+      {
+        key: "codec",
+        address: 0x2000,
+        route: { unitAddress: 2, protocol: "plugin-codec" },
+      },
+    ]);
+    h.host.startPolling();
+    h.clock.advance(100);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames).toHaveLength(1);
+    expect(h.transport.sentFrames[0]?.[0]).toBe(1);
+    h.host.stopPolling();
+    h.host.updatePollingTargets([
+      {
+        key: "compatible",
+        address: 0x1000,
+        route: { unitAddress: 1, protocol: "rtu" },
+      },
+      {
+        key: "codec",
+        address: 0x2000,
+        route: { unitAddress: 2, protocol: "plugin-codec" },
+      },
+    ]);
+    expect(
+      h.events.onMessage.mock.calls.filter(
+        ([message]) =>
+          message.messageKey === "messages.requestRouteProtocolSkipped",
+      ),
+    ).toHaveLength(1);
+    expect(h.events.onMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageKey: "messages.requestRouteProtocolSkipped",
+        params: { protocols: "plugin-codec" },
+      }),
+    );
+  });
+
+  it("rejects a whole-table read before sending when its protocol is incompatible", async () => {
+    const h = createHarness();
+    await connect(h);
+    const handle = h.host.readAllRows(
+      [{ key: "a", address: 0x1000 }],
+      "batch-mismatch",
+      { unitAddress: 2, protocol: "plugin-codec" },
+    );
+    const result = await handle.promise;
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("REQUEST_ROUTE_PROTOCOL_MISMATCH");
+    }
+    expect(h.transport.sentFrames).toHaveLength(0);
+  });
+
+  it("does not start Trace for a target with an incompatible protocol", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.host.traceStart("row-codec", 0x1000, 100, 1, {
+      unitAddress: 2,
+      protocol: "plugin-codec",
+    });
+    h.clock.advance(500);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames).toHaveLength(0);
+  });
+
   it("写入+回读期间暂缓同一行轮询（§18.3），完成后恢复", async () => {
     const h = createHarness();
     await connect(h);

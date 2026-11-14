@@ -16,6 +16,7 @@ import type {
   PlatformCapabilities,
   ReadVerifySettings,
   RegisterRow,
+  RequestRoute,
   Result,
   RtuConnectionProfile,
   TcpConnectionProfile,
@@ -121,6 +122,7 @@ export class AndroidAppHost implements AppHost {
   private activeProtocol: "rtu" | "tcp" | null = null;
   /** TCP 连接配置本地镜像（通信属性摘要用）。 */
   private tcpProfile: TcpConnectionProfile | null = null;
+  private currentTcpUnitId = 0;
   private tcpConnectionState: ConnectionState = "disconnected";
   /** 已选串口标签（enumerated 路径由本 Host 记录，供通信属性与 bottom panel 展示）。 */
   private portLabel: string | null = null;
@@ -382,6 +384,7 @@ export class AndroidAppHost implements AppHost {
     if (!result.ok) return result;
 
     this.tcpProfile = effective;
+    this.currentTcpUnitId = effective.unitId;
     this.activeProtocol = "tcp";
     return ok(undefined);
   }
@@ -433,9 +436,22 @@ export class AndroidAppHost implements AppHost {
     // TCP 的「从站地址」即 Unit ID（每表独立，ADR-026）。
     if (this.activeProtocol === "tcp") {
       this.tcp.setUnitId(slave);
+      this.currentTcpUnitId = slave;
     } else {
       this.inner.setSlaveAddress(slave);
     }
+  }
+
+  private fallbackRoute(): RequestRoute {
+    if (this.activeProtocol === "tcp") {
+      return { unitAddress: this.currentTcpUnitId, protocol: "tcp" };
+    }
+    return (
+      this.inner.getSession()?.getCurrentRoute() ?? {
+        unitAddress: 1,
+        protocol: "rtu",
+      }
+    );
   }
 
   setAddressTransform(
@@ -478,30 +494,39 @@ export class AndroidAppHost implements AppHost {
   }
 
   // ---- 读写（按协议路由）----
-  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
     return this.activeProtocol === "tcp"
-      ? this.tcp.readRow(row)
-      : this.inner.readRow(row);
+      ? this.tcp.readRow(row, route ?? this.fallbackRoute())
+      : this.inner.readRow(row, route ?? this.fallbackRoute());
   }
 
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
     return this.activeProtocol === "tcp"
-      ? this.tcp.writeRow(row, options)
-      : this.inner.writeRow(row, options);
+      ? this.tcp.writeRow(row, options, route ?? this.fallbackRoute())
+      : this.inner.writeRow(row, options, route ?? this.fallbackRoute());
   }
 
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
+  readAllRows(rows: BatchReadRow[], route?: RequestRoute): BatchReadHandle {
     return this.activeProtocol === "tcp"
-      ? this.tcp.readAllRows(rows)
-      : this.inner.readAllRows(rows);
+      ? this.tcp.readAllRows(rows, undefined, route ?? this.fallbackRoute())
+      : this.inner.readAllRows(rows, route ?? this.fallbackRoute());
   }
 
   // ---- 轮询 ----
   updatePollingTargets(
-    rows: Array<{ key: string; address: number; quantity?: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
   ): void {
     if (this.activeProtocol === "tcp") {
       this.tcp.updatePollingTargets(rows);
@@ -545,12 +570,25 @@ export class AndroidAppHost implements AppHost {
     address: number,
     speedMs: number,
     quantity?: number,
+    route?: RequestRoute,
   ): void {
     if (this.activeProtocol === "tcp") {
-      this.tcp.traceStart(key, address, speedMs, quantity);
+      this.tcp.traceStart(
+        key,
+        address,
+        speedMs,
+        quantity,
+        route ?? this.fallbackRoute(),
+      );
       return;
     }
-    this.inner.traceStart(key, address, speedMs, quantity);
+    this.inner.traceStart(
+      key,
+      address,
+      speedMs,
+      quantity,
+      route ?? this.fallbackRoute(),
+    );
   }
 
   traceStop(key: string): void {

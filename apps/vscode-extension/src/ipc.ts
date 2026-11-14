@@ -16,6 +16,7 @@ import type {
 import type {
   RegisterRow,
   ReadVerifySettings,
+  RequestRoute,
   RtuConnectionProfile,
   TcpConnectionProfile,
 } from "@mamep2026/domain";
@@ -82,18 +83,39 @@ export interface VscodeSessionLike {
       enabled: boolean;
     } | null,
   ): void;
-  readRow(row: RegisterRow): Promise<Result<number | number[]>>;
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>>;
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>>;
-  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle;
+  readAllRows(
+    rows: BatchReadRow[],
+    batchId?: string,
+    route?: RequestRoute,
+  ): BatchReadHandle;
   /** 按 batchId 取消活动批任务（ADR-025）：未知 batchId 为安全 no-op。 */
   cancelBatch(batchId: string): void;
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void;
+  updatePollingTargets(
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
+  ): void;
   startPolling(): void;
   stopPolling(): void;
-  traceStart(key: string, address: number, speedMs: number): void;
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity?: number,
+    route?: RequestRoute,
+  ): void;
   traceStop(key: string): void;
   dispose(): Promise<void>;
 }
@@ -320,29 +342,35 @@ export async function handleVscodeRequest(
         deps.session.setAddressTransform(message.payload),
       );
     case "session-read-row": {
-      const { row } = message.payload;
+      const { row, route } = message.payload;
       return sessionResult(message, () =>
-        deps.session.readRow(registerRowFromPayload(row)),
+        deps.session.readRow(registerRowFromPayload(row), route),
       );
     }
     case "session-write-row": {
-      const { row, writeVerify } = message.payload;
+      const { row, writeVerify, route } = message.payload;
       return sessionResult(message, async () => {
         const result = await deps.session.writeRow(
           registerRowFromPayload(row),
           writeVerify !== undefined
             ? { writeVerify: readVerifySettingsFromPayload(writeVerify) }
             : undefined,
+          route,
         );
         return result.ok ? ok(toWriteOutcomePayload(result.value)) : result;
       });
     }
     case "session-batch-read": {
-      const { batchId, rows } = message.payload;
+      const { batchId, rows, route } = message.payload;
       return sessionResult(message, async () => {
         const handle = deps.session.readAllRows(
-          rows.map((r) => ({ key: r.key, address: r.address })),
+          rows.map((r) => ({
+            key: r.key,
+            address: r.address,
+            ...(r.quantity !== undefined ? { quantity: r.quantity } : {}),
+          })),
           batchId,
+          route,
         );
         const result = await handle.promise;
         return result.ok
@@ -357,7 +385,14 @@ export async function handleVscodeRequest(
       );
     case "session-update-polling-targets":
       return sessionVoid(message, () =>
-        deps.session.updatePollingTargets(message.payload.rows),
+        deps.session.updatePollingTargets(
+          message.payload.rows.map((row) => ({
+            key: row.key,
+            address: row.address,
+            route: row.route,
+            ...(row.quantity !== undefined ? { quantity: row.quantity } : {}),
+          })),
+        ),
       );
     case "session-polling-start":
       return sessionVoid(message, () => deps.session.startPolling());
@@ -369,6 +404,8 @@ export async function handleVscodeRequest(
           message.payload.key,
           message.payload.address,
           message.payload.speedMs,
+          message.payload.quantity,
+          message.payload.route,
         ),
       );
     case "session-trace-stop":

@@ -6,7 +6,12 @@
  * Phase A 实现 readRegisters / writeRegisters；batchRead / trace 随 Phase F 扩展。
  */
 import type { CommunicationSession } from "@mamep2026/communication";
-import { createMamepError, fail, ok } from "@mamep2026/domain";
+import {
+  createMamepError,
+  fail,
+  ok,
+  type RequestRoute,
+} from "@mamep2026/domain";
 import {
   PLUGIN_RUNTIME_NOT_AVAILABLE,
   type PluginCommunicationApi,
@@ -15,6 +20,8 @@ import {
 export interface PluginCommunicationDeps {
   /** 当前会话提供器（未连接/无会话时返回 null → 能力错误）。 */
   getSession: () => CommunicationSession | null;
+  /** 调用创建时读取一次活动路由；会话内部会再固化快照。 */
+  getRoute?: () => RequestRoute | null;
   /** 调用方插件 id（写入通信日志）。 */
   pluginId: string;
 }
@@ -32,7 +39,7 @@ function unavailableError(operation: string) {
 export function createPluginCommunicationApi(
   deps: PluginCommunicationDeps,
 ): PluginCommunicationApi {
-  const { getSession, pluginId } = deps;
+  const { getSession, getRoute, pluginId } = deps;
   const pluginMeta = {
     source: "plugin" as const,
     pluginId,
@@ -42,16 +49,19 @@ export function createPluginCommunicationApi(
     async readRegisters(req) {
       const session = getSession();
       if (session === null) return fail(unavailableError("read"));
-      return session.readRegisters(req.address, req.quantity, pluginMeta);
+      const route = getRoute?.() ?? session.getCurrentRoute();
+      return session.readRegisters(req.address, req.quantity, {
+        ...pluginMeta,
+        route,
+      });
     },
     async writeRegisters(req) {
       const session = getSession();
       if (session === null) return fail(unavailableError("write"));
-      const result = await session.writeRegisters(
-        req.address,
-        req.values,
-        pluginMeta,
-      );
+      const result = await session.writeRegisters(req.address, req.values, {
+        ...pluginMeta,
+        route: getRoute?.() ?? session.getCurrentRoute(),
+      });
       return result.ok ? ok(undefined) : result;
     },
   };

@@ -250,6 +250,7 @@ describe("WriteOutcome payload（写后回读，2026-08-26）", () => {
     const parsed = sessionWriteRowPayloadSchema.safeParse({
       row: rowPayload,
       writeVerify: { mode: "immediate", delayMs: null },
+      route: { unitAddress: 1, protocol: "rtu" },
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
@@ -259,7 +260,25 @@ describe("WriteOutcome payload（写后回读，2026-08-26）", () => {
       });
     }
     // 缺省 writeVerify 合法（保持既有行为）。
-    const without = sessionWriteRowPayloadSchema.safeParse({ row: rowPayload });
+    const without = sessionWriteRowPayloadSchema.safeParse({
+      row: rowPayload,
+      route: { unitAddress: 1, protocol: "rtu" },
+    });
     expect(without.success).toBe(true);
+  });
+
+  it("request route schema rejects invalid Unit IDs and empty protocols", () => {
+    expect(
+      sessionWriteRowPayloadSchema.safeParse({
+        row: toRegisterRowPayload(makeRow(0x1000, "04D2")),
+        route: { unitAddress: 256, protocol: "rtu" },
+      }).success,
+    ).toBe(false);
+    expect(
+      sessionWriteRowPayloadSchema.safeParse({
+        row: toRegisterRowPayload(makeRow(0x1000, "04D2")),
+        route: { unitAddress: 1, protocol: "" },
+      }).success,
+    ).toBe(false);
   });
 });

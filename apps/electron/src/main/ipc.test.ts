@@ -430,6 +430,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
           updatedAt: 0,
         },
         writeVerify: { mode: "immediate", delayMs: null },
+        route: { unitAddress: 1, protocol: "tcp" },
       }),
       makeDeps({ session }),
     );
@@ -437,6 +438,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     expect(session.writeRow).toHaveBeenCalledWith(
       expect.objectContaining({ rowId: "row-1", cellText: "04D2" }),
       { writeVerify: { mode: "immediate", delayMs: null } },
+      { unitAddress: 1, protocol: "tcp" },
     );
     if (result.type === "response") {
       expect(result.payload).toEqual({
@@ -476,6 +478,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
       request("session-batch-read", {
         batchId: "batch-abc",
         rows: [{ key: "a", address: 1 }],
+        route: { unitAddress: 1, protocol: "tcp" },
       }),
       makeDeps({ session }),
     );
@@ -483,6 +486,7 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     expect(session.readAllRows).toHaveBeenCalledWith(
       [{ key: "a", address: 1 }],
       "batch-abc",
+      { unitAddress: 1, protocol: "tcp" },
     );
     if (result.type === "response") {
       expect(result.payload).toMatchObject({ summary: { batchId: "b-1" } });

@@ -7,6 +7,7 @@ export {
   type TraceWindowModel,
 } from "./app-store";
 export type { AppHost, CommProperties, TraceSampleEvent } from "./host";
+export { requestProtocolResolver, requestRouteForSheet } from "./request-route";
 export {
   applyLanguage,
   i18nResources,

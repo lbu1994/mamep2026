@@ -36,6 +36,7 @@ import {
   type AddressTransformConfig,
   type ReadVerifySettings,
   type RegisterRow,
+  type RequestRoute,
   type Result,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
@@ -88,12 +89,20 @@ export class SessionHostCore {
     key: string;
     address: number;
     quantity?: number;
+    route?: RequestRoute;
   }> = [];
+  /** 不兼容轮询提示去重：当前协议或跳过协议集合变化时才再次上报。 */
+  private skippedProtocolNotice: string | null = null;
   /** 后台挂起标志（移动端生命周期）：挂起期间不启动轮询/追踪，回前台按原配置恢复。 */
   private backgroundSuspended = false;
   private readonly activeTraces = new Map<
     string,
-    { address: number; speedMs: number; quantity: number }
+    {
+      address: number;
+      speedMs: number;
+      quantity: number;
+      route?: RequestRoute;
+    }
   >();
   /** 活动批任务登记（远程路径按 batchId 取消，ADR-025）：promise 落定后注销。 */
   private readonly activeBatches = new Map<string, BatchReadHandle>();
@@ -156,13 +165,21 @@ export class SessionHostCore {
     this.trace = new TraceCoordinator(session, this.clock);
     this.trace.onSample((sample) => this.events.onTraceSample(sample));
 
+    this.syncPollingTargets();
     if (this.pollingTargets.length > 0 && !this.backgroundSuspended) {
-      this.polling.setTargets(this.pollingTargets);
       this.polling.start();
     }
     if (!this.backgroundSuspended) {
       for (const [key, entry] of this.activeTraces) {
-        this.trace.start(key, entry.address, entry.speedMs, entry.quantity);
+        if (this.isRouteCompatible(entry.route)) {
+          this.trace.start(
+            key,
+            entry.address,
+            entry.speedMs,
+            entry.quantity,
+            entry.route,
+          );
+        }
       }
     }
     return ok(undefined);
@@ -202,6 +219,61 @@ export class SessionHostCore {
     return this.codecRegistry;
   }
 
+  private isRouteCompatible(route: RequestRoute | undefined): boolean {
+    return (
+      route === undefined ||
+      this.session === null ||
+      route.protocol === this.session.getProtocol()
+    );
+  }
+
+  private routeMismatchError(route: RequestRoute | undefined) {
+    const requestProtocol = route?.protocol ?? "";
+    const sessionProtocol = this.session?.getProtocol() ?? "";
+    return createMamepError({
+      code: "REQUEST_ROUTE_PROTOCOL_MISMATCH",
+      category: "capability",
+      severity: "warning",
+      retryable: false,
+      userMessageKey: "errors.requestRouteProtocolMismatch",
+      technicalMessage: `request protocol ${requestProtocol} does not match session protocol ${sessionProtocol}`,
+    });
+  }
+
+  /**
+   * 只把与当前会话协议兼容的轮询目标交给协调器；所有 WP 配置仍保留在
+   * pollingTargets 中，供下次兼容连接恢复。提示按协议集合去重。
+   */
+  private syncPollingTargets() {
+    const incompatibleProtocols = new Set<string>();
+    const compatible = this.pollingTargets.filter((target) => {
+      const ok = this.isRouteCompatible(target.route);
+      if (!ok && target.route !== undefined) {
+        incompatibleProtocols.add(target.route.protocol);
+      }
+      return ok;
+    });
+    this.polling?.setTargets(compatible);
+
+    if (incompatibleProtocols.size === 0 || this.session === null) {
+      this.skippedProtocolNotice = null;
+      return compatible;
+    }
+    const protocols = [...incompatibleProtocols].sort();
+    const fingerprint = `${this.session.getProtocol()}:${protocols.join(",")}`;
+    if (fingerprint !== this.skippedProtocolNotice) {
+      this.skippedProtocolNotice = fingerprint;
+      this.events.onMessage({
+        timestamp: this.clock.now(),
+        level: "warning",
+        messageKey: "messages.requestRouteProtocolSkipped",
+        params: { protocols: protocols.join(", ") },
+        detail: null,
+      });
+    }
+    return compatible;
+  }
+
   /** 更新会话从站地址（RTU，每表独立）：对后续所有请求（读/写/轮询/追踪）生效。 */
   setSlaveAddress(slave: number): void {
     this.session?.setSlaveAddress(slave);
@@ -212,8 +284,11 @@ export class SessionHostCore {
     this.session?.setUnitId(unitId);
   }
 
-  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
-    return this.tableService.readRow(row);
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
+    return this.tableService.readRow(row, route);
   }
 
   /**
@@ -225,14 +300,19 @@ export class SessionHostCore {
   writeRow(
     row: RegisterRow,
     options: { writeVerify?: ReadVerifySettings } = {},
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
     this.polling?.defer(row.rowId);
-    const promise = this.tableService.writeRow(row, options);
+    const promise = this.tableService.writeRow(row, options, route);
     void promise.finally(() => this.polling?.resume(row.rowId));
     return promise;
   }
 
-  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {
+  readAllRows(
+    rows: BatchReadRow[],
+    batchId?: string,
+    route?: RequestRoute,
+  ): BatchReadHandle {
     if (this.session === null) {
       return {
         promise: Promise.resolve(
@@ -248,6 +328,12 @@ export class SessionHostCore {
         cancel: () => undefined,
       };
     }
+    if (!this.isRouteCompatible(route)) {
+      return {
+        promise: Promise.resolve(fail(this.routeMismatchError(route))),
+        cancel: () => undefined,
+      };
+    }
     const coordinator = new BatchReadCoordinator(this.session, this.clock);
     const handle = coordinator.readAll(
       rows,
@@ -256,6 +342,7 @@ export class SessionHostCore {
         this.events.onPollResult(key, 0, result);
       },
       batchId,
+      route,
     );
     if (batchId !== undefined) {
       // 远程路径（ADR-025）：登记活动批任务，promise 落定后注销，供 cancelBatch 关联取消。
@@ -274,11 +361,20 @@ export class SessionHostCore {
   }
 
   updatePollingTargets(
-    rows: Array<{ key: string; address: number; quantity?: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
   ): void {
     this.pollingTargets = rows;
-    this.polling?.setTargets(rows);
-    if (rows.length > 0 && this.session !== null && !this.backgroundSuspended) {
+    const compatible = this.syncPollingTargets();
+    if (
+      compatible.length > 0 &&
+      this.session !== null &&
+      !this.backgroundSuspended
+    ) {
       this.polling?.start();
     } else {
       this.polling?.stop();
@@ -286,8 +382,11 @@ export class SessionHostCore {
   }
 
   startPolling(): void {
+    this.syncPollingTargets();
     if (
-      this.pollingTargets.length > 0 &&
+      this.pollingTargets.some((target) =>
+        this.isRouteCompatible(target.route),
+      ) &&
       this.session !== null &&
       !this.backgroundSuspended
     ) {
@@ -320,11 +419,19 @@ export class SessionHostCore {
     this.backgroundSuspended = false;
     if (this.session === null) return;
     if (this.pollingTargets.length > 0) {
-      this.polling?.setTargets(this.pollingTargets);
+      this.syncPollingTargets();
       this.polling?.start();
     }
     for (const [key, entry] of this.activeTraces) {
-      this.trace?.start(key, entry.address, entry.speedMs, entry.quantity);
+      if (this.isRouteCompatible(entry.route)) {
+        this.trace?.start(
+          key,
+          entry.address,
+          entry.speedMs,
+          entry.quantity,
+          entry.route,
+        );
+      }
     }
   }
 
@@ -337,10 +444,27 @@ export class SessionHostCore {
     address: number,
     speedMs: number,
     quantity = 1,
+    route?: RequestRoute,
   ): void {
-    this.activeTraces.set(key, { address, speedMs, quantity });
+    const resolvedRoute = route ?? this.session?.getCurrentRoute();
+    this.activeTraces.set(key, {
+      address,
+      speedMs,
+      quantity,
+      ...(resolvedRoute !== undefined ? { route: resolvedRoute } : {}),
+    });
     if (this.backgroundSuspended) return;
-    this.trace?.start(key, address, speedMs, quantity);
+    if (!this.isRouteCompatible(resolvedRoute)) {
+      this.events.onMessage({
+        timestamp: this.clock.now(),
+        level: "warning",
+        messageKey: "messages.requestRouteProtocolSkipped",
+        params: { protocols: resolvedRoute?.protocol ?? "" },
+        detail: null,
+      });
+      return;
+    }
+    this.trace?.start(key, address, speedMs, quantity, resolvedRoute);
   }
 
   traceStop(key: string): void {

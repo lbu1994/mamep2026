@@ -14,6 +14,37 @@ function readResponse(slave: number, value: number): Uint8Array {
 }
 
 describe("BatchReadCoordinator", () => {
+  it("keeps the batch route snapshot even if the session target changes", async () => {
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const session = new CommunicationSession({
+      transport,
+      clock,
+      config: createDefaultRtuProfile(),
+      slaveAddress: 1,
+    });
+    await session.connect();
+    const coordinator = new BatchReadCoordinator(session, clock);
+    const handle = coordinator.readAll(
+      [
+        { key: "a", address: 0x0001 },
+        { key: "b", address: 0x0002 },
+      ],
+      undefined,
+      "batch-route",
+      { unitAddress: 7, protocol: "rtu" },
+    );
+
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    session.setSlaveAddress(9);
+    transport.simulateData(readResponse(7, 0x10));
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    expect(transport.sentFrames[0]?.[0]).toBe(7);
+    expect(transport.sentFrames[1]?.[0]).toBe(7);
+    transport.simulateData(readResponse(7, 0x20));
+    expect((await handle.promise).ok).toBe(true);
+  });
+
   it("reads each eligible row once and summarizes success/skipped counts", async () => {
     const clock = new ManualClock();
     const transport = new FakeTransport();
@@ -138,6 +169,32 @@ describe("BatchReadCoordinator", () => {
 });
 
 describe("TraceCoordinator", () => {
+  it("samples using the route captured at trace start", async () => {
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const session = new CommunicationSession({
+      transport,
+      clock,
+      config: createDefaultRtuProfile(),
+      slaveAddress: 1,
+    });
+    await session.connect();
+    const coordinator = new TraceCoordinator(session, clock);
+
+    coordinator.start("t1", 0x0001, 100, 1, {
+      unitAddress: 6,
+      protocol: "rtu",
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    session.setSlaveAddress(9);
+    expect(transport.sentFrames[0]?.[0]).toBe(6);
+    transport.simulateData(readResponse(6, 0x1111));
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    expect(transport.sentFrames[1]?.[0]).toBe(6);
+    coordinator.stop("t1");
+    transport.simulateData(readResponse(6, 0x2222));
+  });
+
   it("samples the target register at the configured speed with increasing sequence", async () => {
     const clock = new ManualClock();
     const transport = new FakeTransport();

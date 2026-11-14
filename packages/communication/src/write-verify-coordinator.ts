@@ -11,7 +11,12 @@
  *
  * 写入与回读均经同一 CommunicationSession 的统一调度器串行执行（docs/AGENTS.md §13）。
  */
-import { ok, type ReadVerifySettings, type Result } from "@mamep2026/domain";
+import {
+  ok,
+  type ReadVerifySettings,
+  type RequestRoute,
+  type Result,
+} from "@mamep2026/domain";
 import {
   createCancellationToken,
   type CancellationToken,
@@ -24,6 +29,8 @@ export interface WriteVerifyMeta {
   userAddress?: number;
   /** 外部取消令牌（2026-08-26）：延迟中取消 → cancelled-before-verify；缺省仅受 disconnect 影响。 */
   cancelToken?: CancellationToken;
+  /** 写入与回读共同使用的不可变路由快照。 */
+  route?: RequestRoute;
 }
 
 export class WriteVerifyCoordinator {
@@ -55,12 +62,16 @@ export class WriteVerifyCoordinator {
     settings: ReadVerifySettings,
     meta: WriteVerifyMeta = {},
   ): Promise<Result<WriteOutcome>> {
+    const resolvedRoute = meta.route
+      ? { ...meta.route }
+      : this.session.getCurrentRoute();
     // 阶段 1：写入（FC0x10，多值）。
     const writeResult = await this.session.writeRegisters(sentAddress, values, {
       source: "manual-write",
       ...(meta.userAddress !== undefined
         ? { userAddress: meta.userAddress }
         : {}),
+      route: resolvedRoute,
     });
     if (!writeResult.ok) return writeResult;
 
@@ -84,6 +95,7 @@ export class WriteVerifyCoordinator {
         settings,
         cancelToken,
         meta,
+        resolvedRoute,
       );
     } finally {
       unsubscribeExternal?.();
@@ -97,6 +109,7 @@ export class WriteVerifyCoordinator {
     settings: ReadVerifySettings,
     cancelToken: CancellationToken,
     meta: WriteVerifyMeta,
+    route: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
     // 阶段 2：可选延迟（可取消时钟）。
     if (
@@ -123,6 +136,7 @@ export class WriteVerifyCoordinator {
           ? { userAddress: meta.userAddress }
           : {}),
         cancelToken,
+        route,
       },
     );
     if (!readResult.ok) {

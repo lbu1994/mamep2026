@@ -30,6 +30,7 @@ import type {
   RtuConnectionProfile,
   TcpConnectionProfile,
   AddressTransform,
+  RequestRoute,
 } from "@mamep2026/domain";
 import { ok } from "@mamep2026/domain";
 
@@ -169,20 +170,28 @@ export class VscodeSessionHost {
     if (this.active === "rtu") this.rtu.setAddressTransform(config);
   }
 
-  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
-    return this.activeSession.readRow(row);
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
+    return this.activeSession.readRow(row, route);
   }
 
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
-    return this.activeSession.writeRow(row, options);
+    return this.activeSession.writeRow(row, options, route);
   }
 
   /** 全表读取：行结果经 poll-result 事件流上报（address 0），返回 BatchReadHandle。 */
-  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {
-    return this.activeSession.readAllRows(rows, batchId);
+  readAllRows(
+    rows: BatchReadRow[],
+    batchId?: string,
+    route?: RequestRoute,
+  ): BatchReadHandle {
+    return this.activeSession.readAllRows(rows, batchId, route);
   }
 
   /** 按 batchId 取消活动批任务（远程路径，ADR-025）：未知/已完成为安全 no-op。 */
@@ -190,7 +199,14 @@ export class VscodeSessionHost {
     this.activeSession.cancelBatch(batchId);
   }
 
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
+  updatePollingTargets(
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
+  ): void {
     this.activeSession.updatePollingTargets(rows);
   }
 
@@ -202,8 +218,14 @@ export class VscodeSessionHost {
     this.activeSession.stopPolling();
   }
 
-  traceStart(key: string, address: number, speedMs: number): void {
-    this.activeSession.traceStart(key, address, speedMs);
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+    route?: RequestRoute,
+  ): void {
+    this.activeSession.traceStart(key, address, speedMs, quantity, route);
   }
 
   traceStop(key: string): void {

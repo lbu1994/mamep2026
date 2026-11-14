@@ -24,6 +24,7 @@ import type {
   Result,
   TcpConnectionProfile,
   AddressTransform,
+  RequestRoute,
 } from "@mamep2026/domain";
 
 export interface ElectronSessionHostOptions {
@@ -78,19 +79,27 @@ export class ElectronSessionHost {
     return this.tcp.getConnectionState();
   }
 
-  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
-    return this.tcp.readRow(row);
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
+    return this.tcp.readRow(row, route);
   }
 
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
-    return this.tcp.writeRow(row, options);
+    return this.tcp.writeRow(row, options, route);
   }
 
-  readAllRows(rows: BatchReadRow[], batchId?: string): BatchReadHandle {
-    return this.tcp.readAllRows(rows, batchId);
+  readAllRows(
+    rows: BatchReadRow[],
+    batchId?: string,
+    route?: RequestRoute,
+  ): BatchReadHandle {
+    return this.tcp.readAllRows(rows, batchId, route);
   }
 
   /** 按 batchId 取消活动批任务（远程路径，ADR-025）：未知/已完成为安全 no-op。 */
@@ -98,7 +107,14 @@ export class ElectronSessionHost {
     this.tcp.cancelBatch(batchId);
   }
 
-  updatePollingTargets(rows: Array<{ key: string; address: number }>): void {
+  updatePollingTargets(
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
+  ): void {
     this.tcp.updatePollingTargets(rows);
   }
 
@@ -110,8 +126,14 @@ export class ElectronSessionHost {
     this.tcp.stopPolling();
   }
 
-  traceStart(key: string, address: number, speedMs: number): void {
-    this.tcp.traceStart(key, address, speedMs);
+  traceStart(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+    route?: RequestRoute,
+  ): void {
+    this.tcp.traceStart(key, address, speedMs, quantity, route);
   }
 
   traceStop(key: string): void {

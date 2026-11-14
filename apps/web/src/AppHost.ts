@@ -6,6 +6,7 @@ import type {
   PlatformCapabilities,
   ReadVerifySettings,
   RegisterRow,
+  RequestRoute,
   Result,
   RtuConnectionProfile,
   TcpConnectionProfile,
@@ -245,6 +246,11 @@ export class BrowserAppHost implements AppHost {
       communicationApiFactory: (pluginId) =>
         createPluginCommunicationApi({
           getSession: () => this.rtu.getSession(),
+          getRoute: () =>
+            this.rtu.getSession()?.getCurrentRoute() ?? {
+              unitAddress: this.currentSlaveAddress,
+              protocol: "rtu",
+            },
           pluginId,
         }),
       // 同步贡献注册面（ADR-054）：插件 activate 经 ctx.registries 注册同步能力。
@@ -471,6 +477,11 @@ export class BrowserAppHost implements AppHost {
     return createWebPluginRemoteRuntime(entrySource, (pluginId) =>
       createPluginCommunicationApi({
         getSession: () => this.rtu.getSession(),
+        getRoute: () =>
+          this.rtu.getSession()?.getCurrentRoute() ?? {
+            unitAddress: this.currentSlaveAddress,
+            protocol: "rtu",
+          },
         pluginId,
       }),
     );
@@ -868,23 +879,41 @@ export class BrowserAppHost implements AppHost {
     this.rtu.setAddressTransform(config);
   }
 
-  async readRow(row: RegisterRow): Promise<Result<number | number[]>> {
-    return this.rtu.readRow(row);
+  private fallbackRoute(): RequestRoute {
+    return (
+      this.rtu.getSession()?.getCurrentRoute() ?? {
+        unitAddress: this.currentSlaveAddress,
+        protocol: "rtu",
+      }
+    );
+  }
+
+  async readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
+    return this.rtu.readRow(row, route ?? this.fallbackRoute());
   }
 
   async writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
-    return this.rtu.writeRow(row, options);
+    return this.rtu.writeRow(row, options, route ?? this.fallbackRoute());
   }
 
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
-    return this.rtu.readAllRows(rows);
+  readAllRows(rows: BatchReadRow[], route?: RequestRoute): BatchReadHandle {
+    return this.rtu.readAllRows(rows, undefined, route ?? this.fallbackRoute());
   }
 
   updatePollingTargets(
-    rows: Array<{ key: string; address: number; quantity?: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
   ): void {
     this.rtu.updatePollingTargets(rows);
   }
@@ -913,8 +942,15 @@ export class BrowserAppHost implements AppHost {
     address: number,
     speedMs: number,
     quantity = 1,
+    route?: RequestRoute,
   ): void {
-    this.rtu.traceStart(key, address, speedMs, quantity);
+    this.rtu.traceStart(
+      key,
+      address,
+      speedMs,
+      quantity,
+      route ?? this.fallbackRoute(),
+    );
   }
 
   traceStop(key: string): void {

@@ -22,6 +22,7 @@ import {
   pluginRuntimeLoadPayloadSchema,
   pluginRuntimeUnloadPayloadSchema,
   pluginStoreDataPayloadSchema,
+  requestRoutePayloadSchema,
   registerRowPayloadSchema,
   rtuConnectionProfilePayloadSchema,
   sessionBatchCancelPayloadSchema,
@@ -36,6 +37,7 @@ import {
   type PluginRuntimeUnloadPayload,
   type PluginStoreDataPayload,
   type PluginStoreDataResponse,
+  type RequestRoutePayload,
   type ReadVerifySettingsPayload,
   type RegisterRowPayload,
   type SessionTcpConnectPayload,
@@ -381,7 +383,10 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   z.object({
     ...requestBase,
     kind: z.literal("session-read-row"),
-    payload: z.object({ row: registerRowPayloadSchema }),
+    payload: z.object({
+      row: registerRowPayloadSchema,
+      route: requestRoutePayloadSchema,
+    }),
   }),
   z.object({
     ...requestBase,
@@ -411,6 +416,7 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
           address: z.number(),
           /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
           quantity: z.number().int().min(1).optional(),
+          route: requestRoutePayloadSchema,
         }),
       ),
     }),
@@ -434,6 +440,7 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
       speedMs: z.number(),
       /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
       quantity: z.number().int().min(1).optional(),
+      route: requestRoutePayloadSchema,
     }),
   }),
   z.object({
@@ -759,21 +766,31 @@ export interface MamepHostApi {
     enabled: boolean;
   }): Promise<Result<null>>;
   /** 单行读（session-read-row）：经主进程统一调度器 FC03（多寄存器行返回 values[]，ADR-030）。 */
-  sessionReadRow(row: RegisterRowPayload): Promise<Result<number | number[]>>;
+  sessionReadRow(
+    row: RegisterRowPayload,
+    route: RequestRoutePayload,
+  ): Promise<Result<number | number[]>>;
   /** 单行写（session-write-row）：经主进程统一调度器 FC0x10；writeVerify 为每表写后回读配置（2026-08-26）。 */
   sessionWriteRow(
     row: RegisterRowPayload,
     writeVerify?: ReadVerifySettingsPayload,
+    route?: RequestRoutePayload,
   ): Promise<Result<WriteOutcomePayload>>;
   /** 全表读取（session-batch-read）：单次往返返回汇总 + 每行结果。 */
   sessionBatchRead(
     batchId: string,
     rows: BatchReadRowPayload[],
+    route: RequestRoutePayload,
   ): Promise<Result<SessionBatchReadResponse>>;
   /** 取消远程批任务（session-batch-cancel，ADR-025）：未知 batchId 为安全 no-op。 */
   sessionBatchCancel(batchId: string): Promise<Result<null>>;
   sessionUpdatePollingTargets(
-    rows: Array<{ key: string; address: number; quantity?: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route: RequestRoutePayload;
+    }>,
   ): Promise<Result<null>>;
   sessionPollingStart(): Promise<Result<null>>;
   sessionPollingStop(): Promise<Result<null>>;
@@ -782,6 +799,7 @@ export interface MamepHostApi {
     address: number,
     speedMs: number,
     quantity?: number,
+    route?: RequestRoutePayload,
   ): Promise<Result<null>>;
   sessionTraceStop(key: string): Promise<Result<null>>;
 }
@@ -837,21 +855,31 @@ export interface VscodeHostApi extends Omit<
   /** 保存插件存储（plugin-store-save，2026-08-30，ADR-038）：持久化已安装插件清单。 */
   pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>>;
   /** 单行读（session-read-row）：经 Extension Host 统一调度器 FC03（多寄存器行返回 values[]，ADR-030）。 */
-  sessionReadRow(row: RegisterRowPayload): Promise<Result<number | number[]>>;
+  sessionReadRow(
+    row: RegisterRowPayload,
+    route: RequestRoutePayload,
+  ): Promise<Result<number | number[]>>;
   /** 单行写（session-write-row）：经 Extension Host 统一调度器 FC0x10；writeVerify 为每表写后回读配置（2026-08-26）。 */
   sessionWriteRow(
     row: RegisterRowPayload,
     writeVerify?: ReadVerifySettingsPayload,
+    route?: RequestRoutePayload,
   ): Promise<Result<WriteOutcomePayload>>;
   /** 全表读取（session-batch-read）：单次往返返回汇总 + 每行结果。 */
   sessionBatchRead(
     batchId: string,
     rows: BatchReadRowPayload[],
+    route: RequestRoutePayload,
   ): Promise<Result<SessionBatchReadResponse>>;
   /** 取消远程批任务（session-batch-cancel，ADR-025）：未知 batchId 为安全 no-op。 */
   sessionBatchCancel(batchId: string): Promise<Result<null>>;
   sessionUpdatePollingTargets(
-    rows: Array<{ key: string; address: number; quantity?: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route: RequestRoutePayload;
+    }>,
   ): Promise<Result<null>>;
   sessionPollingStart(): Promise<Result<null>>;
   sessionPollingStop(): Promise<Result<null>>;
@@ -860,6 +888,7 @@ export interface VscodeHostApi extends Omit<
     address: number,
     speedMs: number,
     quantity?: number,
+    route?: RequestRoutePayload,
   ): Promise<Result<null>>;
   sessionTraceStop(key: string): Promise<Result<null>>;
   /** 打开并连接远程 TCP 会话（session-tcp-connect；profile 即连接参数，无串口句柄）。 */

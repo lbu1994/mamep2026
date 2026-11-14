@@ -25,6 +25,7 @@ import type {
   PlatformCapabilities,
   ReadVerifySettings,
   RegisterRow,
+  RequestRoute,
   Result,
   RtuConnectionProfile,
   TcpConnectionProfile,
@@ -129,6 +130,7 @@ export class ElectronAppHost implements AppHost {
   private activeProtocol: "rtu" | "tcp" | null = null;
   /** TCP 连接配置本地镜像（通信属性摘要用）。 */
   private tcpProfile: TcpConnectionProfile | null = null;
+  private currentTcpUnitId = 0;
   /** TCP 连接状态本地镜像（connection-state 事件刷新）。 */
   private tcpConnectionState: ConnectionState = "disconnected";
   private readonly connectionListeners = new Set<
@@ -419,6 +421,7 @@ export class ElectronAppHost implements AppHost {
       .then((r) => {
         if (!r.ok) return r;
         this.tcpProfile = profile;
+        this.currentTcpUnitId = profile.unitId;
         this.portLabel = `${profile.host}:${profile.port}`;
         this.tcpConnectionState = "connected";
         this.activeProtocol = "tcp";
@@ -525,9 +528,22 @@ export class ElectronAppHost implements AppHost {
   setSlaveAddress(slave: number): void {
     if (this.activeProtocol === "tcp") {
       void this.bridge.sessionSetUnitId(slave);
+      this.currentTcpUnitId = slave;
     } else {
       this.inner.setSlaveAddress(slave);
     }
+  }
+
+  private fallbackRoute(): RequestRoute {
+    if (this.activeProtocol === "tcp") {
+      return { unitAddress: this.currentTcpUnitId, protocol: "tcp" };
+    }
+    return (
+      this.inner.getSession()?.getCurrentRoute() ?? {
+        unitAddress: 1,
+        protocol: "rtu",
+      }
+    );
   }
 
   /** 更新活动表地址变换配置（ADR-042）：Electron RTU 会话本地（inner）；TCP 无地址变换（恒不调整）。 */
@@ -553,16 +569,23 @@ export class ElectronAppHost implements AppHost {
 
   // ---- 设备请求（统一调度器）：RTU 复用浏览器路径（inner）/ TCP 走主进程远程会话 ----
 
-  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
     if (this.activeProtocol === "tcp") {
-      return this.bridge.sessionReadRow(toRegisterRowPayload(row));
+      return this.bridge.sessionReadRow(
+        toRegisterRowPayload(row),
+        route ?? this.fallbackRoute(),
+      );
     }
-    return this.inner.readRow(row);
+    return this.inner.readRow(row, route ?? this.fallbackRoute());
   }
 
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
     if (this.activeProtocol === "tcp") {
       return this.bridge.sessionWriteRow(
@@ -570,12 +593,13 @@ export class ElectronAppHost implements AppHost {
         options?.writeVerify !== undefined
           ? toReadVerifySettingsPayload(options.writeVerify)
           : undefined,
+        route ?? this.fallbackRoute(),
       );
     }
-    return this.inner.writeRow(row, options);
+    return this.inner.writeRow(row, options, route ?? this.fallbackRoute());
   }
 
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
+  readAllRows(rows: BatchReadRow[], route?: RequestRoute): BatchReadHandle {
     if (this.activeProtocol === "tcp") {
       // 远程批任务（ADR-025）：batchId 由渲染端生成，取消经 session-batch-cancel RPC 通知主进程。
       const batchId = createBatchId();
@@ -588,6 +612,7 @@ export class ElectronAppHost implements AppHost {
             ? { quantity: r.quantity }
             : {}),
         })),
+        route ?? this.fallbackRoute(),
       );
       return {
         promise: handle.then((result) =>
@@ -601,16 +626,27 @@ export class ElectronAppHost implements AppHost {
         },
       };
     }
-    return this.inner.readAllRows(rows);
+    return this.inner.readAllRows(rows, route ?? this.fallbackRoute());
   }
 
   // ---- 轮询 / Trace / 日志：RTU 复用浏览器路径（inner）/ TCP 走主进程远程会话 ----
 
   updatePollingTargets(
-    rows: Array<{ key: string; address: number; quantity?: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
   ): void {
     if (this.activeProtocol === "tcp") {
-      void this.bridge.sessionUpdatePollingTargets(rows);
+      const fallback = this.fallbackRoute();
+      void this.bridge.sessionUpdatePollingTargets(
+        rows.map((row) => ({
+          ...row,
+          route: row.route ?? fallback,
+        })),
+      );
       return;
     }
     this.inner.updatePollingTargets(rows);
@@ -650,12 +686,25 @@ export class ElectronAppHost implements AppHost {
     address: number,
     speedMs: number,
     quantity = 1,
+    route?: RequestRoute,
   ): void {
     if (this.activeProtocol === "tcp") {
-      void this.bridge.sessionTraceStart(key, address, speedMs, quantity);
+      void this.bridge.sessionTraceStart(
+        key,
+        address,
+        speedMs,
+        quantity,
+        route ?? this.fallbackRoute(),
+      );
       return;
     }
-    this.inner.traceStart(key, address, speedMs, quantity);
+    this.inner.traceStart(
+      key,
+      address,
+      speedMs,
+      quantity,
+      route ?? this.fallbackRoute(),
+    );
   }
 
   traceStop(key: string): void {

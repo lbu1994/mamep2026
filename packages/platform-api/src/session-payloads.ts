@@ -112,6 +112,13 @@ export type SessionTcpConnectPayload = z.infer<
   typeof sessionTcpConnectPayloadSchema
 >;
 
+/** 请求路由快照（跨 HostMessage 边界校验）。 */
+export const requestRoutePayloadSchema = z.object({
+  unitAddress: z.number().int().min(0).max(255),
+  protocol: z.string().min(1),
+});
+export type RequestRoutePayload = z.infer<typeof requestRoutePayloadSchema>;
+
 // ---- RegisterRow ----
 
 /** dataType（ADR-043 E-3）：开放字符串，承载内置 + 插件类型。 */
@@ -228,6 +235,7 @@ export function readVerifySettingsFromPayload(
 export const sessionWriteRowPayloadSchema = z.object({
   row: registerRowPayloadSchema,
   writeVerify: readVerifySettingsPayloadSchema.optional(),
+  route: requestRoutePayloadSchema,
 });
 export type SessionWriteRowPayload = z.infer<
   typeof sessionWriteRowPayloadSchema
@@ -276,6 +284,7 @@ export function toBatchReadRowPayload(row: BatchReadRow): BatchReadRowPayload {
 export const sessionBatchReadPayloadSchema = z.object({
   batchId: z.string().min(1),
   rows: z.array(batchReadRowPayloadSchema),
+  route: requestRoutePayloadSchema,
 });
 export type SessionBatchReadPayload = z.infer<
   typeof sessionBatchReadPayloadSchema

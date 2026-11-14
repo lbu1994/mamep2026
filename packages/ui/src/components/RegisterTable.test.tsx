@@ -1309,6 +1309,10 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
 
     fireKeyOn(window, "F9");
     expect(readAllRows).toHaveBeenCalledTimes(1);
+    expect(readAllRows).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ unitAddress: 1, protocol: "rtu" }),
+    );
     // 运行态：取消按钮出现；再按 F9 = 取消（handle.cancel）。
     const cancel = screen.getByRole("button", { name: /Cancel/ });
     fireKeyOn(window, "F9");
@@ -1332,6 +1336,10 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     await waitFor(() => {
       expect(readRow).toHaveBeenCalledTimes(1);
     });
+    expect(readRow).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ unitAddress: 1, protocol: "rtu" }),
+    );
     await waitFor(() => {
       const row = useAppStore
         .getState()
@@ -1355,6 +1363,11 @@ describe("RegisterTable 键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     await waitFor(() => {
       expect(writeRow).toHaveBeenCalledTimes(1);
     });
+    expect(writeRow).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Object),
+      expect.objectContaining({ unitAddress: 1, protocol: "rtu" }),
+    );
   });
 
   it("Alt+P 切换选中行的轮询（WP）开关", () => {

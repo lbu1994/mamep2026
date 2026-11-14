@@ -4,7 +4,7 @@
  * - 每个轮询行最多一个正在执行的任务，任务未完成时跳过本轮（不积压）并记录 skipped tick；
  * - 不提供全部行持续轮询（ALL Polling）：只有传入的 targets 会被轮询。
  */
-import type { Result } from "@mamep2026/domain";
+import type { RequestRoute, Result } from "@mamep2026/domain";
 import type { Clock, TimeoutHandle } from "./clock";
 import type { CommunicationSession } from "./session";
 
@@ -13,6 +13,8 @@ export interface PollingTarget {
   address: number;
   /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
   quantity?: number;
+  /** 请求创建时固化的路由快照。 */
+  route?: RequestRoute;
 }
 
 export interface PollingCoordinatorOptions {
@@ -20,7 +22,7 @@ export interface PollingCoordinatorOptions {
 }
 
 export class PollingCoordinator {
-  private targets: PollingTarget[] = [];
+  private targets: Array<PollingTarget & { route: RequestRoute }> = [];
   private readonly inFlight = new Set<string>();
   private readonly skippedTicks = new Map<string, number>();
   /** 暂缓的轮询 key（写入+回读期间，§18.3）：tick 时与 inFlight 同语义跳过。 */
@@ -64,7 +66,12 @@ export class PollingCoordinator {
   }
 
   setTargets(targets: PollingTarget[]): void {
-    this.targets = [...targets];
+    this.targets = targets.map((target) => ({
+      ...target,
+      route: target.route
+        ? { ...target.route }
+        : this.session.getCurrentRoute(),
+    }));
   }
 
   /** 暂缓指定 key 的轮询（写入+回读期间，§18.3）；已暂缓为幂等 no-op。 */
@@ -116,10 +123,12 @@ export class PollingCoordinator {
           ? this.session.readRegisters(target.address, quantity, {
               source: "polling",
               priority: "polling",
+              route: target.route,
             })
           : this.session.readRegister(target.address, {
               source: "polling",
               priority: "polling",
+              route: target.route,
             });
       void request.then((result) => {
         this.inFlight.delete(target.key);

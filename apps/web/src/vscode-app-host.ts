@@ -20,6 +20,7 @@ import type {
   PlatformCapabilities,
   ReadVerifySettings,
   RegisterRow,
+  RequestRoute,
   Result,
   RtuConnectionProfile,
   TcpConnectionProfile,
@@ -486,6 +487,13 @@ export class VscodeAppHost implements AppHost {
     }
   }
 
+  private fallbackRoute(): RequestRoute {
+    return {
+      unitAddress: this.currentSlaveAddress,
+      protocol: this.currentProfile?.protocol === "tcp" ? "tcp" : "rtu",
+    };
+  }
+
   /** 更新活动表地址变换配置（ADR-042）：VSCode 会话在 Extension Host，经 session-set-address-transform RPC。 */
   setAddressTransform(
     config: {
@@ -506,23 +514,31 @@ export class VscodeAppHost implements AppHost {
 
   // ---- 寄存器读写 / 轮询 / Trace（远程会话 RPC）----
 
-  readRow(row: RegisterRow): Promise<Result<number | number[]>> {
-    return this.bridge.sessionReadRow(toRegisterRowPayload(row));
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
+    return this.bridge.sessionReadRow(
+      toRegisterRowPayload(row),
+      route ?? this.fallbackRoute(),
+    );
   }
 
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
     return this.bridge.sessionWriteRow(
       toRegisterRowPayload(row),
       options?.writeVerify !== undefined
         ? toReadVerifySettingsPayload(options.writeVerify)
         : undefined,
+      route ?? this.fallbackRoute(),
     );
   }
 
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle {
+  readAllRows(rows: BatchReadRow[], route?: RequestRoute): BatchReadHandle {
     // 远程代理：batchId 由渲染端生成（ADR-025），取消经 session-batch-cancel RPC 关联宿主批任务。
     const batchId = createBatchId();
     // 单次往返：行结果经 poll-result 事件流推送，响应只带汇总。
@@ -530,13 +546,15 @@ export class VscodeAppHost implements AppHost {
     const promise = new Promise<Result<BatchReadSummary>>((resolve) => {
       resolvePromise = resolve;
     });
-    void this.bridge.sessionBatchRead(batchId, rows).then((result) => {
-      if (result.ok) {
-        resolvePromise(ok(result.value.summary));
-      } else {
-        resolvePromise(result);
-      }
-    });
+    void this.bridge
+      .sessionBatchRead(batchId, rows, route ?? this.fallbackRoute())
+      .then((result) => {
+        if (result.ok) {
+          resolvePromise(ok(result.value.summary));
+        } else {
+          resolvePromise(result);
+        }
+      });
     return {
       promise,
       // 远程批任务取消（ADR-025）：经 session-batch-cancel RPC 通知宿主；幂等、异常安全。
@@ -547,9 +565,20 @@ export class VscodeAppHost implements AppHost {
   }
 
   updatePollingTargets(
-    rows: Array<{ key: string; address: number; quantity?: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
   ): void {
-    void this.bridge.sessionUpdatePollingTargets(rows);
+    const fallback = this.fallbackRoute();
+    void this.bridge.sessionUpdatePollingTargets(
+      rows.map((row) => ({
+        ...row,
+        route: row.route ?? fallback,
+      })),
+    );
   }
 
   startPolling(): void {
@@ -565,8 +594,15 @@ export class VscodeAppHost implements AppHost {
     address: number,
     speedMs: number,
     quantity = 1,
+    route?: RequestRoute,
   ): void {
-    void this.bridge.sessionTraceStart(key, address, speedMs, quantity);
+    void this.bridge.sessionTraceStart(
+      key,
+      address,
+      speedMs,
+      quantity,
+      route ?? this.fallbackRoute(),
+    );
   }
 
   traceStop(key: string): void {

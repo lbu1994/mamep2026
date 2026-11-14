@@ -662,19 +662,26 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
   it("session-read-row 重建 row 并返回数值", async () => {
     const session = makeSession();
     const result = await handleVscodeInvoke(
-      request("session-read-row", { row }),
+      request("session-read-row", {
+        row,
+        route: { unitAddress: 1, protocol: "rtu" },
+      }),
       makeDeps({ session }),
     );
     expect(result.type).toBe("response");
     if (result.type === "response") expect(result.payload).toBe(0x1234);
     expect(session.readRow).toHaveBeenCalledWith(
       expect.objectContaining({ rowId: "row-1", dataType: "hex" }),
+      { unitAddress: 1, protocol: "rtu" },
     );
   });
 
   it("session-write-row 返回 WriteOutcome payload", async () => {
     const result = await handleVscodeInvoke(
-      request("session-write-row", { row }),
+      request("session-write-row", {
+        row,
+        route: { unitAddress: 1, protocol: "rtu" },
+      }),
       makeDeps(),
     );
     expect(result.type).toBe("response");
@@ -697,6 +704,7 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
       request("session-write-row", {
         row,
         writeVerify: { mode: "delayed", delayMs: 200 },
+        route: { unitAddress: 1, protocol: "rtu" },
       }),
       makeDeps({ session }),
     );
@@ -704,6 +712,7 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     expect(session.writeRow).toHaveBeenCalledWith(
       expect.objectContaining({ rowId: "row-1" }),
       { writeVerify: { mode: "delayed", delayMs: 200 } },
+      { unitAddress: 1, protocol: "rtu" },
     );
     if (result.type === "response") {
       expect(result.payload).toEqual({
@@ -720,6 +729,7 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
       request("session-batch-read", {
         batchId: "batch-abc",
         rows: [{ key: "a", address: 1 }],
+        route: { unitAddress: 1, protocol: "rtu" },
       }),
       makeDeps({ session }),
     );
@@ -727,6 +737,7 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     expect(session.readAllRows).toHaveBeenCalledWith(
       [{ key: "a", address: 1 }],
       "batch-abc",
+      { unitAddress: 1, protocol: "rtu" },
     );
     if (result.type === "response") {
       expect(result.payload).toMatchObject({
@@ -782,11 +793,19 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
   it("session-trace-start 调用 traceStart", async () => {
     const session = makeSession();
     const result = await handleVscodeInvoke(
-      request("session-trace-start", { key: "k", address: 1, speedMs: 100 }),
+      request("session-trace-start", {
+        key: "k",
+        address: 1,
+        speedMs: 100,
+        route: { unitAddress: 1, protocol: "rtu" },
+      }),
       makeDeps({ session }),
     );
     expect(result.type).toBe("response");
-    expect(session.traceStart).toHaveBeenCalledWith("k", 1, 100);
+    expect(session.traceStart).toHaveBeenCalledWith("k", 1, 100, undefined, {
+      unitAddress: 1,
+      protocol: "rtu",
+    });
   });
 
   it("会话操作抛异常时返回 SESSION_INTERNAL_ERROR", async () => {
@@ -796,7 +815,10 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
       }),
     });
     const result = await handleVscodeInvoke(
-      request("session-read-row", { row }),
+      request("session-read-row", {
+        row,
+        route: { unitAddress: 1, protocol: "rtu" },
+      }),
       makeDeps({ session }),
     );
     expect(result.type).toBe("error");

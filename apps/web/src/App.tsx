@@ -2,7 +2,12 @@ import { useEffect, useRef } from "react";
 import type { AddressTransform } from "@mamep2026/domain";
 import type { CompatibilityEnv } from "@mamep2026/platform-web";
 import { buildPollingTargets } from "@mamep2026/register-table";
-import { MamepApp, useAppStore, type AppHost } from "@mamep2026/ui";
+import {
+  MamepApp,
+  requestProtocolResolver,
+  useAppStore,
+  type AppHost,
+} from "@mamep2026/ui";
 import { startAppHost } from "./host-assembly";
 import { detectAppPlatform } from "./platform-detect";
 import { createPlatformHostContext } from "./platform-context";
@@ -100,6 +105,7 @@ export default function App(): React.ReactNode {
       host.updatePollingTargets(
         buildPollingTargets(state.workspace.sheets, {
           resolveAddressTransform: resolveTransformRef.current,
+          resolveProtocol: requestProtocolResolver(host),
         }),
       );
     });

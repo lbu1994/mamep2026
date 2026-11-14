@@ -11,6 +11,7 @@ import {
   type AddressTransform,
   type ReadVerifySettings,
   type RegisterRow,
+  type RequestRoute,
   type Result,
 } from "@mamep2026/domain";
 import { fail } from "@mamep2026/domain";
@@ -70,7 +71,10 @@ export class RegisterTableService {
   }
 
   /** 单行读取（多寄存器行一次 FC03 读全部，ADR-030）：校验连接/地址/地址变换后经统一调度器。 */
-  async readRow(row: RegisterRow): Promise<Result<number | number[]>> {
+  async readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>> {
     const session = this.deps.getSession();
     if (session === null) return fail(notConnectedError());
     const address = row.addressValue?.value;
@@ -84,11 +88,13 @@ export class RegisterTableService {
       return session.readRegisters(sent.value, row.registerCount, {
         source: "manual-read",
         userAddress: address,
+        ...(route !== undefined ? { route } : {}),
       });
     }
     return session.readRegister(sent.value, {
       source: "manual-read",
       userAddress: address,
+      ...(route !== undefined ? { route } : {}),
     });
   }
 
@@ -110,6 +116,7 @@ export class RegisterTableService {
   async writeRow(
     row: RegisterRow,
     options: { writeVerify?: ReadVerifySettings } = {},
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>> {
     const session = this.deps.getSession();
     if (session === null) return fail(notConnectedError());
@@ -135,11 +142,13 @@ export class RegisterTableService {
         return session.writeRegisters(sent.value, values, {
           source: "manual-write",
           userAddress: address,
+          ...(route !== undefined ? { route } : {}),
         });
       }
       const coordinator = new WriteVerifyCoordinator(session, this.deps.clock);
       return coordinator.writeWithVerifyMany(sent.value, values, writeVerify, {
         userAddress: address,
+        ...(route !== undefined ? { route } : {}),
       });
     }
 
@@ -153,11 +162,13 @@ export class RegisterTableService {
       return session.writeRegister(sent.value, parsed.value, {
         source: "manual-write",
         userAddress: address,
+        ...(route !== undefined ? { route } : {}),
       });
     }
     const coordinator = new WriteVerifyCoordinator(session, this.deps.clock);
     return coordinator.writeWithVerify(sent.value, parsed.value, writeVerify, {
       userAddress: address,
+      ...(route !== undefined ? { route } : {}),
     });
   }
 

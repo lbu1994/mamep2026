@@ -21,6 +21,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import type { RegisterRow, RowId } from "@mamep2026/domain";
 import { useAppStore, type BufferSizeOption } from "../app-store";
+import { requestRouteForSheet } from "../request-route";
 
 const TRACE_SPEED_MIN = 100;
 const TRACE_SPEED_MAX = 2000;
@@ -46,6 +47,14 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   const row = useAppStore((s) =>
     s.workspace.sheets.flatMap((sh) => sh.rows).find((r) => r.rowId === rowId),
   );
+  const sheetRoute = useAppStore((s) => {
+    const sheet = s.workspace.sheets.find((candidate) =>
+      candidate.rows.some((candidateRow) => candidateRow.rowId === rowId),
+    );
+    return sheet === undefined
+      ? null
+      : { type: sheet.type, slaveAddress: sheet.slaveAddress };
+  });
   const windowModel = useAppStore((s) => s.traceWindows[rowId]);
   const closeTraceWindow = useAppStore((s) => s.closeTraceWindow);
   const setTracePlaying = useAppStore((s) => s.setTracePlaying);
@@ -59,16 +68,30 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
       windowModel?.playing &&
       row?.addressValue !== null &&
       row?.addressValue !== undefined &&
-      host !== null
+      host !== null &&
+      sheetRoute !== null
     ) {
       const address = row.addressValue.value;
-      host.traceStart(rowId, address, speedToInterval(windowModel.speed));
+      host.traceStart(
+        rowId,
+        address,
+        speedToInterval(windowModel.speed),
+        row.registerCount,
+        requestRouteForSheet(host, sheetRoute),
+      );
     } else {
       host?.traceStop(rowId);
     }
     return () => host?.traceStop(rowId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowModel?.playing, windowModel?.speed, row?.addressValue?.value]);
+  }, [
+    windowModel?.playing,
+    windowModel?.speed,
+    row?.addressValue?.value,
+    row?.registerCount,
+    sheetRoute?.type,
+    sheetRoute?.slaveAddress,
+  ]);
 
   // 窗口位置（拖动标题栏移动）；默认右上角，重新打开后回到默认位置。
   const [position, setPosition] = useState(() => ({

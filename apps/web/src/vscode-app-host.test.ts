@@ -534,6 +534,7 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
         rowId: row.rowId,
         addressValue: { value: 0x1000 },
       }),
+      { unitAddress: 1, protocol: "rtu" },
     );
     const write = await host.writeRow(row);
     expect(write.ok).toBe(true);
@@ -558,6 +559,7 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
         addressValue: { value: 0x1000 },
       }),
       { mode: "delayed", delayMs: 100 },
+      { unitAddress: 1, protocol: "rtu" },
     );
   });
 
@@ -667,12 +669,19 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
     host.traceStart("row-a", 1, 100);
-    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100, 1);
+    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100, 1, {
+      unitAddress: 1,
+      protocol: "rtu",
+    });
     host.traceStop("row-a");
     expect(bridge.sessionTraceStop).toHaveBeenCalledWith("row-a");
     host.updatePollingTargets([{ key: "row-a", address: 1 }]);
     expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalledWith([
-      { key: "row-a", address: 1 },
+      {
+        key: "row-a",
+        address: 1,
+        route: { unitAddress: 1, protocol: "rtu" },
+      },
     ]);
     host.startPolling();
     expect(bridge.sessionPollingStart).toHaveBeenCalled();

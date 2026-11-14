@@ -89,7 +89,14 @@ describe("buildPollingTargets", () => {
     const noAddr = RegisterTableService.createRow();
     noAddr.pollingEnabled = true;
     const targets = buildPollingTargets([makeSheet("s", [on, off, noAddr])]);
-    expect(targets).toEqual([{ key: on.rowId, address: 0x0001, quantity: 1 }]);
+    expect(targets).toEqual([
+      {
+        key: on.rowId,
+        address: 0x0001,
+        quantity: 1,
+        route: { unitAddress: 1, protocol: "rtu" },
+      },
+    ]);
   });
 
   it("applies the table Address Adjust offset when enabled", () => {
@@ -99,7 +106,14 @@ describe("buildPollingTargets", () => {
       [makeSheet("s", [row], { addressTransform: adjustOn() })],
       { resolveAddressTransform: resolveBuiltin },
     );
-    expect(targets).toEqual([{ key: row.rowId, address: 0x0002, quantity: 1 }]);
+    expect(targets).toEqual([
+      {
+        key: row.rowId,
+        address: 0x0002,
+        quantity: 1,
+        route: { unitAddress: 1, protocol: "rtu" },
+      },
+    ]);
   });
 
   it("skips address 0 rows when table Address Adjust is enabled", () => {
@@ -126,8 +140,50 @@ describe("buildPollingTargets", () => {
       { resolveAddressTransform: resolveBuiltin },
     );
     expect(targets).toEqual([
-      { key: onRow.rowId, address: 0x0002, quantity: 1 },
-      { key: offRow.rowId, address: 0x0005, quantity: 1 },
+      {
+        key: onRow.rowId,
+        address: 0x0002,
+        quantity: 1,
+        route: { unitAddress: 1, protocol: "rtu" },
+      },
+      {
+        key: offRow.rowId,
+        address: 0x0005,
+        quantity: 1,
+        route: { unitAddress: 1, protocol: "rtu" },
+      },
+    ]);
+  });
+
+  it("captures each sheet's Unit ID and resolved protocol", () => {
+    const rtuRow = makeRow(0x0001);
+    rtuRow.pollingEnabled = true;
+    const codecRow = makeRow(0x0002);
+    codecRow.pollingEnabled = true;
+    const rtuSheet = makeSheet("rtu", [rtuRow]);
+    rtuSheet.slaveAddress = 3;
+    const codecSheet = makeSheet("codec", [codecRow]);
+    codecSheet.type = "plugin:table";
+    codecSheet.slaveAddress = 7;
+
+    expect(
+      buildPollingTargets([rtuSheet, codecSheet], {
+        resolveProtocol: (sheetType) =>
+          sheetType === "plugin:table" ? "plugin-codec" : "rtu",
+      }),
+    ).toEqual([
+      {
+        key: rtuRow.rowId,
+        address: 0x0001,
+        quantity: 1,
+        route: { unitAddress: 3, protocol: "rtu" },
+      },
+      {
+        key: codecRow.rowId,
+        address: 0x0002,
+        quantity: 1,
+        route: { unitAddress: 7, protocol: "plugin-codec" },
+      },
     ]);
   });
 });

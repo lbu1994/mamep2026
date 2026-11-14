@@ -2,7 +2,7 @@
  * 全表读取协调器（docs/TECH_DESIGN.md §14、docs/AGENTS.md §15）。
  * 一次性批量读取：快照、跳过非法行、单行失败继续、可取消尚未执行的任务、输出汇总。
  */
-import { ok, type Result } from "@mamep2026/domain";
+import { ok, type RequestRoute, type Result } from "@mamep2026/domain";
 import { createCancellationToken } from "./cancellation";
 import type { Clock } from "./clock";
 import type { CommunicationSession } from "./session";
@@ -52,10 +52,12 @@ export class BatchReadCoordinator {
     rows: BatchReadRow[],
     onRowResult?: BatchRowResultListener,
     batchId?: string,
+    route?: RequestRoute,
   ): BatchReadHandle {
     // 显式 batchId 用于远程路径（渲染端生成随请求传入，ADR-025），保证汇总 batchId
     // 与请求关联一致；本地路径缺省时内部自增生成。
     const resolvedBatchId = batchId ?? `batch-${++this.seq}`;
+    const resolvedRoute = route ? { ...route } : this.session.getCurrentRoute();
     const cancelToken = createCancellationToken();
     const eligible = rows.filter((row) => row.address !== null);
     const skippedCount = rows.length - eligible.length;
@@ -101,12 +103,14 @@ export class BatchReadCoordinator {
                 priority: "batch-read",
                 group: resolvedBatchId,
                 cancelToken,
+                route: resolvedRoute,
               })
             : this.session.readRegister(row.address ?? 0, {
                 source: "batch-read",
                 priority: "batch-read",
                 group: resolvedBatchId,
                 cancelToken,
+                route: resolvedRoute,
               });
         void request.then((result) => {
           onRowResult?.(row.key, result);

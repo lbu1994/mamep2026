@@ -235,6 +235,7 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
       messageId: "req-read",
       kind: "session-read-row",
       payload: {
+        route: { unitAddress: 1, protocol: "rtu" },
         row: {
           rowId: "row-1",
           order: 1,
@@ -262,6 +263,7 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
       messageId: "req-read-plugin-type",
       kind: "session-read-row",
       payload: {
+        route: { unitAddress: 1, protocol: "rtu" },
         row: {
           rowId: "row-1",
           order: 1,

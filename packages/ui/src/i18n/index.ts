@@ -475,6 +475,8 @@ export const en = {
     writeVerifyMismatch:
       "Write succeeded but read-back differs ({{address}}): expected {{expected}}, read {{read}}.",
     readAllFailed: "Read All failed: {{detail}}",
+    requestRouteProtocolSkipped:
+      "Requests skipped for tables using unsupported protocol(s): {{protocols}}.",
     clipboardWriteFailed: "System clipboard write failed: {{detail}}",
     pasteIssues: "{{count}} pasted row(s) contain invalid data.",
     clipboardTypeMismatch:
@@ -496,6 +498,9 @@ export const en = {
   errors: {
     notConnected: "Not connected to a device.",
     requestTimeout: "No response from the device within the timeout.",
+    requestRouteInvalid: "The request contains an invalid unit address.",
+    requestRouteProtocolMismatch:
+      "The request protocol does not match the active connection protocol.",
     writeVerifyMismatch: "Write succeeded but the read-back value differs.",
     modbusException: "The device returned a Modbus exception.",
     cancelled: "Cancelled.",
@@ -1009,6 +1014,8 @@ export const zh: TranslationResources = {
     writeVerifyMismatch:
       "写入成功但回读不一致（{{address}}）：期望 {{expected}}，回读 {{read}}。",
     readAllFailed: "全表读取失败：{{detail}}",
+    requestRouteProtocolSkipped:
+      "已跳过使用不兼容协议的表的请求：{{protocols}}。",
     clipboardWriteFailed: "系统剪贴板写入失败：{{detail}}",
     pasteIssues: "{{count}} 行粘贴数据包含无效内容。",
     clipboardTypeMismatch: "不同类型的表之间不可复制粘贴。",
@@ -1028,6 +1035,8 @@ export const zh: TranslationResources = {
   errors: {
     notConnected: "未连接设备。",
     requestTimeout: "设备在超时时间内未响应。",
+    requestRouteInvalid: "请求包含无效的从站地址或 Unit ID。",
+    requestRouteProtocolMismatch: "请求协议与当前连接协议不匹配。",
     writeVerifyMismatch: "写入成功但回读值不一致。",
     modbusException: "设备返回 Modbus 异常。",
     cancelled: "已取消。",

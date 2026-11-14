@@ -8,6 +8,7 @@
 import {
   createMamepError,
   type MamepError,
+  type RequestRoute,
   type Result,
   type RtuConnectionProfile,
   type TcpConnectionProfile,
@@ -83,6 +84,8 @@ export interface ReadRegistersMeta {
   cancelToken?: CancellationToken;
   /** 发起插件 id（source="plugin" 时必填，流入通信日志；ADR-039）。 */
   pluginId?: string | null;
+  /** 请求创建时的路由快照；缺省时在本方法入队前快照当前会话地址。 */
+  route?: RequestRoute;
 }
 
 /** 写请求元数据（多寄存器 values 由 writeRegisters 传入，ADR-030）。 */
@@ -93,10 +96,13 @@ export interface WriteRegistersMeta {
   priority?: RequestPriority;
   /** 发起插件 id（source="plugin" 时必填，流入通信日志；ADR-039）。 */
   pluginId?: string | null;
+  /** 请求创建时的路由快照；缺省时在本方法入队前快照当前会话地址。 */
+  route?: RequestRoute;
 }
 
 interface ExchangeMeta {
   source: RequestSource;
+  unitAddress: number;
   userAddress: number | null;
   sentAddress: number | null;
   /** 功能码（codec 路径由 codec 自定义，日志记录为 null；ADR-040）。 */
@@ -104,6 +110,8 @@ interface ExchangeMeta {
   quantity: number;
   pluginId: string | null;
 }
+
+type ResolvedRequestRoute = Readonly<RequestRoute>;
 
 /** 会话协议：rtu（默认）/ tcp（2026-08-23 TCP 接线）。 */
 export type SessionProtocol = "rtu" | "tcp";
@@ -219,6 +227,31 @@ function quantityOutOfRangeError(
     retryable: false,
     userMessageKey: "errors.internal",
     technicalMessage: `invalid ${operation} quantity: ${quantity}`,
+  });
+}
+
+function requestRouteInvalidError(unitAddress: number): MamepError {
+  return createMamepError({
+    code: "REQUEST_ROUTE_INVALID",
+    category: "validation",
+    severity: "error",
+    retryable: false,
+    userMessageKey: "errors.requestRouteInvalid",
+    technicalMessage: `invalid unit address in request route: ${unitAddress}`,
+  });
+}
+
+function requestRouteProtocolMismatchError(
+  requestProtocol: string,
+  sessionProtocol: string,
+): MamepError {
+  return createMamepError({
+    code: "REQUEST_ROUTE_PROTOCOL_MISMATCH",
+    category: "capability",
+    severity: "warning",
+    retryable: false,
+    userMessageKey: "errors.requestRouteProtocolMismatch",
+    technicalMessage: `request protocol ${requestProtocol} does not match session protocol ${sessionProtocol}`,
   });
 }
 
@@ -478,6 +511,46 @@ export class CommunicationSession {
     this.unitId = unitId;
   }
 
+  /** 当前会话协议（rtu / tcp / codecId）：供应用层筛选兼容轮询与 Trace 路由。 */
+  getProtocol(): string {
+    return this.protocol;
+  }
+
+  /** 当前兼容上下文快照：仅用于无显式路由的插件/旧调用在创建时取一次。 */
+  getCurrentRoute(): RequestRoute {
+    return {
+      unitAddress: this.logUnitAddress(),
+      protocol: this.protocol,
+    };
+  }
+
+  /**
+   * 在请求创建/入队边界固化路由。未显式提供路由的兼容调用也只在这里读取一次
+   * 可变会话地址，之后排队、重试和日志均使用返回的只读快照。
+   */
+  private resolveRequestRoute(
+    route: RequestRoute | undefined,
+  ): Result<ResolvedRequestRoute> {
+    const unitAddress = route?.unitAddress ?? this.logUnitAddress();
+    if (
+      !Number.isInteger(unitAddress) ||
+      unitAddress < 0 ||
+      unitAddress > 255
+    ) {
+      return fail(requestRouteInvalidError(unitAddress));
+    }
+    const protocol = route?.protocol ?? this.protocol;
+    if (protocol !== this.protocol) {
+      return fail(requestRouteProtocolMismatchError(protocol, this.protocol));
+    }
+    return ok(
+      Object.freeze({
+        unitAddress,
+        protocol,
+      }),
+    );
+  }
+
   getConfig(): RtuConnectionProfile | TcpConnectionProfile {
     return this.options.config;
   }
@@ -544,14 +617,17 @@ export class CommunicationSession {
     ) {
       return Promise.resolve(fail(quantityOutOfRangeError("read", quantity)));
     }
+    const route = this.resolveRequestRoute(meta.route);
+    if (!route.ok) return Promise.resolve(route);
     const run =
       this.codec !== null
         ? () =>
             this.executeCodecRead(
               contiguousAddresses(sentAddress, quantity),
               meta,
+              route.value,
             )
-        : () => this.executeRead(sentAddress, quantity, meta);
+        : () => this.executeRead(sentAddress, quantity, meta, route.value);
     return this.scheduler
       .enqueue(run, {
         priority: meta.priority ?? "manual-read",
@@ -581,8 +657,10 @@ export class CommunicationSession {
         fail(quantityOutOfRangeError("read", addresses.length)),
       );
     }
+    const route = this.resolveRequestRoute(meta.route);
+    if (!route.ok) return Promise.resolve(route);
     return this.scheduler
-      .enqueue(() => this.executeCodecRead(addresses, meta), {
+      .enqueue(() => this.executeCodecRead(addresses, meta, route.value), {
         priority: meta.priority ?? "manual-read",
         group: meta.group,
         cancelToken: meta.cancelToken,
@@ -612,6 +690,8 @@ export class CommunicationSession {
         fail(quantityOutOfRangeError("write", values.length)),
       );
     }
+    const route = this.resolveRequestRoute(meta.route);
+    if (!route.ok) return Promise.resolve(route);
     const run =
       this.codec !== null
         ? () =>
@@ -621,8 +701,9 @@ export class CommunicationSession {
                 value,
               })),
               meta,
+              route.value,
             )
-        : () => this.executeWrite(sentAddress, values, meta);
+        : () => this.executeWrite(sentAddress, values, meta, route.value);
     return this.scheduler.enqueue(run, {
       priority: meta.priority ?? "manual-write",
     });
@@ -648,20 +729,27 @@ export class CommunicationSession {
         fail(quantityOutOfRangeError("write", entries.length)),
       );
     }
-    return this.scheduler.enqueue(() => this.executeCodecWrite(entries, meta), {
-      priority: meta.priority ?? "manual-write",
-    });
+    const route = this.resolveRequestRoute(meta.route);
+    if (!route.ok) return Promise.resolve(route);
+    return this.scheduler.enqueue(
+      () => this.executeCodecWrite(entries, meta, route.value),
+      {
+        priority: meta.priority ?? "manual-write",
+      },
+    );
   }
 
   private async executeRead(
     sentAddress: number,
     quantity: number,
     meta: ReadRegistersMeta,
+    route: ResolvedRequestRoute,
   ): Promise<Result<number[]>> {
     const decoded = await this.executeExchange<DecodedResponse>(
-      () => this.buildReadAttempt(sentAddress, quantity),
+      () => this.buildReadAttempt(sentAddress, quantity, route),
       {
         source: meta.source,
+        unitAddress: route.unitAddress,
         userAddress: meta.userAddress ?? null,
         sentAddress,
         functionCode: FUNCTION_READ_HOLDING,
@@ -692,11 +780,13 @@ export class CommunicationSession {
     sentAddress: number,
     values: number[],
     meta: WriteRegistersMeta,
+    route: ResolvedRequestRoute,
   ): Promise<Result<WriteOutcome>> {
     const decoded = await this.executeExchange<DecodedResponse>(
-      () => this.buildWriteAttempt(sentAddress, values),
+      () => this.buildWriteAttempt(sentAddress, values, route),
       {
         source: meta.source,
+        unitAddress: route.unitAddress,
         userAddress: meta.userAddress ?? null,
         sentAddress,
         functionCode: FUNCTION_WRITE_MULTIPLE,
@@ -728,13 +818,15 @@ export class CommunicationSession {
   private async executeCodecRead(
     addresses: number[],
     meta: ReadRegistersMeta,
+    route: ResolvedRequestRoute,
   ): Promise<Result<number[]>> {
     const codec = this.codec;
     if (codec === null) return fail(codecRequiredError());
     const decoded = await this.executeExchange<CodecDecodedResponse>(
-      () => this.buildCodecReadAttempt(codec, addresses),
+      () => this.buildCodecReadAttempt(codec, addresses, route),
       {
         source: meta.source,
+        unitAddress: route.unitAddress,
         userAddress: meta.userAddress ?? null,
         sentAddress: addresses[0] ?? null,
         functionCode: null,
@@ -756,13 +848,15 @@ export class CommunicationSession {
   private async executeCodecWrite(
     entries: CodecWriteEntry[],
     meta: WriteRegistersMeta,
+    route: ResolvedRequestRoute,
   ): Promise<Result<WriteOutcome>> {
     const codec = this.codec;
     if (codec === null) return fail(codecRequiredError());
     const decoded = await this.executeExchange<CodecDecodedResponse>(
-      () => this.buildCodecWriteAttempt(codec, entries),
+      () => this.buildCodecWriteAttempt(codec, entries, route),
       {
         source: meta.source,
+        unitAddress: route.unitAddress,
         userAddress: meta.userAddress ?? null,
         sentAddress: entries[0]?.address ?? null,
         functionCode: null,
@@ -784,13 +878,14 @@ export class CommunicationSession {
   private buildCodecReadAttempt(
     codec: ProtocolCodec,
     addresses: number[],
+    route: ResolvedRequestRoute,
   ): {
     frame: Uint8Array;
     expect: CodecExpect;
     parser: FrameParser;
   } {
     const request: CodecReadRequest = {
-      slaveAddress: this.slaveAddress,
+      slaveAddress: route.unitAddress,
       addresses,
     };
     const expect: CodecExpect = {
@@ -809,13 +904,14 @@ export class CommunicationSession {
   private buildCodecWriteAttempt(
     codec: ProtocolCodec,
     entries: CodecWriteEntry[],
+    route: ResolvedRequestRoute,
   ): {
     frame: Uint8Array;
     expect: CodecExpect;
     parser: FrameParser;
   } {
     const request: CodecWriteRequest = {
-      slaveAddress: this.slaveAddress,
+      slaveAddress: route.unitAddress,
       entries,
     };
     const expect: CodecExpect = {
@@ -860,7 +956,7 @@ export class CommunicationSession {
         direction: "request",
         bytes: frame,
         protocol: this.protocol,
-        slaveAddress: this.logUnitAddress(),
+        slaveAddress: meta.unitAddress,
         functionCode: meta.functionCode,
         userAddress: meta.userAddress,
         sentAddress: meta.sentAddress,
@@ -954,6 +1050,7 @@ export class CommunicationSession {
   private buildReadAttempt(
     sentAddress: number,
     quantity: number,
+    route: ResolvedRequestRoute,
   ): {
     frame: Uint8Array;
     expect: ExpectedResponse | TcpExpectedResponse;
@@ -963,14 +1060,14 @@ export class CommunicationSession {
       return {
         frame: encodeTcpReadHoldingRegistersRequest({
           transactionId,
-          unitId: this.unitId,
+          unitId: route.unitAddress,
           startAddress: sentAddress,
           quantity,
         }),
         expect: {
           kind: "read-holding",
           transactionId,
-          unitId: this.unitId,
+          unitId: route.unitAddress,
           startAddress: sentAddress,
           quantity,
         },
@@ -978,13 +1075,13 @@ export class CommunicationSession {
     }
     return {
       frame: encodeReadHoldingRegistersRequest({
-        slaveAddress: this.slaveAddress,
+        slaveAddress: route.unitAddress,
         startAddress: sentAddress,
         quantity,
       }),
       expect: {
         kind: "read-holding",
-        slaveAddress: this.slaveAddress,
+        slaveAddress: route.unitAddress,
         startAddress: sentAddress,
         quantity,
       },
@@ -995,6 +1092,7 @@ export class CommunicationSession {
   private buildWriteAttempt(
     sentAddress: number,
     values: number[],
+    route: ResolvedRequestRoute,
   ): {
     frame: Uint8Array;
     expect: ExpectedResponse | TcpExpectedResponse;
@@ -1004,14 +1102,14 @@ export class CommunicationSession {
       return {
         frame: encodeTcpWriteMultipleRegistersRequest({
           transactionId,
-          unitId: this.unitId,
+          unitId: route.unitAddress,
           startAddress: sentAddress,
           values,
         }),
         expect: {
           kind: "write-multiple",
           transactionId,
-          unitId: this.unitId,
+          unitId: route.unitAddress,
           address: sentAddress,
           quantity: values.length,
         },
@@ -1019,13 +1117,13 @@ export class CommunicationSession {
     }
     return {
       frame: encodeWriteMultipleRegistersRequest({
-        slaveAddress: this.slaveAddress,
+        slaveAddress: route.unitAddress,
         startAddress: sentAddress,
         values,
       }),
       expect: {
         kind: "write-multiple",
-        slaveAddress: this.slaveAddress,
+        slaveAddress: route.unitAddress,
         address: sentAddress,
         quantity: values.length,
       },
@@ -1112,7 +1210,7 @@ export class CommunicationSession {
       direction: "response",
       bytes,
       protocol: this.protocol,
-      slaveAddress: this.logUnitAddress(),
+      slaveAddress: meta.unitAddress,
       functionCode: meta.functionCode,
       userAddress: meta.userAddress,
       sentAddress: meta.sentAddress,

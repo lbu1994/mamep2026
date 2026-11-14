@@ -86,6 +86,36 @@ async function completeWrite(
 }
 
 describe("WriteVerifyCoordinator 写后回读（§15.3 / §18.2）", () => {
+  it("uses one route snapshot for both write and verify read", async () => {
+    const { clock, transport, session } = makeSession();
+    await session.connect();
+    const coordinator = new WriteVerifyCoordinator(session, clock);
+    const promise = coordinator.writeWithVerify(
+      0x0001,
+      0x1234,
+      { mode: "immediate", delayMs: null },
+      {
+        userAddress: 0x0001,
+        route: { unitAddress: 5, protocol: "rtu" },
+      },
+    );
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    session.setSlaveAddress(9);
+    transport.simulateData(writeResponse(5, 0x0001));
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    expect(transport.sentFrames[0]?.[0]).toBe(5);
+    expect(transport.sentFrames[1]?.[0]).toBe(5);
+    transport.simulateData(readResponse(5, 0x1234));
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toEqual({
+        kind: "write-succeeded-verify-matched",
+        readValues: [0x1234],
+      });
+    }
+  });
+
   it("OFF：写入成功不回读，返回 write-succeeded-no-verify", async () => {
     const { clock, transport, session } = makeSession();
     await session.connect();

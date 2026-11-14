@@ -2,7 +2,7 @@
  * 轨迹追踪协调器（TM）：按 Speed 设定的间隔对目标寄存器持续采样。
  * 采样走统一调度器；缓冲与历史数据由调用方（register-table / UI）管理。
  */
-import type { Result } from "@mamep2026/domain";
+import type { RequestRoute, Result } from "@mamep2026/domain";
 import type { Clock, TimeoutHandle } from "./clock";
 import type { CommunicationSession } from "./session";
 
@@ -19,6 +19,7 @@ interface TraceEntry {
   speedMs: number;
   /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时采样组合数值。 */
   quantity: number;
+  route: RequestRoute;
   timer: TimeoutHandle | null;
   inFlight: boolean;
   sequence: number;
@@ -40,13 +41,20 @@ export class TraceCoordinator {
     return () => this.listeners.delete(listener);
   }
 
-  start(key: string, address: number, speedMs: number, quantity = 1): void {
+  start(
+    key: string,
+    address: number,
+    speedMs: number,
+    quantity = 1,
+    route?: RequestRoute,
+  ): void {
     this.stop(key);
     const entry: TraceEntry = {
       key,
       address,
       speedMs,
       quantity,
+      route: route ? { ...route } : this.session.getCurrentRoute(),
       timer: null,
       inFlight: false,
       sequence: 0,
@@ -86,10 +94,12 @@ export class TraceCoordinator {
         ? this.session.readRegisters(entry.address, entry.quantity, {
             source: "trace",
             priority: "polling",
+            route: entry.route,
           })
         : this.session.readRegister(entry.address, {
             source: "trace",
             priority: "polling",
+            route: entry.route,
           });
     void request.then((result: Result<number | number[]>) => {
       entry.inFlight = false;

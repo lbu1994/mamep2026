@@ -22,6 +22,7 @@ import type {
   PluginStoreDataPayload,
   PluginStoreDataResponse,
   RegisterRowPayload,
+  RequestRoutePayload,
   SaveTextFileResponse,
   SessionBatchReadResponse,
   SessionStateResponse,
@@ -188,32 +189,44 @@ const api: MamepHostApi = {
   }): Promise<Result<null>> {
     return invoke<null>("session-set-address-transform", config);
   },
-  sessionReadRow(row: RegisterRowPayload): Promise<Result<number>> {
-    return invoke<number>("session-read-row", { row });
+  sessionReadRow(
+    row: RegisterRowPayload,
+    route: RequestRoutePayload,
+  ): Promise<Result<number>> {
+    return invoke<number>("session-read-row", { row, route });
   },
   sessionWriteRow(
     row: RegisterRowPayload,
     writeVerify?: ReadVerifySettingsPayload,
+    route?: RequestRoutePayload,
   ): Promise<Result<WriteOutcomePayload>> {
     return invoke<WriteOutcomePayload>("session-write-row", {
       row,
       ...(writeVerify !== undefined ? { writeVerify } : {}),
+      ...(route !== undefined ? { route } : {}),
     });
   },
   sessionBatchRead(
     batchId: string,
     rows: BatchReadRowPayload[],
+    route: RequestRoutePayload,
   ): Promise<Result<SessionBatchReadResponse>> {
     return invoke<SessionBatchReadResponse>("session-batch-read", {
       batchId,
       rows,
+      route,
     });
   },
   sessionBatchCancel(batchId: string): Promise<Result<null>> {
     return invoke<null>("session-batch-cancel", { batchId });
   },
   sessionUpdatePollingTargets(
-    rows: Array<{ key: string; address: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      route: RequestRoutePayload;
+      quantity?: number;
+    }>,
   ): Promise<Result<null>> {
     return invoke<null>("session-update-polling-targets", { rows });
   },
@@ -227,8 +240,16 @@ const api: MamepHostApi = {
     key: string,
     address: number,
     speedMs: number,
+    quantity?: number,
+    route?: RequestRoutePayload,
   ): Promise<Result<null>> {
-    return invoke<null>("session-trace-start", { key, address, speedMs });
+    return invoke<null>("session-trace-start", {
+      key,
+      address,
+      speedMs,
+      ...(quantity !== undefined ? { quantity } : {}),
+      ...(route !== undefined ? { route } : {}),
+    });
   },
   sessionTraceStop(key: string): Promise<Result<null>> {
     return invoke<null>("session-trace-stop", { key });

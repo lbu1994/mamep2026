@@ -8,6 +8,7 @@ import type {
   PlatformCapabilities,
   ReadVerifySettings,
   RegisterRow,
+  RequestRoute,
   Result,
   RtuConnectionProfile,
   TcpConnectionProfile,
@@ -192,7 +193,10 @@ export interface AppHost {
   ): () => void;
 
   /** 单行读取（多寄存器行返回 values[]，ADR-030）。 */
-  readRow(row: RegisterRow): Promise<Result<number | number[]>>;
+  readRow(
+    row: RegisterRow,
+    route?: RequestRoute,
+  ): Promise<Result<number | number[]>>;
   /**
    * 单行写（FC0x10）。options.writeVerify（2026-08-26）：每表写后回读配置，
    * 非 off 时写入后按配置（立即/延迟）FC03 回读，返回扩展的 WriteOutcome（§18.2）。
@@ -200,12 +204,18 @@ export interface AppHost {
   writeRow(
     row: RegisterRow,
     options?: { writeVerify?: ReadVerifySettings },
+    route?: RequestRoute,
   ): Promise<Result<WriteOutcome>>;
-  readAllRows(rows: BatchReadRow[]): BatchReadHandle;
+  readAllRows(rows: BatchReadRow[], route?: RequestRoute): BatchReadHandle;
 
   /** WP 轮询：传入当前启用轮询的有效行（多寄存器行携带 quantity，ADR-030）。 */
   updatePollingTargets(
-    rows: Array<{ key: string; address: number; quantity?: number }>,
+    rows: Array<{
+      key: string;
+      address: number;
+      quantity?: number;
+      route?: RequestRoute;
+    }>,
   ): void;
   startPolling(): void;
   stopPolling(): void;
@@ -222,6 +232,7 @@ export interface AppHost {
     address: number,
     speedMs: number,
     quantity?: number,
+    route?: RequestRoute,
   ): void;
   traceStop(key: string): void;
   subscribeTraceSample(

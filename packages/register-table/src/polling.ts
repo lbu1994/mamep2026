@@ -11,6 +11,7 @@ import type {
   AddressTransform,
   RegisterRow,
   RegisterSheet,
+  RequestRoute,
 } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { applyAddressTransform, resolveSheetAddressTransform } from "./address";
@@ -21,6 +22,8 @@ export interface PollingTarget {
   address: number;
   /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
   quantity?: number;
+  /** 由所属表创建的路由快照。 */
+  route: RequestRoute;
 }
 
 /** 解析表级地址变换（ADR-042）：启用时返回变换；未配置/关闭/未知 id 返回 null。 */
@@ -36,9 +39,11 @@ export function buildPollingTargets(
   sheets: readonly RegisterSheet[],
   options?: {
     resolveAddressTransform?: (id: string) => AddressTransform | null;
+    resolveProtocol?: (sheetType: string) => string;
   },
 ): PollingTarget[] {
   const resolve = options?.resolveAddressTransform;
+  const resolveProtocol = options?.resolveProtocol ?? (() => "rtu");
   const targets: PollingTarget[] = [];
   for (const sheet of sheets) {
     const transform = sheetTransform(sheet, resolve);
@@ -53,6 +58,10 @@ export function buildPollingTargets(
         address: sent.value,
         // 多寄存器行（ADR-030）：一次 FC03 轮询全部连续寄存器。
         quantity: row.registerCount,
+        route: {
+          unitAddress: sheet.slaveAddress,
+          protocol: resolveProtocol(sheet.type),
+        },
       });
     }
   }
