@@ -17,6 +17,16 @@
 - 转发结构化事件；
 - 在停用时释放连接。
 
+### 宿主插件执行
+
+Extension Host 从 `GlobalStatePluginStore` 读取与 Webview 共用的插件记录，通过 Node 宿主插件运行时装配宿主侧 codec 与地址变换。基础表 codec 仍由核心注册；插件 codec 覆盖在宿主插件注册表上。
+
+宿主只加载已启用、`executionMode: "same-process"` 且带 `entrySource` 的插件。RTU 会话在 Extension Host 中承载，因此插件 codec 和表级地址变换可沿真实 RPC 路径生效。插件集合变化必须全量重建 dataType 与 addressTransform 注册表，卸载或禁用后不得继续解析其贡献。
+
+插件 Webview 保存成功后触发宿主同步；保存失败不得同步。扩展停用时注销宿主插件并释放可重建注册表。Webview 不直接加载或执行 Node Host 插件，也不取得插件 entry 或注册表对象。
+
+插件 entrySource 当前随插件记录保存在全局状态中。较大的插件记录可能触发 VSCode 的大扩展状态警告；需要承载大体积可执行插件时，应迁移到 `globalStorageUri` 等文件存储，并保持当前受控加载与同步契约不变。
+
 ### webview
 
 职责：

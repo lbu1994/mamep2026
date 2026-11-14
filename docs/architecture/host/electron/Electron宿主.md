@@ -18,6 +18,23 @@
 - 安全 IPC 处理；
 - 自动更新的后续接入边界。
 
+### 宿主插件执行
+
+主进程从 Electron 插件存储加载宿主插件，并通过 Node 宿主插件运行时构造会话所需的 codec 注册表和地址变换解析器。插件代码不得由 Main、Preload 或 Renderer 静态 import。
+
+装配与同步规则：
+
+- 只加载已启用、`executionMode: "same-process"` 且带 `entrySource` 的插件；
+- 启动时同步一次，插件存储保存成功后再次同步；
+- 启用插件集合或其 entrySource 变化时，以新建的 dataType、addressTransform 注册表全量重建；
+- 保存失败不触发同步；
+- Main 退出时注销宿主插件并释放可重建注册表；
+- 加载和激活错误只影响对应插件，并上报宿主诊断。
+
+宿主插件运行时不能依赖 serialport 等 Electron 专用能力。Renderer 仍只能通过版本化 HostMessage 调用 Main，不取得 Node.js、文件系统或插件执行对象。
+
+当前 Electron RTU 会话位于 Renderer，TCP 路径也未消费宿主地址变换或插件 codec。因此宿主执行面已经装配并可验证加载、卸载和释放，但尚不一定形成用户可见的协议扩展路径。新增 TCP 插件 codec 路由或 TCP 地址变换时必须复用现有宿主注册表，不得恢复静态插件 import。
+
 ### preload
 
 职责：
