@@ -19,6 +19,17 @@ Electron 和 VSCode 共用 Node TCP Adapter。
 
 是否自动重连不由 Adapter 决定，而由 Application 层的连接策略决定。
 
+Adapter 与协议会话的边界：
+
+- `NodeTcpTransport` 负责 DNS/Socket、连接、原始字节、关闭和错误映射；
+- `TcpConnectionProfile` 是 Domain/Workspace 中的可持久化连接参数；
+- `TcpFrameParser` 在 `CommunicationSession` 中按 MBAP Length 分帧，并隔离半包、粘包、非法
+  Length 与迟到响应；
+- Transaction ID 由会话层按每次尝试分配，Adapter 不解释功能码或事务语义。
+
+Electron TCP 会话在 Main，VSCode TCP 会话在 Extension Host；两端共用 Adapter 与通信核心，
+但各自负责进程生命周期、消息桥、原生依赖安装和打包。
+
 
 ## 2. Modbus TCP 原型
 

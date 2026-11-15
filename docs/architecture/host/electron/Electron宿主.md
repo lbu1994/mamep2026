@@ -4,6 +4,23 @@
 
 Electron 已迁移到 `apps/electron/`，主进程 `src/main/main.ts`、preload `src/preload/preload.ts`，Renderer 复用 `apps/web` 的共享 UI。RTU 当前走 Renderer Web Serial 与主进程 `select-serial-port` 协调；TCP 会话和文件工作区由 Main 承载；Renderer 的 `ElectronAppHost` 按协议路由本地 RTU 与远程 TCP。工作区持久化使用应用数据目录中的版本化 JSON、原子替换和单份备份恢复。`debug:get-state` 是 dev 探针，打包后禁用。
 
+### 混合会话与协议路由
+
+Electron 同时存在两条通信路径：
+
+- RTU：Renderer Web Serial 直接承载共享会话，Main 仅参与有限的串口授权协调；
+- TCP：Main 使用 `NodeTcpTransport` 和共享 `SessionHostCore`，Renderer 经 Preload 的 HostMessage v1 远程调用。
+
+`ElectronAppHost` 根据活动协议路由：
+
+- RTU 读、写、轮询、Trace、Slave Address 和本地批任务使用 Renderer 会话；
+- TCP 连接、会话状态、Unit ID、读写、批量取消、轮询和 Trace 使用 Main 会话 RPC；
+- 本地与远程连接事件、通信日志、轮询结果、Trace 样本和应用消息合并转发给共享 UI。
+
+TCP profile（host、port、初始 Unit ID、超时和重试）随工作区持久化，连接恢复后保持离线。TCP Unit ID 可按活动表动态更新，对后续请求生效。远程全表读取携带 Renderer 生成的 `batchId`，`session-batch-cancel` 由 Main 取消活动宿主任务。
+
+Main、Preload、Renderer 都不得把当前协议判断散落到业务组件。共享 UI 只调用 `AppHost`，协议路由固定在 Electron 宿主边界。IPC 输入必须经过 HostMessage 白名单和 Zod 校验；错误投影保留原始 code、category、userMessageKey 和 technicalMessage，不能统一覆盖为通用宿主错误。
+
 ### 进程与产物
 
 - Renderer 不创建独立页面工程，生产模式加载 `apps/web/dist-electron/index.html`；
