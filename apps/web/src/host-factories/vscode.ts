@@ -1,5 +1,5 @@
 /**
- * VSCode Webview Host 工厂（2026-09-13；本模块只在 VSCode 平台被动态 `import()`）。
+ * VSCode Webview Host 工厂（本模块只在 VSCode 平台被动态 `import()`）。
  *
  * 边界：只做装配——工作区/剪贴板/插件注册表复用浏览器路径、通信经 HostMessage v2 RPC 到
  * Extension Host 等实现细节仍在 `VscodeAppHost` 内。dev 桥（`vscode-dev-bridge.ts`）在

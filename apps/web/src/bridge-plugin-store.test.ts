@@ -1,5 +1,5 @@
 /**
- * BridgePluginStore 单测（ADR-038，2026-08-30）。
+ * BridgePluginStore 单测。
  * 覆盖：load 经桥透传（含空存储）、save 经桥透传、桥错误原样往返（category/userMessageKey）。
  */
 import { describe, expect, it, vi } from "vitest";

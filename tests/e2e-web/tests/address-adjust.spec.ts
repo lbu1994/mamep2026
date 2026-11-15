@@ -14,7 +14,7 @@ async function openApp(page: Page): Promise<string[]> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
-  // ADR-054：地址变换由插件提供（不再随包安装）——先手动安装，
+  //地址变换由插件提供（不再随包安装）——先手动安装，
   // 并在确认框中授权「同进程执行」（隔离线程无法提供同步变换）。
   await installExecutablePlugin(page, {
     pluginId: "builtin-address-adjust",
@@ -24,7 +24,7 @@ async function openApp(page: Page): Promise<string[]> {
   return errors;
 }
 
-/** 表格上方工具栏里的 Address Adjust Segmented（每表独立，ADR-042）。 */
+/** 表格上方工具栏里的 Address Adjust Segmented（每表独立）。 */
 function adjustSegmented(page: Page) {
   return page.locator(
     ".register-table-tabs .ant-tabs-content-active .table-toolbar__adjust",
@@ -42,7 +42,7 @@ test("toolbar shows Address Adjust defaulting to OFF（Connection Settings 已�
     "OFF",
   );
 
-  // Connection Settings 弹窗不再包含 Address Adjust（全局选项已移出核心，ADR-042）。
+  // Connection Settings 弹窗不再包含 Address Adjust（全局选项已移出核心）。
   await page
     .getByRole("button", { name: "Connection" })
     .evaluate((el) => (el as HTMLElement).click());

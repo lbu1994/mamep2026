@@ -53,7 +53,7 @@ async function rpcEnvelope(
   };
 }
 
-/** 会话通信统计（dev 探针 debug:get-state 的 sessionStats 字段，2026-08-23）。 */
+/** 会话通信统计（dev 探针 debug:get-state 的 sessionStats 字段）。 */
 async function sessionStats(): Promise<{
   requestFrames: number;
   responseFrames: number;
@@ -173,7 +173,7 @@ async function runRtuLoop(): Promise<void> {
     0x1234,
     "FC03 read should return the value written via FC10",
   );
-  // 回归（2026-08-23）：一次读取在会话层恰好 1 次发送 + 1 次收到。
+  // 回归：一次读取在会话层恰好 1 次发送 + 1 次收到。
   // 「Comm Log 收发各两次、从站只收到一次」的重复投递根因在 Renderer 订阅层
   // （StrictMode 双挂载），由 apps/web 单测覆盖；此处保证会话层物理帧 1:1。
   const afterRead = await sessionStats();
@@ -211,7 +211,7 @@ async function runRtuLoop(): Promise<void> {
 }
 
 /**
- * VSCode 基础表 codec 闭环（ADR-043 E-6）：经真实 HostMessage RPC 路径验证
+ * VSCode 基础表 codec 闭环：经真实 HostMessage RPC 路径验证
  * session-connect 携带 protocol（modbus-basic-tables:coil）路由到 Extension Host
  * codecRegistry 的 BasicTablesRtuCodec → FC01 读线圈 / FC0F 写线圈。
  */
@@ -306,7 +306,7 @@ function tcpProfile(): Record<string, unknown> {
 }
 
 /**
- * VSCode TCP 闭环（2026-08-23 两端 TCP 接线）：经真实 HostMessage RPC 路径验证
+ * VSCode TCP 闭环（两端 TCP 接线）：经真实 HostMessage RPC 路径验证
  * 连接 → FC0x10 写 → FC03 读 → 状态 → 断开（MAMEP_FAKE_TCP=1 的 DevFakeTcpServer）。
  */
 async function runTcpLoop(): Promise<void> {
@@ -364,7 +364,7 @@ async function runTcpLoop(): Promise<void> {
 }
 
 /**
- * TCP Unit ID 会话内动态修改（2026-08-25，ADR-022 已知限制打通）：经真实 HostMessage
+ * TCP Unit ID 会话内动态修改（已知限制打通）：经真实 HostMessage
  * RPC 路径验证 session-set-unit-id 新 kind——连接后改 Unit ID → FC10 写 + FC03 读仍成功
  * （DevFakeTcpServer 回显请求帧 unitId；帧级 unitId 断言由 communication/application
  * 单测与 Electron e2e 覆盖，本用例验证新 kind 全链路接线 + 会话改后不破坏读写）。
@@ -422,7 +422,7 @@ async function runUnitIdLoop(): Promise<void> {
 }
 
 /**
- * 远程批任务取消（ADR-025，2026-08-25）：经真实 HostMessage RPC 路径验证
+ * 远程批任务取消：经真实 HostMessage RPC 路径验证
  * session-batch-read（携带 batchId）→ 中途 session-batch-cancel → 汇总 cancelledCount > 0。
  * 扩展宿主消息处理为并发（onDidReceiveMessage void 分发），取消消息在批任务进行中到达；
  * 批任务逐行发送（无 Rx Delay 间隔），靠假设备响应延迟提供可取消窗口。
@@ -479,7 +479,7 @@ async function runBatchCancelLoop(): Promise<void> {
 }
 
 /**
- * 工作区导入导出闭环（2026-08-29，PRD §8.3 P1，ADR-033 方案 A）：经真实 HostMessage RPC
+ * 工作区导入导出闭环（PRD §8.3 P1 方案 A）：经真实 HostMessage RPC
  * 路径验证 save-text-file / open-text-file 全链路（白名单 + Zod 校验 + ipc 分发 →
  * Extension Host 假对话框 → workspace.fs 真实读写）。@vscode/test-electron 测试宿主与扩展
  * 宿主为不同进程、无法桩替换 vscode.window 对话框，故由 run-e2e.mjs 注入 MAMEP_FAKE_DIALOG=1
@@ -597,7 +597,7 @@ async function runPanelCloseRelease(): Promise<void> {
 }
 
 /**
- * VSCode 多寄存器范围行闭环（ADR-030）：经真实 HostMessage RPC 路径验证
+ * VSCode 多寄存器范围行闭环：经真实 HostMessage RPC 路径验证
  * 连接 → FC0x10 多值写（registerCount 2）→ FC03 多值读（返回数组）→ 断开。
  * DevFakeSerial 支持 quantity>1（mustMultiStart 默认 null，地址 0x0000 读写正常）。
  */
@@ -646,7 +646,7 @@ async function runRangeMultiLoop(): Promise<void> {
 }
 
 /**
- * TCP 自动重连闭环（2026-08-30，PRD §8.3 P1 / ADR-022 已知限制打通）：经真实 HostMessage
+ * TCP 自动重连闭环（PRD §8.3 P1 已知限制打通）：经真实 HostMessage
  * RPC 路径验证 autoReconnect=true 连接 → debug:fake-tcp-drop 探针强制断线（MAMEP_FAKE_TCP
  * 假设备）→ ReconnectCoordinator 自动重连（指数退避首个间隔 1s）→ 状态回 connected →
  * 新会话读写仍可用。用户断开不重连/失败达上限等由 application 单测与 Electron e2e 覆盖。
@@ -745,7 +745,7 @@ async function runReconnectLoop(): Promise<void> {
 }
 
 /**
- * 宿主侧插件执行面闭环（ADR-055，2026-09-12）：经真实 HostMessage RPC 路径验证
+ * 宿主侧插件执行面闭环：经真实 HostMessage RPC 路径验证
  * Extension Host 从**同一份插件存储**（globalState）加载「已启用 + same-process」插件并执行，
  * 使其贡献的同步能力（addressTransform）真正作用于宿主会话：
  * 安装（plugin-store-save = 渲染端安装流程的等价载荷）→ 启用表级地址变换 →
@@ -953,31 +953,31 @@ export async function run(): Promise<void> {
   // 5. VSCode RTU 闭环（硬性 P0）：枚举 → 连接 → 写 → 读 → 断开。
   await runRtuLoop();
 
-  // 5.1 基础表 codec 闭环（ADR-043 E-6）：session-connect protocol → FC01/FC0F。
+  // 5.1 基础表 codec 闭环：session-connect protocol → FC01/FC0F。
   await runBasicTableLoop();
 
-  // 5.25 多寄存器范围行闭环（ADR-030）：连接 → 多值写 → 多值读 → 断开。
+  // 5.25 多寄存器范围行闭环：连接 → 多值写 → 多值读 → 断开。
   await runRangeMultiLoop();
 
-  // 6. VSCode TCP 闭环（2026-08-23）：连接 → 写 → 读 → 断开。
+  // 6. VSCode TCP 闭环：连接 → 写 → 读 → 断开。
   await runTcpLoop();
 
-  // 6.25 TCP Unit ID 会话内动态修改（2026-08-25）：session-set-unit-id → 写 → 读。
+  // 6.25 TCP Unit ID 会话内动态修改：session-set-unit-id → 写 → 读。
   await runUnitIdLoop();
 
-  // 6.5 远程批任务取消（ADR-025）：session-batch-read → 中途 cancel → cancelledCount > 0。
+  // 6.5 远程批任务取消：session-batch-read → 中途 cancel → cancelledCount > 0。
   await runBatchCancelLoop();
 
-  // 6.75 TCP 自动重连（2026-08-30）：断线 → 自动重连成功 → 读写仍可用。
+  // 6.75 TCP 自动重连：断线 → 自动重连成功 → 读写仍可用。
   await runReconnectLoop();
 
-  // 6.75 工作区导入导出闭环（2026-08-29，PRD §8.3 P1）：save-text-file / open-text-file。
+  // 6.75 工作区导入导出闭环（PRD §8.3 P1）：save-text-file / open-text-file。
   await runWorkspaceFileLoop();
 
   // 7. 面板关闭释放：连接 → 关闭面板 → 会话释放 → 可重连。
   await runPanelCloseRelease();
 
-  // 8. 宿主侧插件执行面（ADR-055）：安装同进程插件 → 地址变换在 Extension Host 生效 → 卸载后不再生效。
+  // 8. 宿主侧插件执行面：安装同进程插件 → 地址变换在 Extension Host 生效 → 卸载后不再生效。
   //    置于最后：本用例会改写插件存储（已自行清理，避免影响其它用例）。
   await runPluginHostLoop();
 }

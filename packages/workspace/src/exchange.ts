@@ -1,5 +1,5 @@
 /**
- * 工作区公开交换格式辅助（2026-08-29，PRD §8.3 P1 工作区导入和导出）。
+ * 工作区公开交换格式辅助（PRD §8.3 P1 工作区导入和导出）。
  *
  * 交换格式 = 版本化 JSON：直接复用 workspaceSchema 的 serializeWorkspace / parseWorkspace
  * （含 v1→v4 迁移与断链检测），本模块只提供文件名等展示/落盘辅助（纯函数）。

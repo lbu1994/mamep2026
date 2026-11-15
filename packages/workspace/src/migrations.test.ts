@@ -68,7 +68,7 @@ function toV3Data(
   return data;
 }
 
-/** 把 v5 序列化数据降级为 v4 形态：sheet 去掉 type、版本设为 4（ADR-041）。 */
+/** 把 v5 序列化数据降级为 v4 形态：sheet 去掉 type、版本设为 4。 */
 function toV4Data(): Record<string, unknown> {
   const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
     string,
@@ -83,7 +83,7 @@ function toV4Data(): Record<string, unknown> {
   return data;
 }
 
-/** 把 v6 序列化数据降级为 v5 形态（ADR-042）：sheet 去掉 addressTransform、preferences 去掉 themePrimary、RTU profile 加回全局 addressAdjust、版本设为 5。 */
+/** 把 v6 序列化数据降级为 v5 形态：sheet 去掉 addressTransform、preferences 去掉 themePrimary、RTU profile 加回全局 addressAdjust、版本设为 5。 */
 function toV5Data(
   options: { addressAdjust?: string } = {},
 ): Record<string, unknown> {
@@ -361,7 +361,7 @@ describe("migrations v6→v7（dataType 开放，ADR-043 E-3）", () => {
   });
 });
 
-/** 把 v8 序列化数据降级为 v7 形态（ADR-047）：preferences.themePrimary 恢复为 {light,dark} 对象、版本设为 7。 */
+/** 把 v8 序列化数据降级为 v7 形态：preferences.themePrimary 恢复为 {light,dark} 对象、版本设为 7。 */
 function toV7Data(): Record<string, unknown> {
   const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
     string,
@@ -391,7 +391,7 @@ describe("migrations v7→v8（主题色预设 ID，ADR-047）", () => {
   });
 });
 
-/** 把 v10 序列化数据降级为 v8 形态（ADR-052）：行去掉 bitComments/bitNames、版本设为 8。 */
+/** 把 v10 序列化数据降级为 v8 形态：行去掉 bitComments/bitNames、版本设为 8。 */
 function toV8Data(): Record<string, unknown> {
   const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
     string,
@@ -409,7 +409,7 @@ function toV8Data(): Record<string, unknown> {
   return data;
 }
 
-/** 把 v10 序列化数据降级为 v9 形态（ADR-052）：行去掉 bitNames、版本设为 9（保留 bitComments）。 */
+/** 把 v10 序列化数据降级为 v9 形态：行去掉 bitNames、版本设为 9（保留 bitComments）。 */
 function toV9Data(): Record<string, unknown> {
   const data = JSON.parse(serializeWorkspace(createEmptyWorkspace())) as Record<
     string,

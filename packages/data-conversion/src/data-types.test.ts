@@ -20,7 +20,7 @@ function expectParseFail(text: string, type: DataType, code: string): void {
   if (!result.ok) expect(result.error.code).toBe(code);
 }
 
-/** 校验失败必须携带与 i18n（packages/ui/src/i18n）一致的驼峰 userMessageKey（回归：曾生成全小写 code 断链）。 */
+/** 校验失败必须携带与 i18n（packages/ui/src/i18n）一致的驼峰 userMessageKey。 */
 function expectParseFailMessageKey(
   text: string,
   type: DataType,

@@ -1,8 +1,8 @@
 /**
- * Electron 主进程工作区文件仓储（docs/TECH_DESIGN.md §19.4、ADR-036，2026-08-30）。
+ * Electron 主进程工作区文件仓储（docs/TECH_DESIGN.md §19.4）。
  * 实现 WorkspaceRepositoryPort：应用数据目录（app.getPath("userData")）下版本化 JSON 文件。
  * 原子保存流程（§19.4）：序列化 → 写临时文件 → 写入完成 → 尽可能同步刷新（fsync）→
- * 当前文件改为备份 → 临时文件原子替换为正式文件；单份 .bak 轮转（与浏览器
+ * 当前文件轮转为备份 → 临时文件原子替换为正式文件；单份 .bak 轮转（与浏览器
  * IndexedDBWorkspaceRepository 的单备份语义一致）。损坏时尝试从备份恢复（自愈写回）。
  * 路径与权限由主进程控制，Renderer 不直接触碰文件系统；跨边界经 HostMessage v2
  * workspace-load / workspace-save / workspace-clear（content 传序列化 JSON 字符串）。
@@ -48,7 +48,7 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-/** 读取文件修改时间戳（ms）；文件不存在/不可读时返回 null（ADR-049 恢复备份时间）。 */
+/** 读取文件修改时间戳（ms）；文件不存在/不可读时返回 null（恢复备份时间）。 */
 async function fileMtime(filePath: string): Promise<number | null> {
   try {
     const s = await stat(filePath);
@@ -60,7 +60,7 @@ async function fileMtime(filePath: string): Promise<number | null> {
 
 export class WorkspaceFileRepository implements WorkspaceRepositoryPort {
   private readonly dir: string;
-  /** 最近一次 `load()` 的恢复元数据（ADR-049）。 */
+  /** 最近一次 `load()` 的恢复元数据。 */
   private recoveryInfo: WorkspaceRecoveryInfo | null = null;
 
   constructor(dir: string) {
@@ -280,7 +280,7 @@ export class WorkspaceFileRepository implements WorkspaceRepositoryPort {
    * 原子写内容（TECH_DESIGN §19.4）：
    * 1) 写同目录临时文件并 fsync（尽可能同步刷新）；
    * 2) 主文件存在则轮转为备份（先删旧 .bak 再 rename，规避 Windows rename 目标已存在失败）；
-   * 3) 临时文件替换为正式文件（Windows 下先删主再 rename 的兜底，ADR-036 记录）。
+   * 3) 临时文件替换为正式文件（Windows 下先删主再 rename 的兜底记录）。
    */
   private async writeAtomic(content: string): Promise<void> {
     const mainPath = path.join(this.dir, MAIN_FILE);

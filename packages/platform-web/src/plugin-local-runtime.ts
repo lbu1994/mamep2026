@@ -1,5 +1,5 @@
 /**
- * 同进程插件 entry 加载（ADR-054，2026-09-12）。
+ * 同进程插件 entry 加载。
  *
  * 与 `WebPluginRemoteRuntime`（隔离线程，Worker）对称：本加载器在**宿主同一进程**中
  * `import()` 单文件 JS 插件 entry（Blob URL），提取 `manifest` 与 `activate` /

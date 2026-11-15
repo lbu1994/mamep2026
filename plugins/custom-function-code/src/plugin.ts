@@ -1,11 +1,11 @@
 /**
- * 自定义功能码示例插件（ADR-043 E-4；2026-09-12 ADR-054：改为**用户手动安装**的单文件插件）。
+ * 自定义功能码示例插件（**用户手动安装**的单文件插件）。
  *
  * 演示插件开发范本：
  * - `protocolExtension`：声明协议 "custom-function-code"；
  * - `tableType`：声明 "holding-register" 表类型映射到该协议（侧边栏分组）；
  * - `toolbarAction`：演示工具栏动作（声明式，无 handler → 界面置灰占位）；
- * - `dataType`：演示 ADR-043 E-3 插件数据类型（activate 经 `ctx.registries` 注册
+ * - `dataType`：演示插件数据类型（activate 经 `ctx.registries` 注册
  *   codec 与解析/格式化函数）。
  * 单文件 entry 导出 `manifest` + `activate(ctx)`，由平台侧同进程加载器加载
  * （安装时用户需在确认框中显式授权「同进程执行」）。
@@ -23,7 +23,7 @@ export const CUSTOM_FUNCTION_PROTOCOL_ID = "custom-function-code";
 /** 插件表类型：<pluginId>:<tableTypeId>（tableTypeId 复用核心 holding-register）。 */
 export const CUSTOM_FUNCTION_TABLE_TYPE =
   "custom-function-code:holding-register";
-/** 示例插件数据类型 id（ADR-043 E-3：单寄存器插件类型，值 × 10 显示）。 */
+/** 示例插件数据类型 id（单寄存器插件类型，值 × 10 显示）。 */
 export const CUSTOM_PLUGIN_DATA_TYPE = "custom-function-code:scaled";
 
 export const customFunctionManifest: PluginManifest = {
@@ -67,7 +67,7 @@ export const customFunctionManifest: PluginManifest = {
 };
 
 /**
- * 插件 dataType 处理函数（ADR-043 E-3）：值语义 = 单元格文本为原始值 ÷ 10（一位小数，无符号）。
+ * 插件 dataType 处理函数：值语义 = 单元格文本为原始值 ÷ 10（一位小数，无符号）。
  */
 const CUSTOM_PLUGIN_DATA_TYPE_HANDLERS: PluginDataTypeHandlers = {
   parse: (text) => {
@@ -105,7 +105,7 @@ const CUSTOM_PLUGIN_DATA_TYPE_HANDLERS: PluginDataTypeHandlers = {
 };
 
 /**
- * 单文件 entry 导出（ADR-044 F-3 / ADR-054）：安装时同进程加载器 import 本模块并调用
+ * 单文件 entry 导出：安装时同进程加载器 import 本模块并调用
  * `activate`（manifest 嵌入 entry，安装流程从 entry 提取），经 `ctx.registries` 注册 codec
  * 与插件 dataType（函数不可序列化，不能进 manifest 的 contributes payload）。
  */

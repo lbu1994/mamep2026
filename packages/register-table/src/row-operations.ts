@@ -17,7 +17,7 @@ import {
   type DataTypeResolver,
 } from "@mamep2026/data-conversion";
 
-/** 模块级缺省解析器（仅内置；ADR-043 E-3 插件类型由 UI 注入 resolver）。 */
+/** 模块级缺省解析器（仅内置插件类型由 UI 注入 resolver）。 */
 const defaultResolver: DataTypeResolver = createDataTypeResolver();
 
 /** 应用读取成功结果（单寄存器）：按 Type 格式化并强制覆盖单元格（单一当前值模型，§15.1）。 */
@@ -36,7 +36,7 @@ export function applyReadValueToRow(
   });
 }
 
-/** 应用读取成功结果（多寄存器，ADR-030）：按组合类型格式化并覆盖单元格。
+/** 应用读取成功结果（多寄存器）：按组合类型格式化并覆盖单元格。
  *  组合格式化保持内置契约（插件类型仅单寄存器，E-3 范围收敛，无需 resolver）。 */
 export function applyReadValuesToRow(
   row: RegisterRow,

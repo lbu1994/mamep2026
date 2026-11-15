@@ -1,5 +1,5 @@
 /**
- * VscodeAppHost 单测（VSCode 端骨架，2026-08-23）：能力矩阵如实声明（RTU/TCP/串口/文件
+ * VscodeAppHost 单测（VSCode 端骨架）：能力矩阵如实声明（RTU/TCP/串口/文件
  * 均未支持）、主题初始化与 color-theme-changed 事件映射共享 store、剪贴板透传 VSCode 桥、
  * 工作区经注入仓储委托 inner（BrowserAppHost）、连接不虚报成功。
  */
@@ -76,7 +76,7 @@ function createFakeBridge(): {
         value: null,
       }),
     ),
-    // ---- 工作区文件仓储（2026-08-30，ADR-036；ADR-049 增 recoveryInfo/create-backup）：
+    // ---- 工作区文件仓储（增 recoveryInfo/create-backup）：
     // VSCode filesystem unsupported，fake 返回能力错误（VscodeAppHost 不走这些桥）。----
     workspaceLoad: vi.fn(
       async (): Promise<Result<{ content: string; recoveryInfo: null }>> => ({
@@ -124,7 +124,7 @@ function createFakeBridge(): {
         technicalMessage: "unsupported",
       },
     })),
-    // ---- 插件存储桥（2026-08-30，ADR-038：Extension Host globalState 持久化）----
+    // ---- 插件存储桥（Extension Host globalState 持久化）----
     pluginStoreLoad: vi.fn(
       async (): Promise<Result<PluginStoreDataResponse>> => ({
         ok: true,
@@ -135,7 +135,7 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
-    // ---- 插件运行时桥（2026-08-31，ADR-039：Phase A 契约，测试不实际调用）----
+    // ---- 插件运行时桥（契约，测试不实际调用）----
     pluginRuntimeLoad: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
@@ -154,7 +154,7 @@ function createFakeBridge(): {
         value: { points: [] },
       }),
     ),
-    // ---- RTU 会话 RPC（VSCode 接线，2026-08-23）----
+    // ---- RTU 会话 RPC（VSCode 接线）----
     enumerateSerialPorts: vi.fn(
       async (): Promise<Result<SerialPortOption[]>> => ({
         ok: true,
@@ -288,7 +288,7 @@ describe("VscodeAppHost", () => {
   it("能力矩阵如实声明（RTU/TCP 已接线：modbusRtu/modbusTcp true、serialPorts enumerated）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
-    // ADR-054：能力矩阵读取即派生（基础值 + 已启用插件贡献）；无插件时与基础值深等。
+    //能力矩阵读取即派生（基础值 + 已启用插件贡献）；无插件时与基础值深等。
     expect(host.capabilities).toEqual(vscodeCapabilities);
     expect(host.capabilities.modbusRtu).toBe(true);
     expect(host.capabilities.modbusTcp).toBe(true);
@@ -816,7 +816,7 @@ describe("VscodeAppHost 生命周期（dispose / StrictMode 双挂载回归，20
     const host2 = makeHost(bridge);
     host2.subscribeCommLog((e) => logs.push(Array.from(e.bytes)));
     emit(commLogEvent());
-    // 修复前：host1 + host2 各投递一次 → 2 条；修复后：仅 host2 → 1 条。
+    // 只允许当前 host 投递：仅 host2 → 1 条。
     expect(logs).toHaveLength(1);
   });
 

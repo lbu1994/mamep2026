@@ -1,8 +1,8 @@
 /**
- * 寄存器地址格式化与草稿解析（docs/AGENTS.md §16.6、§17.2、ADR-014、ADR-030）。
+ * 寄存器地址格式化与草稿解析（docs/AGENTS.md §16.6、§17.2）。
  * - HEX：显示 4 位大写十六进制；输入仅 1~4 位十六进制字符（不接受 0x 前缀）；
  * - DEC：显示十进制；输入仅十进制数字 0~65535（超范围报错）；
- * - 范围行（ADR-030）：支持 `start-end`（HEX `0400-0401` / DEC `1000-1001`），
+ * - 范围行：支持 `start-end`（HEX `0400-0401` / DEC `1000-1001`），
  *   解析为 { value: 起始地址, count: 覆盖寄存器数 }；
  * - 校验失败必须返回结构化错误，调用方保留用户输入（不得清空）。
  */
@@ -24,7 +24,7 @@ export function formatRegisterAddress(
   return String(value);
 }
 
-/** 按进制格式化地址范围（ADR-030）：HEX "0400-0401"；DEC "1000-1001"；count=1 时即单地址。 */
+/** 按进制格式化地址范围：HEX "0400-0401"；DEC "1000-1001"；count=1 时即单地址。 */
 export function formatRegisterAddressRange(
   value: number,
   count: number,
@@ -37,7 +37,7 @@ export function formatRegisterAddressRange(
   )}`;
 }
 
-/** 解析后的地址：起始地址 + 覆盖的连续寄存器数（ADR-030 范围行）。 */
+/** 解析后的地址：起始地址 + 覆盖的连续寄存器数（范围行）。 */
 export interface ParsedRegisterAddress {
   value: number;
   count: number;

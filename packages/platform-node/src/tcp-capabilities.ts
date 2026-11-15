@@ -10,7 +10,7 @@ export interface NodeTcpCapabilities {
   readonly ipv4: boolean;
   readonly ipv6: boolean;
   readonly tls: boolean;
-  /** MBAP 单元标识范围（用户决策 2026-08-23：0~255 全范围）。 */
+  /** MBAP 单元标识范围（用户决策：0~255 全范围）。 */
   readonly unitIdMin: number;
   readonly unitIdMax: number;
   readonly portRange: readonly [number, number];

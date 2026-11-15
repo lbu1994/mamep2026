@@ -1,9 +1,9 @@
 /**
- * jsdom 的 `matchMedia` 桩（Phase 3：响应式布局需要可切换的断点）。
+ * jsdom 的 `matchMedia` 桩（响应式布局需要可切换的断点）。
  *
  * jsdom 不实现 `window.matchMedia`；本桩提供**可配置**的匹配结果与变更通知，
  * 使断点相关分支（移动布局 / 桌面布局）都能在单测里覆盖。
- * 默认所有查询匹配 `false`（与 Phase 3 之前的固定桩一致，既有用例零影响）。
+ * 默认所有查询匹配 `false`（与之前的固定桩一致，既有用例零影响）。
  */
 
 const matchesByQuery = new Map<string, boolean>();

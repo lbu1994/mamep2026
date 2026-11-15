@@ -50,7 +50,7 @@ export interface TraceSampleEvent {
 }
 
 export interface CommProperties {
-  /** 连接协议：RTU 显示串口参数；TCP 显示 host/port/unitId（2026-08-23）。 */
+  /** 连接协议：RTU 显示串口参数；TCP 显示 host/port/unitId。 */
   protocol: "rtu" | "tcp";
   portLabel: string | null;
   /** TCP Unit ID（仅 TCP 有意义；RTU 为 null）。 */
@@ -79,13 +79,13 @@ export interface AppHost {
   readonly platform: "browser" | "electron" | "vscode" | "android";
 
   /**
-   * 启动插件系统（ADR-038 / ADR-054）：装配后显式调用——加载已安装插件（用户手动安装），
+   * 启动插件系统：装配后显式调用——加载已安装插件（用户手动安装），
    * 按 executionMode 装配执行面（同进程 / 隔离）后注册，并启动持久化订阅。
    * 无插件存储端口的宿主为 no-op（无手动安装能力）。
    */
   startPlugins(): Promise<void>;
   /**
-   * 预览可执行插件 entry（ADR-054）：按 executionMode 加载 entry 并校验 manifest（不注册）。
+   * 预览可执行插件 entry：按 executionMode 加载 entry 并校验 manifest（不注册）。
    * 安装确认框据此展示插件信息（名称/版本/权限/平台 + 运行位置）。
    */
   previewPluginEntry(
@@ -93,7 +93,7 @@ export interface AppHost {
     executionMode: PluginExecutionMode,
   ): Promise<Result<PluginManifest>>;
   /**
-   * 安装可执行插件（ADR-054）：按 executionMode 装配执行面并注册为 installed 插件
+   * 安装可执行插件：按 executionMode 装配执行面并注册为 installed 插件
    * （持久化由持久化协调器承担）。same-process 需用户在安装确认框中显式授权。
    */
   installPluginEntry(
@@ -105,28 +105,28 @@ export interface AppHost {
   /** 清除全部持久化数据并返回全新默认工作区（§16.5.5 用户重置损坏工作区）。 */
   resetWorkspace(): Promise<Result<Workspace>>;
   scheduleSave(workspace: Workspace): void;
-  /** 立即保存当前待写快照（应用关闭/页面隐藏前调用，ADR-049 崩溃后状态恢复）。 */
+  /** 立即保存当前待写快照（应用关闭/页面隐藏前调用崩溃后状态恢复）。 */
   flush(): Promise<Result<void>>;
   /**
-   * 应用进入/离开后台（移动端生命周期，ADR-050 Phase 3）。
+   * 应用进入/离开后台（移动端生命周期）。
    * 挂起时暂停轮询与追踪（**保留配置**），恢复时按原配置重启；幂等。
    * 可选：会话不在本进程的平台（如 Electron/VSCode 的远程会话）暂不实现。
    */
   setBackgroundSuspended?(suspended: boolean): void;
   /**
-   * 屏幕常亮（KeepAwake，ADR-050 Phase 3）：有持续轮询/追踪时开启。
+   * 屏幕常亮（KeepAwake）：有持续轮询/追踪时开启。
    * 仅 Android 实现；其余平台不实现（保持系统默认灭屏策略）。
    */
   setKeepScreenOn?(enabled: boolean): void;
   /**
-   * 订阅硬件返回键（Android，ADR-050 Phase 3）。
+   * 订阅硬件返回键（Android）。
    *
    * `handler` 返回 `true` 表示已消费（宿主不再执行默认行为）；返回 `false` 时宿主
    * 最小化应用。返回取消订阅函数；平台无硬件返回键（浏览器/桌面）返回 `null`。
    * UI 层据此实现「先关最上层覆盖层，无覆盖层才最小化」的返回键语义。
    */
   onHardwareBack?(handler: () => boolean): (() => void) | null;
-  /** 最近一次加载的恢复元数据（ADR-049 恢复提示；null=无恢复相关信息）。 */
+  /** 最近一次加载的恢复元数据（恢复提示；null=无恢复相关信息）。 */
   getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null;
   getSaveStatus(): SaveStatus;
   subscribeSaveStatus(listener: (status: SaveStatus) => void): () => void;
@@ -158,28 +158,28 @@ export interface AppHost {
     options?: { protocol?: string },
   ): Promise<Result<void>>;
   /**
-   * TCP 连接（2026-08-23 两端 TCP 接线）：profile 即连接参数（host/port/unitId/超时/重试），
+   * TCP 连接（两端 TCP 接线）：profile 即连接参数（host/port/unitId/超时/重试），
    * 无串口句柄。仅 Electron/VSCode 支持；浏览器返回能力错误（UI 依能力矩阵不调用）。
    */
   connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
   disconnect(): Promise<Result<void>>;
   /**
-   * 当前通信会话（ADR-044 Phase F-2）：插件通信面（PluginCommunicationApi）经统一
+   * 当前通信会话：插件通信面（PluginCommunicationApi）经统一
    * 调度器访问会话；未连接 / 会话在远程宿主时返回 null（插件通信降级为能力错误）。
    */
   getSession(): CommunicationSession | null;
   /**
    * 释放全部资源（页面卸载 / Webview 销毁 / StrictMode 重复挂载清理）：
    * 断开会话、退订所有外部事件源（如 bridge.onEvent）并清空本地订阅集合，
-   * 保证重复挂载不产生重复订阅（事件重复投递的根因，2026-08-23）。
+   * 保证重复挂载不产生重复订阅（事件重复投递的根因）。
    */
   dispose(): Promise<void>;
   getConnectionState(): ConnectionState;
   getCommProperties(): CommProperties;
-  /** 更新当前会话的从站地址（每表独立，2026-08-19）：对后续所有请求生效。 */
+  /** 更新当前会话的从站地址（每表独立）：对后续所有请求生效。 */
   setSlaveAddress(slave: number): void;
   /**
-   * 更新活动表地址变换配置（2026-09-01，ADR-042 表级 Address Adjust）：
+   * 更新活动表地址变换配置（表级 Address Adjust）：
    * 对后续读/写请求生效（轮询地址在 Renderer 生成时按表应用，不经本端口）。
    * null=不调整；host 端会话（VSCode/Electron TCP）经 session-set-address-transform RPC。
    */
@@ -193,13 +193,13 @@ export interface AppHost {
     listener: (state: ConnectionState) => void,
   ): () => void;
 
-  /** 单行读取（多寄存器行返回 values[]，ADR-030）。 */
+  /** 单行读取（多寄存器行返回 values[]）。 */
   readRow(
     row: RegisterRow,
     route?: RequestRoute,
   ): Promise<Result<number | number[]>>;
   /**
-   * 单行写（FC0x10）。options.writeVerify（2026-08-26）：每表写后回读配置，
+   * 单行写（FC0x10）。options.writeVerify：每表写后回读配置，
    * 非 off 时写入后按配置（立即/延迟）FC03 回读，返回扩展的 WriteOutcome（§18.2）。
    */
   writeRow(
@@ -209,7 +209,7 @@ export interface AppHost {
   ): Promise<Result<WriteOutcome>>;
   readAllRows(rows: BatchReadRow[], route?: RequestRoute): BatchReadHandle;
 
-  /** WP 轮询：传入当前启用轮询的有效行（多寄存器行携带 quantity，ADR-030）。 */
+  /** WP 轮询：传入当前启用轮询的有效行（多寄存器行携带 quantity）。 */
   updatePollingTargets(
     rows: Array<{
       key: string;
@@ -250,7 +250,7 @@ export interface AppHost {
   /** 读取系统剪贴板文本；无内容返回 ok(null)。 */
   readTextFromClipboard(): Promise<Result<string | null>>;
   /**
-   * 保存文本文件（2026-08-28 通信日志 CSV 导出）：
+   * 保存文本文件（通信日志 CSV 导出）：
    * 浏览器触发 Blob 下载；桌面端弹保存对话框落盘（用户取消返回 ok({ saved: false })）。
    * CSV 序列化由 packages/logging 完成，本端口只负责平台侧落盘/下载。
    */
@@ -260,7 +260,7 @@ export interface AppHost {
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>>;
   /**
-   * 打开文件对话框并读取 UTF-8 文本（2026-08-29 工作区导入）：
+   * 打开文件对话框并读取 UTF-8 文本（工作区导入）：
    * 桌面端（workspaceImport === "file"）弹系统打开对话框读取；用户取消返回 ok({ content: null })。
    * 浏览器（workspaceImport === "upload"）UI 走客户端文件选择（antd Upload），不调用本端口。
    */
@@ -269,12 +269,12 @@ export interface AppHost {
   }): Promise<Result<OpenTextFileResponse>>;
 
   /**
-   * 插件运行时桥（2026-08-31，ADR-039，Phase A 契约就位）：
+   * 插件运行时桥：
    * - pluginRuntimeLoad / pluginRuntimeUnload：请求宿主加载/卸载 Host 插件实例；
    * - pluginRpc：渲染 ↔ 宿主通用插件调用桥；
    * - pluginContributionQuery：查询宿主侧已装配贡献点。
-   * Phase A 宿主侧（Electron/VSCode）返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误；
-   * 浏览器无宿主桥，同样返回能力错误。运行时语义随 Phase F（隔离机制 ADR）补齐。
+   * Electron / VSCode 宿主在本桥返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误；
+   * 浏览器无宿主桥，同样返回能力错误。
    */
   pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>>;
   pluginRuntimeUnload(

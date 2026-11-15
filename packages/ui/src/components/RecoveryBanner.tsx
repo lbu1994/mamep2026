@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { WorkspaceRecoveryInfo } from "@mamep2026/domain";
 
 /**
- * 工作区恢复提示横幅（PRD §8.3 / TECH_DESIGN §19.7，2026-09-04，ADR-049）：
+ * 工作区恢复提示横幅（PRD §8.3 / TECH_DESIGN §19.7）：
  * 加载时发生「从备份恢复」或「恢复失败已重建为空工作区」时在主体区顶部展示；
  * `source:"none"`（正常恢复）不渲染；纯信息、无操作按钮（重置仍走 Settings）。
  */

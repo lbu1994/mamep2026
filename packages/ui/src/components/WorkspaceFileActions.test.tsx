@@ -1,5 +1,5 @@
 /**
- * WorkspaceFileActions 导入/导出交互测试（jsdom，2026-08-29）。
+ * WorkspaceFileActions 导入/导出交互测试（jsdom）。
  * 组件用 App.useApp()（antd message），渲染必须包 <AntApp>（与 BottomPanel 测试同模式，
  * 用 fireEvent + @testing-library/waitFor 断言异步 message）。
  * 覆盖：导出调用 saveTextFile（序列化 + 建议文件名）、成功/取消/失败提示；

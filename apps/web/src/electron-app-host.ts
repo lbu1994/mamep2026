@@ -1,11 +1,11 @@
 /**
  * Electron Renderer Host（docs/TECH_DESIGN.md §5.1.6、§6.2）。
- * 实现共享 UI 的 AppHost 契约。MVP 串口（ADR-017，2026-08-21；2026-08-21 扩展为下拉框选择）：
+ * 实现共享 UI 的 AppHost 契约。串口使用下拉框选择：
  * 仍经 Web Serial API（Renderer navigator.serial），但主进程 select-serial-port 不再自动选
  * 第一个端口，而是把端口列表经 serial-ports-available 事件转发给本 Host，UI 以 antd Select
  * 下拉框展示；用户选择后经 preload 桥 selectSerialPort(portId) 回传主进程解析挂起请求，
  * 再 await requestPort() 得到所选端口对象。连接/读写/轮询/Trace/日志/工作区全部委托复用
- * BrowserAppHost；工作区持久化（2026-08-30，ADR-036）为主进程文件仓储薄桥
+ * BrowserAppHost；工作区持久化为主进程文件仓储薄桥
  * FileWorkspaceRepository（应用数据目录版本化 JSON，经 workspace-load/save/clear IPC），
  * 自动保存（AutoSaveCoordinator debounce）与会话恢复语义不变；剪贴板走 preload 白名单桥
  * （window.mamepHost）主进程真实实现。
@@ -86,16 +86,16 @@ export interface ElectronAppHostOptions {
   repository?: WorkspaceRepositoryPort | undefined;
   /** 插件存储（默认 BridgePluginStore 经 preload 桥；测试注入内存仓储）。 */
   pluginStore?: PluginStorePort | undefined;
-  /** codec 注册表（ADR-041 决策 A）：RTU 本地路径复用浏览器 AppHost，按活动表协议路由。 */
+  /** codec 注册表：RTU 本地路径复用浏览器 AppHost，按活动表协议路由。 */
   codecRegistry?: CodecRegistry | undefined;
-  /** 同步贡献注册面（ADR-054）：透传 inner，供插件 activate 经 ctx.registries 注册。 */
+  /** 同步贡献注册面：透传 inner，供插件 activate 经 ctx.registries 注册。 */
   syncRegistries?: PluginSyncRegistries | undefined;
-  /** 地址变换解析（ADR-054）：透传 inner（RTU 本地会话按表应用）。 */
+  /** 地址变换解析：透传 inner（RTU 本地会话按表应用）。 */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
 }
 
 export class ElectronAppHost implements AppHost {
-  /** 能力矩阵派生（ADR-054）：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
+  /** 能力矩阵派生：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
   get capabilities(): PlatformCapabilities {
     return deriveCapabilities(electronCapabilities, this.pluginRegistry);
   }
@@ -126,7 +126,7 @@ export class ElectronAppHost implements AppHost {
   /** 已选端口标签（Electron 枚举路径下覆盖 inner 的记录）。 */
   private portLabel: string | null = null;
 
-  // ---- 混合模式（2026-08-23 两端 TCP 接线）：RTU 本地（inner）/ TCP 主进程远程代理 ----
+  // ---- 混合模式（两端 TCP 接线）：RTU 本地（inner）/ TCP 主进程远程代理 ----
   /** 当前活动协议（RTU 复用浏览器 Web Serial 路径；TCP 走主进程远程会话）。 */
   private activeProtocol: "rtu" | "tcp" | null = null;
   /** TCP 连接配置本地镜像（通信属性摘要用）。 */
@@ -154,19 +154,19 @@ export class ElectronAppHost implements AppHost {
     this.bridge = bridge;
     this.serial = options.serial ?? navigator.serial;
     // 串口（enumerated）：Renderer 的 Chromium 即支持 navigator.serial，连接/读写仍复用
-    // 浏览器 Web Serial 路径；仅「选择串口」改为下拉框枚举（主进程 select-serial-port
+    // 浏览器 Web Serial 路径；串口使用下拉框枚举（主进程 select-serial-port
     // 转发端口列表 → serial-ports-available 事件 → 用户选择 → selectSerialPort 回传）。
     this.platformHost = new BrowserPlatformHost({ serial: this.serial });
     this.inner = new BrowserAppHost({
       platform: this.platformHost,
-      // 工作区持久化（2026-08-30，ADR-036）：主进程文件仓储薄桥（userData 目录版本化 JSON）。
+      // 工作区持久化：主进程文件仓储薄桥（userData 目录版本化 JSON）。
       repository: options.repository ?? new FileWorkspaceRepository(bridge),
       mockTransport: false,
-      // 插件持久化（2026-08-30，ADR-038）：主进程插件存储薄桥（userData 目录 plugins.json）。
+      // 插件持久化：主进程插件存储薄桥（userData 目录 plugins.json）。
       pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
-      // codec 注册表（ADR-041 决策 A）：RTU 本地路径复用浏览器 AppHost。
+      // codec 注册表：RTU 本地路径复用浏览器 AppHost。
       codecRegistry: options.codecRegistry,
-      // 同步贡献注册面 + 地址变换解析（ADR-054）。
+      // 同步贡献注册面 + 地址变换解析。
       syncRegistries: options.syncRegistries,
       resolveAddressTransform: options.resolveAddressTransform,
     });
@@ -415,7 +415,7 @@ export class ElectronAppHost implements AppHost {
   }
 
   /**
-   * TCP 连接（2026-08-23 两端 TCP 接线）：会话承载在主进程（ElectronSessionHost），
+   * TCP 连接（两端 TCP 接线）：会话承载在主进程（ElectronSessionHost），
    * 本方法经 bridge.sessionTcpConnect 远程代理；连接后的读写/轮询/Trace 亦走主进程。
    */
   async connectTcp(profile: TcpConnectionProfile): Promise<Result<void>> {
@@ -448,8 +448,8 @@ export class ElectronAppHost implements AppHost {
 
   /**
    * 释放全部资源（StrictMode 重复挂载 / 卸载清理）：退订主进程桥事件、清空本地订阅
-   * 集合、取消挂起选择会话并 dispose inner。修复事件重复投递（comm-log 一条变两条）
-   * 的根因（2026-08-23）。
+   * 集合、取消挂起选择会话并 dispose inner，避免事件重复投递（comm-log 一条变两条）
+   * 的根因。
    */
   async dispose(): Promise<void> {
     this.disposeBridgeEvents();
@@ -471,12 +471,12 @@ export class ElectronAppHost implements AppHost {
       : this.inner.getConnectionState();
   }
 
-  /** 启动插件系统（ADR-054）：委托 inner（加载已安装插件并装配执行面）。 */
+  /** 启动插件系统：委托 inner（加载已安装插件并装配执行面）。 */
   startPlugins(): Promise<void> {
     return this.inner.startPlugins();
   }
 
-  /** 预览可执行插件 entry（ADR-054）。 */
+  /** 预览可执行插件 entry。 */
   previewPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
@@ -484,7 +484,7 @@ export class ElectronAppHost implements AppHost {
     return this.inner.previewPluginEntry(entrySource, executionMode);
   }
 
-  /** 安装可执行插件（ADR-054）：委托 inner（注册 + 持久化）。 */
+  /** 安装可执行插件：委托 inner（注册 + 持久化）。 */
   installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
@@ -492,7 +492,7 @@ export class ElectronAppHost implements AppHost {
     return this.inner.installPluginEntry(entrySource, executionMode);
   }
 
-  /** 当前会话（ADR-044 Phase F-2）：RTU 本地路径返回内部会话；TCP 在主进程 → null。 */
+  /** 当前会话：RTU 本地路径返回内部会话；TCP 在主进程 → null。 */
   getSession(): CommunicationSession | null {
     return this.activeProtocol === "tcp" ? null : this.inner.getSession();
   }
@@ -525,7 +525,7 @@ export class ElectronAppHost implements AppHost {
   }
 
   /**
-   * 从站地址 / TCP Unit ID 会话内动态修改（2026-08-25，ADR-022 已知限制打通）：
+   * 从站地址 / TCP Unit ID 会话内动态修改（已知限制打通）：
    * RTU 本地路径（inner）；TCP 经 session-set-unit-id 远程代理主进程。
    */
   setSlaveAddress(slave: number): void {
@@ -549,7 +549,7 @@ export class ElectronAppHost implements AppHost {
     );
   }
 
-  /** 更新活动表地址变换配置（ADR-042）：Electron RTU 会话本地（inner）；TCP 无地址变换（恒不调整）。 */
+  /** 更新活动表地址变换配置：Electron RTU 会话本地（inner）；TCP 无地址变换（恒不调整）。 */
   setAddressTransform(
     config: {
       transformId: string;
@@ -604,7 +604,7 @@ export class ElectronAppHost implements AppHost {
 
   readAllRows(rows: BatchReadRow[], route?: RequestRoute): BatchReadHandle {
     if (this.activeProtocol === "tcp") {
-      // 远程批任务（ADR-025）：batchId 由渲染端生成，取消经 session-batch-cancel RPC 通知主进程。
+      // 远程批任务：batchId 由渲染端生成，取消经 session-batch-cancel RPC 通知主进程。
       const batchId = createBatchId();
       const handle = this.bridge.sessionBatchRead(
         batchId,
@@ -759,7 +759,7 @@ export class ElectronAppHost implements AppHost {
     return this.bridge.readTextFromClipboard();
   }
 
-  // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：主进程保存对话框 + fs 落盘 ----
+  // ---- 通信日志 CSV 导出（PRD §8.3 P1）：主进程保存对话框 + fs 落盘 ----
 
   saveTextFile(options: {
     suggestedName: string;
@@ -769,7 +769,7 @@ export class ElectronAppHost implements AppHost {
     return this.bridge.saveTextFile(options);
   }
 
-  // ---- 工作区导入（2026-08-29，PRD §8.3 P1）：主进程打开对话框 + fs 读取 ----
+  // ---- 工作区导入（PRD §8.3 P1）：主进程打开对话框 + fs 读取 ----
 
   openTextFile(options?: {
     suggestedName?: string;
@@ -777,7 +777,7 @@ export class ElectronAppHost implements AppHost {
     return this.bridge.openTextFile(options);
   }
 
-  // ---- 插件运行时桥（2026-08-31，ADR-039）：主进程返回能力错误（Phase A），委托桥契约就位 ----
+  // ---- 插件运行时桥：主进程返回能力错误，委托桥契约就位 ----
 
   pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>> {
     return this.bridge.pluginRuntimeLoad(payload);

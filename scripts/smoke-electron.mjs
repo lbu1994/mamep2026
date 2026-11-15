@@ -1,5 +1,5 @@
 /**
- * Electron 骨架冒烟验证（Playwright + Electron，docs/adr/ADR-016 后续事项的先行验证）。
+ * Electron 冒烟验证（Playwright + Electron）。
  *
  * 用法：node scripts/smoke-electron.mjs
  * - 用生产构建路径启动：dist-electron/main.js + apps/web/dist（loadFile，验证 base ./ + CSP）

@@ -4,7 +4,7 @@ import { initReactI18next } from "react-i18next";
 export const en = {
   app: {
     title: "Mamep2026",
-    /** 启动骨架文案（2026-09-13）：Host 按运行时平台动态加载期间显示。 */
+    /** 启动骨架文案：Host 按运行时平台动态加载期间显示。 */
     loading: "Starting…",
   },
   topbar: {
@@ -26,13 +26,13 @@ export const en = {
     registerTables: "Tables",
     newTable: "New Table",
     toggleGroup: "Click to expand/collapse",
-    // 分组标题统一由 table.tableType.* 提供（2026-09-13 列语义泛化）：侧边栏不再持有分组文案。
+    // 分组标题统一由 table.tableType.* 提供（列语义泛化）：侧边栏不再持有分组文案。
     footerBrowser: "Browser v{{version}}",
     footerClient: "Client v{{version}}",
     footerExtension: "Extension v{{version}}",
     footerAndroid: "Android v{{version}}",
   },
-  // 移动布局（ADR-050 Phase 3）：抽屉入口。
+  // 移动布局：抽屉入口。
   mobile: {
     openTables: "Open table list",
     openPanel: "Open panel",
@@ -74,7 +74,7 @@ export const en = {
     unsupportedSecureContext:
       "Web Serial requires a secure context (HTTPS or localhost).",
     selectDeviceFirst: "Please select a serial port first.",
-    // ---- TCP（2026-08-23 两端 TCP 接线）----
+    // ---- TCP（两端 TCP 接线）----
     protocol: "Protocol",
     protocolRtu: "Modbus RTU",
     protocolTcp: "Modbus TCP",
@@ -111,7 +111,7 @@ export const en = {
     no: "No",
     tm: "TM",
     name: "Name",
-    // ROM/RAM Enter（ADR-041 Phase C，安川插件工具栏动作）。
+    // ROM/RAM Enter（安川插件工具栏动作）。
     enterRom: "Enter ROM (EEPROM)",
     enterRam: "Enter RAM",
     confirm: "Confirm",
@@ -119,8 +119,8 @@ export const en = {
       "Write parameter data to EEPROM (persists after power off) via register 0900H? EEPROM endurance is limited to ~100,000 writes.",
     enterRamConfirm:
       "Update parameters in RAM only (lost after power off) via register 0910H?",
-    // 列头/工具栏「地址」文案（2026-09-13）：对线圈 / 离散输入 / 输入寄存器等表类型，
-    // 「Register」不再准确，统一泛化为 Address。进制后缀沿用 ADR-014。
+    // 列头/工具栏「地址」文案：对线圈 / 离散输入 / 输入寄存器等表类型，
+    // 「Register」不再准确，统一泛化为 Address。进制后缀沿用。
     addressDec: "Address[DEC]",
     addressHex: "Address[HEX]",
     addressFormat: "Address format",
@@ -165,7 +165,7 @@ export const en = {
     bool: "Bool",
     readOnlyTable:
       "This table is read-only (discrete inputs / input registers)",
-    // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）：2026-09-13 起明确读/写属性、
+    // 核心表类型标题（侧边栏分组/新建表）： 起明确读/写属性、
     // 不再显示功能码（功能码在帮助/表类型说明中仍可查）。
     tableType: {
       holdingRegister: "HOLDING REGISTERS (R/W)",
@@ -173,7 +173,7 @@ export const en = {
       discreteInput: "DISCRETE INPUTS (R)",
       inputRegister: "INPUT REGISTERS (R)",
     },
-    // 自定义功能码示例插件（ADR-043 E-4）。
+    // 自定义功能码示例插件。
     customZero: "Zero All (example)",
     customScaled: "Scaled (x0.1, example)",
     sheet: "Sheet",
@@ -208,12 +208,12 @@ export const en = {
       "Slave address used for this table's read/write requests.",
     unitId: "Unit ID",
     unitIdHint: "Modbus TCP Unit ID used for this table's read/write requests.",
-    // 写后回读（2026-08-26）：每表独立配置。
+    // 写后回读：每表独立配置。
     writeVerify: "Write verification",
     writeVerifyLabel: "Verify:",
     writeVerifyHint:
       "Read back (FC03) after a write for this table. ON = read back immediately; ON 100/200/500 ms = wait before reading back.",
-    // 表级 Address Adjust（2026-09-01，ADR-042）：每表独立 OFF/ON。
+    // 表级 Address Adjust：每表独立 OFF/ON。
     addressAdjust: "Address Adjust",
     addressAdjustOff: "OFF",
     addressAdjustOn: "ON",
@@ -225,7 +225,7 @@ export const en = {
     noOpenSheetsHint: "Select a table from the sidebar to open it.",
     batchSummary:
       "Read All: {{success}} Succeeded, {{failure}} Failed, {{skipped}} Skipped, {{cancelled}} Cancelled",
-    // Read All 完成结果的全局提示（antd message，2026-08-28）。
+    // Read All 完成结果的全局提示（antd message）。
     readAllComplete: "Read All Complete",
     readAllSucceeded: "{{count}} Succeeded",
     readAllFailed: "{{count}} Failed",
@@ -267,7 +267,7 @@ export const en = {
     autoScroll: "Auto scroll",
     copy: "Copy",
     copySuccess: "Copied",
-    // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）----
+    // ---- 通信日志 CSV 导出（PRD §8.3 P1）----
     export: "Export",
     exportConfirmTitle: "Export communication log?",
     exportConfirmContent:
@@ -295,7 +295,7 @@ export const en = {
     empty: "No built-in plugins registered.",
     exampleTitle: "Example Plugin",
     exampleThemeColor: "Indigo",
-    // panels 贡献示例插件（2026-09-12）：插件自带翻译优先（方案 A），本键作 i18n 兜底。
+    // panels 贡献示例插件：插件自带翻译优先（方案 A），本键作 i18n 兜底。
     examplePanelTitle: "Example Panel",
     author: "Author",
     platform: "Platform",
@@ -304,25 +304,25 @@ export const en = {
     platformNode: "Node",
     platformWebTooltip: "Runs in the browser (Web platform).",
     platformNodeTooltip: "Requires the Node.js platform.",
-    // 可执行化（2026-08-31，ADR-039）：apiVersion / 能力要求 / entry 展示。
+    // 可执行化：apiVersion / 能力要求 / entry 展示。
     apiVersion: "API Version",
     requiredCapabilities: "Required capabilities",
     entry: "Entry",
     entryWeb: "Web",
     entryNode: "Node",
     entryNotExecuted: "Declared only (not executed)",
-    // 贡献点占位（2026-08-31，ADR-039）：交互内容随 Phase F 插件 runtime 提供。
+    // 贡献点占位：交互内容随插件 runtime 提供。
     panelPlaceholder:
       "Plugin panel content will be provided by the plugin runtime.",
     settingsPlaceholder:
       "Plugin settings will be provided by the plugin runtime.",
     toolbarActionPlaceholder:
       "This plugin action is not available yet (plugin runtime is Phase A).",
-    // 安川插件（ADR-041，Phase C）：表类型标题（侧边栏分组头/新建表类型名）与协议标题。
+    // 安川插件：表类型标题（侧边栏分组头/新建表类型名）与协议标题。
     yaskawaTableTypeTitle: "Read/write via 67H 010DH/010EH",
     yaskawaMemobusTitle: "Yaskawa MEMOBUS (67H 010DH/010EH)",
     yaskawaManualTitle: "Yaskawa MEMOBUS Register Manual",
-    // 自定义功能码示例插件（ADR-043 E-4）。
+    // 自定义功能码示例插件。
     customFunctionTitle: "Custom FC 65H/66H (example plugin)",
     permission: {
       uiPanel: "UI Panel",
@@ -336,9 +336,9 @@ export const en = {
       uiContribution: "UI Contribution",
       theme: "Theme",
     },
-    // 地址变换注册（2026-09-01，ADR-042）。
+    // 地址变换注册。
     transformAlreadyRegistered: "Address transform already registered.",
-    // 插件安装入口（2026-08-30，PRD §8.3 P1，ADR-038）。
+    // 插件安装入口（PRD §8.3 P1）。
     install: "Install Plugin",
     installUnsupported:
       "Plugin installation is not supported in this environment.",
@@ -348,7 +348,7 @@ export const en = {
     installConfirmOk: "Install",
     installSuccess: "Plugin installed.",
     installedTag: "Installed",
-    // 插件卸载（2026-09-01，ADR-044 Phase F-1）：仅 installed 可卸载。
+    // 插件卸载：仅 installed 可卸载。
     uninstall: "Uninstall",
     uninstallConfirmTitle: "Uninstall this plugin?",
     uninstallConfirmWarning:
@@ -356,11 +356,11 @@ export const en = {
     uninstallConfirmOk: "Uninstall",
     uninstallSuccess: "Plugin uninstalled.",
     actionSucceeded: "Plugin action completed.",
-    // 单文件 JS 可执行插件（ADR-044 F-2/3；ADR-054：插件一律手动安装）。
+    // 单文件 JS 可执行插件（插件一律手动安装）。
     executableUnsupported:
       "Executable plugins are not supported in this environment.",
-    // 执行模式（ADR-054）：默认隔离线程；同进程需用户显式授权（插件与应用同权限）。
-    // ADR-055：桌面端同进程 = 在宿主进程（Electron 主进程 / 扩展宿主）内执行（完整 Node 环境）。
+    // 执行模式：默认隔离线程；同进程需用户显式授权（插件与应用同权限）。
+    //桌面端同进程 = 在宿主进程（Electron 主进程 / 扩展宿主）内执行（完整 Node 环境）。
     executionModeWarning:
       "Same-process execution grants the plugin the application's own privileges: in the browser/webview it runs in the UI process, and on desktop hosts (Electron main process / VS Code extension host) it runs in the host process with full Node.js access (file system, network, subprocesses). Choose it only for plugins you fully trust.",
     executionModeIsolated: "Isolated worker (recommended)",
@@ -380,7 +380,7 @@ export const en = {
     tabPluginDocs: "Plugin Documentation",
     tabAbout: "About",
   },
-  // ---- 键盘快捷键（2026-08-30，PRD §8.3 P1，ADR-037）----
+  // ---- 键盘快捷键（PRD §8.3 P1）----
   keyboard: {
     title: "Keyboard Shortcuts",
     groupApp: "Global",
@@ -410,13 +410,13 @@ export const en = {
   },
   settings: {
     title: "Settings",
-    // 抽屉页签（2026-09-12 插件管理并入）：General=既有设置项，Plugins=插件管理。
+    // 抽屉页签（插件管理并入）：General=既有设置项，Plugins=插件管理。
     tabGeneral: "General",
     tabPlugins: "Plugins",
     theme: "Theme",
     themeLight: "Light",
     themeDark: "Dark",
-    // 主题色预设（2026-09-02，ADR-047）：内置默认蓝（Ant Design 默认）+ 插件注册可选色。
+    // 主题色预设：内置默认蓝（Ant Design 默认）+ 插件注册可选色。
     themeColor: "Accent color",
     themeColorDefault: "Default blue",
     resetWorkspace: "Reset Workspace",
@@ -427,7 +427,7 @@ export const en = {
     aboutText:
       "Mamep2026 — Modbus debugging tool (browser MVP). Modbus RTU via Web Serial.",
   },
-  // ---- 工作区导入导出（2026-08-29，PRD §8.3 P1）----
+  // ---- 工作区导入导出（PRD §8.3 P1）----
   workspace: {
     import: "Import Workspace",
     export: "Export Workspace",
@@ -455,7 +455,7 @@ export const en = {
     saved: "Saved",
     failed: "Save failed",
   },
-  // ---- 崩溃后状态恢复（2026-09-04，PRD §8.3 / ADR-049）----
+  // ---- 崩溃后状态恢复（PRD §8.3）----
   recovery: {
     recoveredBackup:
       "Workspace recovered from backup ({{time}}). Some recent changes may be lost.",
@@ -588,13 +588,13 @@ export const zh: TranslationResources = {
     registerTables: "表格",
     newTable: "新建表格",
     toggleGroup: "点击展开/折叠",
-    // 分组标题统一由 table.tableType.* 提供（2026-09-13 列语义泛化）。
+    // 分组标题统一由 table.tableType.* 提供（列语义泛化）。
     footerBrowser: "浏览器 v{{version}}",
     footerClient: "客户端 v{{version}}",
     footerExtension: "插件 v{{version}}",
     footerAndroid: "Android v{{version}}",
   },
-  // 移动布局（ADR-050 Phase 3）：抽屉入口。
+  // 移动布局：抽屉入口。
   mobile: {
     openTables: "打开表列表",
     openPanel: "打开面板",
@@ -635,7 +635,7 @@ export const zh: TranslationResources = {
     unsupportedSecureContext:
       "Web Serial 需要安全上下文（HTTPS 或 localhost）。",
     selectDeviceFirst: "请先选择串口。",
-    // ---- TCP（2026-08-23 两端 TCP 接线）----
+    // ---- TCP（两端 TCP 接线）----
     protocol: "协议",
     protocolRtu: "Modbus RTU",
     protocolTcp: "Modbus TCP",
@@ -669,14 +669,14 @@ export const zh: TranslationResources = {
     no: "No",
     tm: "TM",
     name: "名称",
-    // ROM/RAM Enter（ADR-041 Phase C，安川插件工具栏动作）。
+    // ROM/RAM Enter（安川插件工具栏动作）。
     enterRom: "Enter ROM（EEPROM）",
     enterRam: "Enter RAM",
     confirm: "确认",
     enterRomConfirm:
       "将参数数据写入 EEPROM（断电后仍保留，寄存器 0900H）？EEPROM 写入寿命约 10 万次，请勿频繁执行。",
     enterRamConfirm: "仅更新 RAM 中的参数（断电后失效，寄存器 0910H）？",
-    // 列头/工具栏「地址」文案（2026-09-13，与 en 同步）。
+    // 列头/工具栏「地址」文案（与 en 同步）。
     addressDec: "地址[DEC]",
     addressHex: "地址[HEX]",
     addressFormat: "地址格式",
@@ -717,14 +717,14 @@ export const zh: TranslationResources = {
     string: "字符串",
     bool: "BOOL",
     readOnlyTable: "该表为只读（离散输入 / 输入寄存器）",
-    // 核心表类型标题（ADR-043 E-2，侧边栏分组/新建表）：2026-09-13 起明确读/写属性。
+    // 核心表类型标题（侧边栏分组/新建表）： 起明确读/写属性。
     tableType: {
       holdingRegister: "多个保持寄存器（读/写）",
       coil: "多个线圈（读/写）",
       discreteInput: "离散输入（只读）",
       inputRegister: "输入寄存器（只读）",
     },
-    // 自定义功能码示例插件（ADR-043 E-4）。
+    // 自定义功能码示例插件。
     customZero: "全部清零（示例）",
     customScaled: "缩放（x0.1，示例）",
     sheet: "标签页",
@@ -756,12 +756,12 @@ export const zh: TranslationResources = {
     slaveAddressHint: "本表读写请求使用的从站地址。",
     unitId: "Unit ID",
     unitIdHint: "本表读写请求使用的 Modbus TCP Unit ID。",
-    // 写后回读（2026-08-26）：每表独立配置。
+    // 写后回读：每表独立配置。
     writeVerify: "写后回读",
     writeVerifyLabel: "回读:",
     writeVerifyHint:
       "本表写入后回读（FC03）校验。ON = 写入后立即回读；ON 100/200/500 ms = 等待后再回读。",
-    // 表级 Address Adjust（2026-09-01，ADR-042）：每表独立 OFF/ON。
+    // 表级 Address Adjust：每表独立 OFF/ON。
     addressAdjust: "地址调整",
     addressAdjustOff: "OFF",
     addressAdjustOn: "ON",
@@ -773,7 +773,7 @@ export const zh: TranslationResources = {
     noOpenSheetsHint: "从侧边栏选择一张表以打开。",
     batchSummary:
       "全表读取：成功 {{success}}，失败 {{failure}}，跳过 {{skipped}}，取消 {{cancelled}}",
-    // Read All 完成结果的全局提示（antd message，2026-08-28）。
+    // Read All 完成结果的全局提示（antd message）。
     readAllComplete: "全表读取完成",
     readAllSucceeded: "成功 {{count}}",
     readAllFailed: "失败 {{count}}",
@@ -815,7 +815,7 @@ export const zh: TranslationResources = {
     autoScroll: "自动滚动",
     copy: "复制",
     copySuccess: "已复制",
-    // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）----
+    // ---- 通信日志 CSV 导出（PRD §8.3 P1）----
     export: "导出",
     exportConfirmTitle: "导出通信日志？",
     exportConfirmContent:
@@ -843,7 +843,7 @@ export const zh: TranslationResources = {
     empty: "没有已注册的内置插件。",
     exampleTitle: "示例插件",
     exampleThemeColor: "靛蓝",
-    // panels 贡献示例插件（2026-09-12）：插件自带翻译优先（方案 A），本键作 i18n 兜底。
+    // panels 贡献示例插件：插件自带翻译优先（方案 A），本键作 i18n 兜底。
     examplePanelTitle: "示例面板",
     author: "作者",
     platform: "平台能力",
@@ -852,21 +852,21 @@ export const zh: TranslationResources = {
     platformNode: "Node",
     platformWebTooltip: "可在浏览器（Web 平台）运行。",
     platformNodeTooltip: "需要 Node.js 平台。",
-    // 可执行化（2026-08-31，ADR-039）：apiVersion / 能力要求 / entry 展示。
+    // 可执行化：apiVersion / 能力要求 / entry 展示。
     apiVersion: "API 版本",
     requiredCapabilities: "能力要求",
     entry: "入口",
     entryWeb: "Web",
     entryNode: "Node",
     entryNotExecuted: "仅声明（不执行）",
-    // 贡献点占位（2026-08-31，ADR-039）：交互内容随 Phase F 插件 runtime 提供。
+    // 贡献点占位：交互内容随插件 runtime 提供。
     panelPlaceholder: "插件面板内容将由插件运行时提供。",
     settingsPlaceholder: "插件设置内容将由插件运行时提供。",
-    toolbarActionPlaceholder: "此插件动作暂不可用（插件运行时为 Phase A）。", // 安川插件（ADR-041，Phase C）：表类型标题与协议标题。
+    toolbarActionPlaceholder: "此插件动作暂不可用（插件运行时为 Phase A）。", // 安川插件：表类型标题与协议标题。
     yaskawaTableTypeTitle: "用 67H 010DH/010EH 读写寄存器",
     yaskawaMemobusTitle: "安川 MEMOBUS（67H 010DH/010EH）",
     yaskawaManualTitle: "安川 MEMOBUS 寄存器手册",
-    // 自定义功能码示例插件（ADR-043 E-4）。
+    // 自定义功能码示例插件。
     customFunctionTitle: "自定义 65H/66H（示例插件）",
     permission: {
       uiPanel: "界面面板",
@@ -880,9 +880,9 @@ export const zh: TranslationResources = {
       uiContribution: "界面贡献",
       theme: "主题",
     },
-    // 地址变换注册（2026-09-01，ADR-042）。
+    // 地址变换注册。
     transformAlreadyRegistered: "地址变换已注册。",
-    // 插件安装入口（2026-08-30，PRD §8.3 P1，ADR-038）。
+    // 插件安装入口（PRD §8.3 P1）。
     install: "安装插件",
     installUnsupported: "当前环境不支持安装插件。",
     installConfirmTitle: "安装此插件？",
@@ -891,7 +891,7 @@ export const zh: TranslationResources = {
     installConfirmOk: "安装",
     installSuccess: "插件安装成功。",
     installedTag: "已安装",
-    // 插件卸载（2026-09-01，ADR-044 Phase F-1）：仅 installed 可卸载。
+    // 插件卸载：仅 installed 可卸载。
     uninstall: "卸载",
     uninstallConfirmTitle: "卸载此插件？",
     uninstallConfirmWarning:
@@ -899,10 +899,10 @@ export const zh: TranslationResources = {
     uninstallConfirmOk: "卸载",
     uninstallSuccess: "插件已卸载。",
     actionSucceeded: "插件动作执行完成。",
-    // 单文件 JS 可执行插件（ADR-044 F-2/3；ADR-054：插件一律手动安装）。
+    // 单文件 JS 可执行插件（插件一律手动安装）。
     executableUnsupported: "当前环境不支持可执行插件。",
-    // 执行模式（ADR-054）：默认隔离线程；同进程需用户显式授权（插件与应用同权限）。
-    // ADR-055：桌面端同进程 = 在宿主进程（Electron 主进程 / 扩展宿主）内执行（完整 Node 环境）。
+    // 执行模式：默认隔离线程；同进程需用户显式授权（插件与应用同权限）。
+    //桌面端同进程 = 在宿主进程（Electron 主进程 / 扩展宿主）内执行（完整 Node 环境）。
     executionModeWarning:
       "同进程执行意味着该插件拥有与应用相同的权限：浏览器/Webview 中在界面进程内执行，桌面端（Electron 主进程 / VSCode 扩展宿主）则在宿主进程内执行并拥有完整 Node 能力（文件系统、网络、子进程）。请仅对你完全信任的插件选择此项。",
     executionModeIsolated: "隔离线程（推荐）",
@@ -922,7 +922,7 @@ export const zh: TranslationResources = {
     tabPluginDocs: "插件文档",
     tabAbout: "关于",
   },
-  // ---- 键盘快捷键（2026-08-30，PRD §8.3 P1，ADR-037）----
+  // ---- 键盘快捷键（PRD §8.3 P1）----
   keyboard: {
     title: "键盘快捷键",
     groupApp: "全局",
@@ -952,13 +952,13 @@ export const zh: TranslationResources = {
   },
   settings: {
     title: "设置",
-    // 抽屉页签（2026-09-12 插件管理并入）：General=既有设置项，Plugins=插件管理。
+    // 抽屉页签（插件管理并入）：General=既有设置项，Plugins=插件管理。
     tabGeneral: "常规",
     tabPlugins: "插件",
     theme: "主题",
     themeLight: "浅色",
     themeDark: "深色",
-    // 主题色预设（2026-09-02，ADR-047）：内置默认蓝（Ant Design 默认）+ 插件注册可选色。
+    // 主题色预设：内置默认蓝（Ant Design 默认）+ 插件注册可选色。
     themeColor: "主题色",
     themeColorDefault: "默认蓝",
     resetWorkspace: "重置工作区",
@@ -968,7 +968,7 @@ export const zh: TranslationResources = {
     aboutText:
       "Mamep2026 — Modbus 调试工具（浏览器 MVP）。通过 Web Serial 支持 Modbus RTU。",
   },
-  // ---- 工作区导入导出（2026-08-29，PRD §8.3 P1）----
+  // ---- 工作区导入导出（PRD §8.3 P1）----
   workspace: {
     import: "导入工作区",
     export: "导出工作区",
@@ -996,7 +996,7 @@ export const zh: TranslationResources = {
     saved: "已保存",
     failed: "保存失败",
   },
-  // ---- 崩溃后状态恢复（2026-09-04，PRD §8.3 / ADR-049）----
+  // ---- 崩溃后状态恢复（PRD §8.3）----
   recovery: {
     recoveredBackup: "工作区已从备份恢复（{{time}}），最近的更改可能丢失。",
     recoveredFresh: "工作区恢复失败，已重置为空工作区。",
@@ -1102,8 +1102,8 @@ export const i18nResources = {
 export type AppLanguage = "en-US" | "zh-CN";
 
 /**
- * 初始化 i18n。`language` 供组合根在**首屏渲染前**用持久化偏好初始化（2026-09-16：刷新后
- * 语言闪烁修复——见 `apps/web/src/boot-preferences.ts`）；缺省 `en-US`（既有调用不变）。
+ * 初始化 i18n。`language` 供组合根在**首屏渲染前**用持久化偏好初始化（刷新后
+ * 首屏语言由 `apps/web/src/boot-preferences.ts` 提前 hydrate）；缺省 `en-US`。
  */
 export function initI18n(language: AppLanguage = "en-US"): void {
   void i18next.use(initReactI18next).init({

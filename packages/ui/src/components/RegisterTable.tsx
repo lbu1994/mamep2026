@@ -118,7 +118,7 @@ import { readRowById, writeRowById } from "../row-io";
 import { requestRouteForSheet } from "../request-route";
 import { runPluginToolbarAction } from "../plugin-toolbar-actions";
 
-/** 写后回读配置选项（PRD §6.5.12，2026-08-26）：Select value ↔ ReadVerifySettings。 */
+/** 写后回读配置选项（PRD §6.5.12）：Select value ↔ ReadVerifySettings。 */
 type WriteVerifyOptionValue = "off" | "immediate" | "100" | "200" | "500";
 
 const WRITE_VERIFY_OPTIONS: Array<{
@@ -152,7 +152,7 @@ function writeVerifyOptionMs(value: WriteVerifyOptionValue): number | null {
     : null;
 }
 
-// ---- 可编辑单元格（antd 可编辑单元格模式，2026-08-15）----
+// ---- 可编辑单元格（antd 可编辑单元格模式）----
 // 非编辑态：值以无边框文本显示（hover 出现边框提示可编辑），点击或 Enter/Space 进入编辑；
 // 编辑态：`Input variant="filled"` 自动聚焦，Enter 或失焦提交。
 // 草稿保存在组件本地（短暂态），提交后才写 store——不依赖行内长存状态，
@@ -172,7 +172,7 @@ interface EditableCellValueProps {
   emptyText?: string;
   /** 非编辑态值右侧的附加节点（如 Data 列状态点）；编辑态不显示。 */
   trailing?: React.ReactNode;
-  /** 只读（ADR-052 位明细行）：禁用进入编辑，仅展示文本。 */
+  /** 只读（位明细行）：禁用进入编辑，仅展示文本。 */
   disabled?: boolean;
   /** 提交回调（Enter/失焦）：参数为最终草稿；草稿未变时不调用。 */
   onCommit: (value: string) => void;
@@ -195,7 +195,7 @@ function EditableCellValue({
   const editingRef = useRef(false);
   // 同步追踪最新草稿：onChange 的 setState 是异步重渲染，若在渲染完成前提交
   // （如自动化 fill+立即 Enter / 用户快速输入），commit 闭包读到旧 draft 会误判
-  // "未修改"而跳过提交（2026-08-25 real e2e 发现）。commit 改读 ref 根治。
+  // "未修改"而跳过提交（real e2e 发现）。commit 改读 ref 根治。
   const draftRef = useRef(value);
   useEffect(() => {
     editingRef.current = editing;
@@ -213,7 +213,7 @@ function EditableCellValue({
     draftRef.current = value;
     // 同步置编辑态标记：useEffect 更新是异步的（浏览器在渲染提交后才运行 effect），
     // 若在 effect 运行前立即提交（自动化 click+fill+Enter / 用户快速操作），commit 会
-    // 因 editingRef 仍为 false 提前 return 而丢弃输入（2026-08-26 real e2e 竞态，
+    // 因 editingRef 仍为 false 提前 return 而丢弃输入（real e2e 竞态，
     // 与 draftRef 同类）。同步更新根治。
     editingRef.current = true;
     setEditing(true);
@@ -306,7 +306,7 @@ const TmCell = memo(function TmCell({
 }: {
   rowId: RowId;
   traceEnabled: boolean;
-  /** 多寄存器字符串行（ADR-030）：Trace 对组合数值采样，字符串行禁用。 */
+  /** 多寄存器字符串行：Trace 对组合数值采样，字符串行禁用。 */
   dataType: DataType;
   registerCount: number;
 }) {
@@ -445,7 +445,7 @@ const ReadCell = memo(function ReadCell({
 }: {
   rowId: RowId;
   hasAddress: boolean;
-  /** 范围长度与类型合法集匹配（ADR-030）：不匹配时禁用读写。 */
+  /** 范围长度与类型合法集匹配：不匹配时禁用读写。 */
   typeCountValid: boolean;
 }) {
   const { t } = useTranslation();
@@ -455,7 +455,7 @@ const ReadCell = memo(function ReadCell({
   const connected = useAppStore((s) => s.connectionState) === "connected";
   // 离线、未配置合法地址或范围长度与类型合法集不匹配时禁用；无地址时提供 Tooltip 说明原因。
   const disabled = !connected || !hasAddress || !typeCountValid;
-  // 单行读逻辑统一在 row-io.readRowById（与 F8 读选中行快捷键共用，2026-08-30）。
+  // 单行读逻辑统一在 row-io.readRowById（与 F8 读选中行快捷键共用）。
   const handleRead = (): void => {
     if (host === null || host === undefined) return;
     void readRowById(host, rowId, { updateRow, recordManualResult });
@@ -576,7 +576,7 @@ const WriteCell = memo(function WriteCell({
   sheetId: SheetId;
   rowId: RowId;
   hasAddress: boolean;
-  /** 范围长度与类型合法集匹配（ADR-030）：不匹配时禁用读写。 */
+  /** 范围长度与类型合法集匹配：不匹配时禁用读写。 */
   typeCountValid: boolean;
 }) {
   const { t } = useTranslation();
@@ -585,7 +585,7 @@ const WriteCell = memo(function WriteCell({
   const recordManualResult = useAppStore((s) => s.recordManualResult);
   const updateRow = useAppStore((s) => s.updateRow);
   const connected = useAppStore((s) => s.connectionState) === "connected";
-  // 只读表（ADR-043 E-2）：discrete-input/input-register 按表类型禁用写（WriteCell 守卫）。
+  // 只读表：discrete-input/input-register 按表类型禁用写（WriteCell 守卫）。
   const sheetType = useAppStore(
     (s) =>
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.type ??
@@ -596,7 +596,7 @@ const WriteCell = memo(function WriteCell({
   const disabled = !connected || !hasAddress || !typeCountValid || readOnly;
 
   // 单行写逻辑（含每表写后回读配置）统一在 row-io.writeRowById
-  // （与 Ctrl+Shift+Enter 写选中行快捷键共用，2026-08-30）。
+  // （与 Ctrl+Shift+Enter 写选中行快捷键共用）。
   const handleWrite = (): void => {
     if (host === null || host === undefined) return;
     void writeRowById(host, sheetId, rowId, {
@@ -636,13 +636,13 @@ const TypeCell = memo(function TypeCell({
 }: {
   rowId: RowId;
   dataType: DataType;
-  /** 类型列校验错误（ADR-030）：范围长度与类型合法集不匹配时红框 + Tooltip。 */
+  /** 类型列校验错误：范围长度与类型合法集不匹配时红框 + Tooltip。 */
   error?: RowFailure | undefined;
 }) {
   const { t, i18n } = useTranslation();
   const setRowDataType = useAppStore((s) => s.setRowDataType);
   const host = useAppStore((s) => s.host);
-  // 插件数据类型（ADR-043 E-3）：贡献点声明（id/titleKey）+ 已注册运行时（resolver.list）。
+  // 插件数据类型：贡献点声明（id/titleKey）+ 已注册运行时（resolver.list）。
   // 注意：订阅 resolver 对象本身（稳定引用），list() 在渲染时调用避免 selector 返回新数组触发无限重渲染。
   const dataTypeResolver = useAppStore((s) => s.dataTypeResolver);
   const dataTypeContributions = usePluginContributions<DataTypeContribution>(
@@ -658,7 +658,7 @@ const TypeCell = memo(function TypeCell({
         ? t(c.payload.titleKey)
         : c.payload.id,
     }));
-  // Type 双列拆分（ADR-030）：进制列 + scale 列，组合映射回 dataType。
+  // Type 双列拆分：进制列 + scale 列，组合映射回 dataType。
   const radix = dataTypeToRadix(dataType);
   const scale = dataTypeToScale(dataType);
   // 插件类型行：Select 显示插件类型 id；内置行显示进制。
@@ -686,7 +686,7 @@ const TypeCell = memo(function TypeCell({
         variant="borderless"
         {...(error !== undefined ? { status: "error" as const } : {})}
         onChange={(value: string) => {
-          // 插件类型（ADR-043 E-3）：value 即 dataType id（单寄存器）；内置走进制+scale 组合。
+          // 插件类型：value 即 dataType id（单寄存器）；内置走进制+scale 组合。
           const plugin = pluginDataTypeOptions.find((o) => o.value === value);
           if (plugin !== undefined) {
             setRowDataType(rowId, plugin.value as DataType);
@@ -706,7 +706,7 @@ const TypeCell = memo(function TypeCell({
   );
 });
 
-/** Type scale 列（ADR-030）：仅 unsigned/signed 可用，其余进制禁用。 */
+/** Type scale 列：仅 unsigned/signed 可用，其余进制禁用。 */
 const ScaleCell = memo(function ScaleCell({
   rowId,
   dataType,
@@ -760,7 +760,7 @@ const CommentCell = memo(function CommentCell({
   );
 });
 
-// ---- 范围行虚拟子行（ADR-030 + 2026-08-27 子行可编辑化）----
+// ---- 范围行虚拟子行（+ 子行可编辑化）----
 // 子行=每寄存器一行：Address 列只读展示实际地址；Name/Data/Type/Scale/Comment 五列
 // 可编辑，经 app-store 的 commitChildCellText / setChildMeta 路由回父行（registers[i] +
 // registerValues[i] 落盘）；其余列（No/TM/WP/Read/Write/拖拽/多选/右键菜单）维持不可用。
@@ -915,7 +915,7 @@ const ChildCommentCell = memo(function ChildCommentCell({
   );
 });
 
-// ---- 位明细虚拟行（ADR-052，2026-09-11）----
+// ---- 位明细虚拟行----
 // 位行 = 一个 16 位寄存器展开出的 16 行之一（bit15 → bit0）：Name 列位名称（可编辑，同 Comment 列），
 // Address 列显示「寄存器地址 + Bit 序号」（掩码作为 hover 提示），Data 列**只有开关 1/0**
 // （未读取时开关内显示 `—` 代替 `0`；只改当前值、**不写设备**），Comment 列可编辑位注释（入撤销栈）。
@@ -951,7 +951,7 @@ const BitNameCell = memo(function BitNameCell({
 
 /**
  * 位行 Address 列：寄存器地址 + Bit 序号（如 `2000 Bit 15`，只读）；
- * 位掩码（如 `0x8000`）作为 hover 提示保留（ADR-052 需求追加）。
+ * 位掩码（如 `0x8000`）作为 hover 提示保留。
  */
 const BitRegisterCell = memo(function BitRegisterCell({
   row,
@@ -975,10 +975,10 @@ const BitRegisterCell = memo(function BitRegisterCell({
 });
 
 /**
- * 位行 Data 列：仅一个开关（`1`/`0`），不再提供输入框（2026-09-16 交互简化）。
- * 未读取（值为 null）时开关**内部**显示「—」代替 `0`（与「读到 0」区分，2026-09-17）；开关仍可切换
- * （按「cellText 派生、失败即全 0」基准，ADR-052 决策 4）。
- * 只改当前值、**不写设备**、不入撤销栈（ADR-052 决策 3/6）；只读表的开关禁用。
+ * 位行 Data 列：仅一个开关（`1`/`0`），不再提供输入框（交互简化）。
+ * 未读取（值为 null）时开关**内部**显示「—」代替 `0`（与「读到 0」区分）；开关仍可切换
+ * （按「cellText 派生、失败即全 0」基准）。
+ * 只改当前值、**不写设备**、不入撤销栈；只读表的开关禁用。
  */
 const BitDataCell = memo(function BitDataCell({
   row,
@@ -1043,7 +1043,7 @@ const BitCommentCell = memo(function BitCommentCell({
   );
 });
 
-// ---- dnd-kit 拖拽排序列（2026-08-16）----
+// ---- dnd-kit 拖拽排序列----
 // 最右列拖拽手柄：仅手柄可拖（setActivatorNodeRef + listeners 经 RowContext 传给手柄按钮），
 // 行体空白处不触发拖拽，避免与单元格编辑/多选冲突。排序动作经 app-store.moveRowToIndex
 // 落到领域层（packages/register-table 的 moveRowToIndex，arrayMove 语义）。
@@ -1073,16 +1073,14 @@ const DragHandle = memo(function DragHandle({
   );
 });
 
-// ---- 表头拖拽列宽（2026-08-16）----
+// ---- 表头拖拽列宽----
 // 通过 Table components.header.cell 自定义表头单元格；width/onResize 经 column.onHeaderCell 透传。
-// 实现说明：antd 官方示例用 react-resizable + react-draggable，但 react-draggable v4 在 React 19 下
-// 依赖 nodeRef 且拖拽首帧 delta 不稳定（实测列宽会在拖拽开始时跳变，慢速/快速拖拽均复现），
-// 故改为自研极简 east 手柄：mousedown 记录起点与当前渲染宽度，document 级 mousemove/mouseup 计算增量，
-// 纯鼠标数学、无第三方依赖，行为与官方示例一致且稳健。
+// east 手柄使用 mousedown 记录起点与当前渲染宽度，document 级 mousemove/mouseup 计算增量，
+// 不依赖第三方拖拽组件。
 // 仅「有默认 width 的列」提供手柄：弹性列（Comment）无 width，若强赋固定宽会使
 // table-layout:fixed 下全部列被浏览器按容器比例拉伸、列宽失真（已实测验证），故弹性列不拖拽。
 
-// 固定宽度、不可通过表头拖拽调整的列 key（2026-08-17）。
+// 固定宽度、不可通过表头拖拽调整的列 key。
 // 仅「可拖拽列」挂 onHeaderCell：固定列不提供拖拽手柄、并忽略会话内 colWidths 覆盖。
 const FIXED_WIDTH_COLUMNS = new Set<string>([
   "no",
@@ -1109,7 +1107,7 @@ interface ResizeHeaderCellProps extends React.ThHTMLAttributes<HTMLTableCellElem
 }
 
 /**
- * 表头单元格（列宽手柄 + 列拖拽排序，2026-08-18）。
+ * 表头单元格（列宽手柄 + 列拖拽排序）。
  * - 列宽：经 onHeaderCell 透传 width/onResize/onResizeEnd，仅「有默认宽且非固定宽」的可调列渲染 east 手柄。
  * - 列拖拽：useSortable 绑到整个 th（attributes/listeners），水平方向排序；
  *   rowSelection 列（id 为 undefined）用 disabled 对象形式只禁拖动、仍可作其他列排序的放置边界。
@@ -1235,7 +1233,7 @@ function HeaderCell(props: ResizeHeaderCellProps): React.ReactNode {
  * 行级 memo 的 <tr> props（性能优化）：`_record`/`_index`/`_selection`/`_colOrder` 经 onRow 注入，
  * 仅供 React.memo 比较器判断该行数据/位置/选中集合/列顺序是否变化，不渲染到 DOM。
  * 选中集合参与比较：选中变化时全行重渲染，刷新 rowSelection 复选框的事件闭包（避免陈旧闭包破坏多选）。
- * 列顺序签名参与比较：列拖拽排序后数据行必须同步重渲染（否则表头/数据错位，2026-08-18）；
+ * 列顺序签名参与比较：列拖拽排序后数据行必须同步重渲染（否则表头/数据错位）；
  * 列宽拖拽不改变签名，行仍可跳过渲染（保持列宽拖拽的帧级优化）。
  */
 interface MemoTableRowProps {
@@ -1256,7 +1254,7 @@ interface RegisterTableProps {
 
 /** 表格行高（size="small" 实测固定 29px），虚拟滚动需要固定行高。 */
 const ROW_HEIGHT = 29;
-/** 移动布局行高（触摸目标 ≥44dp，ADR-050 Phase 3）：与 apps/web/src/mobile.css 的 td height 同源。 */
+/** 移动布局行高（触摸目标 ≥44dp）：与 apps/web/src/mobile.css 的 td height 同源。 */
 const MOBILE_ROW_HEIGHT = 44;
 /** 移动布局横向滚动下限（列总宽之和小于该值时仍可横向滑动，避免列被挤压换行）。 */
 const MOBILE_SCROLL_X = 960;
@@ -1279,20 +1277,20 @@ export const RegisterTable = memo(function RegisterTable({
   sheetId,
 }: RegisterTableProps): React.ReactNode {
   const { t } = useTranslation();
-  // antd 全局 message（App.useApp，2026-08-28）：Read All 完成结果富内容提示；
-  // modal（ADR-041 Phase C）：ROM/RAM 确定指令安全确认（EEPROM 寿命提示）。
+  // antd 全局 message（App.useApp）：Read All 完成结果富内容提示；
+  // modal：ROM/RAM 确定指令安全确认（EEPROM 寿命提示）。
   // 应用已在 MamepApp 用 <AntApp> 包裹（测试须包 <AntApp>，见 BottomPanel.test.tsx）。
   const { message, modal } = App.useApp();
   const host = useAppStore((s) => s.host);
-  // 插件工具栏动作贡献（2026-08-31，ADR-039/041）：payload 为数组（一插件可贡献多个动作），
-  // 按目标表类型过滤（ADR-041：核心表匹配 holding-register；插件表匹配 <pluginId>:<tableTypeId>）。
-  // Phase C 为安川 ROM/RAM 确定指令提供内置执行，其余动作保持占位（Phase F 插件 runtime）。
+  // 插件工具栏动作贡献：payload 为数组（一插件可贡献多个动作），
+  // 按目标表类型过滤（核心表匹配 holding-register；插件表匹配 <pluginId>:<tableTypeId>）。
+  //  为安川 ROM/RAM 确定指令提供内置执行，其余动作保持占位（插件 runtime）。
   const sheetType = useAppStore(
     (s) =>
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.type ??
       "holding-register",
   );
-  // 本表可写（ADR-052 位明细）：只读表（discrete-input/input-register）位切换与位注释编辑禁用。
+  // 本表可写（位明细）：只读表（discrete-input/input-register）位切换与位注释编辑禁用。
   const sheetWritable = sheetTypeWritable(sheetType);
   const toolbarActions = usePluginContributions<ToolbarActionContribution[]>(
     host,
@@ -1312,27 +1310,27 @@ export const RegisterTable = memo(function RegisterTable({
       return sheetType === `${action.pluginId}:${target}`;
     });
   // 连接状态订阅：连接/断开时刷新（工具栏「从站地址 / Unit ID」label 按活动协议切换，
-  // 2026-08-25 TCP Unit ID 会话内动态修改；协议只在连接时变化）。
+  // TCP Unit ID 会话内动态修改；协议只在连接时变化）。
   const connectionState = useAppStore((s) => s.connectionState);
   const cellValidationErrors = useAppStore((s) => s.cellValidationErrors);
   const rows = useAppStore(
     (s) => s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.rows ?? [],
   );
-  // 范围行树形数据（ADR-030）：registerCount>1 的行带 children（虚拟子行，只读展示）。
+  // 范围行树形数据：registerCount>1 的行带 children（虚拟子行，只读展示）。
   const treeRows = useMemo(() => buildTreeRows(rows), [rows]);
-  // 本表最大行号（No 列宽度自适应，2026-08-27）：No 列内容 = antd 树形展开图标 +
+  // 本表最大行号（No 列宽度自适应）：No 列内容 = antd 树形展开图标 +
   // 行号，虚拟表列宽须静态确定，故按最大行号位数计算列宽（见 no-column-width.ts）。
   // 虚拟子行在 No 列渲染 null，不计入；rows 为父行集合。
   const maxOrder = useMemo(
     () => rows.reduce((max, row) => Math.max(max, row.order), 0),
     [rows],
   );
-  // 表内是否存在范围行：有则禁用虚拟滚动（antd tree 数据 + virtual 不兼容，ADR-030 风险 1 回退）。
+  // 表内是否存在范围行：有则禁用虚拟滚动（antd tree 数据 + virtual 不兼容风险 1 回退）。
   const hasRangeRows = useMemo(
     () => rows.some((r) => r.registerCount > 1),
     [rows],
   );
-  // 表内是否存在二进制行（ADR-052）：位明细同为 tree 数据，与 virtual 同样不兼容，
+  // 表内是否存在二进制行：位明细同为 tree 数据，与 virtual 同样不兼容，
   // 沿用「存在即降级」先例（位行仅在展开时生成，但仅此一次简单判定代价最低）。
   const hasBinaryRows = useMemo(
     () =>
@@ -1345,7 +1343,7 @@ export const RegisterTable = memo(function RegisterTable({
   );
   const addRow = useAppStore((s) => s.addRow);
   const appendMessage = useAppStore((s) => s.appendMessage);
-  // 插件工具栏动作执行（ADR-041 Phase C；2026-09-02 插件外部化）：requiresConfirm 先弹
+  // 插件工具栏动作执行（插件外部化）：requiresConfirm 先弹
   // 安全确认（文案经贡献点 confirmKey，安川 ROM/RAM 确定指令 EEPROM 寿命提示，决策③），
   // 确认后经 PluginRegistry 委托插件同进程 runtime（handleToolbarAction → 通信面写
   // 0900H/0910H，不回读、不触发轮询刷新，语义由插件承担）；无 handler 的动作按钮置灰。
@@ -1387,7 +1385,7 @@ export const RegisterTable = memo(function RegisterTable({
       null,
   );
   const [readAllRunning, setReadAllRunning] = useState(false);
-  // 全表读取运行态句柄与递增序号（ADR-025）：取消/重新读取的竞态守卫——
+  // 全表读取运行态句柄与递增序号：取消/重新读取的竞态守卫——
   // 只有最新一次读取的 promise 落定才允许改运行态，过期 promise 不再清状态。
   const readAllHandleRef = useRef<BatchReadHandle | null>(null);
   const readAllSeqRef = useRef(0);
@@ -1429,7 +1427,7 @@ export const RegisterTable = memo(function RegisterTable({
       }
       // 面板隐藏（display:none）时所有尺寸为 0：保持上次有效高度不重置，避免
       // scroll.y 在 0↔实际高 间切换导致 rc-table 重建全部行（含 dnd-kit useSortable，
-      // 每次 Tab 切换重建 50 行 ≈ 1s 卡顿根因，2026-08-18 实测）。显示时高度不变 → React 跳过重渲染。
+      // 每次 Tab 切换重建 50 行 ≈ 1s 卡顿根因实测）。显示时高度不变 → React 跳过重渲染。
       // 已知限制：挂载即隐藏的表首显会补测一次（每表每会话一次 ~1s，根因是 useSortable 每行成本）。
       if (next <= 0) return;
       setTableBodyHeight(Math.max(next, 0));
@@ -1449,7 +1447,7 @@ export const RegisterTable = memo(function RegisterTable({
   const copySelectedRows = useAppStore((s) => s.copySelectedRows);
   const cutSelectedRows = useAppStore((s) => s.cutSelectedRows);
   const pasteRows = useAppStore((s) => s.pasteRows);
-  // 键盘读写选中行/轮询启停（2026-08-30，PRD §8.3 P1）依赖的单行读/写/轮询动作。
+  // 键盘读写选中行/轮询启停（PRD §8.3 P1）依赖的单行读/写/轮询动作。
   const updateRow = useAppStore((s) => s.updateRow);
   const recordManualResult = useAppStore((s) => s.recordManualResult);
   const setPollingEnabled = useAppStore((s) => s.setPollingEnabled);
@@ -1459,7 +1457,7 @@ export const RegisterTable = memo(function RegisterTable({
   const canUndo = useAppStore((s) => s.undoStack.length > 0);
   const canRedo = useAppStore((s) => s.redoStack.length > 0);
 
-  // 只订阅本表的 Register 地址进制（ADR-014）：行数据变化不触发本选择器，
+  // 只订阅本表的 Register 地址进制：行数据变化不触发本选择器，
   // 配合 updateRow 外科手术式更新，非活动表在单行更新时完全不重渲染（性能优化）。
   const registerRadix = useAppStore(
     (s) =>
@@ -1474,7 +1472,7 @@ export const RegisterTable = memo(function RegisterTable({
       defaultConfig.registerTable.slaveAddress,
   );
   const setSheetSlaveAddress = useAppStore((s) => s.setSheetSlaveAddress);
-  // 本表写后回读配置（每表独立，2026-08-26）：默认立即回读。
+  // 本表写后回读配置（每表独立）：默认立即回读。
   const writeVerifyValue = useAppStore((s) =>
     writeVerifyToValue(
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.writeVerify ?? {
@@ -1484,7 +1482,7 @@ export const RegisterTable = memo(function RegisterTable({
     ),
   );
   const setSheetWriteVerify = useAppStore((s) => s.setSheetWriteVerify);
-  // 本表地址变换配置（每表独立，ADR-042）：默认不调整（null）。
+  // 本表地址变换配置（每表独立）：默认不调整（null）。
   const sheetAddressTransform = useAppStore(
     (s) =>
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)
@@ -1493,13 +1491,13 @@ export const RegisterTable = memo(function RegisterTable({
   const setSheetAddressTransform = useAppStore(
     (s) => s.setSheetAddressTransform,
   );
-  // 地址变换贡献（ADR-042）：内置 builtin.address-adjust 恒在；工具栏按贡献渲染 OFF/ON。
+  // 地址变换贡献：内置 builtin.address-adjust 恒在；工具栏按贡献渲染 OFF/ON。
   const addressTransformContributions =
     usePluginContributions<AddressTransformContribution>(
       host,
       "addressTransform",
     );
-  // 活动协议（2026-08-25）：TCP 连接时工具栏值语义为 Unit ID（label 随之切换）；
+  // 活动协议：TCP 连接时工具栏值语义为 Unit ID（label 随之切换）；
   // 未连接/RTU 时恒为从站地址。
   const activeProtocol =
     host !== null && host !== undefined && connectionState === "connected"
@@ -1519,7 +1517,7 @@ export const RegisterTable = memo(function RegisterTable({
         key: row.rowId,
         sheetId,
         address: row.addressValue?.value ?? null,
-        // 多寄存器范围行（ADR-030）：一次 FC03 批量读取全部连续寄存器。
+        // 多寄存器范围行：一次 FC03 批量读取全部连续寄存器。
         ...(row.registerCount > 1 ? { quantity: row.registerCount } : {}),
       })),
       requestRouteForSheet(host, sheet),
@@ -1539,7 +1537,7 @@ export const RegisterTable = memo(function RegisterTable({
         },
         detail: null,
       });
-      // 全局提示（2026-08-28）：富内容展示批次统计（成功/失败/跳过/取消 + 耗时），
+      // 全局提示：富内容展示批次统计（成功/失败/跳过/取消 + 耗时），
       // 与底部面板消息并存；content 为 ReactNode，AntApp 上下文内渲染（i18n 可用）。
       message.open({
         content: <ReadAllResultMessage summary={result.value} />,
@@ -1562,7 +1560,7 @@ export const RegisterTable = memo(function RegisterTable({
     }
   };
 
-  /** 取消运行中的全表读取（ADR-025）：立即退出运行态，宿主导致 promise 落定后不再改状态。 */
+  /** 取消运行中的全表读取：立即退出运行态，宿主导致 promise 落定后不再改状态。 */
   const handleCancelReadAll = (): void => {
     readAllHandleRef.current?.cancel();
     readAllSeqRef.current += 1;
@@ -1949,7 +1947,7 @@ export const RegisterTable = memo(function RegisterTable({
   const hasCustomColumnLayout =
     Object.keys(colWidths).length > 0 || columnOrder !== null;
 
-  // 移动布局（ADR-050 Phase 3）：与 MamepApp 同一断点；影响横向滚动下限、前两列固定、
+  // 移动布局：与 MamepApp 同一断点；影响横向滚动下限、前两列固定、
   // 行高与列宽/列拖拽可用性。**必须定义在 baseColumns/columns 之前**（下方会用到）。
   const isMobileLayout = useIsMobileLayout();
   /** 行高（虚拟滚动与实测高度共用；移动端提高以满足触摸目标 ≥44dp）。 */
@@ -1960,7 +1958,7 @@ export const RegisterTable = memo(function RegisterTable({
       {
         title: t("table.no"),
         key: "no",
-        // 宽度自适应（2026-08-27）：No 单元格 = antd 树形展开图标（ADR-030 范围行「加号按钮」）
+        // 宽度自适应：No 单元格 = antd 树形展开图标（范围行「加号按钮」）
         // + 行号，按本表最大行号位数计算，保证单行完整显示（固定宽 40 时两位数换行撑高行）。
         // 仍属 FIXED_WIDTH_COLUMNS：不可表头拖拽、忽略 colWidths 持久化覆盖。
         width: computeNoColumnWidth(maxOrder),
@@ -2096,7 +2094,7 @@ export const RegisterTable = memo(function RegisterTable({
       {
         title: t("table.type"),
         key: "type",
-        // 默认宽 72：为原默认宽（144）的一半（用户需求）。进制下拉在窄列下省略显示；
+        // 默认宽 72：兼顾地址列紧凑性与进制下拉显示。进制下拉在窄列下省略显示；
         // 拖拽仍可自由调整（COLUMN_MIN_WIDTHS.type 已同步下调为 72，保证默认宽不被钳制）。
         width: 72,
         align: "center",
@@ -2115,7 +2113,7 @@ export const RegisterTable = memo(function RegisterTable({
           ),
       },
       {
-        // Type scale 列（ADR-030）：进制+scale 两列表达类型。
+        // Type scale 列：进制+scale 两列表达类型。
         title: t("table.scale"),
         key: "scale",
         width: 80,
@@ -2149,7 +2147,7 @@ export const RegisterTable = memo(function RegisterTable({
         align: "center",
         // 仅最后一列（drag 列）响应右键打开行级菜单：preventDefault 抑制系统菜单并记录目标行；
         // 不 stopPropagation，放行冒泡到 Dropdown trigger 以记录鼠标点坐标（alignPoint 定位）。
-        // 虚拟子行/位明细行（ADR-030/ADR-052）不响应右键菜单（不可交互）。
+        // 虚拟子行/位明细行不响应右键菜单（不可交互）。
         onCell: (record) => ({
           onContextMenu: isVirtualRow(record)
             ? undefined
@@ -2175,7 +2173,7 @@ export const RegisterTable = memo(function RegisterTable({
       applyColumnOrder(baseColumns, columnOrder).map((col) => {
         const key = col.key !== undefined ? String(col.key) : undefined;
         const fixed = key !== undefined && FIXED_WIDTH_COLUMNS.has(key);
-        // 窄屏（移动布局）**不做任何列固定**（2026-09-11 用户决策）：
+        // 窄屏（移动布局）**不做任何列固定**（用户决策）：
         // 固定列在多列间横滑时占用可视宽度、且与触摸横滑手势争抢，
         // 故移动端与桌面保持一致（都不固定）。
         // 仅「有默认宽且非固定宽」的可调列接受 colWidths 覆盖：固定列忽略（防御：残留 state
@@ -2192,7 +2190,7 @@ export const RegisterTable = memo(function RegisterTable({
             "width" in column && typeof column.width === "number"
               ? column.width
               : undefined;
-          // 移动端禁用列宽调整（触摸下 mouse-only 手柄不可用且易误触，ADR-050 Phase 3）。
+          // 移动端禁用列宽调整（触摸下 mouse-only 手柄不可用且易误触）。
           const resizable =
             !fixed && cellWidth !== undefined && !isMobileLayout;
           const onResize =
@@ -2222,7 +2220,7 @@ export const RegisterTable = memo(function RegisterTable({
     ],
   );
 
-  // ---- 列拖拽排序（2026-08-18）----
+  // ---- 列拖拽排序----
   // 水平方向排序；第一列（antd rowSelection Checkbox 列）在 HeaderCell 中按「无 id」判定禁拖。
   // 拖拽结束一次性写入本表 columnOrder（workspace 变更 → 自动保存 IndexedDB），与列宽同一持久化通道。
   const columnSensors = useSensors(
@@ -2261,7 +2259,7 @@ export const RegisterTable = memo(function RegisterTable({
   /**
    * 列拖拽结束：arrayMove 语义——把活动列移动到 over 列所在索引（只在这 11 个业务列间排序）。
    * 事件期从 store 实时读取当前列序（useAppStore.getState() 恒为最新），避免基于陈旧顺序计算
-   * arrayMove——2026-08-19 实测：连续拖拽后「被拖列落错位 + 未拖列被连带移动」的根因正是
+   * arrayMove—— 实测：连续拖拽后「被拖列落错位 + 未拖列被连带移动」的根因正是
    * 闭包/ref 滞后一帧（每次都基于上一次拖拽前的顺序重排，覆盖掉前面的结果）。
    */
   const handleColumnDragEnd = useCallback(
@@ -2283,16 +2281,10 @@ export const RegisterTable = memo(function RegisterTable({
     [sheetId],
   );
 
-  // ---- 列拖拽上下文归属（2026-08-19 修复嵌套 DndContext 吞行拖拽 + 滞后一帧）----
-  // 1) 嵌套修复：原实现把「列拖拽 DndContext」包在整个 Table 外层；dnd-kit 的 useSortable 读取
-  //    「最近」的 DndContext，导致行级 MemoRow 的 useSortable 也绑到列拖拽 context：行拖拽被
-  //    restrictToHorizontalAxis 钳制、SortableContext items 是列 key（行 id 不在其中）、
-  //    handleColumnDragEnd 找不到行 id → 行拖拽失效。修复：把列拖拽 DndContext + SortableContext(列)
-  //    移入 components.header.wrapper（只包表头 thead），行级 MemoRow 读到外层行拖拽 context。
-  // 2) 滞后修复（本次）：wrapper 组件必须保持引用稳定（避免 thead 重挂载），但不能再经
-  //    「渲染期读 ref + 渲染后 useEffect 更新」的间接层传递数据（会滞后一帧、顺序错乱）。
-  //    改为：SortableContext items 渲染期从 store 实时读取；onDragEnd 用稳定的 useCallback
-  //    （仅依赖 sheetId）在事件期从 store 读取——两者永远拿到最新列序。
+  // ---- 列拖拽上下文归属 ----
+  // 列拖拽 DndContext + SortableContext(列) 只包表头 thead，行级 MemoRow 使用外层行拖拽
+  // context，避免两种拖拽互相吞事件。wrapper 保持引用稳定；SortableContext 渲染期从 store
+  // 实时读取列序，onDragEnd 也只依赖稳定的 sheetId 并从 store 读取最新值。
   // 列拖拽 DndContext 位于 <table> 内（包 thead），其无障碍元素（HiddenText/LiveRegion 两个 div）
   // 若内联渲染会成为 <table> 的直接子元素（非法 HTML + React 嵌套警告，破坏 e2e「无 console 错误」）。
   // 故经 accessibility.container 用 portal 渲染到 table 外的容器（document.body 常驻、无需创建/清理）。
@@ -2336,7 +2328,7 @@ export const RegisterTable = memo(function RegisterTable({
   // （onRow 事件闭包每次新建，经 rowHandlersRef 始终指向最新处理器；style 每次新建对象引用，
   // 本表不设行样式，选中/悬停类经 className 按字符串值比较传递）。
   // 依赖与 columns useMemo 一致：任一外部渲染依赖变化时重建行组件，强制全行重渲染，避免陈旧内容。
-  // 虚拟子行（ADR-030）不注册 useSortable：不可拖拽（不在 SortableContext items 中），
+  // 虚拟子行不注册 useSortable：不可拖拽（不在 SortableContext items 中），
   // 用无 dnd-kit 的普通 <tr>（hooks 规则：useSortable 只在 SortableRow 内部无条件调用）。
   const MemoRow = useMemo(() => {
     const SortableRow = forwardRef<HTMLTableRowElement, MemoTableRowProps>(
@@ -2419,7 +2411,7 @@ export const RegisterTable = memo(function RegisterTable({
     const MemoizedTr = memo(
       forwardRef<HTMLTableRowElement, MemoTableRowProps>(
         function RegisterTableRow(props, ref) {
-          // 虚拟子行/位明细行（ADR-030/ADR-052）：普通 <tr>（无 useSortable）；父行/普通行走 SortableRow。
+          // 虚拟子行/位明细行：普通 <tr>（无 useSortable）；父行/普通行走 SortableRow。
           if (isVirtualRow(props._record)) {
             return <ChildRow {...props} ref={ref} />;
           }
@@ -2442,7 +2434,7 @@ export const RegisterTable = memo(function RegisterTable({
   }, []);
 
   /**
-   * 工具栏次要控件组（ADR-050 Phase 3）：地址进制 / 从站地址(Unit ID) / 写后回读 /
+   * 工具栏次要控件组：地址进制 / 从站地址(Unit ID) / 写后回读 /
    * 表级 Address Adjust / 恢复列布局 / 行数。
    *
    * 桌面（≥ 1024px）直接铺在工具栏右侧；移动端收进「更多」Popover 面板——**同一份 JSX
@@ -2529,7 +2521,7 @@ export const RegisterTable = memo(function RegisterTable({
           />
         </span>
       </Tooltip>
-      {/* 表级 Address Adjust（2026-09-01，ADR-042）：每表独立 OFF/ON；
+      {/* 表级 Address Adjust：每表独立 OFF/ON；
               选项来自 addressTransform 贡献（内置恒在），仅 RTU 显示。 */}
       {activeProtocol === "rtu" && addressTransformContributions.length > 0 ? (
         <Tooltip title={t("table.addressAdjustHint")}>
@@ -2644,7 +2636,7 @@ export const RegisterTable = memo(function RegisterTable({
           ) : null}
         </div>
         <span className="table-toolbar__spacer" />
-        {/* 移动端（ADR-050 Phase 3）：次要控件收进「更多」面板，避免工具栏换行挤压表格；
+        {/* 移动端：次要控件收进「更多」面板，避免工具栏换行挤压表格；
             桌面端保持直接铺开（大屏一步到位，不增加点击成本）。 */}
         {isMobileLayout ? (
           <Popover
@@ -2670,7 +2662,7 @@ export const RegisterTable = memo(function RegisterTable({
             <span className="table-toolbar__sep" aria-hidden="true" />
             <div className="table-toolbar__group table-toolbar__plugins">
               {toolbarActions.map((action) => {
-                // 2026-09-02 插件外部化：动作可用性由插件 runtime 是否声明 handler 决定
+                // 插件外部化：动作可用性由插件 runtime 是否声明 handler 决定
                 // （安川 ROM/RAM 确定指令由插件自身承载；声明式占位动作置灰）。
                 const canHandle =
                   host?.pluginRegistry.canHandleToolbarAction(
@@ -2743,7 +2735,7 @@ export const RegisterTable = memo(function RegisterTable({
                         ? "register-table__row--striped"
                         : ""
                 }
-                // 范围行（ADR-030）：tree 数据 + virtual 不兼容 → 禁用虚拟滚动（风险 1 回退）。
+                // 范围行：tree 数据 + virtual 不兼容 → 禁用虚拟滚动（风险 1 回退）。
                 virtual={
                   rows.length > VIRTUAL_SCROLL_THRESHOLD &&
                   !hasRangeRows &&
@@ -2759,7 +2751,7 @@ export const RegisterTable = memo(function RegisterTable({
                 scroll={{
                   x: isMobileLayout ? MOBILE_SCROLL_X : 920,
                   // 虚拟表 scroll.y 必须为数字：隐藏未测量表（tableBodyHeight=0）用兜底高度，
-                  // 显示后由 ResizeObserver 校正。否则 rc-table 虚拟渲染失败（0 行 + 报错，2026-08-18 复现）。
+                  // 显示后由 ResizeObserver 校正。否则 rc-table 虚拟渲染失败（0 行 + 报错复现）。
                   ...(tableBodyHeight > 0 ||
                   rows.length > VIRTUAL_SCROLL_THRESHOLD
                     ? {
@@ -2776,7 +2768,7 @@ export const RegisterTable = memo(function RegisterTable({
                   selectedRowKeys: selectedRowIds,
                   onChange: (keys) =>
                     setSelectedRowIds(keys.map((k) => String(k)) as RowId[]),
-                  // 虚拟子行/位明细行（ADR-030/ADR-052）：不可多选（复选框禁用）。
+                  // 虚拟子行/位明细行：不可多选（复选框禁用）。
                   getCheckboxProps: (record) => ({
                     disabled: isVirtualRow(record),
                   }),

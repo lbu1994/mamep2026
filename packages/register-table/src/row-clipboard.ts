@@ -1,11 +1,11 @@
 /**
  * 行剪贴板模型（纯函数）。
  * - 复制/剪切只携带可粘贴字段，运行时状态（轮询/追踪/结果值）一律清零；
- * - 地址以内部十进制数值传递，粘贴时按目标表进制重新格式化（ADR-051：与提交路径同源规范化），
+ * - 地址以内部十进制数值传递，粘贴时按目标表进制重新格式化（与提交路径同源规范化），
  *   避免跨表进制歧义；
  * - 系统剪贴板 CSV：表头 Name,Address,Data,Type,Comment，Address 为十进制数值；
- *   多寄存器范围行（ADR-030）编码为 "start-end"（十进制），解码时恢复 registerCount；
- * - Data 文本粘贴时按行自身 Type 规范化（ADR-051）：解析成功写回规范显示文本，失败保留原文；
+ *   多寄存器范围行编码为 "start-end"（十进制），解码时恢复 registerCount；
+ * - Data 文本粘贴时按行自身 Type 规范化：解析成功写回规范显示文本，失败保留原文；
  * - 非法数据不得静默丢弃：粘贴返回结构化 issue 汇总（docs/AGENTS.md §32-26）。
  */
 import {
@@ -29,7 +29,7 @@ import { renumberRows } from "./row-operations";
 export interface RowClipboardData {
   name: string;
   addressValue: number | null;
-  /** 覆盖的连续寄存器数（ADR-030）：范围行 >1，单寄存器行恒为 1。 */
+  /** 覆盖的连续寄存器数：范围行 >1，单寄存器行恒为 1。 */
   registerCount: number;
   dataType: DataType;
   cellText: string;
@@ -89,7 +89,7 @@ export function cutRowsFromSheet(
 /**
  * 在目标行之后粘贴载荷行（新 rowId、运行时状态清零、renumber）；
  * 目标行不存在时追加末尾；地址按目标表进制重新格式化；
- * Data 文本按行自身 Type 规范化（ADR-051；解析失败保留原文，不静默丢弃）。
+ * Data 文本按行自身 Type 规范化（解析失败保留原文，不静默丢弃）。
  * resolver 用于插件类型（缺省仅内置）。
  */
 export function pasteClipboardRows(
@@ -105,18 +105,18 @@ export function pasteClipboardRows(
     row.name = data.name;
     row.comment = data.comment;
     row.dataType = data.dataType;
-    // 多寄存器范围行（ADR-030）：恢复覆盖寄存器数（运行时 registerValues 清零）。
+    // 多寄存器范围行：恢复覆盖寄存器数（运行时 registerValues 清零）。
     row.registerCount = data.registerCount;
-    // 子行元数据初始化（2026-08-27）：按父行 dataType 生成默认数组（剪贴板不携带子行元数据）。
+    // 子行元数据初始化：按父行 dataType 生成默认数组（剪贴板不携带子行元数据）。
     row.registers = resizeRegisters(row, data.registerCount);
-    // Data 文本规范化（ADR-051）：成功写回规范文本；失败保留原文（错误在写入/编辑时按既有校验提示）。
+    // Data 文本规范化：成功写回规范文本；失败保留原文（错误在写入/编辑时按既有校验提示）。
     const canonical = canonicalCellText(row, data.cellText, resolver);
     row.cellText = canonical.ok ? canonical.value : data.cellText;
     if (data.addressValue !== null) {
       const addressResult = RegisterAddress.create(data.addressValue);
       if (addressResult.ok) {
         row.addressValue = addressResult.value;
-        // 地址按目标表进制规范化（ADR-051）：范围行 "start-end"，单地址等同。
+        // 地址按目标表进制规范化：范围行 "start-end"，单地址等同。
         row.addressDraft = formatRegisterAddressRange(
           addressResult.value.value,
           data.registerCount,
@@ -230,7 +230,7 @@ function parseCsv(text: string): string[][] {
 }
 
 /** 解码系统剪贴板 CSV；非法行保留可恢复字段并返回 issue，不静默丢弃。
- *  ADR-043 E-3：插件类型白名单经 knownTypes 传入（缺省仅内置）。 */
+ * 插件类型白名单经 knownTypes 传入（缺省仅内置）。 */
 export function decodeClipboardCsv(
   text: string,
   knownTypes?: readonly string[],
@@ -258,7 +258,7 @@ export function decodeClipboardCsv(
     let registerCount = 1;
     const registerText = register.trim();
     if (registerText !== "") {
-      // 单值或范围（"start-end"，ADR-030）：均为十进制。
+      // 单值或范围（"start-end"）：均为十进制。
       const rangeMatch = /^(\d+)-(\d+)$/.exec(registerText);
       const single = /^[0-9]+$/.test(registerText);
       if (rangeMatch !== null) {

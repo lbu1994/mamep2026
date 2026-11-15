@@ -1,17 +1,13 @@
 /**
- * 插件主题色「首帧即已应用」e2e（mockTransport=1，浏览器端，2026-09-16）。
+ * 插件主题色「首帧即已应用」e2e（mockTransport=1，浏览器端）。
  *
- * **Bug**：用户选择**插件提供的主题色**（ADR-047，如 example-theme 的 Indigo）后刷新页面，
- * 首屏会先按 **Ant Design 默认蓝**渲染，等插件从存储恢复（`host.startPlugins()` fire-and-forget：
- * 读插件存储 → 逐个 register → activate → 贡献点写入）后才变成插件色 —— 品牌色（主按钮 /
- * 表头选中态 / 表格选行 / 骨架屏 Spin）先蓝后变。
+ * 用户选择**插件提供的主题色**（如 example-theme 的 Indigo）后刷新页面，首帧必须直接使用
+ * 该插件色。启动缓存保存上次解析出的主色种子，插件注册表就绪后仍以注册表为准
+ * （见 `resolveThemeColorSeed`）。
  *
- * **复现（红）**：安装 example-theme → Settings 选 Indigo → 等自动保存 → 注册记录器 → reload；
+ * 验证：安装 example-theme → Settings 选 Indigo → 等自动保存 → 注册记录器 → reload；
  * 记录器在「`#root` 首次出现子节点」（= 首帧渲染提交）时读取 `.ant-app` 上的
- * `--ant-color-primary`（antd cssVar 运行时值）。修复前该值是默认蓝（非 `#4f46e5`）→ 断言失败。
- *
- * **修复（绿）**：启动缓存额外记住「上次解析出的主色种子」，并在「选了预设但插件贡献尚未就绪」
- * 期间用它（插件就绪后仍以注册表为准，见 `resolveThemeColorSeed`）。
+ * `--ant-color-primary`（antd cssVar 运行时值），断言首帧已是插件色。
  *
  * 全程无 console 错误。
  */
@@ -186,7 +182,7 @@ test("插件主题色：刷新后首帧即已应用（不等插件恢复）", as
   const record = await readThemeBootRecord(page);
   // 记录器自检：首帧应已存在 .ant-app（否则读数无意义）。
   expect(record.appAtFirstRender).toBe(true);
-  // 关键断言（修复红 / 绿分界）：首帧主色已是插件色，而非 Ant Design 默认蓝。
+  // 首帧主色已是插件色，而非 Ant Design 默认蓝。
   expect(String(record.primaryAtFirstRender).toLowerCase()).toContain(INDIGO);
   // 就绪后仍是插件色（无回归）。
   await expect.poll(() => antdPrimary(page)).toContain(INDIGO);

@@ -1,8 +1,8 @@
 /**
- * Help/关于抽屉（PRD §8.3「完整用户帮助」，2026-09-05）。
+ * Help/关于抽屉（PRD §8.3「完整用户帮助」）。
  *
- * 由 Modal 改为右侧 Drawer + 顶部 Tabs：按主题分页展示完整帮助正文；
- * 复用 ADR-043 E-5 的 markdown 渲染（renderMarkdown）与已有组件：
+ * 右侧 Drawer + 顶部 Tabs：按主题分页展示完整帮助正文；
+ * 复用的 markdown 渲染（renderMarkdown）与已有组件：
  * - 键盘快捷键 → KeyboardShortcutsTable；
  * - 插件文档 → DocumentationPanel（文档/寄存器手册贡献点）。
  *

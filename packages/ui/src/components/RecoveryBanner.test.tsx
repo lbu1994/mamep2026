@@ -1,5 +1,5 @@
 /**
- * RecoveryBanner（PRD §8.3 / TECH_DESIGN §19.7，2026-09-04，ADR-049）。
+ * RecoveryBanner（PRD §8.3 / TECH_DESIGN §19.7）。
  * 仅测试渲染三态；纯信息、无按钮。
  */
 import { describe, expect, it, beforeEach } from "vitest";

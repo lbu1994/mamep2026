@@ -1,10 +1,10 @@
 /**
  * 轮询纯函数（docs/TECH_DESIGN.md §13、docs/AGENTS.md §17/§12.5）。
- * - 轮询目标：仅含 WP 开关且地址合法的行；表级地址变换（ADR-042）启用时发送地址 = 变换 apply
+ * - 轮询目标：仅含 WP 开关且地址合法的行；表级地址变换启用时发送地址 = 变换 apply
  *   （内置 builtin.address-adjust = 用户地址 − 1），变换校验失败（地址 0）跳过；
  * - 结果应用：generation 校验（结果地址必须仍是该行当前的轮询发送地址，避免旧地址迟到结果覆盖）；
  *   全表读取结果（address = 0）不参与轮询 generation 校验。
- * - 每表独立应用各自 addressTransform 配置（ADR-042：非活动表轮询同样按各行所属 sheet 配置）。
+ * - 每表独立应用各自 addressTransform 配置（非活动表轮询同样按各行所属 sheet 配置）。
  * 本模块为纯函数，供 Application/Host 消费，不触碰 React 或平台 API。
  */
 import type {
@@ -23,13 +23,13 @@ export interface PollingTarget {
   /** 行所属表；结果回写时用于拒绝切表/重绑后的旧响应。 */
   sheetId: string;
   address: number;
-  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
+  /** 覆盖的连续寄存器数：缺省/1=单寄存器。 */
   quantity?: number;
   /** 由所属表创建的路由快照。 */
   route: RequestRoute;
 }
 
-/** 解析表级地址变换（ADR-042）：启用时返回变换；未配置/关闭/未知 id 返回 null。 */
+/** 解析表级地址变换：启用时返回变换；未配置/关闭/未知 id 返回 null。 */
 function sheetTransform(
   sheet: Pick<RegisterSheet, "addressTransform">,
   resolve?: (transformId: string) => AddressTransform | null,
@@ -37,7 +37,7 @@ function sheetTransform(
   return resolveSheetAddressTransform(sheet.addressTransform, resolve);
 }
 
-/** 从工作区表格构建轮询目标（表级地址变换已应用到发送地址，ADR-042）。 */
+/** 从工作区表格构建轮询目标（表级地址变换已应用到发送地址）。 */
 export function buildPollingTargets(
   sheets: readonly RegisterSheet[],
   options?: {
@@ -60,7 +60,7 @@ export function buildPollingTargets(
         key: row.rowId,
         sheetId: sheet.sheetId,
         address: sent.value,
-        // 多寄存器行（ADR-030）：一次 FC03 轮询全部连续寄存器。
+        // 多寄存器行：一次 FC03 轮询全部连续寄存器。
         quantity: row.registerCount,
         route: {
           unitAddress: sheet.slaveAddress,
@@ -141,7 +141,7 @@ export function applyPollResult(
     if (sheet.sheetId !== event.sheetId) continue;
     const row = sheet.rows.find((candidate) => candidate.rowId === event.key);
     if (row === undefined) continue;
-    // 多寄存器行（ADR-030）：一次请求读回 values[]，按组合类型格式化。
+    // 多寄存器行：一次请求读回 values[]，按组合类型格式化。
     if (Array.isArray(raw)) {
       const applied = applyReadValuesToRow(row, raw);
       return applied.ok ? applied.value : null;

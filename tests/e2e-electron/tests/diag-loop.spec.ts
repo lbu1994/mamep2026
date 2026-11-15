@@ -1,5 +1,5 @@
 /**
- * Electron Web Serial RTU 闭环 E2E（ADR-017，2026-08-21）。
+ * Electron Web Serial RTU 闭环 E2E。
  * 生产构建路径启动（dist-electron/main.js + apps/web/dist-electron/，loadFile）。
  * 渲染器注入自包含 fake navigator.serial（真实字节流 + 内联 CRC16 Modbus RTU responder），
  * 覆盖「串口授权选择（含用户取消 ok(null)）+ FC03 读 + FC10 写」闭环，走真实
@@ -157,7 +157,7 @@ test.beforeAll(async () => {
       if (db.name !== undefined) indexedDB.deleteDatabase(db.name);
     }
   });
-  // 工作区持久化已改为文件仓储（ADR-036，2026-08-30）：IndexedDB 清理不再清除工作区，
+  // 工作区持久化使用文件仓储：IndexedDB 清理不涉及工作区，
   // 一并删除 userData 下 workspace.json(.bak)，避免跨测试/跨运行污染。
   await clearWorkspaceFile(app);
   await page.reload();
@@ -176,7 +176,7 @@ test.afterAll(async () => {
 
 test("取消/无可用端口：下拉框空态、无端口标签、无错误", async () => {
   const modal = page.locator(".ant-modal-container:visible");
-  // 端口下拉须限定在 Port 表单项内（连接对象配置分组已移除，ADR-034）。
+  // 端口下拉须限定在 Port 表单项内（连接对象配置分组已移除）。
   const portSelect = modal
     .locator(".ant-form-item")
     .filter({ hasText: "Port" })
@@ -193,7 +193,7 @@ test("取消/无可用端口：下拉框空态、无端口标签、无错误", a
   // 列表仍为空 → 空态提示、无端口选项、弹窗内无端口标签与「先选择设备」类错误。
   // 注：antd v6 Select 无 .ant-select-selector 类，点击根元素 .ant-select 打开下拉。
   // `force: true`：`click()` 的稳定性检查要求元素连续两帧包围盒一致，高负载（`pnpm test:all`
-  // 串行跑完全量套件后）会因重排/重渲染判定 not stable 并重试到超时（2026-09-13 实测）；
+  // 串行跑完全量套件后）会因重排/重渲染判定 not stable 并重试到超时（实测）；
   // force 仍派发完整鼠标事件（antd Select 靠 mousedown 打开），仅跳过行动性检查。
   // 不能用 DOM `.click()`：它不触发 mousedown，下拉框不会打开。
   await portSelect.click({ force: true });
@@ -222,7 +222,7 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   });
 
   const modal = page.locator(".ant-modal-container:visible");
-  // 端口刷新须限定在 Port 表单项内（连接对象配置分组已移除，ADR-034）。
+  // 端口刷新须限定在 Port 表单项内（连接对象配置分组已移除）。
   const portField = modal.locator(".ant-form-item").filter({ hasText: "Port" });
   const portSelect = portField.locator(".ant-select");
   const portRefresh = portField.locator('button[title="Refresh"]');

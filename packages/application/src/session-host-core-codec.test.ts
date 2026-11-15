@@ -1,6 +1,6 @@
 /**
- * SessionHostCore codec 注册表注入测试（ADR-040 决策 5）。
- * Phase C 宿主据此构建 codec 会话；核心仅透传，协议无关。
+ * SessionHostCore codec 注册表注入测试。
+ *  宿主据此构建 codec 会话；核心仅透传，协议无关。
  */
 import { describe, expect, it, vi } from "vitest";
 import { SessionHostCore, type SessionHostEvents } from "./session-host-core";

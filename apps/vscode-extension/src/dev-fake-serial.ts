@@ -22,9 +22,9 @@ export const FAKE_SERIAL_PORT = "FAKE-1";
 /** e2e 可访问的共享状态（仅测试用）。 */
 export const devFakeSerialState = {
   registers: new Map<number, number>(),
-  /** 线圈状态（ADR-043 E-6 基础表 FC01/FC0F）：位 1=ON。 */
+  /** 线圈状态（基础表 FC01/FC0F）：位 1=ON。 */
   coils: new Map<number, boolean>(),
-  /** must-multi 区起始地址（ADR-030）：null=关闭；该地址起单读/单写返回异常 0x02。 */
+  /** must-multi 区起始地址：null=关闭；该地址起单读/单写返回异常 0x02。 */
   mustMultiStart: null as number | null,
 };
 
@@ -90,7 +90,7 @@ class DevFakeSerialPort implements SerialPortLike {
     const address = ((frame[2] ?? 0) << 8) | (frame[3] ?? 0);
     if (functionCode === 0x03) {
       const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
-      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      // must-multi 区：单读返回非法数据地址异常。
       if (
         devFakeSerialState.mustMultiStart !== null &&
         address >= devFakeSerialState.mustMultiStart &&
@@ -115,7 +115,7 @@ class DevFakeSerialPort implements SerialPortLike {
     }
     if (functionCode === 0x10) {
       const quantity = ((frame[4] ?? 0) << 8) | (frame[5] ?? 0);
-      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      // must-multi 区：单写返回非法数据地址异常。
       if (
         devFakeSerialState.mustMultiStart !== null &&
         address >= devFakeSerialState.mustMultiStart &&

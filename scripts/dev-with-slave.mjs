@@ -4,13 +4,13 @@
  * （RTU COM5 + TCP tcp-local-slave）。
  *
  * 用法（由根 package.json 的 dev:slave / dev:electron:slave / dev:vscode:slave 脚本调用）：
- *   node scripts/dev-with-slave.mjs dev            # 等价原 pnpm --filter @mamep2026/web dev
- *   node scripts/dev-with-slave.mjs dev:electron   # 等价原 pnpm --filter @mamep2026/web dev:electron
- *   node scripts/dev-with-slave.mjs dev:vscode     # 等价原 pnpm dev:vscode（启动 Vite，供 VSCode dev 模式 iframe 加载）
- *   node scripts/dev-with-slave.mjs --self-test    # 不启动 Vite：拉起 RTU + TCP 从站并断言均就绪（exit 0/1）
- *   node scripts/dev-with-slave.mjs --help, -h      # 显示本帮助
+ *   node scripts/dev-with-slave.mjs dev # 等价原 pnpm --filter @mamep2026/web dev
+ *   node scripts/dev-with-slave.mjs dev:electron # 等价原 pnpm --filter @mamep2026/web dev:electron
+ *   node scripts/dev-with-slave.mjs dev:vscode # 等价原 pnpm dev:vscode（启动 Vite，供 VSCode dev 模式 iframe 加载）
+ *   node scripts/dev-with-slave.mjs --self-test # 不启动 Vite：拉起 RTU + TCP 从站并断言均就绪（exit 0/1）
+ *   node scripts/dev-with-slave.mjs --help, -h # 显示本帮助
  *
- * 从站（2026-09-04 增强，关联 ADR-023 / ADR-024）：
+ * 从站（增强，关联）：
  *   - RTU 从站挂 COM5（复用 scripts/modbus-slave/modbus-rtu-slave.mjs，读同目录 modbus-slave.config.json）；
  *   - TCP 从站监听 tcp-local-slave（复用 scripts/modbus-slave/modbus-tcp-slave.mjs，
  *     host/port/unitId 取 config/connections.json 的 tcp-local-slave，由该脚本内部读取，无需传参）；

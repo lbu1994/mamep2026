@@ -63,12 +63,12 @@ function resultFor(sheet: RegisterSheet, row: RegisterRow, address: number) {
   };
 }
 
-/** 表级启用内置 Address Adjust（ADR-042）。 */
+/** 表级启用内置 Address Adjust。 */
 function adjustOn(): AddressTransformConfig {
   return { transformId: "builtin.address-adjust", enabled: true };
 }
 
-/** 注入式解析器（2026-09-02 插件外部化：核心不再内置，测试模拟随包插件 resolver）。 */
+/** 注入式解析器（插件外部化：核心不再内置，测试模拟随包插件 resolver）。 */
 const resolveBuiltin: (id: string) => AddressTransform | null = (id) =>
   id === "builtin.address-adjust"
     ? {

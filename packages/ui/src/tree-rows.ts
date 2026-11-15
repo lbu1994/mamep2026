@@ -1,8 +1,8 @@
 /**
- * 范围行 / 位明细树形数据构造（ADR-030 + 2026-08-27 子行可编辑化 + ADR-052 位明细）：
+ * 范围行 / 位明细树形数据构造（+ 子行可编辑化 + 位明细）：
  * - registerCount>1 的父行展开为 antd Table tree 数据（children=每寄存器一子行）；
  * - 单寄存器行 / 范围行寄存器子行若为 binary 类型，再展开为 16 行位明细
- *   （ADR-052，顺序 bit15 → bit0，MSB first）；
+ *   （顺序 bit15 → bit0，MSB first）；
  * - 子行为派生的虚拟行（不持久化、不进 store），携带自身独立元数据
  *   （name/comment/dataType，来自父行 registers[i]）与按自身 Type 格式化的值；
  * - 子行编辑经 app-store 的 commitChildCellText / setChildMeta 路由回父行；
@@ -29,7 +29,7 @@ export type VirtualChildRow = RegisterRow & {
   __virtualChild: VirtualChildInfo;
 };
 
-/** 位明细虚拟行信息（ADR-052）。 */
+/** 位明细虚拟行信息。 */
 export interface VirtualBitInfo {
   /** bit 号（0..15）。 */
   bit: number;
@@ -66,7 +66,7 @@ export function isVirtualChildRow(
   );
 }
 
-/** 判断是否为位明细行（ADR-052）。 */
+/** 判断是否为位明细行。 */
 export function isVirtualBitRow(
   row: RegisterRow | null | undefined,
 ): row is VirtualBitRow {
@@ -84,7 +84,7 @@ export function isVirtualRow(
   return isVirtualChildRow(row) || isVirtualBitRow(row);
 }
 
-/** 该类型是否支持位明细展开（ADR-052：仅内置 binary）。 */
+/** 该类型是否支持位明细展开（仅内置 binary）。 */
 export function supportsBitDetail(dataType: string): boolean {
   return dataType === "binary";
 }
@@ -105,7 +105,7 @@ function buildBitRows(
     rowId: `${registerRowId}:b${entry.bit}` as RowId,
     order: 0,
     registerCount: 1,
-    // 位名称（ADR-052 需求追加）：Name 列可编辑（同 Comment 列语义）。
+    // 位名称：Name 列可编辑（同 Comment 列语义）。
     name: entry.name,
     comment: entry.comment,
     dataType: "binary",
@@ -129,7 +129,7 @@ function buildBitRows(
 /** 从表内行列表构造树形数据（children 在范围行 / 二进制行的位明细上生成）。 */
 export function buildTreeRows(rows: readonly RegisterRow[]): TreeRow[] {
   return rows.map((row) => {
-    // 单寄存器行：binary 时展开位明细（ADR-052）。
+    // 单寄存器行：binary 时展开位明细。
     if (row.registerCount <= 1) {
       if (!supportsBitDetail(row.dataType)) return row;
       return {
@@ -141,7 +141,7 @@ export function buildTreeRows(rows: readonly RegisterRow[]): TreeRow[] {
     const children: VirtualChildRow[] = [];
     for (let i = 0; i < row.registerCount; i += 1) {
       const raw = row.registerValues?.[i]?.value;
-      // 子行独立元数据（2026-08-27）：优先父行 registers[i]，缺省回退父行 dataType/空串。
+      // 子行独立元数据：优先父行 registers[i]，缺省回退父行 dataType/空串。
       const meta = row.registers?.[i];
       const childType = meta?.dataType ?? row.dataType;
       const dataText =
@@ -168,7 +168,7 @@ export function buildTreeRows(rows: readonly RegisterRow[]): TreeRow[] {
           address: baseAddress + i,
           dataText,
         },
-        // 该寄存器自身为 binary 时可再展开位明细（ADR-052 决策 1）。
+        // 该寄存器自身为 binary 时可再展开位明细。
         ...(supportsBitDetail(childType)
           ? { children: buildBitRows(row, i, childRowId) }
           : {}),

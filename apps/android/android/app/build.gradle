@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
-// 应用版本号统一取自仓库根 package.json（ADR-050 决策 7：appId / appName / 版本以根 package.json 为准），
+// 应用版本号统一取自仓库根 package.json（appId / appName / 版本以根 package.json 为准），
 // 不再使用 Capacitor 模板的占位值 "1.0"——安装器显示的即 versionName。
 def rootPackageJson = new groovy.json.JsonSlurper().parse(file("$rootDir/../../../package.json"))
 def appVersionName = rootPackageJson.version.toString()
@@ -16,7 +16,7 @@ def parseVersionCode = { String version ->
         matcher.group(3).toInteger()
 }
 
-// 发布签名材料（ADR-050 Phase 5 / ADR-056）：**密钥与口令不入库**——按序从
+// 发布签名材料：**密钥与口令不入库**——按序从
 //   1) app/keystore.properties（本机发布用，已 gitignore；storeFile 可为绝对路径或相对 app/）；
 //   2) MAMEP_ANDROID_KEYSTORE_PATH / _STORE_PASSWORD / _KEY_ALIAS / _KEY_PASSWORD 环境变量
 // 读取；两者都没有（或不完整）时 release **不签名**（产出 app-release-unsigned.apk）——
@@ -98,7 +98,7 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
-    // USB-RS485（Phase 2）：UsbManager + UsbSerialProber/SerialInputOutputManager。
+    // USB-RS485：UsbManager + UsbSerialProber/SerialInputOutputManager。
     implementation "com.github.mik3y:usb-serial-for-android:$usbSerialForAndroidVersion"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

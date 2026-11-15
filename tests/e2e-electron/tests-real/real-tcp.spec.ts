@@ -58,7 +58,7 @@ let app: ElectronApplication;
 let page: Page;
 const consoleErrors: string[] = [];
 
-/** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。 */
+/** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
 async function setRadixHex(p: Page): Promise<void> {
   await p
     .locator(".table-toolbar__radix .ant-segmented-item")
@@ -91,8 +91,8 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
   // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
-  // 短路——real e2e 曾致地址提交被跳过）。改 fill("")+pressSequentially 逐字符输入
-  // （真实键盘事件，onChange 必然触发），toHaveValue 确认受控值同步后再 Enter。
+  // 短路）。使用 fill("")+pressSequentially 逐字符输入（真实键盘事件，onChange 必然触发），
+  // toHaveValue 确认受控值同步后再 Enter。
   await input.fill("");
   await input.pressSequentially(addressHex, { delay: 10 });
   await expect(input).toHaveValue(addressHex);
@@ -144,7 +144,7 @@ test.beforeAll(async () => {
       if (db.name !== undefined) indexedDB.deleteDatabase(db.name);
     }
   });
-  // 工作区持久化已改为文件仓储（ADR-036，2026-08-30）：IndexedDB 清理不再清除工作区，
+  // 工作区持久化使用文件仓储：IndexedDB 清理不涉及工作区，
   // 一并删除 userData 下 workspace.json(.bak)，避免跨测试/跨运行污染。
   await clearWorkspaceFile(app);
   await page.reload();
@@ -336,7 +336,7 @@ test("通信日志：请求/响应/异常帧字节", async () => {
   const list = page.locator(".comm-log .ant-listy-holder");
   // Listy 虚拟列表默认停在底部（最新帧可见）；最早帧（写门控异常 01 90 03）可能被挤出
   // 视口（TCP 帧含 MBAP 头行更高，且延迟响应的迟到帧也会占用视口）。滚动到顶部让最早帧
-  // 渲染后断言，再滚回底部断言最新帧（2026-08-26 real e2e 修复）。
+  // 渲染后断言，再滚回底部断言最新帧。
   await list.evaluate((el) => {
     el.scrollTop = 0;
   });
@@ -372,7 +372,7 @@ test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成�
 
 test("断开连接 → Offline，重连 → Online（稳定性）", async () => {
   await page.getByRole("button", { name: /Disconnect/i }).click();
-  // Header 连接按钮已整合（2026-09-06），断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定。
+  // Header 连接按钮已整合，断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定。
   await expect(
     page.locator(".connection-cluster__button[data-conn-state='disconnected']"),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });

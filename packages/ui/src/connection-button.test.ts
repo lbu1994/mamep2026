@@ -1,7 +1,7 @@
 /**
- * connection-button（2026-09-06 Header 连接 UI 整合）单测。
+ * connection-button（Header 连接 UI 整合）单测。
  * 覆盖：
- * - 9 个连接状态的 label / aria / icon / type / danger / 状态点颜色 / 呼吸 映射
+ * - 9 个连接状态的 label / aria / icon / type / danger / 状态点颜色 / 呼吸映射
  * - 窄窗口隐藏文字（不隐藏状态点）
  */
 import { describe, expect, it } from "vitest";

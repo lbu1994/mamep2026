@@ -51,7 +51,7 @@ export function createEmptyRowStatusState(): RowStatusState {
 /** §18.2 写后回读结果 → 三态（success/failure/none）。 */
 export type WriteResultStatus = "success" | "failure" | "none";
 
-// 写后回读（2026-08-26）：WriteOutcome 扩展为 5 种 kind，由 Record 保证类型穷尽：
+// 写后回读：WriteOutcome 扩展为 5 种 kind，由 Record 保证类型穷尽：
 //   write-succeeded-no-verify         -> success
 //   write-succeeded-verify-matched    -> success
 //   write-succeeded-verify-mismatched -> failure
@@ -255,7 +255,7 @@ export function applyCellValidation(
 }
 
 /**
- * 类型列校验错误状态（ADR-030）：范围长度与类型合法集不匹配时记录、匹配时清除；
+ * 类型列校验错误状态：范围长度与类型合法集不匹配时记录、匹配时清除；
  * 不触碰三态状态点。键 = `${rowId}:type`，与地址/数据列独立。
  */
 export function applyTypeValidation(

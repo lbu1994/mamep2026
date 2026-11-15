@@ -1,5 +1,5 @@
 /**
- * BrowserCompatibilityBanner（PRD §8.3 / §15.7，2026-09-02）。
+ * BrowserCompatibilityBanner（PRD §8.3 / §15.7）。
  */
 import { describe, expect, it, beforeEach } from "vitest";
 import { render } from "@testing-library/react";

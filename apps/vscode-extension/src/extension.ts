@@ -1,6 +1,6 @@
 /**
  * Mamep2026 VSCode 扩展入口（docs/TECH_DESIGN.md §6.3、§22.2、§22.4、docs/AGENTS.md §22）。
- * 骨架阶段（2026-08-23）：
+ * 扩展装配：
  * - 命令 mamep2026.openMainPanel 创建 WebviewPanel 加载共享 UI（三端同一套 React UI）；
  * - 生产模式：打包进扩展的本地静态资源（dist/media/，由 scripts/build-vscode.mjs 产出）
  *   经 webview.asWebviewUri() 加载（构建期 CSP meta：style-src 'unsafe-inline'）；
@@ -58,14 +58,14 @@ let panel: vscode.WebviewPanel | undefined;
 let panelDisposables: vscode.Disposable[] = [];
 /** 装配后的依赖（供 deactivate 释放会话）。 */
 let deps: IpcDeps | undefined;
-/** 宿主侧插件执行面（ADR-055；供 deactivate 释放）。 */
+/** 宿主侧插件执行面（供 deactivate 释放）。 */
 let hostPluginsRef: HostPluginRuntime | undefined;
 /** dev/e2e 假 TCP 设备（MAMEP_FAKE_TCP=1，deactivate 时停止）。 */
 let fakeTcpServer: DevFakeTcpServer | null = null;
 /** event Envelope 消息号（面板事件与主题事件共用，避免冲突）。 */
 let eventSeq = 0;
 /**
- * 会话通信统计（dev/e2e 探针，2026-08-23）：comm-log request/response 帧计数，
+ * 会话通信统计（dev/e2e 探针）：comm-log request/response 帧计数，
  * 经 debug:get-state 返回。用于 e2e 断言「一次读取 = 恰好一次发送 + 一次收到」，
  * 不进入 UI 状态源；仅作诊断/验证用。
  */
@@ -100,7 +100,7 @@ function createSessionHost(
       ? new DevFakeSerialFactory()
       : undefined;
   const platform = new NodePlatformHost({ factory });
-  // codec 注册表（ADR-043 E-6；2026-09-12 ADR-055）：基础表 codec 为核心内建，
+  // codec 注册表：基础表 codec 为核心内建，
   // 安川 MEMOBUS 等插件 codec 由**宿主侧插件运行时**按插件存储激活后注册进同一注册表；
   // 会话按 session-connect 的 protocol 字段（codecId）解析 codec。
   const codecRegistry = hostPlugins.getCodecRegistry();
@@ -108,7 +108,7 @@ function createSessionHost(
   return new VscodeSessionHost({
     platform,
     codecRegistry,
-    // 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055 改为宿主侧插件运行时）：
+    // 地址变换解析（宿主侧插件运行时）：
     // 读当前插件注册表（安装/禁用/卸载后自动跟随）。
     resolveAddressTransform: hostPlugins.resolveAddressTransform,
     events: {
@@ -162,7 +162,7 @@ function createDeps(
     capabilities: () => vscodeCapabilities,
     colorTheme: () => toColorThemeKind(vscode.window.activeColorTheme.kind),
     isDev: () => isDev,
-    // 自动重连 e2e（2026-08-30）：dev/e2e 探针，断开假 TCP 设备当前客户端（MAMEP_FAKE_TCP=1 时装配）。
+    // 自动重连 e2e：dev/e2e 探针，断开假 TCP 设备当前客户端（MAMEP_FAKE_TCP=1 时装配）。
     dropFakeTcpClients: () => {
       if (fakeTcpServer === null) return false;
       fakeTcpServer.dropClients();
@@ -174,9 +174,9 @@ function createDeps(
     clipboardReadText: async () => vscode.env.clipboard.readText(),
     session: createSessionHost(isDev, postEvent, hostPlugins),
     sessionStats: () => ({ ...sessionStats }),
-    // 通信日志 CSV 导出（save-text-file，2026-08-28）：保存对话框 + workspace.fs 落盘。
+    // 通信日志 CSV 导出（save-text-file）：保存对话框 + workspace.fs 落盘。
     saveTextFile: async (options) => {
-      // dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1 && isDev，ADR-033 方案 A）：
+      // dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1 && isDev 方案 A）：
       // 写入固定路径，使工作区导入导出闭环可确定性自动化（测试宿主无法桩替换真实对话框）。
       if (isDev && process.env.MAMEP_FAKE_DIALOG === "1") {
         return fakeSaveTextFile(fakeDialogPaths().savePath, options.content);
@@ -207,9 +207,9 @@ function createDeps(
         );
       }
     },
-    // 工作区导入（open-text-file，2026-08-29）：打开对话框 + workspace.fs 读 UTF-8 文本。
+    // 工作区导入（open-text-file）：打开对话框 + workspace.fs 读 UTF-8 文本。
     openTextFile: async (options) => {
-      // dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1 && isDev，ADR-033 方案 A）：
+      // dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1 && isDev 方案 A）：
       // 读固定路径；文件不存在 = 用户取消（content:null 非错误）。
       if (isDev && process.env.MAMEP_FAKE_DIALOG === "1") {
         return fakeOpenTextFile(fakeDialogPaths().openPath);
@@ -241,9 +241,9 @@ function createDeps(
         );
       }
     },
-    // 插件存储（plugin-store-load/save，2026-08-30，ADR-038）：Extension Host globalState 承载。
+    // 插件存储（plugin-store-load/save）：Extension Host globalState 承载。
     pluginStore,
-    // 保存成功即同步宿主侧插件执行面（ADR-055，2026-09-12）：插件安装/卸载/启停后，
+    // 保存成功即同步宿主侧插件执行面：插件安装/卸载/启停后，
     // 宿主会话内的插件同步能力（codec / addressTransform）随之更新。
     onPluginStoreSaved: () => {
       void hostPlugins.sync();
@@ -275,17 +275,17 @@ export function activate(context: vscode.ExtensionContext): void {
   const postEvent = (event: HostEventMessage): void => {
     if (panel !== undefined) void panel.webview.postMessage(event);
   };
-  // 宿主侧插件执行面（ADR-055，2026-09-12）：Extension Host 从同一份插件存储
+  // 宿主侧插件执行面：Extension Host 从同一份插件存储
   // （context.globalState，即渲染端 plugin-store-save 的落点）加载「已启用 + same-process」
   // 插件并执行，使其贡献的同步能力（codec / addressTransform）在宿主会话中真正生效
-  // —— 取代此前对 `@mamep2026/yaskawa-*` / `@mamep2026/address-adjust` 的静态 import。
+  // 插件由 HostPluginRuntime 加载，宿主入口不静态 import 插件包。
   const pluginStore = new GlobalStatePluginStore(context.globalState);
   const hostPlugins = createHostPluginRuntime({
     store: pluginStore,
     codecRegistry: createCodecRegistry(),
     onIssue: (issue) => {
       // 宿主插件问题不阻断扩展激活：记录到扩展宿主日志（渲染端能力矩阵不感知，
-      // 表现为该协议连接失败，见 ADR-055 决策 3）。
+      // 表现为该协议连接失败，见）。
       console.warn(
         `[mamep2026] host plugin issue (${issue.code}${issue.pluginId ? `, ${issue.pluginId}` : ""}): ${issue.technicalMessage}`,
       );
@@ -301,7 +301,7 @@ export function activate(context: vscode.ExtensionContext): void {
     pluginStore,
   );
   deps = activeDeps;
-  // 宿主侧插件执行面（ADR-055，2026-09-12）：启动同步一次（已安装的 same-process 插件
+  // 宿主侧插件执行面：启动同步一次（已安装的 same-process 插件
   // 立即生效）；后续每次 plugin-store-save 由 ipc 回调再同步。
   void hostPlugins.sync();
 
@@ -410,7 +410,7 @@ function setupPanel(p: vscode.WebviewPanel, deps: IpcDeps): void {
       panel = undefined;
       for (const disposable of panelDisposables) disposable.dispose();
       panelDisposables = [];
-      // Webview 关闭即断开（用户决策，2026-08-23）：释放 RTU 会话与串口，避免端口占用。
+      // Webview 关闭即断开（用户决策）：释放 RTU 会话与串口，避免端口占用。
       void deps?.session.dispose();
     }),
     p.onDidChangeViewState((event) => {
@@ -506,7 +506,7 @@ export function deactivate(): void {
   panel = undefined;
   // 扩展停用（§22.2）：释放会话（断开连接/释放串口），避免端口残留占用。
   void deps?.session.dispose();
-  // 释放宿主侧插件执行面（ADR-055）：注销插件并清空宿主注册表。
+  // 释放宿主侧插件执行面：注销插件并清空宿主注册表。
   hostPluginsRef?.dispose();
   hostPluginsRef = undefined;
   // 停止 dev/e2e 假 TCP 设备（若已启动）。

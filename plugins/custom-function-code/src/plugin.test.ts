@@ -19,7 +19,7 @@ import {
 } from "./plugin";
 
 /**
- * 装配测试夹具（ADR-054）：真 codec 注册表 + 真 dataType 解析器作为同步注册面，
+ * 装配测试夹具：真 codec 注册表 + 真 dataType 解析器作为同步注册面，
  * 按装配层同样方式把单文件 entry 注册为 installed + same-process 插件。
  */
 function makeHarness() {

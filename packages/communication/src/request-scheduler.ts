@@ -3,7 +3,7 @@
  * - 同一连接任意时刻只执行一个设备请求；
  * - 优先级只影响尚未开始的任务，不中断已发送请求；
  * - 公平性：等待超过阈值的任务按 FIFO 执行，避免低优先级饥饿；
- * - 任务紧接执行（不附加请求间隔，2026-09-06 删除 Rx Delay）。
+ * - 任务紧接执行（不附加请求间隔删除 Rx Delay）。
  */
 import { createMamepError, type Result } from "@mamep2026/domain";
 import { fail } from "@mamep2026/domain";

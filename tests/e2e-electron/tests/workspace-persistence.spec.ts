@@ -1,5 +1,5 @@
 /**
- * Electron 文件持久化 e2e（ADR-036，2026-08-30）：
+ * Electron 文件持久化 e2e：
  * - 能力矩阵翻转：filesystem === "full"；
  * - 修改工作区（新增表）→ 主进程自动保存落盘为 userData/workspace.json（含改动）；
  * - 关闭 → 同 userData 重启 → 会话恢复（新表仍在）；
@@ -240,7 +240,7 @@ test("损坏主文件 + 合法备份 → 启动从备份恢复（自愈写回）
       "RecoveredSheet",
       { timeout: 5000 },
     );
-    // 恢复提示（ADR-049）：从备份恢复时展示 RecoveryBanner（纯信息、无按钮）。
+    // 恢复提示：从备份恢复时展示 RecoveryBanner（纯信息、无按钮）。
     const banner = page.getByTestId("recovery-banner");
     await expect(banner).toBeVisible();
     await expect(banner).toContainText("recovered from backup");

@@ -1,5 +1,5 @@
 /**
- * 快捷键守卫（PRD §8.3 P1，2026-08-30，ADR-037）。
+ * 快捷键守卫（PRD §8.3 P1）。
  * app 级（useGlobalShortcuts）与表格级（RegisterTable.handleGlobalKeyDown）共用，
  * 保证「焦点在输入控件不触发 / 弹窗打开不触发」的语义全应用一致。
  */

@@ -1,5 +1,5 @@
 /**
- * 插件隔离 Worker 引导脚本（ADR-044 Phase F-2，2026-09-01）。
+ * 插件隔离 Worker 引导脚本。
  *
  * 主线程把该源码作为 Blob 创建 Web Worker；Worker 内动态 import 单文件 JS 插件
  * （entrySource，须自包含无外部 import），提取 manifest / activate / deactivate，

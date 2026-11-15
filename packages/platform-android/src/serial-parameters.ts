@@ -1,5 +1,5 @@
 /**
- * USB 串口链路参数校验（ADR-050 Phase 2）。
+ * USB 串口链路参数校验。
  *
  * 为什么在 `platform-android` 重复一小段 `packages/platform-node` 的同类逻辑：
  * 两个平台包是**兄弟关系**，互不依赖（`platform-android` 不得为了复用而依赖 Node 适配层），
@@ -7,7 +7,7 @@
  * （`SERIAL_PARAMETER_UNSUPPORTED` / `errors.serialParameterUnsupported`）。
  *
  * 校验只覆盖「本平台能否参数化」；`flowControl` 是否真被驱动支持由原生侧决定，
- * 不支持时按**打开失败**如实上报，不静默忽略（用户决策 2026-09-10 Q5）。
+ * 不支持时按**打开失败**如实上报，不静默忽略（用户决策 Q5）。
  */
 import type { RtuConnectionProfile } from "@mamep2026/domain";
 

@@ -1,5 +1,5 @@
 /**
- * Android（Capacitor）Host 工厂（2026-09-13；本模块只在 Android 平台被动态 `import()`）。
+ * Android（Capacitor）Host 工厂（本模块只在 Android 平台被动态 `import()`）。
  *
  * **本模块是 `@capacitor/core` / `@capacitor/app` 的唯一加载边界**（经 `platform-android` 的
  * `/capacitor`、`/capacitor-app` 子路径）：浏览器 / Electron / VSCode 产物不再包含 Capacitor
@@ -9,7 +9,7 @@
  * 工厂注入 —— 红线：Capacitor 插件调用只允许出现在 `packages/platform-android` 与 `apps/android`
  * （docs/AGENTS.md §32），故本文件只**调用** `platform-android` 的桥工厂。
  *
- * **异步装配（ADR-056）**：Android 的 `executablePlugins` 由**运行时探测**（Blob Worker +
+ * **异步装配**：Android 的 `executablePlugins` 由**运行时探测**（Blob Worker +
  * Worker 内 blob entry 动态 import）决定，故本工厂先 await `resolveAndroidHostCapabilities()`
  * 再构造宿主——能力在 UI 首次读取前即定型，无需额外响应式信号。
  */
@@ -27,9 +27,9 @@ export const createAndroidHost: PlatformHostFactory = async ({
   context,
   signal,
 }) => {
-  // 应用生命周期桥（ADR-050 Phase 3）：返回键（宿主）与前后台（下方订阅）共用同一实例。
+  // 应用生命周期桥：返回键（宿主）与前后台（下方订阅）共用同一实例。
   const appLifecycle = createCapacitorAppLifecycleBridge();
-  // 插件执行能力探测（ADR-056）：Blob Worker 可用性随系统 WebView 版本变化，必须实测。
+  // 插件执行能力探测：Blob Worker 可用性随系统 WebView 版本变化，必须实测。
   const capabilities = await resolveAndroidHostCapabilities();
   // 工作区与插件存储复用浏览器 IndexedDB 路径（WebView 原生支持）。
   const kv = context.createIdbKeyValueStore();
@@ -49,7 +49,7 @@ export const createAndroidHost: PlatformHostFactory = async ({
 };
 
 /**
- * Android 前后台状态（`@capacitor/app`，ADR-050 Phase 3）：部分 OEM 上 WebView 的
+ * Android 前后台状态（`@capacitor/app`）：部分 OEM 上 WebView 的
  * visibilitychange 在进程被冻结时不可靠，故用原生 appStateChange 兜底。与 visibilitychange
  * 路径都调用幂等的 `setBackgroundSuspended`（重复调用为空操作），可安全并存。
  *

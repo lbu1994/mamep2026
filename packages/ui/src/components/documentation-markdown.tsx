@@ -1,5 +1,5 @@
 /**
- * documentation 贡献点的轻量 Markdown 渲染（ADR-043 E-5）。
+ * documentation 贡献点的轻量 Markdown 渲染。
  *
  * 独立于 DocumentationPanel 组件文件（react-refresh only-export-components）：
  * 本文件只导出接口与纯函数，不导出组件。
@@ -14,7 +14,7 @@
 import { Typography } from "antd";
 import { Fragment, type ReactNode } from "react";
 
-/** documentation 贡献 payload（ADR-043 E-5）。 */
+/** documentation 贡献 payload。 */
 export interface DocumentationContribution {
   id: string;
   titleKey: string;

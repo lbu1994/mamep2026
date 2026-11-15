@@ -1,7 +1,7 @@
 /**
- * BrowserAppHost 通信日志与生命周期（2026-08-23）：
+ * BrowserAppHost 通信日志与生命周期：
  * - 一次读取恰好产生 1 条 request + 1 条 response（Comm Log 无重复的会话层保证，
- *   与 VscodeAppHost/ElectronAppHost 的 dispose 修复共同覆盖「一次读取收发各两次」根因）；
+ *   与 VscodeAppHost/ElectronAppHost 的 dispose 语义共同保证一次读取只记录一次收发）；
  * - dispose 清空本地订阅集合（StrictMode 双挂载回归：旧 host 不再收到事件）。
  */
 // @vitest-environment jsdom

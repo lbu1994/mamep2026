@@ -1,5 +1,5 @@
 /**
- * Electron 三端运行骨架 E2E（ADR-016 后续事项的正式测试，冒烟脚本 scripts/smoke-electron.mjs 的升级）。
+ * Electron 三端运行骨架 E2E（后续事项的正式测试，冒烟脚本 scripts/smoke-electron.mjs 的升级）。
  * 生产构建路径启动：dist-electron/main.js + apps/web/dist-electron/（loadFile，验证 base ./ + CSP）。
  * 覆盖：共享 UI 加载、preload 白名单桥、能力如实声明、debug 探针、剪贴板往返、
  * Renderer 安全边界、无 console 错误、关闭窗口干净退出。
@@ -143,27 +143,27 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       "selectSerialPort",
       "onEvent",
       "getDebugState",
-      // 通信日志 CSV 导出（save-text-file，2026-08-28）：主进程保存对话框落盘。
+      // 通信日志 CSV 导出（save-text-file）：主进程保存对话框落盘。
       "saveTextFile",
-      // 工作区导入（open-text-file，2026-08-29）：主进程打开对话框读取。
+      // 工作区导入（open-text-file）：主进程打开对话框读取。
       "openTextFile",
-      // 插件存储桥（2026-08-30，ADR-038）：主进程 userData plugins.json 持久化。
+      // 插件存储桥：主进程 userData plugins.json 持久化。
       "pluginStoreLoad",
       "pluginStoreSave",
-      // 插件运行时桥（2026-08-31，ADR-039）：Phase A 契约，宿主返回能力错误。
+      // 插件运行时桥： 契约，宿主返回能力错误。
       "pluginContributionQuery",
       "pluginRpc",
       "pluginRuntimeLoad",
       "pluginRuntimeUnload",
-      // 会话 RPC 桥（2026-08-23 两端 TCP 接线，ADR-022）：Electron TCP 会话承载主进程，
+      // 会话 RPC 桥（两端 TCP 接线）：Electron TCP 会话承载主进程，
       // preload 暴露完整会话 RPC 方法。
       "sessionTcpConnect",
       "sessionDisconnect",
       "sessionGetState",
       "sessionReadRow",
-      // TCP Unit ID 会话内动态修改（ADR-026）：preload 桥新增 sessionSetUnitId。
+      // TCP Unit ID 会话内动态修改：preload 桥提供 sessionSetUnitId。
       "sessionSetUnitId",
-      // 表级 Address Adjust（ADR-042）：preload 桥新增 sessionSetAddressTransform（RTU 在 Renderer，主进程返回能力错误）。
+      // 表级 Address Adjust：preload 桥提供 sessionSetAddressTransform（RTU 在 Renderer，主进程返回能力错误）。
       "sessionSetAddressTransform",
       "sessionWriteRow",
       "sessionBatchRead",
@@ -173,7 +173,7 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       "sessionPollingStop",
       "sessionTraceStart",
       "sessionTraceStop",
-      // 工作区文件仓储桥（2026-08-30，ADR-036；2026-09-04 ADR-049 增 create-backup）：
+      // 工作区文件仓储桥（增 create-backup）：
       // 主进程应用数据目录版本化 JSON。
       "workspaceLoad",
       "workspaceSave",

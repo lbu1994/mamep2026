@@ -74,11 +74,11 @@ test("WP polling shows a non-color polling indicator while online", async ({
 test("narrow viewport moves secondary header actions into a More menu", async ({
   page,
 }) => {
-  // 移动布局断点已统一为 1023px（ADR-050 Phase 3）：1024 属桌面档，故此处改用 900。
+  // 移动布局断点已统一为 1023px：1024 属桌面档，故此处改用 900。
   await page.setViewportSize({ width: 900, height: 768 });
   await openApp(page);
 
-  // 次要操作被收纳：Settings / Help 收进 More（Plugin Manager 已并入 Settings，2026-09-12）。
+  // 次要操作被收纳：Settings / Help 收进 More（Plugin Manager 已并入 Settings）。
   await expect(
     page.getByRole("button", { name: "Plugin Manager" }),
   ).toHaveCount(0);

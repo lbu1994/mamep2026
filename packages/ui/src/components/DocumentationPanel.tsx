@@ -1,5 +1,5 @@
 /**
- * 文档面板（ADR-043 E-5）：渲染 `documentation` 贡献点。
+ * 文档面板：渲染 `documentation` 贡献点。
  *
  * 轻量 Markdown 子集渲染（不引重库）逻辑见 ./documentation-markdown
  * （`renderMarkdown`/`DocumentationContribution`）。本文件只导出组件

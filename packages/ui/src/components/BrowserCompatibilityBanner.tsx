@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { BrowserCompatibility } from "@mamep2026/domain";
 
 /**
- * 浏览器兼容性提示横幅（PRD §8.3 / §15.7，2026-09-02）：
+ * 浏览器兼容性提示横幅（PRD §8.3 / §15.7）：
  * Web Serial 缺失或非安全上下文时在主体区顶部提示 + 替代方案；
  * 桌面端（null）/ mock 传输 / 全部可用时不渲染。
  */

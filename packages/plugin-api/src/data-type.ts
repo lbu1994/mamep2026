@@ -1,9 +1,9 @@
 /**
- * 数据类型注册表（ADR-043 E-3）。
+ * 数据类型注册表。
  *
  * dataType 贡献点 payload 为声明式数据（id/titleKey，可 JSON 序列化）；
  * `parse`/`format` 是函数，不能进 payload，由插件 `activate` 时经本注册表注册
- * （仿 AddressTransformRegistry 模式，ADR-042）。范围收敛：仅单寄存器插件类型。
+ * （仿 AddressTransformRegistry 模式）。范围收敛：仅单寄存器插件类型。
  */
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
 

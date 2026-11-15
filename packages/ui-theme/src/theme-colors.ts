@@ -1,5 +1,5 @@
 /**
- * VSCode Theme Color 数据源（ui-theme，纯函数，无 DOM 依赖；ADR-027）。
+ * VSCode Theme Color 数据源（ui-theme，纯函数，无 DOM 依赖）。
  *
  * VSCode Webview 会把当前主题解析后的真实颜色以 --vscode-* CSS 自定义属性注入文档：
  * - 生产：Webview 主 frame 直接可用（getComputedStyle(root)）；

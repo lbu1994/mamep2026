@@ -1,6 +1,6 @@
 /**
- * Modbus RTU 从站地址：已确认允许范围 0~255（ADR-013）。
- * 从站地址 0 为广播语义；MVP 不实现广播写入，配置为 0 时设备按标准不应答。
+ * Modbus RTU 从站地址：已确认允许范围 0~255。
+ * 从站地址 0 为广播语义；不实现广播写入，配置为 0 时设备按标准不应答。
  */
 import { createMamepError, type MamepError } from "./errors";
 import { fail, ok, type Result } from "./result";

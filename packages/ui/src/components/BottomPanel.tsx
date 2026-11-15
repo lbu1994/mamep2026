@@ -85,7 +85,7 @@ CommLogRow.displayName = "CommLogRow";
 
 export interface BottomPanelProps {
   /**
-   * 形态（ADR-050 Phase 3）：
+   * 形态：
    * - `docked`（默认）：桌面常驻面板，可拖拽调高、可折叠；
    * - `drawer`：移动端底部抽屉内，高度由抽屉控制，**不套用折叠态也不渲染折叠按钮**。
    */
@@ -114,7 +114,7 @@ export function BottomPanel({
   const panelLayout = useAppStore((s) => s.workspace.panelLayout);
   const properties = host?.getCommProperties() ?? null;
   const connectionState = useAppStore((s) => s.connectionState);
-  // 插件面板贡献（2026-08-31，ADR-039）：有贡献时显示「插件」页签。
+  // 插件面板贡献：有贡献时显示「插件」页签。
   const pluginPanels = usePluginContributions<PanelContribution[]>(
     host,
     "panels",
@@ -123,7 +123,7 @@ export function BottomPanel({
   // drawer 形态下抽屉自身控制高度，忽略持久化的折叠态（否则抽屉内会出现“只剩标签栏”的空白）。
   const collapsed =
     variant === "drawer" ? false : panelLayout.bottomPanelCollapsed;
-  // 可用页签集合（2026-09-17）：`plugins` 仅在有插件面板贡献时存在。
+  // 可用页签集合：`plugins` 仅在有插件面板贡献时存在。
   const tabKeys = [
     "messages",
     "commlog",
@@ -131,7 +131,7 @@ export function BottomPanel({
     "notes",
     ...(pluginPanels.length > 0 ? ["plugins"] : []),
   ];
-  // 失效指向兜底（2026-09-17）：持久化的 activeBottomTab 可能指向已不存在的页签（典型：插件
+  // 失效指向兜底：持久化的 activeBottomTab 可能指向已不存在的页签（典型：插件
   // 卸载后残留 `plugins`）→ 回退 Messages，避免空内容区；并把纠正写回持久化，不残留无效值。
   const activeTab = tabKeys.includes(panelLayout.activeBottomTab)
     ? panelLayout.activeBottomTab
@@ -240,7 +240,7 @@ export function BottomPanel({
     }
   };
 
-  // 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：仅导出当前缓冲区，不提供搜索/过滤。
+  // 通信日志 CSV 导出（PRD §8.3 P1）：仅导出当前缓冲区，不提供搜索/过滤。
   // 导出前按 PRD §15.3.6 / TECH_DESIGN §20.6 提示可能包含设备地址与通信数据。
   // 序列化在 packages/logging（纯函数）；平台落盘/下载经 AppHost.saveTextFile 端口。
   const handleExport = async (): Promise<void> => {
@@ -354,7 +354,7 @@ export function BottomPanel({
           >
             {t("panel.copy")}
           </Button>
-          {/* Export：通信日志 CSV 导出（PRD §8.3 P1，2026-08-28） */}
+          {/* Export：通信日志 CSV 导出（PRD §8.3 P1） */}
           <Button
             size="small"
             icon={<DownloadOutlined />}
@@ -398,7 +398,7 @@ export function BottomPanel({
 
   const propertiesTab =
     properties === null ? null : (
-      /* 通信属性读数面板（2026-08-19 精修）：容器 + 小写大写字幕标签 + 统一值字体，
+      /* 通信属性读数面板（精修）：容器 + 小写大写字幕标签 + 统一值字体，
          取色走令牌，浅/深主题自动适配。 */
       <div className="comm-props">
         <Descriptions

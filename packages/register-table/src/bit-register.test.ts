@@ -1,5 +1,5 @@
 /**
- * 位明细领域逻辑（bit-register，ADR-052）单测。
+ * 位明细领域逻辑（bit-register）单测。
  * 覆盖：bitMaskText、readRegisterBit/readBitComment、buildBitEntries（顺序 bit15→bit0）、
  * setRegisterBit（单行/范围行、值回写、父行 cellText 重算、未读值基准派生、无变化原引用返回、越界错误）、
  * setBitComment（写入/清除/全空归一、无变化原引用返回）、resizeBitComments（保留/截断/补齐）。

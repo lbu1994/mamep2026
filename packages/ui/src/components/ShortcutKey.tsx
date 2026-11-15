@@ -1,5 +1,5 @@
 /**
- * 快捷键按键展示（<kbd> 风格，PRD §8.3 P1，2026-08-30，ADR-037）。
+ * 快捷键按键展示（<kbd> 风格，PRD §8.3 P1）。
  * antd v6 无内置 Kbd 组件；自写小组件，供 Help 弹窗快捷键总览使用。
  * 样式见 apps/web/src/index.css 的 .shortcut-key。
  */

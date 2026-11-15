@@ -1,12 +1,12 @@
 /**
- * 快捷键注册表（PRD §8.3 P1「更完整的键盘操作」，2026-08-30，ADR-037）。
+ * 快捷键注册表（PRD §8.3 P1「更完整的键盘操作」）。
  *
  * 单一事实源：帮助弹窗（Help Modal 快捷键总览）与两级快捷键分发
  * （app 级 useGlobalShortcuts / 表格级 RegisterTable.handleGlobalKeyDown）共用本表，
  * 避免「文档里的快捷键」与「代码里的快捷键」漂移。
  *
- * 键位设计约束（浏览器/系统保留键规避，三端行为一致，ADR-037）：
- * - 不覆盖浏览器/系统保留组合：Ctrl+W/T/N/R、Ctrl+Tab、Ctrl+1..9、F5/F12、Alt+←/→ 等；
+ * 键位设计约束（浏览器/系统保留键规避，三端行为一致）：
+ * - 不覆盖浏览器/系统保留组合：Ctrl+W/T/N/R、Ctrl+Tab、Ctrl+1。9、F5/F12、Alt+←/→ 等；
  * - macOS 用 mod（Ctrl 或 Meta）语义（沿用仓库 mod = ctrlKey || metaKey 惯例）；
  * - 所有快捷键在焦点位于文本输入控件 / 任一弹窗打开时一律不触发（见 guards.ts）。
  */

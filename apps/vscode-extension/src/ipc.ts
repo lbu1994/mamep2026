@@ -69,14 +69,14 @@ export interface VscodeSessionLike {
     slaveAddress: number,
     options?: { protocol?: string },
   ): Promise<Result<void>>;
-  /** TCP 连接（2026-08-23 两端 TCP 接线）：profile 即连接参数，无串口句柄。 */
+  /** TCP 连接（两端 TCP 接线）：profile 即连接参数，无串口句柄。 */
   connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
   disconnect(): Promise<Result<void>>;
   getConnectionState(): ConnectionState;
   setSlaveAddress(slave: number): void;
-  /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）。 */
+  /** TCP Unit ID 会话内动态修改（session-set-unit-id）。 */
   setUnitId(unitId: number): void;
-  /** 表级 Address Adjust（session-set-address-transform，2026-09-01 ADR-042）。 */
+  /** 表级 Address Adjust（session-set-address-transform）。 */
   setAddressTransform(
     config: {
       transformId: string;
@@ -97,7 +97,7 @@ export interface VscodeSessionLike {
     batchId?: string,
     route?: RequestRoute,
   ): BatchReadHandle;
-  /** 按 batchId 取消活动批任务（ADR-025）：未知 batchId 为安全 no-op。 */
+  /** 按 batchId 取消活动批任务：未知 batchId 为安全 no-op。 */
   cancelBatch(batchId: string): void;
   updatePollingTargets(
     rows: Array<{
@@ -124,28 +124,28 @@ export interface VscodeSessionLike {
 /** 扩展宿主侧外部能力（extension.ts 装配真实实现，测试注入 fake）。 */
 export interface IpcDeps {
   appVersion(): string;
-  /** 当前能力矩阵（骨架阶段返回 vscodeCapabilities）。 */
+  /** 当前能力矩阵（返回 vscodeCapabilities）。 */
   capabilities(): PlatformCapabilities;
   /** 当前颜色主题（VSCode ColorThemeKind 已映射为 light/dark）。 */
   colorTheme(): ColorThemeKind;
   /** 是否开发/测试运行（extensionMode Development；生产打包禁用探针）。 */
   isDev(): boolean;
   /**
-   * 断开假 TCP 设备当前客户端（dev/e2e 探针，2026-08-30 自动重连）：
+   * 断开假 TCP 设备当前客户端（dev/e2e 探针自动重连）：
    * 无运行中的假设备返回 false；仅 MAMEP_FAKE_TCP=1 时装配。
    */
   dropFakeTcpClients(): boolean;
   clipboardWriteText(text: string): Promise<void>;
   clipboardReadText(): Promise<string>;
-  /** RTU 会话（VSCode 接线，Extension Host 侧，2026-08-23）。 */
+  /** RTU 会话（VSCode 接线，Extension Host 侧）。 */
   session: VscodeSessionLike;
   /**
-   * 会话通信统计（dev/e2e 探针，2026-08-23）：comm-log request/response 帧计数。
+   * 会话通信统计（dev/e2e 探针）：comm-log request/response 帧计数。
    * 用于 e2e 断言一次读取恰好一次收发；生产构建不进入 UI 状态源。
    */
   sessionStats(): { requestFrames: number; responseFrames: number };
   /**
-   * 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：
+   * 保存文本文件（save-text-file 通信日志 CSV 导出）：
    * Extension Host 弹保存对话框 + workspace.fs 落盘；用户取消返回 ok({ saved: false })。
    */
   saveTextFile(options: {
@@ -154,19 +154,19 @@ export interface IpcDeps {
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>>;
   /**
-   * 打开文件对话框并读取 UTF-8 文本（open-text-file，2026-08-29 工作区导入）：
+   * 打开文件对话框并读取 UTF-8 文本（open-text-file 工作区导入）：
    * Extension Host 弹系统打开对话框 + workspace.fs 读取；用户取消返回 ok({ content: null })。
    */
   openTextFile(options?: {
     suggestedName?: string;
   }): Promise<Result<OpenTextFileResponse>>;
   /**
-   * 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038）：
+   * 插件存储（plugin-store-load / plugin-store-save）：
    * Extension Host globalState 承载（应用级持久化，跨窗口共享）。
    */
   pluginStore: PluginStorePort;
   /**
-   * 插件存储保存成功后触发宿主侧插件执行面同步（ADR-055，2026-09-12）：
+   * 插件存储保存成功后触发宿主侧插件执行面同步：
    * Extension Host 重新加载「已启用 + same-process」插件，使插件贡献的同步能力
    * （codec / addressTransform）在宿主会话中生效。同步不阻塞保存响应。
    */
@@ -303,7 +303,7 @@ export async function handleVscodeRequest(
       );
     case "get-color-theme":
       return okResponse(message, deps.colorTheme());
-    // ---- RTU 会话（VSCode 接线，2026-08-23）----
+    // ---- RTU 会话（VSCode 接线）----
     case "serial-enumerate":
       return sessionResult(message, () => deps.session.enumerateSerialPorts());
     case "session-connect": {
@@ -333,12 +333,12 @@ export async function handleVscodeRequest(
         deps.session.setSlaveAddress(message.payload.slave),
       );
     case "session-set-unit-id":
-      // TCP Unit ID 会话内动态修改（2026-08-25）：渲染端按活动协议路由到本 kind。
+      // TCP Unit ID 会话内动态修改：渲染端按活动协议路由到本 kind。
       return sessionVoid(message, () =>
         deps.session.setUnitId(message.payload.unitId),
       );
     case "session-set-address-transform":
-      // 表级 Address Adjust（2026-09-01，ADR-042）：host 端会话同步活动表地址变换配置。
+      // 表级 Address Adjust：host 端会话同步活动表地址变换配置。
       return sessionVoid(message, () =>
         deps.session.setAddressTransform(message.payload),
       );
@@ -381,7 +381,7 @@ export async function handleVscodeRequest(
       });
     }
     case "session-batch-cancel":
-      // 远程批任务取消（ADR-025）：按 batchId 取消活动批任务（未知 id 安全 no-op）。
+      // 远程批任务取消：按 batchId 取消活动批任务（未知 id 安全 no-op）。
       return sessionVoid(message, () =>
         deps.session.cancelBatch(message.payload.batchId),
       );
@@ -416,14 +416,14 @@ export async function handleVscodeRequest(
         deps.session.traceStop(message.payload.key),
       );
     case "session-tcp-connect": {
-      // 两端 TCP 接线（2026-08-23）：profile 即连接参数，无串口句柄。
+      // 两端 TCP 接线：profile 即连接参数，无串口句柄。
       const { profile } = message.payload;
       return sessionResult(message, () =>
         deps.session.connectTcp(tcpConnectionProfileFromPayload(profile)),
       );
     }
     case "save-text-file":
-      // 通信日志 CSV 导出（2026-08-28）：Extension Host 弹保存对话框 + workspace.fs 落盘。
+      // 通信日志 CSV 导出：Extension Host 弹保存对话框 + workspace.fs 落盘。
       // 显式构造 payload：exactOptionalPropertyTypes 下 Zod 可选字段是 `?: T | undefined`。
       return sessionResult(message, () =>
         deps.saveTextFile({
@@ -435,7 +435,7 @@ export async function handleVscodeRequest(
         }),
       );
     case "open-text-file":
-      // 工作区导入（2026-08-29）：Extension Host 弹打开对话框读 UTF-8 文本（取消=ok({content:null})）。
+      // 工作区导入：Extension Host 弹打开对话框读 UTF-8 文本（取消=ok({content:null})）。
       return sessionResult(message, () =>
         deps.openTextFile(
           message.payload.suggestedName !== undefined
@@ -447,7 +447,7 @@ export async function handleVscodeRequest(
     case "workspace-save":
     case "workspace-clear":
     case "workspace-create-backup":
-      // Electron 文件持久化（2026-08-30，ADR-036；2026-09-04，ADR-049 新增 create-backup）：
+      // Electron 文件持久化（新增 create-backup）：
       // VSCode filesystem 维持 unsupported 如实声明（工作区持久化走 Webview 内 IndexedDB，
       // VscodeAppHost inner BrowserAppHost），本 kind 不适用——返回能力错误并满足穷尽守卫。
       return errorEnvelope(
@@ -457,14 +457,14 @@ export async function handleVscodeRequest(
         "capability",
       );
     case "plugin-store-load":
-      // 插件存储（2026-08-30，ADR-038）：Extension Host globalState 承载（无数据 = 空数组）。
+      // 插件存储：Extension Host globalState 承载（无数据 = 空数组）。
       return sessionResult(message, () => deps.pluginStore.load());
     case "plugin-store-save": {
-      // 插件存储（2026-08-30，ADR-038）：载荷为结构化插件存储数据，宿主校验后写入 globalState。
+      // 插件存储：载荷为结构化插件存储数据，宿主校验后写入 globalState。
       const saved = await sessionResult(message, () =>
         deps.pluginStore.save(message.payload.data),
       );
-      // 保存成功 → 同步宿主侧插件执行面（ADR-055）：插件加载失败不影响保存结果。
+      // 保存成功 → 同步宿主侧插件执行面：插件加载失败不影响保存结果。
       if (saved.type === "response") deps.onPluginStoreSaved?.();
       return saved;
     }
@@ -472,8 +472,8 @@ export async function handleVscodeRequest(
     case "plugin-runtime-unload":
     case "plugin-rpc":
     case "plugin-contribution-query":
-      // 插件运行时桥（2026-08-31，ADR-039）：Phase A 不执行第三方代码（隔离机制 Phase F，
-      // 另立 ADR），宿主侧如实返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误；契约与穷尽守卫先行。
+      // 插件运行时桥保留请求/响应契约；当前宿主在本入口返回
+      // PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误。
       return errorEnvelope(
         message.messageId,
         PLUGIN_RUNTIME_NOT_AVAILABLE,

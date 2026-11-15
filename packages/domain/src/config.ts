@@ -13,26 +13,26 @@ export const defaultConfig = {
     retryCount: 1,
   },
   tcp: {
-    /** MBAP 单元标识默认 0（2026-08-23 确认：与 RTU Slave Address 默认 1 不同） */
+    /** MBAP 单元标识默认 0（确认：与 RTU Slave Address 默认 1 不同） */
     unitId: 0,
     connectTimeoutMs: 5000,
     requestTimeoutMs: 50,
     retryCount: 1,
-    /** 自动重连：P1 能力（2026-08-30 落地），默认 false */
+    /** 自动重连：P1 能力（落地），默认 false */
     autoReconnect: false,
-    /** 自动重连：最大尝试次数（内部默认值，不入 profile/表单/持久化，2026-08-30） */
+    /** 自动重连：最大尝试次数（内部默认值，不入 profile/表单/持久化） */
     reconnectMaxAttempts: 5,
-    /** 自动重连：退避基值（ms，内部默认值，2026-08-30） */
+    /** 自动重连：退避基值（ms，内部默认值） */
     reconnectBaseIntervalMs: 1000,
-    /** 自动重连：退避封顶（ms，内部默认值，2026-08-30） */
+    /** 自动重连：退避封顶（ms，内部默认值） */
     reconnectMaxIntervalMs: 15000,
   },
   registerTable: {
-    /** Register 地址列进制：默认 DEC（按表独立，ADR-014） */
+    /** Register 地址列进制：默认 DEC（按表独立） */
     addressRadix: "dec",
-    /** Slave Address 默认值：1（按表独立设置，2026-08-19） */
+    /** Slave Address 默认值：1（按表独立设置） */
     slaveAddress: 1,
-    /** 新建寄存器表默认填充的行数（2026-08-15） */
+    /** 新建寄存器表默认填充的行数 */
     defaultRowCount: 50,
   },
   polling: {

@@ -1,5 +1,5 @@
 /**
- * 连接动作共享逻辑（2026-09-06 Header Connect 直连）：
+ * 连接动作共享逻辑（Header Connect 直连）：
  * Header「Connect」直连与 ConnectionSettingsModal 的 CONNECT 复用同一套
  * 连接执行（runConnect）与「可直连」判定（canDirectConnect），避免两处重复。
  *
@@ -14,7 +14,7 @@ import type {
 import type { SerialDeviceHandle } from "@mamep2026/platform-api";
 import type { AppHost } from "./host";
 
-/** 串口能力被阻断（无 Web Serial + 非 enumerated + 非 mock）：不能直连，应回退弹窗（ADR-046）。 */
+/** 串口能力被阻断（无 Web Serial + 非 enumerated + 非 mock）：不能直连，应回退弹窗。 */
 export function isSerialBlocked(host: AppHost): boolean {
   const supportsSerial = host.supportsWebSerial();
   const serialPorts = host.capabilities.serialPorts;
@@ -44,7 +44,7 @@ export function canDirectConnect(
  * 统一执行连接（Header 直连与弹窗 onSubmit 共用；封装 mock null-handle 语义）。
  * @param opts.protocol 传输协议（RTU/TCP）
  * @param opts.profile 对应协议的连接 profile（可为表单派生或持久化）
- * @param opts.sheetProtocol 活动表 codec 协议（ADR-041，非核心表如安川/基础表）
+ * @param opts.sheetProtocol 活动表 codec 协议（非核心表如安川/基础表）
  * @param opts.handle 会话内已选串口句柄（RTU 用；mock 或 TCP 忽略）
  */
 export async function runConnect(

@@ -20,7 +20,7 @@ const SLAVE_SCRIPT = resolve(
   "modbus-slave",
   "modbus-rtu-slave.mjs",
 );
-// 主站连接参数来自 config/connections.json（ADR-023）：rtu-com4-master 即 COM4 主站。
+// 主站连接参数来自 config/connections.json：rtu-com4-master 即 COM4 主站。
 const master = findConnection("rtu-com4-master");
 const MASTER_PORT = master.port;
 const SLAVE_PORT = "COM5";

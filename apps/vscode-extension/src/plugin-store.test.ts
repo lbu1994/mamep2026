@@ -1,5 +1,5 @@
 /**
- * GlobalStatePluginStore 单测（ADR-038，2026-08-30）。
+ * GlobalStatePluginStore 单测。
  * 注入 fake Memento，覆盖：首次 load（无数据）空存储、roundtrip、损坏数据错误、非法数据
  * 拒绝写入、写入失败错误映射（category plugin）。
  */

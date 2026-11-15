@@ -1,5 +1,5 @@
 /**
- * 插件同步贡献注册面装配（ADR-054，2026-09-12）。
+ * 插件同步贡献注册面装配。
  *
  * 插件 `activate(ctx)` 经 `ctx.registries` 注册 codec / dataType / addressTransform
  * （同步纯函数不可 JSON 序列化，不能进 manifest 的 contributes payload）。

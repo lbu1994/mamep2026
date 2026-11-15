@@ -1,6 +1,6 @@
 /**
  * VSCode Webview Renderer Host（docs/TECH_DESIGN.md §5.1.6、§6.3、§22.2）。
- * 实现共享 UI 的 AppHost 契约。VSCode RTU 接线（2026-08-23）：通信在 Extension Host 执行
+ * 实现共享 UI 的 AppHost 契约。VSCode RTU 接线：通信在 Extension Host 执行
  * （TECH_DESIGN §28.3），本类作为「远程会话代理」——connect/读/写/批量/轮询/Trace 全部
  * 经 HostMessage v2 类型化 RPC（window.mamepHost，VscodeHostApi）委托 Extension Host；
  * 工作区持久化（IndexedDB）复用 BrowserAppHost 路径；剪贴板与颜色主题走 VSCode 桥。
@@ -85,9 +85,9 @@ export interface VscodeAppHostOptions {
   repository?: WorkspaceRepositoryPort | undefined;
   /** 插件存储（默认 BridgePluginStore 经 vscode-bridge；测试注入内存仓储）。 */
   pluginStore?: PluginStorePort | undefined;
-  /** 同步贡献注册面（ADR-054）：透传 inner，供插件 activate 经 ctx.registries 注册。 */
+  /** 同步贡献注册面：透传 inner，供插件 activate 经 ctx.registries 注册。 */
   syncRegistries?: PluginSyncRegistries | undefined;
-  /** 地址变换解析（ADR-054）：透传 inner（本地只读会话不用于通信）。 */
+  /** 地址变换解析：透传 inner（本地只读会话不用于通信）。 */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
   /**
    * 主题 CSS 变量读取源（默认 getComputedStyle(document.documentElement) 惰性委托；
@@ -116,7 +116,7 @@ function portLabelOf(ports: SerialPortOption[], portId: string): string {
 }
 
 export class VscodeAppHost implements AppHost {
-  /** 能力矩阵派生（ADR-054）：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
+  /** 能力矩阵派生：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
   get capabilities(): PlatformCapabilities {
     return deriveCapabilities(vscodeCapabilities, this.pluginRegistry);
   }
@@ -171,9 +171,9 @@ export class VscodeAppHost implements AppHost {
         options.repository ??
         new IndexedDBWorkspaceRepository(createIdbKeyValueStore()),
       mockTransport: false,
-      // 插件持久化（2026-08-30，ADR-038）：Extension Host globalState 经 vscode-bridge 薄桥。
+      // 插件持久化：Extension Host globalState 经 vscode-bridge 薄桥。
       pluginStore: options.pluginStore ?? new BridgePluginStore(bridge),
-      // 同步贡献注册面 + 地址变换解析（ADR-054）。
+      // 同步贡献注册面 + 地址变换解析。
       syncRegistries: options.syncRegistries,
       resolveAddressTransform: options.resolveAddressTransform,
     });
@@ -186,7 +186,7 @@ export class VscodeAppHost implements AppHost {
       };
     this.scheduleFrame = options.scheduleFrame ?? defaultScheduleFrame;
     // 主题：初始化查询 + 订阅宿主 color-theme-changed 事件，映射共享 store 的 antd 主题
-    // （完整令牌映射 buildVscodeTheme，ADR-027）；Host 与应用同生命周期，无需退订。
+    // （完整令牌映射 buildVscodeTheme）；Host 与应用同生命周期，无需退订。
     void this.applyColorThemeFromHost();
     this.scheduleApplyHostTheme();
     // 桥事件订阅：dispose 时退订（StrictMode 双挂载下避免旧 host 残留订阅重复投递）。
@@ -362,7 +362,7 @@ export class VscodeAppHost implements AppHost {
         portId: handle.id,
         profile: toRtuConnectionProfilePayload(profile),
         slaveAddress: this.currentSlaveAddress,
-        // ADR-043 E-6：codec 协议（基础表/安川）透传 Extension Host；缺省 rtu。
+        //codec 协议（基础表/安川）透传 Extension Host；缺省 rtu。
         ...(options?.protocol !== undefined && options.protocol !== "rtu"
           ? { protocol: options.protocol }
           : {}),
@@ -399,8 +399,8 @@ export class VscodeAppHost implements AppHost {
 
   /**
    * 释放全部资源（StrictMode 重复挂载 / Webview 卸载清理）：退订桥事件、清空本地订阅
-   * 集合、断开会话并 dispose inner。修复「一次读取在 Comm Log 里收发各两次、从站只
-   * 收到一次」的重复投递根因（2026-08-23）。
+   * 集合、断开会话并 dispose inner，确保一次读取在 Comm Log 中只记录一次收发、从站只
+   * 收到一次」的重复投递根因。
    */
   async dispose(): Promise<void> {
     this.disposeBridgeEvents();
@@ -418,12 +418,12 @@ export class VscodeAppHost implements AppHost {
     return this.connectionState;
   }
 
-  /** 启动插件系统（ADR-054）：委托 inner（加载已安装插件并装配执行面）。 */
+  /** 启动插件系统：委托 inner（加载已安装插件并装配执行面）。 */
   startPlugins(): Promise<void> {
     return this.inner.startPlugins();
   }
 
-  /** 预览可执行插件 entry（ADR-054）。 */
+  /** 预览可执行插件 entry。 */
   previewPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
@@ -431,7 +431,7 @@ export class VscodeAppHost implements AppHost {
     return this.inner.previewPluginEntry(entrySource, executionMode);
   }
 
-  /** 安装可执行插件（ADR-054）：委托 inner（注册 + 持久化）。 */
+  /** 安装可执行插件：委托 inner（注册 + 持久化）。 */
   installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
@@ -439,7 +439,7 @@ export class VscodeAppHost implements AppHost {
     return this.inner.installPluginEntry(entrySource, executionMode);
   }
 
-  /** 当前会话（ADR-044 Phase F-2）：VSCode 会话在 Extension Host，无本地会话 → null。 */
+  /** 当前会话：VSCode 会话在 Extension Host，无本地会话 → null。 */
   getSession(): CommunicationSession | null {
     return null;
   }
@@ -447,7 +447,7 @@ export class VscodeAppHost implements AppHost {
   getCommProperties(): CommProperties {
     const profile = this.currentProfile;
     if (profile !== null && profile.protocol === "tcp") {
-      // TCP 摘要（2026-08-23）：RTU 专属字段置默认；BottomPanel 按 protocol 渲染 TCP 字段。
+      // TCP 摘要：RTU 专属字段置默认；BottomPanel 按 protocol 渲染 TCP 字段。
       return {
         protocol: "tcp",
         portLabel: this.portLabel,
@@ -479,7 +479,7 @@ export class VscodeAppHost implements AppHost {
   }
 
   /**
-   * 从站地址 / TCP Unit ID 会话内动态修改（2026-08-25，ADR-022 已知限制打通）：
+   * 从站地址 / TCP Unit ID 会话内动态修改（已知限制打通）：
    * 渲染端按活动协议路由——RTU 走 session-set-slave-address，TCP 走 session-set-unit-id。
    */
   setSlaveAddress(slave: number): void {
@@ -498,7 +498,7 @@ export class VscodeAppHost implements AppHost {
     };
   }
 
-  /** 更新活动表地址变换配置（ADR-042）：VSCode 会话在 Extension Host，经 session-set-address-transform RPC。 */
+  /** 更新活动表地址变换配置：VSCode 会话在 Extension Host，经 session-set-address-transform RPC。 */
   setAddressTransform(
     config: {
       transformId: string;
@@ -543,7 +543,7 @@ export class VscodeAppHost implements AppHost {
   }
 
   readAllRows(rows: BatchReadRow[], route?: RequestRoute): BatchReadHandle {
-    // 远程代理：batchId 由渲染端生成（ADR-025），取消经 session-batch-cancel RPC 关联宿主批任务。
+    // 远程代理：batchId 由渲染端生成，取消经 session-batch-cancel RPC 关联宿主批任务。
     const batchId = createBatchId();
     // 单次往返：行结果经 poll-result 事件流推送，响应只带汇总。
     let resolvePromise: (result: Result<BatchReadSummary>) => void = () => {};
@@ -561,7 +561,7 @@ export class VscodeAppHost implements AppHost {
       });
     return {
       promise,
-      // 远程批任务取消（ADR-025）：经 session-batch-cancel RPC 通知宿主；幂等、异常安全。
+      // 远程批任务取消：经 session-batch-cancel RPC 通知宿主；幂等、异常安全。
       cancel: () => {
         void this.bridge.sessionBatchCancel(batchId);
       },
@@ -671,7 +671,7 @@ export class VscodeAppHost implements AppHost {
     return this.bridge.readTextFromClipboard();
   }
 
-  // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：Extension Host 保存对话框 + workspace.fs 落盘 ----
+  // ---- 通信日志 CSV 导出（PRD §8.3 P1）：Extension Host 保存对话框 + workspace.fs 落盘 ----
 
   saveTextFile(options: {
     suggestedName: string;
@@ -681,7 +681,7 @@ export class VscodeAppHost implements AppHost {
     return this.bridge.saveTextFile(options);
   }
 
-  // ---- 工作区导入（2026-08-29，PRD §8.3 P1）：Extension Host 打开对话框 + workspace.fs 读取 ----
+  // ---- 工作区导入（PRD §8.3 P1）：Extension Host 打开对话框 + workspace.fs 读取 ----
 
   openTextFile(options?: {
     suggestedName?: string;
@@ -689,7 +689,7 @@ export class VscodeAppHost implements AppHost {
     return this.bridge.openTextFile(options);
   }
 
-  // ---- 插件运行时桥（2026-08-31，ADR-039）：Extension Host 返回能力错误（Phase A），委托桥契约就位 ----
+  // ---- 插件运行时桥：Extension Host 返回能力错误，委托桥契约就位 ----
 
   pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>> {
     return this.bridge.pluginRuntimeLoad(payload);

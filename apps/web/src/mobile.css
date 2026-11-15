@@ -1,5 +1,5 @@
 /* ==========================================================================
-   移动布局（< 1024px，ADR-050 Phase 3）
+   移动布局（< 1024px）
    断点数值与 packages/ui/src/layout/breakpoints.ts 的 MOBILE_LAYOUT_MAX_WIDTH
    同源（媒体查询无法引用 JS 常量，故此处手写同值；行为由 e2e 守）。
    桌面（≥ 1024px）不受本节任何规则影响。
@@ -24,7 +24,7 @@
     row-gap: 4px;
   }
 
-  /* 「更多」面板（ADR-050 Phase 3）：次要控件纵向堆叠，标签保持可见（触摸无 hover 提示）。
+  /* 「更多」面板：次要控件纵向堆叠，标签保持可见（触摸无 hover 提示）。
      必须限制面板宽度：控件组默认不换行（inline-flex），一行铺开会比手机视口更宽，
      Popover 定位后选项会落到视口之外（e2e 实测 click 报 "outside of the viewport"）。 */
   .table-toolbar__more {

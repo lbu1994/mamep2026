@@ -1,5 +1,5 @@
 /**
- * 单行读/写请求的统一入口（PRD §8.3 P1 键盘操作，2026-08-30，ADR-037）。
+ * 单行读/写请求的统一入口（PRD §8.3 P1 键盘操作）。
  * ReadCell/WriteCell（按钮路径）与表格级快捷键（F8 读选中行 / Ctrl+Shift+Enter 写选中行）
  * 共用同一套「请求 → 结果 → 状态点/回读覆盖/消息」逻辑，避免两处复制漂移。
  * 纯函数式（依赖经 deps 注入），便于单测。
@@ -58,7 +58,7 @@ export async function readRowById(
   // 手动读结果 → 三态状态点（成功清失败态写成功点；失败写失败态并带错误码）。
   deps.recordManualResult(rowId, result, "read");
   if (result.ok) {
-    // 多寄存器行（ADR-030）：applyReadValuesToRow 更新 registerValues（子行数据源）
+    // 多寄存器行：applyReadValuesToRow 更新 registerValues（子行数据源）
     // + cellText（组合文本）；单寄存器行走原路径。
     deps.updateRow(rowId, (r) => {
       const resolver = useAppStore.getState().dataTypeResolver;
@@ -101,7 +101,7 @@ export async function writeRowById(
   if (sheet === undefined) return;
   const row = sheet?.rows.find((r) => r.rowId === rowId);
   if (row === undefined) return;
-  // 本表写后回读配置（每表独立，2026-08-26）。
+  // 本表写后回读配置（每表独立）。
   const writeVerify = sheet?.writeVerify ?? {
     mode: "immediate" as const,
     delayMs: null,

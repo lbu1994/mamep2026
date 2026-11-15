@@ -1,5 +1,5 @@
 /**
- * 插件寄存器手册（ADR-043 E-5）E2E（mock 传输）：
+ * 插件寄存器手册E2E（mock 传输）：
  * - Help 弹窗渲染 documentation 贡献点（安川 MEMOBUS 手册）
  * - 轻量 markdown 渲染（标题/列表/代码块）
  */
@@ -13,7 +13,7 @@ async function openApp(page: Page): Promise<void> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
-  // ADR-054：安川插件（寄存器手册贡献方）不再随包安装——先手动安装。
+  //安川插件（寄存器手册贡献方）不再随包安装——先手动安装。
   await installExecutablePlugin(page, {
     pluginId: "yaskawa-memobus-67h-010dh-010eh",
     pluginName: "Yaskawa MEMOBUS",

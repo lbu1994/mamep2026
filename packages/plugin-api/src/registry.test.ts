@@ -36,7 +36,7 @@ function registryWithPanels(): PluginRegistry {
   return new PluginRegistry({ contributionRegistry });
 }
 
-/** 假隔离线程运行时（ADR-044 Phase F-2 单测）。 */
+/** 假隔离线程运行时（单测）。 */
 function fakeRemoteRuntime(overrides: Partial<PluginRemoteRuntime> = {}) {
   return {
     load: vi.fn(async () => ({ ok: true, value: manifest() })),
@@ -289,7 +289,7 @@ describe("PluginRegistry 隔离线程运行时（2026-09-01，ADR-044 Phase F-2�
     expect(restored.getEntrySource("installed-exec")).toBe(
       "export const manifest = { id: 'x' }",
     );
-    // 执行模式随快照持久化（ADR-054）：重启后装配方据此重建隔离运行时。
+    // 执行模式随快照持久化：重启后装配方据此重建隔离运行时。
     expect(restored.getExecutionMode("installed-exec")).toBe("isolated");
     // hydrate 不自动激活（装配方 attachRemoteRuntime 后激活）。
     expect(restored.getLifecycleState("installed-exec")).toBe("registered");

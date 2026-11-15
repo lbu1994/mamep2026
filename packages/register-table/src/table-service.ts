@@ -32,13 +32,13 @@ import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 export interface TableServiceDeps {
   getSession: () => CommunicationSession | null;
   /**
-   * 活动表配置解析出的地址变换（ADR-042）：null=不调整；
+   * 活动表配置解析出的地址变换：null=不调整；
    * ON（内置 builtin.address-adjust）时发送地址 = 用户地址 − 1。
    */
   getAddressTransform: () => AddressTransform | null;
-  /** 时钟（写后回读延迟用，2026-08-26）：由调用方注入（测试用 Virtual Clock）。 */
+  /** 时钟（写后回读延迟用）：由调用方注入（测试用 Virtual Clock）。 */
   clock: Clock;
-  /** 数据类型解析器（ADR-043 E-3）：缺省仅内置；插件类型由 UI 装配点注入。 */
+  /** 数据类型解析器：缺省仅内置；插件类型由 UI 装配点注入。 */
   dataTypeResolver?: DataTypeResolver;
 }
 
@@ -60,7 +60,7 @@ function addressEmptyError() {
   });
 }
 
-/** 模块级缺省解析器（仅内置；ADR-043 E-3 插件类型由 UI 装配点注入）。 */
+/** 模块级缺省解析器（仅内置插件类型由 UI 装配点注入）。 */
 const defaultResolver: DataTypeResolver = createDataTypeResolver();
 
 export class RegisterTableService {
@@ -70,7 +70,7 @@ export class RegisterTableService {
     this.deps = deps;
   }
 
-  /** 单行读取（多寄存器行一次 FC03 读全部，ADR-030）：校验连接/地址/地址变换后经统一调度器。 */
+  /** 单行读取（多寄存器行一次 FC03 读全部）：校验连接/地址/地址变换后经统一调度器。 */
   async readRow(
     row: RegisterRow,
     route?: RequestRoute,
@@ -110,7 +110,7 @@ export class RegisterTableService {
 
   /**
    * 单行写入：校验连接/地址/输入值，转 16 位原始值后发送 FC0x10。
-   * options.writeVerify（2026-08-26）：非 off 时经 WriteVerifyCoordinator 组合
+   * options.writeVerify：非 off 时经 WriteVerifyCoordinator 组合
    * 「写入 → 可选延迟 → FC03 回读 → 比较」，返回扩展的 WriteOutcome（§18.2）。
    */
   async writeRow(
@@ -129,7 +129,7 @@ export class RegisterTableService {
     if (!sent.ok) return sent;
     const writeVerify = options.writeVerify;
 
-    // 多寄存器行（ADR-030）：组合值一次 FC0x10 写全部连续寄存器。
+    // 多寄存器行：组合值一次 FC0x10 写全部连续寄存器。
     if (row.registerCount > 1) {
       const parsed = parseCompositeText(
         row.cellText,

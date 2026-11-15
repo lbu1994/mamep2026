@@ -1,5 +1,5 @@
 /**
- * 插件隔离 worker_threads 引导脚本（ADR-044 Phase F-2，2026-09-01）。
+ * 插件隔离 worker_threads 引导脚本。
  *
  * Electron 主进程 / VSCode Extension Host 用 `new Worker(code, {eval:true,
  * type:"module"})` 加载本脚本；脚本经 parentPort 与主线程隔离桥通信，协议与

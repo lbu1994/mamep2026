@@ -1,29 +1,29 @@
 /**
- * command / dataType 贡献点消费方（docs/architecture/ports/plugin-api/插件契约.md §3，ADR-039）。
- * Phase A：聚合贡献为只读注册表（查询用）；handler / 解析接入随 Phase E/F 扩展。
+ * command / dataType 贡献点消费方（docs/architecture/ports/plugin-api/插件契约.md §3）。
+ * 聚合贡献为只读注册表（查询用）；handler / 解析由插件 runtime 提供。
  */
 import type { Contribution } from "@mamep2026/plugin-api";
 import { basicTablesProtocolId, isBasicSheetType } from "@mamep2026/domain";
 
-/** command 贡献 payload（Phase A 声明式；handler 随 Phase F 插件 runtime 提供）。 */
+/** command 贡献 payload（声明式；handler 随插件 runtime 提供）。 */
 export interface CommandContribution {
   id: string;
   titleKey: string;
 }
 
-/** dataType 贡献 payload（Phase A 声明式；parse/format 接入属 Phase E）。 */
+/** dataType 贡献 payload（声明式；parse/format 由插件 resolver 提供）。 */
 export interface DataTypeContribution {
   id: string;
   titleKey: string;
 }
 
-/** settings 贡献 payload（Phase A 声明式标题；组件随 Phase F 插件 runtime 提供）。 */
+/** settings 贡献 payload（声明式标题；组件随插件 runtime 提供）。 */
 export interface SettingsContribution {
   id: string;
   titleKey: string;
 }
 
-/** toolbarAction 贡献 payload（Phase A 声明式；handler 随 Phase F 插件 runtime 提供）。 */
+/** toolbarAction 贡献 payload（声明式；handler 随插件 runtime 提供）。 */
 export interface ToolbarActionContribution {
   id: string;
   titleKey: string;
@@ -31,11 +31,11 @@ export interface ToolbarActionContribution {
   scope?: "table-toolbar";
   targetTableType?: string;
   requiresConfirm?: boolean;
-  /** 安全确认文案键（2026-09-02 插件外部化，ADR-045：缺省回退 titleKey）。 */
+  /** 安全确认文案键（插件外部化：缺省回退 titleKey）。 */
   confirmKey?: string;
 }
 
-/** tableType 贡献 payload（ADR-041 Phase C：声明式；createDefaultRow 等交互随插件 runtime）。 */
+/** tableType 贡献 payload（声明式；createDefaultRow 等交互随插件 runtime）。 */
 export interface TableTypeContribution {
   id: string;
   protocolId: string;
@@ -44,13 +44,13 @@ export interface TableTypeContribution {
   rowActions?: string[];
 }
 
-/** protocolExtension 贡献 payload（ADR-041 Phase C：声明式；codec 经插件 activate 注册进会话）。 */
+/** protocolExtension 贡献 payload（声明式；codec 经插件 activate 注册进会话）。 */
 export interface ProtocolExtensionContribution {
   protocolId: string;
   titleKey: string;
 }
 
-/** addressTransform 贡献 payload（ADR-042 插件 Phase D：声明式；apply/validate 经 activate 注册）。 */
+/** addressTransform 贡献 payload（声明式；apply/validate 经 activate 注册）。 */
 export interface AddressTransformContribution {
   id: string;
   protocol: string;
@@ -59,10 +59,10 @@ export interface AddressTransformContribution {
 }
 
 /**
- * 表类型 → 会话协议（ADR-041 决策 A / ADR-043 E-2）：
+ * 表类型 → 会话协议：
  * - 核心 "holding-register" → "rtu"；
  * - 核心基础表 "coil"/"discrete-input"/"input-register" → 基础表 codec 协议 ID
- *   （"modbus-basic-tables:<tableType>"，RTU 承载，ADR-043）；
+ *   （"modbus-basic-tables:<tableType>"，RTU 承载）；
  * - 插件表类型 "<pluginId>:<tableTypeId>" → 查 tableType 贡献的 protocolId；
  * - 目标协议不在平台能力矩阵 protocolExtensions 内 → 回退 "rtu"（能力门控）。
  */
@@ -88,7 +88,7 @@ export function protocolForSheetType(
   return "rtu";
 }
 
-/** 命令分发注册表（ADR-039/041）：把插件 command 贡献（数组）聚合为 id → 元数据映射。 */
+/** 命令分发注册表：把插件 command 贡献（数组）聚合为 id → 元数据映射。 */
 export function buildCommandRegistry(
   contributions: readonly Contribution<CommandContribution[]>[],
 ): Map<string, CommandContribution> {
@@ -101,7 +101,7 @@ export function buildCommandRegistry(
   return registry;
 }
 
-/** 数据类型注册表（ADR-039）：把插件 dataType 贡献聚合为 id → 元数据映射。 */
+/** 数据类型注册表：把插件 dataType 贡献聚合为 id → 元数据映射。 */
 export function buildDataTypeRegistry(
   contributions: readonly Contribution<DataTypeContribution>[],
 ): Map<string, DataTypeContribution> {

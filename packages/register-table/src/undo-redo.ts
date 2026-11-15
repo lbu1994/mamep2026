@@ -45,11 +45,11 @@ export interface RowEditFields {
   registerCount: number;
   dataType: DataType;
   pollingEnabled: boolean;
-  /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据。 */
+  /** 范围行子行元数据：null=单寄存器行或老数据。 */
   registers: RegisterSubRowMeta[] | null;
-  /** 位级注释（ADR-052，2026-09-11）：null=无位注释。 */
+  /** 位级注释：null=无位注释。 */
   bitComments: RegisterBitComments | null;
-  /** 位级名称（ADR-052 需求追加）：null=无位名称。 */
+  /** 位级名称：null=无位名称。 */
   bitNames: RegisterBitNames | null;
 }
 
@@ -77,7 +77,7 @@ export function extractRowEditFields(row: RegisterRow): RowEditFields {
 
 /**
  * 把编辑字段应用到现有行：保留运行时字段（cellText/registerValues/order/traceEnabled 等）。
- * 范围长度变化后旧读值不再对齐时清空 registerValues（与 commitAddress 语义一致，ADR-030）。
+ * 范围长度变化后旧读值不再对齐时清空 registerValues（与 commitAddress 语义一致）。
  */
 export function applyRowEditFields(
   row: RegisterRow,
@@ -117,14 +117,14 @@ export interface RowSnapshot {
 export interface SheetEditSnapshot {
   sheetId: SheetId;
   name: string;
-  /** 表类型（ADR-041）：撤销/重做携带，重建时保留插件表类型。 */
+  /** 表类型：撤销/重做携带，重建时保留插件表类型。 */
   type: SheetType;
   order: number;
   open: boolean;
   registerRadix: RegisterRadix;
   slaveAddress: number;
   writeVerify: ReadVerifySettings;
-  /** 表级地址变换配置（ADR-042）：撤销/重做携带。 */
+  /** 表级地址变换配置：撤销/重做携带。 */
   addressTransform: AddressTransformConfig | null;
   rows: RowSnapshot[];
 }

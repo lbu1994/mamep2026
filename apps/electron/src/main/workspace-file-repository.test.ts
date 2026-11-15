@@ -1,5 +1,5 @@
 /**
- * WorkspaceFileRepository 单测（docs/TECH_DESIGN.md §19.4、ADR-036，2026-08-30）。
+ * WorkspaceFileRepository 单测（docs/TECH_DESIGN.md §19.4）。
  * 注入临时目录（os.tmpdir + mkdtemp），覆盖：roundtrip、原子替换与 .bak 轮转、损坏恢复
  * （自愈写回）、双坏错误、无文件空工作区、clear、v1→v4 迁移、错误映射（category persistence）。
  */

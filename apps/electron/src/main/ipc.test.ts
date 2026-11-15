@@ -1,6 +1,6 @@
 /**
  * 安全 IPC 处理核心单测（docs/AGENTS.md §23：未知 kind 拒绝、输入校验、发送者校验、探针禁用）。
- * handleRequest/handleInvoke 为异步（主进程 TCP 会话承载，2026-08-23 两端 TCP 接线）。
+ * handleRequest/handleInvoke 为异步（主进程 TCP 会话承载两端 TCP 接线）。
  */
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectionState } from "@mamep2026/communication";

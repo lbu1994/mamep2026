@@ -1,18 +1,12 @@
 /**
- * 外壳界面状态「首帧即持久化值」e2e（mockTransport=1，浏览器端，2026-09-16）。
+ * 外壳界面状态「首帧即持久化值」e2e（mockTransport=1，浏览器端）。
  *
- * **Bug**：`.ant-layout-sider` / 已打开 Tab / 底部面板等**工作区派生**的界面状态，在刷新后
- * 会先按 `createEmptyWorkspace()`（单张默认 `Sheet 1` + 默认 `panelLayout`）渲染，等工作区
- * 从宿主仓储异步加载完成后才切换 —— 侧栏折叠/宽度、底部面板折叠/高度/活动页签、打开的 Tab
- * 与活动 Tab 全部先错后对（首屏闪烁，范围远超主题 / 语言两项）。
+ * `.ant-layout-sider` / 已打开 Tab / 底部面板等**工作区派生**的界面状态必须在首帧直接
+ * 使用持久化值。启动骨架（`hostStatus === "assembling"`）覆盖到工作区与插件就绪之后，
+ * 外壳首现即已加载完成。
  *
- * **复现（红）**：构造一组全非默认状态（多表 + 多行 + 活动 Tab + 侧栏折叠或拖宽 + 底部面板
- * 折叠或拖高 + 活动底部页签），记录「`#root` 首次渲染出外壳」（`.ant-layout-sider` 首次出现）
- * 那一刻的外壳快照，与刷新前稳定态快照比对。修复前首现快照 = 默认工作区（`Sheet 1` / 展开 /
- * Messages…）→ 断言失败。
- *
- * **修复（绿）**：启动骨架（`hostStatus === "assembling"`）覆盖到「工作区 + 插件就绪」之后
- * （见 `apps/web/src/host-assembly.ts`）→ 外壳首现即已加载完成，全部状态一步到位。
+ * 验证：构造一组全非默认状态（多表 + 多行 + 活动 Tab + 侧栏折叠或拖宽 + 底部面板
+ * 折叠或拖高 + 活动底部页签），记录外壳首次出现时的快照，与刷新前稳定态快照比对。
  *
  * 全程无 console 错误。
  */
@@ -96,8 +90,7 @@ interface ShellBootRecord {
  *
  * `bottomHeight` 单独用容差断言：antd `Splitter` 的首帧布局会先落在一个沉降中间值、次帧才
  * 采用受控 `size`（逐帧实测：持久化 280 → 首帧 239 → 次帧 280；**持久化为默认 200 时同样如此**
- * → 179 → 200）。这是 Splitter 自身的首帧布局行为，与「持久化值是否恢复」无关，
- * 故与本次修复分离、另立缺陷记录。
+ * → 179 → 200）。这是 Splitter 自身的首帧布局行为，与持久化值恢复无关。
  */
 function expectShellStateMatch(
   actual: ShellSnapshot | null,
@@ -227,7 +220,7 @@ test("多表 / 活动 Tab / 行数据：刷新后外壳首帧即持久化状态"
   });
 
   const record = await readShellBootRecord(page);
-  // 修复后外壳首现必须晚于启动骨架（骨架窗口覆盖工作区加载）。
+  // 外壳首现必须晚于启动骨架（骨架窗口覆盖工作区加载）。
   expect(record.sawSkeleton).toBe(true);
   // 关键断言（红 / 绿分界）：外壳首现快照 == 刷新前稳定态快照（无「先默认后切换」）。
   expectShellStateMatch(record.shellAtFirstAppearance, settled);

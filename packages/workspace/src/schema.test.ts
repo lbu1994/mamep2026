@@ -126,7 +126,7 @@ describe("connection profile persistence", () => {
     expect(profile.requestTimeoutMs).toBe(3000);
     // 旧 profile 中的 slaveAddress 被剥离，不再进入领域对象。
     expect("slaveAddress" in profile).toBe(false);
-    // 旧全局 addressAdjust 已移出核心（ADR-042）：解析时被剥离，不再进入领域对象。
+    // 旧全局 addressAdjust 已移出核心：解析时被剥离，不再进入领域对象。
     expect("addressAdjust" in profile).toBe(false);
     // 从站地址以表级默认 1 回退（sheet 缺省补默认）。
     expect(parsed.value.sheets[0]?.slaveAddress).toBe(1);
@@ -184,7 +184,7 @@ describe("workspace schema round-trip", () => {
     expect(value.schemaVersion).toBe(workspace.schemaVersion);
     expect(value.sheets).toHaveLength(1);
     expect(value.connectionProfiles).toHaveLength(1);
-    // 表级地址变换默认 null（ADR-042）：不调整。
+    // 表级地址变换默认 null：不调整。
     expect(value.sheets[0]?.addressTransform).toBeNull();
     // 从站地址为表级字段：默认 1。
     expect(value.sheets[0]?.slaveAddress).toBe(1);
@@ -283,9 +283,9 @@ describe("workspace schema round-trip", () => {
       { name: "Hi", comment: "high", dataType: "unsigned" },
       { name: "Lo", comment: "low", dataType: "hex" },
     ]);
-    // 位级注释（ADR-052）随工作区往返。
+    // 位级注释随工作区往返。
     expect(row?.bitComments).toEqual([["carry"], null]);
-    // 位级名称（ADR-052 需求追加）随工作区往返。
+    // 位级名称随工作区往返。
     expect(row?.bitNames).toEqual([["carry flag"], null]);
   });
 
@@ -416,7 +416,7 @@ describe("workspace schema round-trip", () => {
 
   it("defaults sheet open to true for legacy data without the field", () => {
     const legacy = JSON.parse(serializeWorkspace(createEmptyWorkspace()));
-    // 模拟老版本数据：sheet 无 open 字段（关闭/打开状态 2026-08-21 引入）。
+    // 模拟老版本数据：sheet 无 open 字段（关闭/打开状态引入）。
     for (const sheet of legacy.sheets) {
       delete sheet.open;
     }
@@ -582,7 +582,7 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
 
     const serialized = serializeWorkspace(workspace);
     // 导出文件为版本化 JSON（含 schemaVersion；TECH_DESIGN §6「版本化 JSON 更适合跨端导入导出」）。
-    // 当前为 v10（ADR-052：行位级注释 bitComments（v9）+ 位级名称 bitNames（v10））。
+    // 当前为 v10（行位级注释 bitComments（v9）+ 位级名称 bitNames（v10））。
     const raw = JSON.parse(serialized);
     expect(raw.schemaVersion).toBe(10);
 
@@ -620,7 +620,7 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
       { name: "Hi", comment: "high", dataType: "unsigned" },
       { name: "Lo", comment: "low", dataType: "hex" },
     ]);
-    // 位级注释/名称（ADR-052）随公开交换格式往返。
+    // 位级注释/名称随公开交换格式往返。
     expect(range?.bitComments).toEqual([["carry"], null]);
     expect(range?.bitNames).toEqual([["carry flag"], null]);
     expect(value.connectionProfiles[0]).toMatchObject({

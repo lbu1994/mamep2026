@@ -1,11 +1,11 @@
 /**
- * 多寄存器组合类型转换（ADR-030，2026-08-27）。
+ * 多寄存器组合类型转换。
  *
  * 范围行（Address 列 `start-end`，registerCount>1）一次请求读写多个连续寄存器，组合宽度由
  * 范围长度决定：32 位 = 2、64 位 = 4、二进制 1/2/3/4、HEX 与字符串任意数量。字节序默认大端
  * （高字在前，Modbus 惯例）。
  *
- * 合法寄存器数（跨字段校验，错误显示在进制列并禁止读写，ADR-030 决策 7/8/10）：
+ * 合法寄存器数（跨字段校验，错误显示在进制列并禁止读写）：
  * - Unsigned/Signed（含各 scale）：1 / 2 / 4；
  * - Binary：1 / 2 / 3 / 4；
  * - HEX / String：任意数量（>= 1）。
@@ -57,14 +57,14 @@ export function allowedRegisterCounts(
 ): readonly number[] | "any" {
   if (type === "hex" || type === "string") return "any";
   if (type === "binary") return BINARY_ALLOWED;
-  // bool（ADR-043 E-2）：单寄存器（线圈/离散输入一行一个位）。
+  // bool：单寄存器（线圈/离散输入一行一个位）。
   if (type === "bool") return [1];
-  // 插件类型（ADR-043 E-3 范围收敛）：仅单寄存器（registerCount 恒 1），范围行拒绝。
+  // 插件类型（范围收敛）：仅单寄存器（registerCount 恒 1），范围行拒绝。
   if (!isBuiltinDataType(type)) return [1];
   return DECIMAL_ALLOWED;
 }
 
-/** 校验「范围长度 × 类型合法集」（ADR-030 决策 7/8/10）。 */
+/** 校验「范围长度 × 类型合法集」。 */
 export function isValidRegisterCount(type: DataType, count: number): boolean {
   const allowed = allowedRegisterCounts(type);
   if (allowed === "any") return count >= 1;
@@ -83,7 +83,7 @@ export function formatRawValues(values: number[], type: DataType): string {
         .map((value) => value.toString(16).toUpperCase().padStart(4, "0"))
         .join(" ");
     case "binary":
-      // 每 8 位一组（ADR-051）：32 位 4 组、48 位 6 组、64 位 8 组。
+      // 每 8 位一组：32 位 4 组、48 位 6 组、64 位 8 组。
       return groupBinaryBits(
         values.map((value) => value.toString(2).padStart(16, "0")).join(""),
       );
@@ -237,7 +237,7 @@ function parseCompositeHex(
   return ok(values);
 }
 
-/** binary：位串（忽略任意空白，与单寄存器 parseBinary 对称，ADR-051），不足 registerCount*16 位前补零。 */
+/** binary：位串（忽略任意空白，与单寄存器 parseBinary 对称），不足 registerCount*16 位前补零。 */
 function parseCompositeBinary(
   text: string,
   registerCount: number,

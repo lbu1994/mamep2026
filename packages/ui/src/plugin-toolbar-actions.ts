@@ -1,7 +1,7 @@
 /**
- * 插件工具栏动作执行（2026-09-02 插件外部化）。
- * Phase A 的 toolbarAction 是声明式占位；Phase C 为安川插件的 ROM/RAM 确定指令
- * （enter-rom / enter-ram）提供真实执行；2026-09-02 起执行面移入插件自身
+ * 插件工具栏动作执行（插件外部化）。
+ * toolbarAction 为声明式描述；安川插件的 ROM/RAM 确定指令
+ * （enter-rom / enter-ram）由插件自身执行
  * （PluginRuntime.handleToolbarAction，经 PluginCommunicationApi 走统一调度器写
  * 0900H/0910H），核心（packages/ui）不再硬编码厂商地址/写入规则（docs/AGENTS.md §24.4）。
  * 本模块仅保留平台侧通用执行前置（连接检查 + 消息提示）与代理调用。

@@ -1,5 +1,5 @@
 /**
- * 完整用户帮助的正文内容（PRD §8.3「完整用户帮助」，2026-09-05）。
+ * 完整用户帮助的正文内容（PRD §8.3「完整用户帮助」）。
  *
  * 说明：
  * - 每页正文为 Markdown（子集，见 ./documentation-markdown renderMarkdown 支持范围：

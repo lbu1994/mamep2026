@@ -1,5 +1,5 @@
 /**
- * Electron Modbus TCP 闭环 E2E（2026-08-23 两端 TCP 接线）。
+ * Electron Modbus TCP 闭环 E2E（两端 TCP 接线）。
  * 生产构建路径启动（dist-electron/main.js + apps/web/dist-electron/，loadFile）。
  * 测试进程内启动本地回环 Modbus TCP Server（net，内联 MBAP responder），
  * 走真实路径：Connection Settings TCP 表单 → 主进程 ElectronSessionHost（Node
@@ -135,7 +135,7 @@ test.beforeAll(async () => {
       if (db.name !== undefined) indexedDB.deleteDatabase(db.name);
     }
   });
-  // 工作区持久化已改为文件仓储（ADR-036，2026-08-30）：IndexedDB 清理不再清除工作区，
+  // 工作区持久化使用文件仓储：IndexedDB 清理不涉及工作区，
   // 一并删除 userData 下 workspace.json(.bak)，避免跨测试/跨运行污染。
   await clearWorkspaceFile(app);
   await page.reload();

@@ -1,5 +1,5 @@
 /**
- * FileWorkspaceRepository 单测（ADR-036，2026-08-30）：
+ * FileWorkspaceRepository 单测：
  * Renderer 薄桥 → preload 桥（workspace-load/save/clear），parse/serialize 在本层完成。
  */
 import { describe, expect, it, vi } from "vitest";

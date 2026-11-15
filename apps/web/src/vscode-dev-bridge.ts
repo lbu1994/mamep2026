@@ -1,14 +1,14 @@
 /**
- * VSCode dev 模式专用桥（MAMEP_DEV_URL，2026-08-23）。
+ * VSCode dev 模式专用桥（MAMEP_DEV_URL）。
  *
- * 场景：扩展 Webview 主 frame 的 dev HTML 以 <iframe src=".../?mamepVscode=1"> 加载本
+ * 场景：扩展 Webview 主 frame 的 dev HTML 以 <iframe src="。/?mamepVscode=1"> 加载本
  * dev server（Vite 自己的 index.html，渲染/HMR 一切正常）；主 frame 运行中继脚本
  * （apps/vscode-extension/src/webview/html.ts）在 iframe ↔ 扩展宿主之间转发 HostMessage
  * Envelope。本模块在 iframe 内把 window.parent.postMessage 封装成 VsCodeApi，复用
  * platform-api 的 createVscodeBridge 建立与生产完全一致的 window.mamepHost（HostMessage
  * v1 类型化 RPC）→ App.tsx 装配 VscodeAppHost，串口枚举走 serial-enumerate RPC。
  *
- * 主题颜色中继（2026-08-25，ADR-027）：CSS 变量不跨 iframe 文档，dev 下共享 UI 读不到
+ * 主题颜色中继：CSS 变量不跨 iframe 文档，dev 下共享 UI 读不到
  * --vscode-*。installVscodeDevThemeRelay 把主 frame 下发的 {source:"mamep-theme-relay",
  * type:"theme-colors", colors} 物化到 iframe 文档根（documentElement.style.setProperty），
  * 之后应用与生产走同一读取路径（readVscodeCssVars）。安装时向主 frame 发

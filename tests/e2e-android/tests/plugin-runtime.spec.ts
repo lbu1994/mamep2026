@@ -1,5 +1,5 @@
 /**
- * Android 插件安装与可执行插件 E2E（ADR-056，Phase 5）。
+ * Android 插件安装与可执行插件 E2E。
  *
  * 本待办的核心问题是「Android WebView 能否**执行**可执行插件（Blob Worker +
  * Worker 内 blob entry 动态 import）」。生产 APK（`https://localhost`，构建期 CSP 已注入）
@@ -13,11 +13,11 @@
  * 6. **同进程执行 + 同步贡献**：以 same-process 安装 → reload 后表列表出现插件分组 → 卸载回收；
  * 7. 全程无 console 错误。
  *
- * 两点真机约束（见 ADR-056 §已知限制）：
+ * 两点真机约束（见 §已知限制）：
  * - **不点击 Install 按钮**：它会拉起设备侧系统文件选择器（原生 Activity），自动化无法驱动且会把
  *   WebView 切到后台（实测会令后续抽屉交互失败）；安装流程一律经 `setInputFiles` 直接投递文件
  *   （即隐藏 input + `file.text()` 的真实应用路径，仅跳过 OS 选择器 UI）。
- * - **移动布局（< 1024px）**：Settings 收在顶栏「More」下拉内，表列表在左侧抽屉内（ADR-050 Phase 3）。
+ * - **移动布局（< 1024px）**：Settings 收在顶栏「More」下拉内，表列表在左侧抽屉内。
  */
 import { expect, test } from "@playwright/test";
 import {

@@ -1,5 +1,5 @@
 /**
- * 浏览器插件存储（ADR-038，2026-08-30）。
+ * 浏览器插件存储。
  * 实现 PluginStorePort：IndexedDB KV（createIdbKeyValueStore，与工作区仓储同一
  * 键值库，独立 key "plugins"）。存储语义与主进程 plugins.json / VSCode globalState
  * 一致：schemaVersion 1 + installed 插件清单 + 启用状态；load/save 均经
@@ -45,7 +45,7 @@ export class IndexedDBPluginStore implements PluginStorePort {
     try {
       const raw = await this.store.get(PLUGINS_KEY);
       if (raw === undefined) return ok(createEmptyPluginStoreData());
-      // v1 → v2 迁移（ADR-039）：老版本已装插件平滑升级；损坏数据返回结构化错误。
+      // v1 → v2 迁移：老版本已装插件平滑升级；损坏数据返回结构化错误。
       return migratePluginStoreData(raw);
     } catch (cause) {
       return fail(

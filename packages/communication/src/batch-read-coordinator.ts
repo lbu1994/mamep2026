@@ -18,7 +18,7 @@ export interface BatchReadRow {
   sheetId: string;
   /** null 表示地址为空或非法，将被跳过。 */
   address: number | null;
-  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
+  /** 覆盖的连续寄存器数：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
   quantity?: number;
 }
 
@@ -61,7 +61,7 @@ export class BatchReadCoordinator {
     route?: RequestRoute,
     requestGeneration = 0,
   ): BatchReadHandle {
-    // 显式 batchId 用于远程路径（渲染端生成随请求传入，ADR-025），保证汇总 batchId
+    // 显式 batchId 用于远程路径（渲染端生成随请求传入），保证汇总 batchId
     // 与请求关联一致；本地路径缺省时内部自增生成。
     const resolvedBatchId = batchId ?? `batch-${++this.seq}`;
     const resolvedRoute = route ? { ...route } : this.session.getCurrentRoute();
@@ -102,7 +102,7 @@ export class BatchReadCoordinator {
 
       for (const row of eligible) {
         const quantity = row.quantity ?? 1;
-        // 多寄存器行（ADR-030）：一次 FC03 读全部连续寄存器，结果携带 values[]。
+        // 多寄存器行：一次 FC03 读全部连续寄存器，结果携带 values[]。
         const request =
           quantity > 1
             ? this.session.readRegisters(row.address ?? 0, quantity, {

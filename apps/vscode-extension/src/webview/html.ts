@@ -3,7 +3,7 @@
  *
  * dev 模式（MAMEP_DEV_URL）：Webview 主 frame 以 <iframe src="${devUrl}/?mamepVscode=1">
  * 加载 Vite dev server 的 index.html（渲染/HMR 由 Vite 处理，与浏览器/Electron 同页面）。
- * window.mamepHost 的建立方式（2026-08-23 修复，VSCode Webview 官方消息机制，见
+ * window.mamepHost 的建立方式（VSCode Webview 官方消息机制，见
  * code.visualstudio.com/api/extension-guides/webview）：
  *   - iframe 内应用（apps/web/src/vscode-dev-bridge.ts）把 window.parent.postMessage 封装
  *     成 VsCodeApi，复用 platform-api 的 createVscodeBridge 设置 window.mamepHost
@@ -11,10 +11,10 @@
  *     serial-enumerate RPC（Extension Host 真实串口列表，antd Select 下拉）；
  *   - 本主 frame 中继脚本转发：iframe → acquireVsCodeApi().postMessage → 扩展宿主；
  *     宿主 response/event（HostMessage Envelope）→ iframe.contentWindow.postMessage。
- * 这修复了「dev 模式 iframe 无桥 → 渲染进程落入浏览器 Web Serial 路径 →
+ * 避免「dev 模式 iframe 无桥 → 渲染进程落入浏览器 Web Serial 路径 →
  * navigator.serial.requestPort() 被 Webview 权限策略拒绝」的问题。
  *
- * 主题颜色中继（2026-08-25，ADR-027）：CSS 变量不跨 iframe 文档，dev 下共享 UI 拿不到
+ * 主题颜色中继：CSS 变量不跨 iframe 文档，dev 下共享 UI 拿不到
  * --vscode-*。本主 frame 拥有这些变量，向 iframe 下发（{source:"mamep-theme-relay",
  * type:"theme-colors"}，非 HostMessage Envelope 形状，不会被 isHostEnvelope 误转发回宿主）：
  *   - 主 frame 加载完成时下发一次；

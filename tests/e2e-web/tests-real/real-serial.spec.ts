@@ -70,7 +70,7 @@ let browserRef: Awaited<ReturnType<typeof chromium.launch>> | null = null;
 let page: Page;
 let consoleErrors: string[] = [];
 
-/** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。 */
+/** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
 async function setRadixHex(p: Page): Promise<void> {
   await p
     .locator(".table-toolbar__radix .ant-segmented-item")
@@ -83,11 +83,11 @@ async function setRadixHex(p: Page): Promise<void> {
 }
 
 /**
- * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时已改为 50ms
- * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
- * 2026-09-16 增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
- * 改为「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
- * 2026-09-17：收窄方式由 `keyboard.type` 改为**直接 fill 搜索框**（与 e2e-vscode / e2e-electron 同源）——
+ * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时为 50ms
+ * 对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
+ *  增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
+ * 使用「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
+ * 收窄方式为**直接 fill 搜索框**（与 e2e-vscode / e2e-electron 同源）——
  * 键盘输入依赖窗口焦点，失焦时列表不收敛 → 虚拟列表不渲染目标档位 → 点选超时。
  */
 async function setRtuTimeoutSelect(
@@ -117,13 +117,13 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
   await cell.click();
   // 等待进入编辑态：click 触发 React 重渲染渲染出 input（生产构建高负载下可能延迟，
   // 且前序读/写操作的行重渲染尚未 settle 时点击可能命中旧节点）。toBeEditable 自动
-  // 重试直到 input 出现，比裸 waitForTimeout 可靠（2026-08-26 real e2e 竞态）。
+  // 重试直到 input 出现，比裸 waitForTimeout 可靠（real e2e 竞态）。
   const input = p.getByLabel("Address", { exact: true }).first();
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
-  // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
-  // 短路——real e2e 曾致地址提交被跳过）。改 fill("")+pressSequentially 逐字符输入
-  // （真实键盘事件，onChange 必然触发），toHaveValue 确认受控值同步后再 Enter。
+  // （draftRef 未同步但 DOM value 已变，toHaveValue 可能假通过，Enter 提交读到旧 draft）。
+  // 使用 fill("")+pressSequentially 逐字符输入（真实键盘事件，onChange 必然触发），
+  // toHaveValue 确认受控值同步后再 Enter。
   await input.fill("");
   await input.pressSequentially(addressHex, { delay: 10 });
   await expect(input).toHaveValue(addressHex);
@@ -146,7 +146,7 @@ async function setRowType(p: Page, optionTitle: string): Promise<void> {
     .click();
 }
 
-/** 切换工具栏「写后回读」配置选项（OFF / ON / ON 100 ms / …，2026-08-26）。 */
+/** 切换工具栏「写后回读」配置选项（OFF / ON / ON 100 ms / …）。 */
 async function setWriteVerify(p: Page, optionText: string): Promise<void> {
   await p.getByLabel("Write verification").click();
   await p
@@ -156,7 +156,7 @@ async function setWriteVerify(p: Page, optionText: string): Promise<void> {
     .click();
   // 确认选中值：antd v6 单选选中文本渲染在 Select 内 .ant-select-content
   // （combobox input 的 value 恒为空），故断言包裹容器 .table-toolbar__verify
-  // 包含所选 label（2026-08-26 real e2e 修复）。
+  // 包含所选 label。
   await expect(p.locator(".table-toolbar__verify")).toContainText(optionText, {
     timeout: 5000,
   });
@@ -391,10 +391,10 @@ test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", 
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 50ms ×
   // retryCount+1 共 2 次 ≈ 100ms）之后才到达；若此时立即发起新读，RTU 无 Transaction ID
-  // 会把迟到的 0x0700 响应当作新读的响应（真实串口时序竞态，曾致读 0x0000 返回 0x0700
-  // 的值 0000）。两次重试（attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
+  // 会把迟到的 0x0700 响应当作新读的响应，污染 0x0000 的新读。两次重试
+  // （attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
   // 后 ~2500ms 到达（~2500 / ~2550ms）。等两帧迟到响应都在无活动请求时（pendingExchange
-  // 为空）到达并被丢弃，再读回正常区（2026-09-06：默认超时改 50ms，等待 3000ms 覆盖）。
+  // 为空）到达并被丢弃，再读回正常区（默认超时 50ms，等待 3000ms 覆盖）。
   await page.waitForTimeout(3000);
   await setRowAddress(page, "0000");
   await readRow(page);
@@ -421,7 +421,7 @@ test("通信日志：请求/响应/异常帧字节", async () => {
   const list = page.locator(".comm-log .ant-listy-holder");
   // Listy 虚拟列表默认停在底部（最新帧可见）；最早帧（写门控异常 01 90 03）可能被挤出
   // 视口（延迟响应的迟到帧也会占用视口）。滚动到顶部让最早帧渲染后断言，再滚回底部
-  // 断言最新帧（2026-08-26 real e2e 修复）。
+  // 断言最新帧。
   await list.evaluate((el) => {
     el.scrollTop = 0;
   });
@@ -481,7 +481,7 @@ test("写后回读 Verify=OFF：写忽略区 0x0900 写入后 Data 保持写入�
 test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Type=String → Data 显示字符串", async () => {
   // 从站保持寄存器 0x0010–0x001F 预置 32 字符 ASCII（16 寄存器 × 2 字符，高字节在前）；
   // 该区间未命中任何规则 → 回退正常行为。应用侧用范围行 + Type=String 一次 FC03 读回，
-  // Data 列直接显示可读 ASCII 字符串（ADR-030 字符串语义）。
+  // Data 列直接显示可读 ASCII 字符串（字符串语义）。
   const ascii = asciiStringRegion();
   await setRowAddress(page, "0010-001F");
   await setRowType(page, "String");
@@ -496,7 +496,7 @@ test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Typ
 
 test("断开连接 → 状态复位为断开（连接按钮恢复 Connect 态）", async () => {
   await page.getByRole("button", { name: /Disconnect/i }).click();
-  // Header 连接 UI 已于 2026-09-06 整合为单一多功能按钮（状态点 + Connect/Disconnect 合一），
+  // Header 连接 UI 已于整合为单一多功能按钮（状态点 + Connect/Disconnect 合一），
   // 不再单独渲染 "Offline" 文本；改用按钮 data-conn-state 判定断开态（宽/窄窗口均适用）。
   await expect(
     page.locator(".connection-cluster__button[data-conn-state='disconnected']"),

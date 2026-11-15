@@ -1,6 +1,6 @@
 /**
  * 周期轮询协调器（docs/TECH_DESIGN.md §13）。
- * - 轮询间隔由调用方传入（2026-09-06 起应用层固定为 0，即读完一个立即读下一个）；
+ * - 轮询间隔由调用方传入（起应用层固定为 0，即读完一个立即读下一个）；
  * - 每个轮询行最多一个正在执行的任务，任务未完成时跳过本轮（不积压）并记录 skipped tick；
  * - 不提供全部行持续轮询（ALL Polling）：只有传入的 targets 会被轮询。
  */
@@ -17,7 +17,7 @@ export interface PollingTarget {
   /** 行所属表；用于结果路由和页面绑定校验。 */
   sheetId: string;
   address: number;
-  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
+  /** 覆盖的连续寄存器数：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
   quantity?: number;
   /** 请求创建时固化的路由快照。 */
   route?: RequestRoute;
@@ -168,7 +168,7 @@ export class PollingCoordinator {
         requestGeneration: target.requestGeneration,
       } satisfies PollResultContext;
       const quantity = target.quantity ?? 1;
-      // 多寄存器行（ADR-030）：一次 FC03 读全部，结果携带 values[]。
+      // 多寄存器行：一次 FC03 读全部，结果携带 values[]。
       const request =
         quantity > 1
           ? this.session.readRegisters(target.address, quantity, {

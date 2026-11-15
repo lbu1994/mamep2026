@@ -1,5 +1,5 @@
 /**
- * 集成测试（决策 B，2026-08-31）：软件（CommunicationSession 的 ProtocolCodec 接口 +
+ * 集成测试（决策 B）：软件（CommunicationSession 的 ProtocolCodec 接口 +
  * CodecRegistry + 会话注入）只提供调用接口；安川专用功能码 67/010D、67/010E 全部在插件内实现。
  * 用真实 MemobusCodec 经 CodecRegistry 注入会话，验证读/写/异常三闭环。
  */

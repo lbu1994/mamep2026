@@ -1,5 +1,5 @@
 /**
- * PluginFileStore 单测（ADR-038，2026-08-30）。
+ * PluginFileStore 单测。
  * 注入临时目录（os.tmpdir + mkdtemp），覆盖：roundtrip、原子替换与 .bak 轮转、损坏恢复
  * （自愈写回）、双坏错误、无文件空存储、非法数据拒绝落盘、错误映射（category plugin）。
  */

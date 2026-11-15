@@ -117,7 +117,7 @@ describe("IndexedDBWorkspaceRepository", () => {
     }
   });
 
-  // ---- ADR-049：§19.1 仓储接口补齐 + 恢复元数据 ----
+  // ----：§19.1 仓储接口补齐 + 恢复元数据 ----
   it("load 主数据完好时 getRecoveryInfo source=none（ADR-049）", async () => {
     const repo = new IndexedDBWorkspaceRepository(memoryStore());
     await repo.save(createEmptyWorkspace());

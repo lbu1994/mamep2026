@@ -6,7 +6,7 @@
  * - Escape 取消、失焦提交行为
  * - 输入框内按 Backspace 不冒泡到 Tabs 键盘删除逻辑（不关闭标签、不退出编辑态）
  * 编辑态为组件局部状态（非全局 store），相关 store 测试见 app-store.test.ts。
- * 侧边栏重命名入口仅为右键菜单 Rename（侧边栏双击进入更名已于 2026-08-21 移除）；
+ * 侧边栏重命名入口仅为右键菜单 Rename（侧边栏双击进入更名已于移除）；
  * 右键菜单（Dropdown 弹层）在 jsdom 无法渲染弹层，其交互与提交/同步行为由 Playwright
  * e2e（tests/e2e-web/tests/sidebar-menu.spec.ts）覆盖。本文件保留页签头（双击）用例。
  */
@@ -78,9 +78,9 @@ describe("Sheet 名重命名编辑态隔离", () => {
     expect(sidebarItemName("Sheet 1")).toBeTruthy();
   });
 
-  // 复现测试（Bug：页签重命名输入框焦点未落位，2026-09-06）。
+  // 复现测试（Bug：页签重命名输入框焦点未落位）。
   // userEvent.dblClick 触发完整的鼠标序列（mousedown 会聚焦 .ant-tabs-tab-btn），
-  // 从而复现「输入框挂载但焦点停留在 tab button」的缺陷；修复后焦点应落在输入框内。
+  // 输入框挂载后焦点应落在输入框内，而不是停留在 tab button。
   it("页签头双击进入编辑态后，焦点落在重命名输入框内", async () => {
     const user = userEvent.setup();
     render(<MamepApp />);
@@ -172,13 +172,13 @@ describe("themeConfig（VSCode 完整主题注入 ConfigProvider，ADR-027）", 
     useAppStore.getState().setThemeConfig(null);
     useAppStore.getState().setTheme("dark");
     render(<MamepApp />);
-    // 暗色 base 的布局色只可能来自 buildTheme(dark) 回退路径（此前用例均为浅色）。
+    // 暗色 base 的布局色来自 buildTheme(dark) 回退路径。
     expect(document.head.innerHTML).toContain("--ant-color-bg-layout:#101014");
   });
 });
 
 describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
-  // 注：帮助/设置/连接设置等弹窗已改为 React.lazy 懒加载（代码分割，2026-09-11）：
+  // 注：帮助/设置/连接设置等弹窗使用 React.lazy 懒加载（代码分割）：
   // 首次打开时才挂载对应 chunk，故断言用 `findBy*`（异步等待）而非 `getBy*`。
   // jsdom 下首次动态 import 需按需转换整条依赖链（实测 HelpDrawer 链路约 4–5s），
   // 默认 1s 等待不够——并行全量测试下会误报；这里显式放宽。
@@ -242,7 +242,7 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     fireAppKey(",", { ctrl: true });
     await screen.findByText("Theme", undefined, LAZY_MOUNT_TIMEOUT);
     expect(useAppStore.getState().settingsModalOpen).toBe(true);
-    // 2026-09-12：容器由 Modal 改为 Drawer（store 字段名保留 settingsModalOpen）。
+    // 容器为 Drawer（store 字段名保留 settingsModalOpen）。
     expect(document.querySelector(".settings-drawer")).not.toBeNull();
   });
 

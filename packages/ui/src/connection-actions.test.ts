@@ -1,5 +1,5 @@
 /**
- * connection-actions（2026-09-06 Header Connect 直连）单测。
+ * connection-actions（Header Connect 直连）单测。
  * 覆盖 canDirectConnect 分支与 runConnect 的连接路由（与 ConnectionSettingsModal 同源）。
  */
 import { describe, expect, it } from "vitest";

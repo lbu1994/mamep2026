@@ -27,11 +27,11 @@ export class MockTransport implements TransportPort {
   readonly kind = "mock" as const;
   private openFlag = false;
   private readonly registers = new Map<number, number>();
-  /** 线圈（FC01 读 / FC0F 写，ADR-043 E-1），值为 0/1。 */
+  /** 线圈（FC01 读 / FC0F 写），值为 0/1。 */
   private readonly coils = new Map<number, number>();
-  /** 离散输入（FC02 读，ADR-043 E-1），值为 0/1。 */
+  /** 离散输入（FC02 读），值为 0/1。 */
   private readonly inputs = new Map<number, number>();
-  /** 输入寄存器（FC04 读，ADR-043 E-1）。 */
+  /** 输入寄存器（FC04 读）。 */
   private readonly inputRegisters = new Map<number, number>();
   private readonly rules: readonly MockRangeRule[];
   private readonly dataListeners = new Set<(chunk: Uint8Array) => void>();
@@ -163,7 +163,7 @@ export class MockTransport implements TransportPort {
         return;
       }
       const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
-      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      // must-multi 区：单读返回非法数据地址异常。
       if (rule?.mustMulti === true && quantity === 1) {
         this.respond(
           this.exceptionFrame(slave, 0x03, EXCEPTION_ILLEGAL_DATA_ADDRESS),
@@ -189,7 +189,7 @@ export class MockTransport implements TransportPort {
       const behavior = rule?.write ?? { kind: "normal" };
       const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
       const byteCount = bytes[6] ?? 0;
-      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      // must-multi 区：单写返回非法数据地址异常。
       if (rule?.mustMulti === true && quantity === 1) {
         this.respond(
           this.exceptionFrame(slave, 0x10, EXCEPTION_ILLEGAL_DATA_ADDRESS),
@@ -246,7 +246,7 @@ export class MockTransport implements TransportPort {
       );
       return;
     }
-    // 自定义功能码示例（ADR-043 E-4）：0x65 读 / 0x66 写，与 FC03/FC10 同构（registers map）。
+    // 自定义功能码示例：0x65 读 / 0x66 写，与 FC03/FC10 同构（registers map）。
     if (functionCode === 0x65 || functionCode === 0x66) {
       const behavior =
         functionCode === 0x65
@@ -298,7 +298,7 @@ export class MockTransport implements TransportPort {
       }
       return;
     }
-    // 基础表（ADR-043 E-1）：FC01/FC02 位打包读、FC04 16 位读、FC0F 位打包写。
+    // 基础表：FC01/FC02 位打包读、FC04 16 位读、FC0F 位打包写。
     if (functionCode === 0x01 || functionCode === 0x02) {
       const tableType: MockTableType =
         functionCode === 0x01 ? "coil" : "discrete-input";

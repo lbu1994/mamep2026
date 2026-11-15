@@ -8,7 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-// AntApp：RegisterTable 使用 App.useApp()（antd message，2026-08-28）。antd 的 useApp
+// AntApp：RegisterTable 使用 App.useApp()（antd message）。antd 的 useApp
 // 无 <App> context 时返回空对象、不抛错（useContext 默认值），因此不调用 message 的既有
 // 测试无需包裹；仅 Read All 成功路径会调用 message.open，此类测试须包 <AntApp>
 // （同 BottomPanel.test.tsx 约定）。
@@ -343,7 +343,7 @@ describe("RegisterTable 全表读取取消（ADR-025）", () => {
             }),
           }) as BatchReadHandle,
       ),
-      // 工具栏「从站地址 / Unit ID」label 需读活动协议（2026-08-25）。
+      // 工具栏「从站地址 / Unit ID」label 需读活动协议。
       getCommProperties: vi.fn(() => ({
         protocol: "rtu" as const,
         portLabel: null,
@@ -571,7 +571,7 @@ describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）
           },
         },
       },
-      // 2026-09-02 插件外部化：随应用分发插件以 installed 来源注册（可禁用/卸载）。
+      // 插件外部化：随应用分发插件以 installed 来源注册（可禁用/卸载）。
       { source: "installed" },
     );
     return {
@@ -691,7 +691,7 @@ describe("RegisterTable No 列宽度自适应（2026-08-27）", () => {
     return match !== undefined && match !== null ? Number(match[1]) : null;
   }
 
-  /** 构造 maxOrder=order 的工作区（首行 order 改为指定值，其余保持 1..n）。 */
+  /** 构造 maxOrder=order 的工作区（首行 order 改为指定值，其余保持 1。n）。 */
   function workspaceWithMaxOrder(order: number): Workspace {
     const workspace = createEmptyWorkspace();
     const sheet = workspace.sheets[0];
@@ -709,7 +709,7 @@ describe("RegisterTable No 列宽度自适应（2026-08-27）", () => {
 
   it("范围行场景：No 单元格 = 行号 + antd 展开图标（加号）共存，td 带 nowrap 类", () => {
     // 构造范围行（registerCount=2）触发 antd 树形模式 → 首列注入展开图标
-    // （ADR-030「加号按钮」，折叠态即 +；无范围行的纯普通表不渲染该图标）。
+    // （「加号按钮」，折叠态即 +；无范围行的纯普通表不渲染该图标）。
     const workspace = createEmptyWorkspace();
     const sheet = workspace.sheets[0];
     if (sheet === undefined) throw new Error("missing sheet");
@@ -730,7 +730,7 @@ describe("RegisterTable No 列宽度自适应（2026-08-27）", () => {
       ".ant-table-tbody tr.ant-table-row td:nth-child(2)",
     );
     expect(firstRowTd).toBeTruthy();
-    // 行号（第一行 order=1）与 antd 树形展开图标（ADR-030「加号按钮」）同格。
+    // 行号（第一行 order=1）与 antd 树形展开图标（「加号按钮」）同格。
     expect(firstRowTd?.textContent?.trim()).toBe("1");
     expect(
       firstRowTd?.querySelector(".ant-table-row-expand-icon"),
@@ -954,7 +954,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     setupBinaryRow();
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
-    // 16 行位明细各一个开关；位行内不存在输入框（2026-09-16 交互简化）。
+    // 16 行位明细各一个开关；位行内不存在输入框（交互简化）。
     expect(document.querySelectorAll(".register-table__bit-value").length).toBe(
       16,
     );
@@ -1134,7 +1134,7 @@ describe("RegisterTable Read All 全局 message（2026-08-28）", () => {
             cancel: vi.fn(),
           }) as BatchReadHandle,
       ),
-      // 工具栏「从站地址 / Unit ID」label 需读活动协议（2026-08-25）。
+      // 工具栏「从站地址 / Unit ID」label 需读活动协议。
       getCommProperties: vi.fn(() => ({
         protocol: "rtu" as const,
         portLabel: null,

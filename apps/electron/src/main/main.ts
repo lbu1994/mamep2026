@@ -4,12 +4,12 @@
  * Electron 主进程（docs/TECH_DESIGN.md §6.2、§22.1、§41）。
  * Main / Preload / Renderer 三层中的 Main：窗口创建与生命周期、安全 IPC 处理
  * （版本化 Envelope + Zod 校验 + kind 白名单，docs/AGENTS.md §23）、
- * Web Serial 最小授权（ADR-017，Renderer 经 navigator.serial 走浏览器路径）、
- * 后续 TCP/文件能力的装配边界。
+ * Web Serial 最小授权（Renderer 经 navigator.serial 走浏览器路径）、
+ * TCP 会话、文件持久化与宿主插件执行面的装配边界。
  *
  * Renderer 为 apps/web 同一套共享 UI（dev: VITE_DEV_SERVER_URL；生产: apps/web/dist/index.html）。
- * MVP 串口（ADR-017）：与浏览器一致经 Web Serial API，主进程仅配合 select-serial-port 权限处理；
- * 后续 Node Serial/TCP Adapter 落地后由本进程接管。
+ * RTU 与浏览器一致经 Web Serial API，主进程配合 select-serial-port 权限处理；
+ * TCP 与文件持久化经主进程承载。
  */
 import {
   app,
@@ -53,7 +53,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// e2e 隔离门控（2026-08-30，ADR-036）：MAMEP_USER_DATA_DIR 指定 userData 目录（Playwright
+// e2e 隔离门控：MAMEP_USER_DATA_DIR 指定 userData 目录（Playwright
 // 注入临时目录，避免污染真实用户数据）；必须在 app ready 前调用。生产不设置该变量则行为不变。
 if (process.env.MAMEP_USER_DATA_DIR) {
   app.setPath("userData", process.env.MAMEP_USER_DATA_DIR);
@@ -83,7 +83,7 @@ const currentConnectionState: ConnectionState = "disconnected";
 /** 主进程侧 TCP 会话宿主（Electron TCP 走主进程，惰性装配）。 */
 let electronSessionHost: ElectronSessionHost | null = null;
 
-/** 主进程侧工作区文件仓储（ADR-036，2026-08-30，惰性装配；userData 目录版本化 JSON）。 */
+/** 主进程侧工作区文件仓储（惰性装配；userData 目录版本化 JSON）。 */
 let workspaceRepository: WorkspaceFileRepository | null = null;
 
 function ensureWorkspaceRepository(): WorkspaceFileRepository {
@@ -93,7 +93,7 @@ function ensureWorkspaceRepository(): WorkspaceFileRepository {
   return workspaceRepository;
 }
 
-/** 主进程侧插件文件仓储（ADR-038，2026-08-30，惰性装配；userData 目录 plugins.json）。 */
+/** 主进程侧插件文件仓储（惰性装配；userData 目录 plugins.json）。 */
 let pluginStore: PluginFileStore | null = null;
 
 function ensurePluginStore(): PluginFileStore {
@@ -104,9 +104,9 @@ function ensurePluginStore(): PluginFileStore {
 }
 
 /**
- * 宿主侧插件执行面（ADR-055，2026-09-12）：从同一份插件存储（plugins.json）加载
+ * 宿主侧插件执行面：从同一份插件存储（plugins.json）加载
  * 「已启用 + same-process」插件并执行，使其贡献的同步能力（codec / addressTransform）
- * 在主进程 TCP 会话中真正生效 —— 取代此前对 `@mamep2026/address-adjust` 的静态 import。
+ * 在主进程 TCP 会话中生效。插件由本运行时加载，宿主入口不静态 import 插件包。
  */
 let hostPlugins: HostPluginRuntime | null = null;
 
@@ -116,7 +116,7 @@ function ensureHostPlugins(): HostPluginRuntime {
       store: ensurePluginStore(),
       onIssue: (issue) => {
         // 宿主插件问题不阻断启动：记录到主进程日志（渲染端能力矩阵不感知，
-        // 表现为该协议连接失败，见 ADR-055 决策 3）。
+        // 表现为该协议连接失败，见）。
         console.warn(
           `[mamep] host plugin issue (${issue.code}${issue.pluginId ? `, ${issue.pluginId}` : ""}): ${issue.technicalMessage}`,
         );
@@ -133,12 +133,12 @@ function postSessionEvent(event: HostEventMessage): void {
   }
 }
 
-/** 装配主进程 TCP 会话（2026-08-23 两端 TCP 接线）：NodeTcpPlatformHost（仅 TCP，零 serialport）+ TcpSessionHost。 */
+/** 装配主进程 TCP 会话（两端 TCP 接线）：NodeTcpPlatformHost（仅 TCP，零 serialport）+ TcpSessionHost。 */
 function ensureSessionHost(): ElectronSessionHost {
   if (electronSessionHost === null) {
     electronSessionHost = new ElectronSessionHost({
       platform: new NodeTcpPlatformHost(),
-      // 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055 改为宿主侧插件运行时）：
+      // 地址变换解析（宿主侧插件运行时）：
       // 读当前插件注册表（安装/禁用/卸载后自动跟随，无需重启）。
       resolveAddressTransform: (transformId) =>
         ensureHostPlugins().resolveAddressTransform(transformId),
@@ -213,9 +213,9 @@ const ipcDeps: IpcDeps = {
   clipboardReadText: () => clipboard.readText(),
   resolveSerialPortSelection: (portId, sender) =>
     serialPermissionHandlers?.resolvePendingSelection(portId, sender) ?? false,
-  // TCP 会话：主进程承载（Electron TCP，2026-08-23 两端 TCP 接线）。
+  // TCP 会话：主进程承载（Electron TCP 两端 TCP 接线）。
   session: ensureSessionHost(),
-  // 通信日志 CSV 导出（save-text-file，2026-08-28）：主进程弹保存对话框落盘。
+  // 通信日志 CSV 导出（save-text-file）：主进程弹保存对话框落盘。
   saveTextFile: async (options) => {
     try {
       const result = await dialog.showSaveDialog({
@@ -244,7 +244,7 @@ const ipcDeps: IpcDeps = {
       );
     }
   },
-  // 工作区导入（open-text-file，2026-08-29）：主进程弹打开对话框读 UTF-8 文本。
+  // 工作区导入（open-text-file）：主进程弹打开对话框读 UTF-8 文本。
   openTextFile: async (options) => {
     try {
       const result = await dialog.showOpenDialog({
@@ -276,13 +276,13 @@ const ipcDeps: IpcDeps = {
       );
     }
   },
-  // 工作区文件仓储（workspace-load/save/clear，2026-08-30，ADR-036）：主进程 userData 目录版本化 JSON。
+  // 工作区文件仓储（workspace-load/save/clear）：主进程 userData 目录版本化 JSON。
   workspace: ensureWorkspaceRepository(),
-  // 插件存储（plugin-store-load/save，2026-08-30，ADR-038）：主进程 userData 目录 plugins.json。
-  // 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038）：
+  // 插件存储（plugin-store-load/save）：主进程 userData 目录 plugins.json。
+  // 插件存储（plugin-store-load / plugin-store-save）：
   // 主进程 userData plugins.json，实现 PluginStorePort（原子保存 + 备份恢复）。
   pluginStore: ensurePluginStore(),
-  // 保存成功即同步宿主侧插件执行面（ADR-055，2026-09-12）：新增/卸载/启停插件后，
+  // 保存成功即同步宿主侧插件执行面：新增/卸载/启停插件后，
   // 主进程会话内的插件同步能力（codec / addressTransform）随之更新。
   onPluginStoreSaved: () => {
     void ensureHostPlugins().sync();
@@ -319,7 +319,7 @@ function createWindow(): void {
     mainWindow = null;
   });
 
-  // 事件通道验证：加载完成后推送初始连接状态（离线）。MVP 下 Renderer 连接状态以本地会话
+  // 事件通道验证：加载完成后推送初始连接状态（离线）。Renderer 连接状态以本地会话
   // 为准，此事件保留用于事件通道往返（ElectronAppHost 不再消费，无害）。
   win.webContents.on("did-finish-load", () => {
     const event: HostEventMessage = {
@@ -340,7 +340,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // Web Serial 最小授权（ADR-017 扩展）：仅对本应用 origin 放行 serial 权限；
+  // Web Serial 最小授权（扩展）：仅对本应用 origin 放行 serial 权限；
   // select-serial-port 不再自动选端口，而是把端口列表经 onPortsAvailable 转发给
   // 渲染进程（serial-ports-available 事件），由用户在下拉框选择后经安全 IPC 回传
   // （select-serial-port invoke → resolvePendingSelection 调用挂起 callback）。
@@ -367,7 +367,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle(MAMEP_IPC_INVOKE_CHANNEL, handleInvokeEvent);
 
-  // 宿主侧插件执行面（ADR-055）：启动时同步一次（已安装的 same-process 插件立即生效）；
+  // 宿主侧插件执行面：启动时同步一次（已安装的 same-process 插件立即生效）；
   // 后续每次 plugin-store-save 由 ipcDeps.onPluginStoreSaved 再同步。
   void ensureHostPlugins().sync();
 

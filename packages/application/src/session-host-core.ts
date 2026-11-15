@@ -55,14 +55,14 @@ export interface SessionHostEvents {
 export interface SessionHostCoreOptions {
   clock: Clock;
   events: SessionHostEvents;
-  /** WP 轮询间隔源（2026-09-06 删除 Rx Delay 后恒为 0：读完一个立即读下一个）。 */
+  /** WP 轮询间隔源（删除 Rx Delay 后恒为 0：读完一个立即读下一个）。 */
   getPollingIntervalMs: () => number;
   /**
-   * 地址变换解析（ADR-042 插件 Phase D；2026-09-02 插件外部化）：按 transformId 返回运行时
+   * 地址变换解析（插件插件外部化）：按 transformId 返回运行时
    * 变换；缺省不调整（核心不再内置变换，由宿主装配点注入随包插件 resolver）。
    */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
-  /** codec 注册表（ADR-040 决策 5）：Phase C 宿主据此构建 codec 会话；协议无关，仅透传。 */
+  /** codec 注册表： 宿主据此构建 codec 会话；协议无关，仅透传。 */
   codecRegistry?: CodecRegistry;
 }
 
@@ -74,9 +74,9 @@ export class SessionHostCore {
   private readonly resolveAddressTransform: (
     transformId: string,
   ) => AddressTransform | null;
-  /** 活动表地址变换配置（ADR-042）：渲染端在表切换/配置变化时同步（host 端经 RPC）。 */
+  /** 活动表地址变换配置：渲染端在表切换/配置变化时同步（host 端经 RPC）。 */
   private addressTransform: AddressTransformConfig | null = null;
-  /** codec 注册表（ADR-040 决策 5）：透传，供 Phase C 宿主构建 codec 会话。 */
+  /** codec 注册表：透传，供宿主构建 codec 会话。 */
   private readonly codecRegistry: CodecRegistry | null;
   private session: CommunicationSession | null = null;
   private polling: PollingCoordinator | null = null;
@@ -106,14 +106,14 @@ export class SessionHostCore {
       route?: RequestRoute;
     }
   >();
-  /** 活动批任务登记（远程路径按 batchId 取消，ADR-025）：promise 落定后注销。 */
+  /** 活动批任务登记（远程路径按 batchId 取消）：promise 落定后注销。 */
   private readonly activeBatches = new Map<string, BatchReadHandle>();
 
   constructor(options: SessionHostCoreOptions) {
     this.clock = options.clock;
     this.events = options.events;
     this.getPollingIntervalMs = options.getPollingIntervalMs;
-    // 地址变换解析（2026-09-02 插件外部化）：核心不再内置变换；由宿主装配点注入
+    // 地址变换解析（插件外部化）：核心不再内置变换；由宿主装配点注入
     // （Renderer 经插件的 AddressTransformRegistry；桌面端 host 经随包插件导出 resolver）。
     this.resolveAddressTransform =
       options.resolveAddressTransform ?? (() => null);
@@ -125,7 +125,7 @@ export class SessionHostCore {
     });
   }
 
-  /** 设置活动表地址变换配置（ADR-042）：供表级 Address Adjust；null=不调整。 */
+  /** 设置活动表地址变换配置：供表级 Address Adjust；null=不调整。 */
   setAddressTransform(config: AddressTransformConfig | null): void {
     this.addressTransform = config;
   }
@@ -211,7 +211,7 @@ export class SessionHostCore {
     return this.session?.getState() ?? "disconnected";
   }
 
-  /** 当前会话（ADR-044 Phase F-2）：插件通信面经统一调度器访问；未连接返回 null。 */
+  /** 当前会话：插件通信面经统一调度器访问；未连接返回 null。 */
   getSession(): CommunicationSession | null {
     return this.session;
   }
@@ -220,7 +220,7 @@ export class SessionHostCore {
     return this.portLabel;
   }
 
-  /** codec 注册表（ADR-040 决策 5）：Phase C 宿主据此构建 codec 会话；协议无关，仅透传。 */
+  /** codec 注册表： 宿主据此构建 codec 会话；协议无关，仅透传。 */
   getCodecRegistry(): CodecRegistry | null {
     return this.codecRegistry;
   }
@@ -298,7 +298,7 @@ export class SessionHostCore {
   }
 
   /**
-   * 单行写入（2026-08-26 支持写后回读）：
+   * 单行写入（支持写后回读）：
    * - options.writeVerify 非 off 时经 TableService 组合「写入 → 可选延迟 → FC03 回读」；
    * - §18.3：写入（及回读）期间暂缓同一行的普通轮询，完成后恢复；
    *   其他行轮询不受影响；用户已停止轮询时不得自动重新启用（defer/resume 只作用于当前实例）。
@@ -354,7 +354,7 @@ export class SessionHostCore {
       requestGeneration,
     );
     if (batchId !== undefined) {
-      // 远程路径（ADR-025）：登记活动批任务，promise 落定后注销，供 cancelBatch 关联取消。
+      // 远程路径：登记活动批任务，promise 落定后注销，供 cancelBatch 关联取消。
       this.activeBatches.set(batchId, handle);
       void handle.promise.then(
         () => this.activeBatches.delete(batchId),
@@ -364,7 +364,7 @@ export class SessionHostCore {
     return handle;
   }
 
-  /** 按 batchId 取消活动批任务（ADR-025）：未知/已完成/未连接均为安全 no-op。 */
+  /** 按 batchId 取消活动批任务：未知/已完成/未连接均为安全 no-op。 */
   cancelBatch(batchId: string): void {
     this.activeBatches.get(batchId)?.cancel();
   }
@@ -409,7 +409,7 @@ export class SessionHostCore {
   }
 
   /**
-   * 应用进入后台（移动端生命周期，ADR-050 Phase 3）：暂停轮询与追踪。
+   * 应用进入后台（移动端生命周期）：暂停轮询与追踪。
    *
    * 只暂停"持续占用总线"的后台任务；`pollingTargets` 与 `activeTraces` **保留**，
    * 供回前台时按原配置恢复（与断线重连的恢复路径同源）。幂等：重复调用无副作用。

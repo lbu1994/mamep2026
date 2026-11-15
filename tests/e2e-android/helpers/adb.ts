@@ -1,5 +1,5 @@
 /**
- * adb / 设备 / WebView CDP 辅助（ADR-050 Android e2e）。
+ * adb / 设备 / WebView CDP 辅助（Android e2e）。
  *
  * 设计要点（来自真机实测，见 docs/architecture/host/android/Android宿主.md）：
  * - 本机部分设备 `adb logcat` 无输出 → 断言与诊断一律走 CDP，不依赖 logcat；
@@ -141,7 +141,7 @@ export function requireDevice(): string {
  * 唤醒屏幕并解除非安全锁屏。
  *
  * 为何必须：**息屏时 Activity 无法获得前台焦点**（`mCurrentFocus` 会变成 keyguard / SystemUI），
- * 此时 `am start` 也不能把应用拉回前台，前台/输入相关断言会全部失真（2026-09-13 实测）。
+ * 此时 `am start` 也不能把应用拉回前台，前台/输入相关断言会全部失真（实测）。
  */
 export function ensureScreenAwake(): void {
   for (const args of [
@@ -173,7 +173,7 @@ export function installApk(apkPath: string = APK_PATH): void {
   // 不在此隐式修改，见 apps/android/README.md「真机 e2e 前置」。
   ensureScreenAwake();
 
-  // 安装通道（2026-09-10 实测）：vivo（V2303A / Android 16）会**静默拒绝流式安装**
+  // 安装通道（实测）：vivo（V2303A / Android 16）会**静默拒绝流式安装**
   // （`adb install -r` → INSTALL_FAILED_ABORTED: User rejected permissions，且手机无任何弹窗），
   // 改用 `--no-streaming`（先 push 再安装，即 "Performing Push Install"）即可直接成功。
   // 先试非流式，失败再回退默认流式通道（其他 OEM 可能相反）。

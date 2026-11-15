@@ -1,5 +1,5 @@
 /**
- * 崩溃后状态恢复（PRD §8.3 / ADR-049）浏览器 E2E（mockTransport=1）：
+ * 崩溃后状态恢复（PRD §8.3）浏览器 E2E（mockTransport=1）：
  * - 关闭丢数据：编辑后关闭/重载不丢数据（autosave 兜底 + flush best-effort）；
  * - 损坏恢复：预置损坏主记录 + 合法备份 → reload 恢复 + RecoveryBanner 展示（无需按钮）。
  * 全程无 console 错误。
@@ -89,7 +89,7 @@ test("关闭丢数据：编辑后关闭/重载不丢数据（autosave 兜底 + f
   // 目标行（默认 mock 场景第一行）改名。
   await setName(page, 0, "FlushName");
   // 等待 autosave（debounce 500ms）+ flush 完成落盘（flush 为 best-effort，
-  // 详见 ADR-049 决策点 3：浏览器 unload 会中断异步 IndexedDB 写入，故以 autosave 兜底）。
+  // 详见 3：浏览器 unload 会中断异步 IndexedDB 写入，故以 autosave 兜底）。
   await page.waitForTimeout(800);
   await page.reload();
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {

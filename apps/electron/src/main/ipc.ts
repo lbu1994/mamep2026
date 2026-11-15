@@ -50,7 +50,7 @@ import { PLUGIN_RUNTIME_NOT_AVAILABLE } from "@mamep2026/plugin-api";
 export interface ElectronSessionLike {
   connectTcp(profile: TcpConnectionProfile): Promise<Result<void>>;
   disconnect(): Promise<Result<void>>;
-  /** TCP Unit ID 会话内动态修改（session-set-unit-id，2026-08-25）。 */
+  /** TCP Unit ID 会话内动态修改（session-set-unit-id）。 */
   setUnitId(unitId: number): void;
   getConnectionState(): ConnectionState;
   readRow(
@@ -67,7 +67,7 @@ export interface ElectronSessionLike {
     batchId?: string,
     route?: RequestRoute,
   ): BatchReadHandle;
-  /** 按 batchId 取消活动批任务（ADR-025）：未知 batchId 为安全 no-op。 */
+  /** 按 batchId 取消活动批任务：未知 batchId 为安全 no-op。 */
   cancelBatch(batchId: string): void;
   updatePollingTargets(
     rows: Array<{
@@ -105,10 +105,10 @@ export interface IpcDeps {
    * portId 空串 = 用户取消；sender 用于归属校验；返回是否成功解析。
    */
   resolveSerialPortSelection(portId: string, sender: unknown): boolean;
-  /** TCP 会话（Electron 主进程承载，2026-08-23 两端 TCP 接线）。 */
+  /** TCP 会话（Electron 主进程承载两端 TCP 接线）。 */
   session: ElectronSessionLike;
   /**
-   * 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：
+   * 保存文本文件（save-text-file 通信日志 CSV 导出）：
    * 主进程弹保存对话框落盘；用户取消返回 ok({ saved: false })。
    */
   saveTextFile(options: {
@@ -117,24 +117,24 @@ export interface IpcDeps {
     mimeType?: string;
   }): Promise<Result<SaveTextFileResponse>>;
   /**
-   * 打开文件对话框并读取 UTF-8 文本（open-text-file，2026-08-29 工作区导入）：
+   * 打开文件对话框并读取 UTF-8 文本（open-text-file 工作区导入）：
    * 主进程弹系统打开对话框；用户取消返回 ok({ content: null })（非错误）。
    */
   openTextFile(options?: {
     suggestedName?: string;
   }): Promise<Result<OpenTextFileResponse>>;
   /**
-   * 工作区文件仓储（workspace-load / workspace-save / workspace-clear，2026-08-30，ADR-036）：
+   * 工作区文件仓储（workspace-load / workspace-save / workspace-clear）：
    * 主进程应用数据目录版本化 JSON，实现 WorkspaceRepositoryPort（原子保存 + 备份恢复）。
    */
   workspace: WorkspaceRepositoryPort;
   /**
-   * 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038）：
+   * 插件存储（plugin-store-load / plugin-store-save）：
    * 主进程 userData plugins.json，实现 PluginStorePort（原子保存 + 备份恢复）。
    */
   pluginStore: PluginStorePort;
   /**
-   * 插件存储保存成功后触发宿主侧插件执行面同步（ADR-055，2026-09-12）：
+   * 插件存储保存成功后触发宿主侧插件执行面同步：
    * 主进程重新加载「已启用 + same-process」插件，使插件贡献的同步能力
    * （codec / addressTransform）在主进程会话中生效。同步不阻塞保存响应。
    */
@@ -255,16 +255,16 @@ export async function handleRequest(
         "no pending serial port selection for this sender",
       );
     case "get-color-theme":
-      // 共享协议新增 kind（VSCode 端骨架，2026-08-23）：Electron preload 不暴露该能力，
+      // VSCode 端专属 kind：Electron preload 不暴露该能力，
       // 此处仅满足穷尽守卫，返回能力错误（不改变既有行为）。
       return errorEnvelope(
         message.messageId,
         "COLOR_THEME_UNSUPPORTED",
         "color theme RPC is not supported on the Electron host",
       );
-    // ---- RTU 会话 kind（2026-08-23）：Electron RTU 运行在 Renderer（Web Serial），
+    // ---- RTU 会话 kind：Electron RTU 运行在 Renderer（Web Serial），
     // 不发给主进程；此处返回能力错误并满足穷尽守卫。
-    // 表级 Address Adjust（2026-09-01，ADR-042）：Electron RTU 会话在 Renderer；TCP 无地址变换。----
+    // 表级 Address Adjust：Electron RTU 会话在 Renderer；TCP 无地址变换。----
     case "serial-enumerate":
     case "session-connect":
     case "session-set-slave-address":
@@ -274,7 +274,7 @@ export async function handleRequest(
         "SESSION_NOT_AVAILABLE",
         "RTU session RPC runs in the renderer (Web Serial); not handled by the Electron main host",
       );
-    // ---- TCP 会话（2026-08-23 两端 TCP 接线）：主进程 ElectronSessionHost 承载。----
+    // ---- TCP 会话（两端 TCP 接线）：主进程 ElectronSessionHost 承载。----
     case "session-tcp-connect": {
       const { profile } = message.payload;
       return sessionResult(message, () =>
@@ -284,7 +284,7 @@ export async function handleRequest(
     case "session-disconnect":
       return sessionResult(message, () => deps.session.disconnect());
     case "session-set-unit-id":
-      // TCP Unit ID 会话内动态修改（2026-08-25）：Electron TCP 会话在主进程。
+      // TCP Unit ID 会话内动态修改：Electron TCP 会话在主进程。
       return sessionVoid(message, () =>
         deps.session.setUnitId(message.payload.unitId),
       );
@@ -334,7 +334,7 @@ export async function handleRequest(
       });
     }
     case "session-batch-cancel":
-      // 远程批任务取消（ADR-025）：按 batchId 取消活动批任务（未知 id 安全 no-op）。
+      // 远程批任务取消：按 batchId 取消活动批任务（未知 id 安全 no-op）。
       return sessionVoid(message, () =>
         deps.session.cancelBatch(message.payload.batchId),
       );
@@ -369,7 +369,7 @@ export async function handleRequest(
         deps.session.traceStop(message.payload.key),
       );
     case "save-text-file":
-      // 通信日志 CSV 导出（2026-08-28）：主进程弹保存对话框落盘（取消=ok({saved:false})）。
+      // 通信日志 CSV 导出：主进程弹保存对话框落盘（取消=ok({saved:false})）。
       // 显式构造 payload：exactOptionalPropertyTypes 下 Zod 可选字段是 `?: T | undefined`。
       return sessionResult(message, () =>
         deps.saveTextFile({
@@ -381,7 +381,7 @@ export async function handleRequest(
         }),
       );
     case "open-text-file":
-      // 工作区导入（2026-08-29）：主进程弹打开对话框读 UTF-8 文本（取消=ok({content:null})）。
+      // 工作区导入：主进程弹打开对话框读 UTF-8 文本（取消=ok({content:null})）。
       return sessionResult(message, () =>
         deps.openTextFile(
           message.payload.suggestedName !== undefined
@@ -390,8 +390,8 @@ export async function handleRequest(
         ),
       );
     case "workspace-load":
-      // Electron 文件持久化（2026-08-30，ADR-036）：主进程文件仓储 load → 序列化 JSON 字符串。
-      // recoveryInfo（2026-09-04，ADR-049）：旁路返回最近一次加载的恢复元数据（备份恢复等）。
+      // Electron 文件持久化：主进程文件仓储 load → 序列化 JSON 字符串。
+      // recoveryInfo：旁路返回最近一次加载的恢复元数据（备份恢复等）。
       return sessionResult(message, async () => {
         const result = await deps.workspace.load();
         if (!result.ok) return result;
@@ -401,7 +401,7 @@ export async function handleRequest(
         } satisfies WorkspaceLoadResponse);
       });
     case "workspace-save":
-      // Electron 文件持久化（2026-08-30，ADR-036）：content 为序列化 JSON 字符串，
+      // Electron 文件持久化：content 为序列化 JSON 字符串，
       // 先 JSON.parse + parseWorkspace 校验再原子落盘（非法 JSON = 校验错误）。
       return sessionResult(message, async () => {
         let data: unknown;
@@ -424,20 +424,20 @@ export async function handleRequest(
         return deps.workspace.save(parsed.value);
       });
     case "workspace-clear":
-      // Electron 文件持久化（2026-08-30，ADR-036）：清除主文件与备份。
+      // Electron 文件持久化：清除主文件与备份。
       return sessionResult(message, () => deps.workspace.clear());
     case "workspace-create-backup":
-      // 崩溃后状态恢复（2026-09-04，ADR-049）：当前工作区文件轮转为 .bak（§19.1 createBackup）。
+      // 崩溃后状态恢复：当前工作区文件轮转为 .bak（§19.1 createBackup）。
       return sessionResult(message, () => deps.workspace.createBackup());
     case "plugin-store-load":
-      // 插件存储（2026-08-30，ADR-038）：返回已安装插件清单 + 启用状态（无文件 = 空数组）。
+      // 插件存储：返回已安装插件清单 + 启用状态（无文件 = 空数组）。
       return sessionResult(message, () => deps.pluginStore.load());
     case "plugin-store-save": {
-      // 插件存储（2026-08-30，ADR-038）：载荷为结构化插件存储数据，主进程校验后原子落盘。
+      // 插件存储：载荷为结构化插件存储数据，主进程校验后原子落盘。
       const saved = await sessionResult(message, () =>
         deps.pluginStore.save(message.payload.data),
       );
-      // 保存成功 → 同步宿主侧插件执行面（ADR-055）：宿主插件加载失败不影响保存结果
+      // 保存成功 → 同步宿主侧插件执行面：宿主插件加载失败不影响保存结果
       // （错误仅记录到宿主日志 / 应用消息）。
       if (saved.type === "response") deps.onPluginStoreSaved?.();
       return saved;
@@ -446,8 +446,8 @@ export async function handleRequest(
     case "plugin-runtime-unload":
     case "plugin-rpc":
     case "plugin-contribution-query":
-      // 插件运行时桥（2026-08-31，ADR-039）：Phase A 不执行第三方代码（隔离机制 Phase F，
-      // 另立 ADR），宿主侧如实返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误；契约与穷尽守卫先行。
+      // 插件运行时桥保留请求/响应契约；当前宿主在本入口返回
+      // PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误。
       return errorEnvelope(
         message.messageId,
         PLUGIN_RUNTIME_NOT_AVAILABLE,
@@ -473,7 +473,7 @@ export async function handleRequest(
         uptimeMs: deps.uptimeMs(),
       } satisfies HostDebugState);
     case "debug:fake-tcp-drop":
-      // dev/e2e 探针（2026-08-30 自动重连）：Electron 的假 TCP 设备在测试进程内
+      // dev/e2e 探针（自动重连）：Electron 的假 TCP 设备在测试进程内
       // （Playwright net server），不驻留主进程，故恒返回 dropped:false。
       return okResponse(message, { dropped: false });
     default: {

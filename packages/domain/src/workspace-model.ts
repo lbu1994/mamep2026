@@ -36,7 +36,7 @@ export type BuiltinDataType =
 
 /**
  * 16 位数据类型（字符串联合，不用 enum 作序列化格式）。
- * ADR-043 E-3：联合开放——内置字面量 + 插件类型（string & {}，单寄存器）。
+ * 联合开放——内置字面量 + 插件类型（string & {}，单寄存器）。
  */
 export type DataType = BuiltinDataType | (string & {});
 
@@ -64,17 +64,17 @@ export function isBuiltinDataType(type: string): type is BuiltinDataType {
 export type Parity = "none" | "even" | "odd";
 export type FlowControl = "off" | "rts-cts" | "xon-xoff";
 export type AddressAdjustMode = "off" | "on";
-/** Register 地址列的显示/输入进制（按表独立设置，默认 DEC，2026-08-14）。 */
+/** Register 地址列的显示/输入进制（按表独立设置，默认 DEC）。 */
 export type RegisterRadix = "dec" | "hex";
 
 /**
- * 内置 Address Adjust 变换 ID（ADR-042 插件 Phase D）：核心开箱即用的唯一变换
+ * 内置 Address Adjust 变换 ID（插件）：核心开箱即用的唯一变换
  * （发送地址 = 用户地址 − 1）。迁移 v5→v6 与内置插件注册共用该 ID。
  */
 export const BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID = "builtin.address-adjust";
 
 /**
- * 表级地址变换配置（ADR-042 插件 Phase D）：随工作区持久化，每表独立。
+ * 表级地址变换配置（插件）：随工作区持久化，每表独立。
  * null=不调整；transformId 指向 addressTransform 贡献点注册的变换（默认内置）。
  */
 export interface AddressTransformConfig {
@@ -83,7 +83,7 @@ export interface AddressTransformConfig {
 }
 
 /**
- * 运行时地址变换（apply 为函数，不进入持久化/贡献点 payload；由插件 activate 注册，ADR-042）。
+ * 运行时地址变换（apply 为函数，不进入持久化/贡献点 payload；由插件 activate 注册）。
  * apply 失败（如 0 下溢）返回结构化错误，调用方保留用户输入。
  */
 export interface AddressTransform {
@@ -95,7 +95,7 @@ export interface AddressTransform {
   validate?(userAddress: number): Result<null>;
 }
 
-/** RTU 连接配置（docs/TECH_DESIGN.md §18.4，ADR-013 字段）。 */
+/** RTU 连接配置（docs/TECH_DESIGN.md §18.4 字段）。 */
 export interface RtuConnectionProfile {
   id: ConnectionProfileId;
   name: string;
@@ -111,7 +111,7 @@ export interface RtuConnectionProfile {
   recentPortHint: string | null;
 }
 
-/** 范围行子行独立元数据（2026-08-27）：每寄存器独立 Name/Comment/Type+Scale。 */
+/** 范围行子行独立元数据：每寄存器独立 Name/Comment/Type+Scale。 */
 export interface RegisterSubRowMeta {
   name: string;
   comment: string;
@@ -136,14 +136,14 @@ export function createRegisterSubRowMetas(
 }
 
 /**
- * 位级注释存储（ADR-052，2026-09-11）：
- * 外层 index = 寄存器序号（长度 = registerCount），内层长度固定 16、下标 = bit 号（0..15，显示时 bit15 在上）。
+ * 位级注释存储：
+ * 外层 index = 寄存器序号（长度 = registerCount），内层长度固定 16、下标 = bit 号（0。15，显示时 bit15 在上）。
  * 某寄存器的 16 条注释全空时该元素为 `null`；整体全空时 `RegisterRow.bitComments` 为 `null`。
  */
 export type RegisterBitComments = (string[] | null)[];
 
 /**
- * 位级名称存储（ADR-052 需求追加，2026-09-11）：结构同 `RegisterBitComments`（与注释对称）。
+ * 位级名称存储：结构同 `RegisterBitComments`（与注释对称）。
  * 位 Name 列可编辑（同 Comment 列），随工作区持久化并入撤销栈。
  */
 export type RegisterBitNames = (string[] | null)[];
@@ -158,7 +158,7 @@ export interface RegisterRow {
   addressDraft: string;
   /** 已提交的合法地址；为空表示未配置 */
   addressValue: RegisterAddress | null;
-  /** 覆盖的连续寄存器数（ADR-030）：1=单寄存器；范围行 >1 */
+  /** 覆盖的连续寄存器数：1=单寄存器；范围行 >1 */
   registerCount: number;
   dataType: DataType;
   /** WP：周期轮询开关 */
@@ -167,21 +167,21 @@ export interface RegisterRow {
   traceEnabled: boolean;
   /** Data 单元格单一当前值（§15.1） */
   cellText: string;
-  /** 各寄存器原始值（ADR-030，单一事实源，替代 lastKnownRawValue）：null=未读；长度=registerCount */
+  /** 各寄存器原始值（单一事实源，替代 lastKnownRawValue）：null=未读；长度=registerCount */
   registerValues: RawRegisterValue[] | null;
-  /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据；范围行（registerCount>1）为长度=registerCount 的数组。 */
+  /** 范围行子行元数据：null=单寄存器行或老数据；范围行（registerCount>1）为长度=registerCount 的数组。 */
   registers: RegisterSubRowMeta[] | null;
-  /** 位级注释（ADR-052，2026-09-11）：null=无位注释；长度=registerCount 的数组，每项为长度 16 的注释数组（下标=bit 号）或 null。 */
+  /** 位级注释：null=无位注释；长度=registerCount 的数组，每项为长度 16 的注释数组（下标=bit 号）或 null。 */
   bitComments: RegisterBitComments | null;
-  /** 位级名称（ADR-052，2026-09-11）：结构同 bitComments；位 Name 列可编辑（同 Comment 列）。 */
+  /** 位级名称：结构同 bitComments；位 Name 列可编辑（同 Comment 列）。 */
   bitNames: RegisterBitNames | null;
   createdAt: number;
   updatedAt: number;
 }
 
 /**
- * 表类型（ADR-041 插件 Phase C）：核心 "holding-register" 或插件表类型 "<pluginId>:<tableTypeId>"。
- * ADR-043 E-2：核心再增 3 个基础表（coil / discrete-input / input-register，RTU 承载）。
+ * 表类型（插件）：核心 "holding-register" 或插件表类型 "<pluginId>:<tableTypeId>"。
+ * 核心再增 3 个基础表（coil / discrete-input / input-register，RTU 承载）。
  */
 export type SheetType =
   | "holding-register"
@@ -190,11 +190,11 @@ export type SheetType =
   | "input-register"
   | (string & {});
 
-/** 核心表类型 ID（ADR-043 E-2）：holding-register + 三个基础表。 */
+/** 核心表类型 ID：holding-register + 三个基础表。 */
 export type CoreSheetType =
   "holding-register" | "coil" | "discrete-input" | "input-register";
 
-/** 基础表类型（ADR-043 E-2）：coil / discrete-input / input-register（不含 holding-register）。 */
+/** 基础表类型：coil / discrete-input / input-register（不含 holding-register）。 */
 export type BasicSheetType = "coil" | "discrete-input" | "input-register";
 
 export const CORE_SHEET_TYPE_IDS: readonly CoreSheetType[] = [
@@ -211,7 +211,7 @@ export const BASIC_SHEET_TYPE_IDS: readonly BasicSheetType[] = [
 ];
 
 /**
- * 基础表 codec 协议 ID（ADR-043 E-2）：
+ * 基础表 codec 协议 ID：
  * codec 请求不携带表类型（CodecReadRequest 仅 slaveAddress+addresses），
  * 故每个基础表类型注册独立 codec 实例，protocolId = `${BASIC_TABLES_PROTOCOL_PREFIX}:${tableType}`
  * （如 "modbus-basic-tables:coil"）。CommunicationSession codec 路径零改动。
@@ -222,7 +222,7 @@ export function basicTablesProtocolId(tableType: BasicSheetType): string {
   return `${BASIC_TABLES_PROTOCOL_PREFIX}:${tableType}`;
 }
 
-/** 核心表类型元数据（ADR-043 E-2）：只读语义由表类型决定（不加模型字段）。 */
+/** 核心表类型元数据：只读语义由表类型决定（不加模型字段）。 */
 export interface CoreTableTypeMeta {
   id: CoreSheetType;
   /** i18n 标题键（完整键，如 "table.tableType.coil"）。 */
@@ -296,24 +296,24 @@ export function sheetTypeWritable(type: string): boolean {
 export interface RegisterSheet {
   sheetId: SheetId;
   name: string;
-  /** 表类型（ADR-041）：核心 holding-register 或插件表类型（安川表 = "yaskawa-memobus-67h-010dh-010eh:holding-register"）。 */
+  /** 表类型：核心 holding-register 或插件表类型（安川表 = "yaskawa-memobus-67h-010dh-010eh:holding-register"）。 */
   type: SheetType;
   order: number;
   /** 打开/关闭状态：关闭的表仍在工作区中（侧边栏保留），仅从页签栏隐藏；默认打开。 */
   open: boolean;
   rows: RegisterRow[];
-  /** Register 地址列进制：默认 DEC（每表独立，ADR-014） */
+  /** Register 地址列进制：默认 DEC（每表独立） */
   registerRadix: RegisterRadix;
-  /** Slave Address（从站地址）：每表独立设置，默认 1；请求使用当前表的值（2026-08-19） */
+  /** Slave Address（从站地址）：每表独立设置，默认 1；请求使用当前表的值 */
   slaveAddress: number;
-  /** 各列拖拽宽度（每表独立，随工作区持久化；只含用户拖拽过的列，未记录列用默认宽，2026-08-18） */
+  /** 各列拖拽宽度（每表独立，随工作区持久化；只含用户拖拽过的列，未记录列用默认宽） */
   columnWidths: Record<string, number>;
-  /** 各列拖拽后的排列顺序（每表独立，随工作区持久化；null=未拖拽过，使用默认顺序，2026-08-18） */
+  /** 各列拖拽后的排列顺序（每表独立，随工作区持久化；null=未拖拽过，使用默认顺序） */
   columnOrder: string[] | null;
-  /** 写后回读配置（每表独立，随工作区持久化，2026-08-26）：默认立即回读（immediate）。 */
+  /** 写后回读配置（每表独立，随工作区持久化）：默认立即回读（immediate）。 */
   writeVerify: ReadVerifySettings;
   /**
-   * 表级地址变换配置（ADR-042 插件 Phase D，每表独立，随工作区持久化）：
+   * 表级地址变换配置（插件，每表独立，随工作区持久化）：
    * null=不调整；默认 null（迁移 v5→v6 把旧全局 profile.addressAdjust 复制到各表）。
    */
   addressTransform: AddressTransformConfig | null;
@@ -322,7 +322,7 @@ export interface RegisterSheet {
 }
 
 export interface PollingSettings {
-  /** MVP：仅支持每行 WP 手动开关 */
+  /** 当前仅支持每行 WP 手动开关 */
   enabledBehavior: "manual";
   /** 内部值，不提供用户配置 */
   maxPendingPollingTasks: number;
@@ -335,7 +335,7 @@ export interface ReadVerifySettings {
 
 export interface PanelLayout {
   sidebarCollapsed: boolean;
-  /** 侧边栏展开态宽度（px，2026-09-08 侧边栏可拖宽）。 */
+  /** 侧边栏展开态宽度（px 侧边栏可拖宽）。 */
   sidebarWidth: number;
   bottomPanelCollapsed: boolean;
   bottomPanelHeight: number;
@@ -350,7 +350,7 @@ export interface Preferences {
   /** 界面语言（用户偏好，随工作区持久化；默认 en-US）。 */
   language: "en-US" | "zh-CN";
   /**
-   * 所选主题色预设（ADR-047，逆转 ADR-042 任意取色；随工作区持久化）。
+   * 所选主题色预设（逆转任意取色；随工作区持久化）。
    * null=内置 Ant Design 默认蓝；插件注册色 = `<pluginId>:<colorId>`（完整预设 ID）。
    * 禁用/卸载插件后解析不到 → 回退默认；schema v7→v8 迁移旧任意 HEX → null。
    */
@@ -389,11 +389,11 @@ export interface Workspace {
   migrationHistory: MigrationRecord[];
 }
 
-/** 当前工作区 Schema 版本（2026-08-27 v4：范围行子行元数据 registers 落盘；2026-08-31 v5：sheet.type 表类型，ADR-041；2026-09-01 v6：sheet.addressTransform + preferences.themePrimary，ADR-042；2026-09-01 v7：dataType 开放，ADR-043；2026-09-02 v8：themePrimary 改预设 ID，ADR-047；2026-09-11 v9：行位级注释 bitComments，ADR-052；2026-09-11 v10：行位级名称 bitNames，ADR-052 需求追加）。 */
+/** 当前工作区 Schema 版本：v10。 */
 export const workspaceSchemaVersion = 10;
 
 /**
- * 工作区加载/恢复元数据（ADR-049，2026-09-04）：
+ * 工作区加载/恢复元数据：
  * 供 UI 在 `load()` 后经 `getRecoveryInfo()` 旁路读取，用于「恢复提示」；
  * 不改变 `load()` 的 `Result<Workspace>` 成功契约。
  * - `source:"none"`：主数据完好（正常恢复，不提示）；
@@ -463,7 +463,7 @@ export function createDefaultTcpProfile(name = "TCP"): TcpConnectionProfile {
     id: newConnectionProfileId(),
     name,
     protocol: "tcp",
-    // 默认 host 置空（2026-09-06 Header Connect 直连）：删除默认占位 "127.0.0.1"，
+    // 默认 host 置空（Header Connect 直连）：删除默认占位 "127.0.0.1"，
     // 使「TCP 已填入 IP」以 host 非空为准——首次需用户在连接设置里显式填写。
     host: "",
     port: 502,
@@ -520,7 +520,7 @@ export function createRegisterSheet(
   const rows = createDefaultSheetRows(
     defaultConfig.registerTable.defaultRowCount,
   );
-  // 基础表（ADR-043 E-2）：按表类型默认 dataType（coil → bool）。
+  // 基础表：按表类型默认 dataType（coil → bool）。
   for (const row of rows) {
     row.dataType = defaultDataType;
   }
@@ -535,9 +535,9 @@ export function createRegisterSheet(
     slaveAddress: defaultConfig.registerTable.slaveAddress,
     columnWidths: {},
     columnOrder: null,
-    // 写后回读默认 ON（写入后立即回读，2026-08-26）。
+    // 写后回读默认 ON（写入后立即回读）。
     writeVerify: { mode: "immediate", delayMs: null },
-    // 表级地址变换默认关闭（ADR-042）：不调整。
+    // 表级地址变换默认关闭：不调整。
     addressTransform: null,
     createdAt: now,
     updatedAt: now,

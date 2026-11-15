@@ -33,7 +33,7 @@ function isCompatMissMode(): boolean {
 }
 
 /**
- * 组合根（2026-09-13 装配重构后）。
+ * 组合根（装配重构后）。
  *
  * 本文件只做三件事：
  * 1. 计算运行模式（mock / 兼容性覆盖）与共享上下文（注册表，见 `platform-context.ts`）；
@@ -47,7 +47,7 @@ export default function App(): React.ReactNode {
   /** 活动 host（工作区变更订阅据其调用 `scheduleSave` / `updatePollingTargets`）。 */
   const hostRef = useRef<AppHost | null>(null);
   /**
-   * 地址变换解析（ADR-042 / ADR-054）：跨 effect 共享——装配 effect 建立注册表后写入，工作区
+   * 地址变换解析：跨 effect 共享——装配 effect 建立注册表后写入，工作区
    * 变更订阅（下方 effect）在回调触发时读取；初始 no-op 兜底（装配完成前无可轮询行）。
    */
   const resolveTransformRef = useRef<
@@ -83,7 +83,7 @@ export default function App(): React.ReactNode {
     );
     return () => {
       // 取消装配 / 释放宿主：abort 触发 host-assembly 的退订与 dispose（StrictMode 双挂载下
-      // 保证旧 host 不再接收事件——通信日志重复投递的回归防护，2026-08-23）。
+      // 保证旧 host 不再接收事件——通信日志重复投递的回归防护）。
       controller.abort();
       hostRef.current = null;
     };
@@ -100,8 +100,8 @@ export default function App(): React.ReactNode {
       if (state.workspace.sheets.length === 0) return;
       host.scheduleSave(state.workspace);
 
-      // 应用层纯函数构建轮询目标（含表级地址变换偏移与地址 0 跳过；ADR-042 按 sheet；
-      // 2026-09-02 插件外部化：变换经插件注册表解析）。
+      // 应用层纯函数构建轮询目标（含表级地址变换偏移与地址 0 跳过按 sheet；
+      // 插件外部化：变换经插件注册表解析）。
       host.updatePollingTargets(
         buildPollingTargets(state.workspace.sheets, {
           resolveAddressTransform: resolveTransformRef.current,

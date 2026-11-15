@@ -57,7 +57,7 @@ const BODY_LABEL_BY_COLUMN: Record<string, string> = {
   drag: "Drag to reorder",
 };
 
-/** 连续拖拽序列（2026-08-19 曾稳定复现「多次拖拽后列序错乱」的用例序列）。 */
+/** 连续拖拽序列（用于守住多次拖拽后的列序一致性）。 */
 const DRAG_SEQUENCE: ReadonlyArray<readonly [string, string]> = [
   ["Name", "No"],
   ["Comment", "Data"],

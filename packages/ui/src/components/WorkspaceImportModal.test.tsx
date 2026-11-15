@@ -1,5 +1,5 @@
 /**
- * WorkspaceImportModal 预览/确认测试（jsdom，2026-08-29）。
+ * WorkspaceImportModal 预览/确认测试（jsdom）。
  * 组件用 App.useApp()（antd message），渲染必须包 <AntApp>。
  * 断言：草稿摘要展示、OK 应用导入（清空草稿 + 替换工作区）、取消清除草稿、无草稿不展示。
  */

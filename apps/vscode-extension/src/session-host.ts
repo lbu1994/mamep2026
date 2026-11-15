@@ -38,10 +38,10 @@ export interface VscodeSessionHostOptions {
   platform: NodePlatformHost;
   /** 会话事件（由装配方转换为 HostMessage v2 event 推送 Webview）。 */
   events: RtuSessionHostEvents;
-  /** codec 注册表（ADR-043 E-6；ADR-055 起由宿主侧插件运行时提供）：插件/基础表 codec 会话经它解析。 */
+  /** codec 注册表（起由宿主侧插件运行时提供）：插件/基础表 codec 会话经它解析。 */
   codecRegistry?: CodecRegistry;
   /**
-   * 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055）：由宿主侧插件运行时
+   * 地址变换解析（插件外部化）：由宿主侧插件运行时
    * （HostPluginRuntime）注入，随插件安装/启停自动更新。
    */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
@@ -51,7 +51,7 @@ export class VscodeSessionHost {
   private readonly platform: NodePlatformHost;
   private readonly rtu: RtuSessionHost;
   private readonly tcp: TcpSessionHost;
-  /** codec 注册表（ADR-043 E-6）：基础表/安川 codec 会话解析用；null=未注入（缺省仅 rtu）。 */
+  /** codec 注册表：基础表/安川 codec 会话解析用；null=未注入（缺省仅 rtu）。 */
   private readonly codecRegistry: CodecRegistry | null;
   /** 当前活动协议会话（由最近一次 connect/connectTcp 决定）。 */
   private active: "rtu" | "tcp" | null = null;
@@ -72,7 +72,7 @@ export class VscodeSessionHost {
     this.tcp = new TcpSessionHost({
       clock: options.platform.clock,
       events: options.events,
-      // 自动重连（2026-08-30）：重连时由协调器重新打开 TCP 传输。
+      // 自动重连：重连时由协调器重新打开 TCP 传输。
       openTransport: (profile) => this.platform.openTcpTransport(profile),
       ...(options.resolveAddressTransform !== undefined
         ? { resolveAddressTransform: options.resolveAddressTransform }
@@ -99,7 +99,7 @@ export class VscodeSessionHost {
   }
 
   /** 打开并连接 RTU 会话（portId 为 enumerateSerialPorts 返回的端口）。
-   *  ADR-043 E-6：protocol 为 codecId 时走 codec 会话（基础表/安川），缺省 rtu。 */
+   * protocol 为 codecId 时走 codec 会话（基础表/安川），缺省 rtu。 */
   async connect(
     portId: string,
     profile: RtuConnectionProfile,
@@ -150,17 +150,17 @@ export class VscodeSessionHost {
     return this.activeSession.getConnectionState();
   }
 
-  /** RTU 从站地址（每表独立）：仅 RTU 活动时生效（渲染端按协议路由，2026-08-25）。 */
+  /** RTU 从站地址（每表独立）：仅 RTU 活动时生效（渲染端按协议路由）。 */
   setSlaveAddress(slave: number): void {
     if (this.active === "rtu") this.rtu.setSlaveAddress(slave);
   }
 
-  /** TCP Unit ID 会话内动态修改（2026-08-25）：仅 TCP 活动时生效，对后续请求生效。 */
+  /** TCP Unit ID 会话内动态修改：仅 TCP 活动时生效，对后续请求生效。 */
   setUnitId(unitId: number): void {
     if (this.active === "tcp") this.tcp.setUnitId(unitId);
   }
 
-  /** 表级 Address Adjust（ADR-042）：仅 RTU 活动时生效（TCP 无地址变换），同步到宿主会话。 */
+  /** 表级 Address Adjust：仅 RTU 活动时生效（TCP 无地址变换），同步到宿主会话。 */
   setAddressTransform(
     config: {
       transformId: string;
@@ -194,7 +194,7 @@ export class VscodeSessionHost {
     return this.activeSession.readAllRows(rows, batchId, route);
   }
 
-  /** 按 batchId 取消活动批任务（远程路径，ADR-025）：未知/已完成为安全 no-op。 */
+  /** 按 batchId 取消活动批任务（远程路径）：未知/已完成为安全 no-op。 */
   cancelBatch(batchId: string): void {
     this.activeSession.cancelBatch(batchId);
   }

@@ -1,10 +1,11 @@
 /**
- * 地址变换注册表（ADR-042 插件 Phase D）。
+ * 地址变换注册表（插件）。
  *
  * addressTransform 贡献点 payload 为声明式数据（id/protocol/titleKey/defaultConfig，
  * 可 JSON 序列化）；`apply`/`validate` 是函数，不能进 payload，由插件 `activate`
- * 时经本注册表注册（仿 codec 注册模式，ADR-040）。核心开箱即用的内置变换
- * `builtin.address-adjust`（-1 语义）定义于 register-table/address.ts，由应用装配点
+ * 时经本注册表注册（仿 codec 注册模式）。核心开箱即用的内置变换
+ * `builtin.address-adjust`（发送地址 = 用户地址 − 1）的逻辑定义于 register-table/address.ts，
+ * 由应用装配点
  * （apps/web App.tsx）注册进本注册表。
  */
 import {

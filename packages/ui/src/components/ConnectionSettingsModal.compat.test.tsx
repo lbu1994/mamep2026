@@ -1,5 +1,5 @@
 /**
- * ConnectionSettingsModal 浏览器兼容性（PRD §8.3 / §15.7，2026-09-02）：
+ * ConnectionSettingsModal 浏览器兼容性（PRD §8.3 / §15.7）：
  * - 浏览器不支持 Web Serial：警告 + 替代方案提示 + CONNECT 禁用（不得执行不可用串口操作）；
  * - 支持环境（supportsWebSerial=true）：无警告、CONNECT 可用；
  * - 非安全上下文：额外提示 Web Serial 需要安全上下文。

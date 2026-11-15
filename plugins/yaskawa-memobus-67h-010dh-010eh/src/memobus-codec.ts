@@ -1,10 +1,10 @@
 /**
- * 安川 MEMOBUS 协议编解码器（ADR-040 插件 Phase B）。
+ * 安川 MEMOBUS 协议编解码器（插件）。
  * 实现功能码 67 + 辅助功能码 010D（非连续读 ≤120）/ 010E（非连续写 ≤60）。
  * 帧结构见 docs/安川MEMOBUS公开协议参考.md §1~§2。
  *
  * 纯 TS、独立于核心 Modbus：不进 protocol-modbus、不 import 其符号（AGENTS §5.3/§10.1），
- * CRC-16 自带实现（标准 CRC-16/MODBUS，用户 2026-08-31 已确认与手册向量一致）。
+ * CRC-16 自带实现（标准 CRC-16/MODBUS，用户已确认与手册向量一致）。
  */
 import type {
   CodecDecodedResponse,

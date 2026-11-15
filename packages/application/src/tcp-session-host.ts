@@ -2,7 +2,7 @@
  * TCP 会话宿主（docs/TECH_DESIGN.md §5.1.2 Application 层、docs/AGENTS.md §6）。
  *
  * 协议专用薄封装：构建 protocol="tcp" 的 CommunicationSession（unitId 连接时由
- * profile 确定，连接后可经 setUnitId 动态修改，2026-08-25），其余会话编排
+ * profile 确定，连接后可经 setUnitId 动态修改），其余会话编排
  * （轮询/追踪/批量读取/设备拔出策略）委托共享 SessionHostCore（session-host-core.ts），
  * 与 RtuSessionHost 共用，避免复制核心会话逻辑（AGENTS.md §32 ㉑）。TCP 无 Address Adjust（恒 off）。
  *
@@ -45,7 +45,7 @@ export interface TcpConnectInput {
 export interface TcpSessionHostOptions {
   clock: Clock;
   events: SessionHostEvents;
-  /** 地址变换解析（ADR-042；2026-09-02 插件外部化：宿主注入随包插件 resolver，缺省不调整）。 */
+  /** 地址变换解析（插件外部化：宿主注入随包插件 resolver，缺省不调整）。 */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
   /**
    * 自动重连用的传输重开工厂（可选，仅 TCP）：由平台宿主注入（重新 openTcpTransport）。
@@ -168,7 +168,7 @@ export class TcpSessionHost {
     return this.core.getPortLabel();
   }
 
-  /** 更新当前会话 TCP Unit ID（每表独立，2026-08-25）：对后续所有请求（读/写/轮询/追踪）生效。 */
+  /** 更新当前会话 TCP Unit ID（每表独立）：对后续所有请求（读/写/轮询/追踪）生效。 */
   setUnitId(unitId: number): void {
     this.core.setUnitId(unitId);
   }
@@ -196,7 +196,7 @@ export class TcpSessionHost {
     return this.core.readAllRows(rows, batchId, route);
   }
 
-  /** 按 batchId 取消活动批任务（远程路径，ADR-025）：未知/已完成为安全 no-op。 */
+  /** 按 batchId 取消活动批任务（远程路径）：未知/已完成为安全 no-op。 */
   cancelBatch(batchId: string): void {
     this.core.cancelBatch(batchId);
   }
@@ -221,7 +221,7 @@ export class TcpSessionHost {
     this.core.stopPolling();
   }
 
-  /** 应用进入后台（ADR-050 Phase 3）：暂停轮询/追踪，保留配置供回前台恢复。 */
+  /** 应用进入后台：暂停轮询/追踪，保留配置供回前台恢复。 */
   pauseBackground(): void {
     this.core.pauseBackground();
   }

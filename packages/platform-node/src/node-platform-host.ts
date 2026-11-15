@@ -1,7 +1,7 @@
 /**
  * Node 平台 Host（docs/TECH_DESIGN.md §6.1、§9.3、§34.3.16）。
  * Electron 主进程与 VSCode Extension Host 共用本 Host：枚举 / 打开串口传输。
- * 本实现为原型（ADR-020），生产接线时由 electronCapabilities / vscodeCapabilities 翻转能力矩阵，
+ * 本实现为原型，生产接线时由 electronCapabilities / vscodeCapabilities 翻转能力矩阵，
  * 串口选择由各端 UI picker 承担。
  */
 import type {
@@ -43,8 +43,8 @@ import { mapSerialError } from "./error-mapping";
 import { nodeClock } from "./real-clock";
 
 /** 默认能力声明（不写入生产能力矩阵；生产接线时翻转 electron/vscode 能力常量）。
- * modbusTcp:true——Node TCP Adapter 已落地（2026-08-23 两端 TCP 接线）。
- * hostPlugins:true——Node 侧宿主插件执行面已落地（`@mamep2026/platform-node/plugin`，ADR-055）。 */
+ * modbusTcp:true——Node TCP Adapter 承载会话。
+ * hostPlugins:true——Node 侧宿主插件执行面（`@mamep2026/platform-node/plugin`）。 */
 export const nodeHostCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: true,
   modbusTcp: true,

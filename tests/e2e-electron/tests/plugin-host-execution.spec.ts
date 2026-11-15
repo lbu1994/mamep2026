@@ -1,5 +1,5 @@
 /**
- * Electron 宿主侧插件执行面 e2e（ADR-055，2026-09-12）。
+ * Electron 宿主侧插件执行面 e2e。
  *
  * 验证 Electron 端「插件一律手动安装 + 同进程执行」在**主进程**的真实闭环：
  * - 经 Settings → Plugins → Install Plugin 安装 `pnpm build:plugins` 产出的可执行插件
@@ -12,8 +12,8 @@
  * - 卸载 → plugins.json 清空（宿主执行面随之注销）；
  * - 全程无 console 错误。
  *
- * 说明（ADR-055 已知限制）：Electron 的 RTU 会话在 Renderer（ADR-017）、TCP 不应用地址变换
- * （ADR-022/042），故宿主插件变换当前在 Electron 无用户可见路径；本 spec 验证**执行面装配与
+ * 说明（已知限制）：Electron 的 RTU 会话在 Renderer、TCP 不应用地址变换
+ * 宿主插件变换当前在 Electron 无用户可见路径；本 spec 验证**执行面装配与
  * 生命周期**（加载/持久化/重启/卸载），宿主插件**生效路径**的端到端证据由 VSCode
  * （`tests/e2e-vscode` runPluginHostLoop，RTU 会话在 Extension Host）提供。
  */

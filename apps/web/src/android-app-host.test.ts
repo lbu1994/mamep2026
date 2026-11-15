@@ -1,5 +1,5 @@
 /**
- * AndroidAppHost 单测（apps/web 组合根，ADR-050）。
+ * AndroidAppHost 单测（apps/web 组合根）。
  * 覆盖：平台标识/能力矩阵/兼容性提示抑制、串口能力错误、TCP 连接（含 Android 默认超时覆盖）、
  * FC03 读闭环（穿过 TcpSessionHost + TcpFrameParser）、Unit ID 动态修改、事件转发与释放。
  * 传输桥注入 `platform-android/testing` 的 FakeTransportBridge（无需 Android 环境）。
@@ -30,7 +30,7 @@ async function flushMicrotasks(times = 12): Promise<void> {
 }
 
 /**
- * 假应用生命周期桥（ADR-050 Phase 3）：记录订阅/退订与最小化调用，
+ * 假应用生命周期桥：记录订阅/退订与最小化调用，
  * `backHandlers` / `stateHandlers` 由用例直接触发，避免依赖真实 `@capacitor/app`。
  */
 class FakeAppLifecycleBridge implements AndroidAppLifecycleBridge {

@@ -1,5 +1,5 @@
 /**
- * Android USB-RS485 真实闭环 E2E（ADR-050 Phase 2）——**需要 USB 串口硬件，默认跳过**。
+ * Android USB-RS485 真实闭环 E2E——**需要 USB 串口硬件，默认跳过**。
  *
  * 真实路径（无任何桩）：真机 WebView → `AndroidAppHost` → `AndroidPlatformHost.openSerialTransport`
  * → `CapacitorUsbSerialTransport` → Capacitor 桥 → app 内原生 `MamepTransportPlugin`

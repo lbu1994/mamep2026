@@ -1,5 +1,5 @@
 /**
- * Settings 抽屉 e2e（mockTransport=1，浏览器端，2026-09-12，ToDoList「Settings 由 Modal 改为 Drawer」）。
+ * Settings 抽屉 e2e（mockTransport=1，浏览器端）。
  *
  * 覆盖：
  * - 容器类型：Settings 打开后是右侧 `Drawer`（`.settings-drawer.ant-drawer-open`），
@@ -59,7 +59,7 @@ test("Ctrl+, 打开的是 Settings 抽屉而非 Modal，Esc 可关闭", async ({
   await expect(drawer).toHaveClass(/ant-drawer/);
   // 标题与内容（原 Modal 内的设置项原样保留）。
   await expect(drawer.locator(".ant-drawer-header")).toContainText("Settings");
-  // 2026-09-12 插件管理并入：抽屉内含 General / Plugins 两个页签，默认停在 General。
+  // 插件管理并入：抽屉内含 General / Plugins 两个页签，默认停在 General。
   await expect(drawer.getByRole("tab", { name: "General" })).toBeVisible();
   await expect(drawer.getByRole("tab", { name: "Plugins" })).toBeVisible();
   await expect(drawer.getByLabel("Accent color")).toBeVisible();

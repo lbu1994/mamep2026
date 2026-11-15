@@ -1,5 +1,5 @@
 /**
- * scripts 侧共享：连接对象配置文件（config/connections.json，ADR-023）读取 helper。
+ * scripts 侧共享：连接对象配置文件（config/connections.json）读取 helper。
  * 供真实设备路径的探针/验证脚本读取主站连接参数，消除 COM4/COM5/9600 等硬编码。
  * 脚本是 Node 工具，直接用 fs 同步读取 + JSON.parse（不引入应用层 Zod 校验依赖；
  * 校验由应用侧 packages/connection-config 承担，脚本侧保持轻量）。

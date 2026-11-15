@@ -1,5 +1,5 @@
 /**
- * VSCode 扩展宿主插件存储（ADR-038，2026-08-30）。
+ * VSCode 扩展宿主插件存储。
  * 实现 PluginStorePort：context.globalState 承载（应用级持久化，跨窗口共享，非工作区数据）。
  * 与主进程 plugins.json / 浏览器 IndexedDB 存储语义一致：schemaVersion 1 + installed 插件
  * 清单 + 启用状态；load/save 均经 pluginStoreDataSchema 校验，损坏数据返回结构化错误
@@ -46,7 +46,7 @@ export class GlobalStatePluginStore implements PluginStorePort {
   async load(): Promise<Result<PluginStoreData>> {
     const raw = this.memento.get<unknown>(STORE_KEY);
     if (raw === undefined) return ok(createEmptyPluginStoreData());
-    // v1 → v2 迁移（ADR-039）：老版本已装插件平滑升级；损坏数据返回结构化错误。
+    // v1 → v2 迁移：老版本已装插件平滑升级；损坏数据返回结构化错误。
     return migratePluginStoreData(raw);
   }
 

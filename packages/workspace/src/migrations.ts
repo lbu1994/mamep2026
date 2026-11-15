@@ -2,48 +2,48 @@
  * 迁移框架（docs/AGENTS.md §19.6）。
  * 迁移单向、按版本顺序执行、不直接覆盖原始数据。
  *
- * v1→v2（2026-08-26，写后回读配置下放到每表）：
+ * v1→v2（写后回读配置下放到每表）：
  * - 把 workspace 全局 readVerifySettings 迁移到各 sheet.writeVerify（旧全局值优先；
  *   无全局值时补默认立即回读）；
  * - 删除全局 readVerifySettings 字段；
  * - schemaVersion 升为 2。
  *
- * v2→v3（2026-08-27，多寄存器范围行 ADR-030）：
+ * v2→v3（多寄存器范围行）：
  * - 各 row 的 lastKnownRawValue（单值）迁移为 registerValues（数组，长度=registerCount）；
  * - 补 registerCount=1（老数据即单寄存器）；
  * - 删除 lastKnownRawValue 字段；
  * - schemaVersion 升为 3。
  *
- * v3→v4（2026-08-27，范围行子行可编辑化）：
+ * v3→v4（范围行子行可编辑化）：
  * - 范围行（registerCount>1）各 row 补齐 registers 数组（长度=registerCount，每项
  *   {name:"", comment:"", dataType: 父行 dataType}，保证迁移后展示与迁移前一致）；
  * - 单寄存器行 registers=null；
  * - schemaVersion 升为 4。
  *
- * v4→v5（2026-08-31，表类型 ADR-041）：
+ * v4→v5（表类型）：
  * - 各 sheet 补齐 type="holding-register"（老数据即核心表；已有 type 保留）；
  * - schemaVersion 升为 5。
  *
- * v5→v6（2026-09-01，表级 Address Adjust + 主题主色 ADR-042）：
+ * v5→v6（表级 Address Adjust + 主题主色）：
  * - 全局 profile.addressAdjust（RTU，off/on）复制到各 sheet.addressTransform
  *   （{transformId:"builtin.address-adjust", enabled: 全局===on}；已有值保留）；
  * - 删除各 profile 的 addressAdjust 字段（全局选项移出核心）；
  * - preferences 补 themePrimary=null 缺省（无数据转换，仅版本）；
  * - schemaVersion 升为 6。
  *
- * v6→v7（2026-09-01，dataType 开放 ADR-043 E-3）：
+ * v6→v7（dataType 开放）：
  * - 无数据转换（dataType 字符串透传），仅升版本；
  * - schemaVersion 升为 7。
  *
- * v7→v8（2026-09-02，主题色预设 ID ADR-047，逆转 ADR-042 任意取色）：
+ * v7→v8（主题色预设 ID，逆转任意取色）：
  * - 旧 preferences.themePrimary 的 {light,dark} 任意 HEX 无可映射预设 → 一律置 null（内置默认蓝）；
  * - schemaVersion 升为 8。
  *
- * v8→v9（2026-09-11，位级注释 ADR-052）：
+ * v8→v9（位级注释）：
  * - 各 row 补 bitComments=null（老数据无位注释；无数据转换）；
  * - schemaVersion 升为 9。
  *
- * v9→v10（2026-09-11，位级名称 ADR-052 需求追加）：
+ * v9→v10（位级名称）：
  * - 各 row 补 bitNames=null（v9 数据仅有位注释，名称缺省为空；bitComments 原值保留）；
  * - schemaVersion 升为 10。
  */
@@ -180,7 +180,7 @@ const migrationV5ToV6: Migration = {
   fromVersion: 5,
   toVersion: 6,
   migrate(data) {
-    // 全局 RTU profile 的 addressAdjust（ADR-013 全局选项，ADR-042 移出核心）。
+    // 全局 RTU profile 的 addressAdjust（全局选项移出核心）。
     const profiles = Array.isArray(data.connectionProfiles)
       ? (data.connectionProfiles as Record<string, unknown>[])
       : [];
@@ -242,7 +242,7 @@ const migrationV6ToV7: Migration = {
   fromVersion: 6,
   toVersion: 7,
   migrate(data) {
-    // ADR-043 E-3：dataType 开放（内置 + 插件字符串），无数据转换，仅升版本。
+    //dataType 开放（内置 + 插件字符串），无数据转换，仅升版本。
     return { ...data, schemaVersion: 7 };
   },
 };
@@ -251,7 +251,7 @@ const migrationV7ToV8: Migration = {
   fromVersion: 7,
   toVersion: 8,
   migrate(data) {
-    // ADR-047：任意取色移除 → 预设 ID；旧 {light,dark} 任意 HEX 无预设可映射 → 一律置 null（默认蓝）。
+    //任意取色移除 → 预设 ID；旧 {light,dark} 任意 HEX 无预设可映射 → 一律置 null（默认蓝）。
     const rawPreferences =
       data.preferences !== null &&
       typeof data.preferences === "object" &&
@@ -273,7 +273,7 @@ const migrationV8ToV9: Migration = {
   fromVersion: 8,
   toVersion: 9,
   migrate(data) {
-    // ADR-052：位级注释新增，老数据无位注释 → 各 row 补 bitComments=null（无数据转换，仅升版本）。
+    //位级注释新增，老数据无位注释 → 各 row 补 bitComments=null（无数据转换，仅升版本）。
     const sheets = Array.isArray(data.sheets)
       ? (data.sheets as Record<string, unknown>[])
       : [];
@@ -300,7 +300,7 @@ const migrationV9ToV10: Migration = {
   fromVersion: 9,
   toVersion: 10,
   migrate(data) {
-    // ADR-052 需求追加：位级名称新增（位 Name 列可编辑）→ 各 row 补 bitNames=null；
+    // 位级名称（位 Name 列可编辑）→ 各 row 补 bitNames=null；
     // v9 的 bitComments 原值保留（不丢已有位注释）。
     const sheets = Array.isArray(data.sheets)
       ? (data.sheets as Record<string, unknown>[])
@@ -348,7 +348,7 @@ export function migrateData(
   );
   for (const migration of sorted) {
     if (migration.fromVersion < version) {
-      // 已应用的迁移：跳过（迁移列表为全量历史，当前数据版本之后的无需再跑）。
+      // 已应用的迁移：跳过（迁移列表按版本固定，当前数据版本之后的无需再跑）。
       continue;
     }
     if (migration.fromVersion !== version) {

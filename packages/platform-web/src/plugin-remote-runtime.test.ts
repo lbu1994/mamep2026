@@ -1,5 +1,5 @@
 /**
- * WebPluginRemoteRuntime 单测（ADR-044 Phase F-2，2026-09-01）。
+ * WebPluginRemoteRuntime 单测。
  * jsdom 无真 Worker：注入 fake Worker 驱动 postMessage 协议，覆盖
  * load（ready/load-error）、activate（activated/error）、communication 桥、
  * dispose/terminate、Worker 崩溃错误隔离。

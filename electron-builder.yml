@@ -1,4 +1,4 @@
-# Electron 免安装绿色版打包配置（docs/ADR-016 后续事项）。
+# Electron 免安装绿色版打包配置（docs 后续事项）。
 # 用法：pnpm dist:portable（= pnpm build:electron && node scripts/package-electron.mjs && electron-builder）
 # 产出：release/win-unpacked/ 整个文件夹（含 Mamep2026.exe + dll + resources/app/），拷走即用。
 #

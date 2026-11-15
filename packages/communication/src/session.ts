@@ -3,7 +3,7 @@
  * - 单连接单队列：所有请求经 RequestScheduler 串行执行；
  * - 超时从完整请求发送后开始；重试按 retryCount 语义（额外尝试次数）；
  * - RTU 响应按期望长度分帧；迟到响应被丢弃并记录；
- * - 请求紧接执行（不附加请求间隔，2026-09-06 删除 Rx Delay）。
+ * - 请求紧接执行（不附加请求间隔删除 Rx Delay）。
  */
 import {
   createMamepError,
@@ -55,9 +55,9 @@ import type { TransportPort } from "./transport-port";
 
 /**
  * 写入结果（docs/TECH_DESIGN.md §15.3、docs/AGENTS.md §18.2）。
- * 写后回读（2026-08-26）：写入与回读为相关但独立的两阶段；
+ * 写后回读：写入与回读为相关但独立的两阶段；
  * 回读失败不得把已成功的写入显示为写入失败（verify-failed 仍属写入成功）。
- * 多寄存器（ADR-030，2026-08-27）：verify 结果携带 readValues/expectedValues 数组
+ * 多寄存器：verify 结果携带 readValues/expectedValues 数组
  * （单寄存器写入为长度 1 的数组）。
  */
 export type WriteOutcome =
@@ -75,26 +75,26 @@ export type WriteOutcome =
     }
   | { kind: "cancelled-before-verify" };
 
-/** 读请求元数据（多寄存器 quantity 由 readRegisters 单独传入，ADR-030）。 */
+/** 读请求元数据（多寄存器 quantity 由 readRegisters 单独传入）。 */
 export interface ReadRegistersMeta {
   source: RequestSource;
   userAddress?: number;
   priority?: RequestPriority;
   group?: string;
   cancelToken?: CancellationToken;
-  /** 发起插件 id（source="plugin" 时必填，流入通信日志；ADR-039）。 */
+  /** 发起插件 id（source="plugin" 时必填，流入通信日志）。 */
   pluginId?: string | null;
   /** 请求创建时的路由快照；缺省时在本方法入队前快照当前会话地址。 */
   route?: RequestRoute;
 }
 
-/** 写请求元数据（多寄存器 values 由 writeRegisters 传入，ADR-030）。 */
+/** 写请求元数据（多寄存器 values 由 writeRegisters 传入）。 */
 export interface WriteRegistersMeta {
   source: RequestSource;
   userAddress?: number;
-  /** 插件写请求可指定 plugin-background（ADR-039）；缺省保持 manual-write。 */
+  /** 插件写请求可指定 plugin-background；缺省保持 manual-write。 */
   priority?: RequestPriority;
-  /** 发起插件 id（source="plugin" 时必填，流入通信日志；ADR-039）。 */
+  /** 发起插件 id（source="plugin" 时必填，流入通信日志）。 */
   pluginId?: string | null;
   /** 请求创建时的路由快照；缺省时在本方法入队前快照当前会话地址。 */
   route?: RequestRoute;
@@ -105,7 +105,7 @@ interface ExchangeMeta {
   unitAddress: number;
   userAddress: number | null;
   sentAddress: number | null;
-  /** 功能码（codec 路径由 codec 自定义，日志记录为 null；ADR-040）。 */
+  /** 功能码（codec 路径由 codec 自定义，日志记录为 null）。 */
   functionCode: number | null;
   quantity: number;
   pluginId: string | null;
@@ -113,13 +113,13 @@ interface ExchangeMeta {
 
 type ResolvedRequestRoute = Readonly<RequestRoute>;
 
-/** 会话协议：rtu（默认）/ tcp（2026-08-23 TCP 接线）。 */
+/** 会话协议：rtu（默认）/ tcp（TCP 接线）。 */
 export type SessionProtocol = "rtu" | "tcp";
 
 /** 内置 RTU 与 TCP 解码结果的公共形态（kind 判别兼容）。 */
 type DecodedResponse = DecodedRtuResponse | DecodedTcpResponse;
 
-/** 全部解码结果（内置 + codec，ADR-040）：判别名互斥，可安全判别。 */
+/** 全部解码结果（内置 + codec）：判别名互斥，可安全判别。 */
 type AnyDecodedResponse = DecodedResponse | CodecDecodedResponse;
 
 /** 会话内部统一的分帧解析器形态：内置 Rtu/TcpFrameParser 与 codec FrameParser 均可赋值。 */
@@ -180,7 +180,7 @@ function notConnectedError(): MamepError {
   });
 }
 
-/** 未知 codecId（ADR-040）：构造期报错，不静默回退。 */
+/** 未知 codecId：构造期报错，不静默回退。 */
 function codecNotFoundError(codecId: string): MamepError {
   return createMamepError({
     code: "CODEC_NOT_FOUND",
@@ -192,7 +192,7 @@ function codecNotFoundError(codecId: string): MamepError {
   });
 }
 
-/** 非连续读写需要 codec 协议（内置 rtu/tcp 不支持，ADR-040）。 */
+/** 非连续读写需要 codec 协议（内置 rtu/tcp 不支持）。 */
 function codecRequiredError(): MamepError {
   return createMamepError({
     code: "CODEC_REQUIRED",
@@ -215,7 +215,7 @@ function timeoutError(timeoutMs: number): MamepError {
   });
 }
 
-/** quantity 越界守卫（ADR-030）：读 ≤125、写 ≤123，由会话层统一校验。 */
+/** quantity 越界守卫：读 ≤125、写 ≤123，由会话层统一校验。 */
 function quantityOutOfRangeError(
   operation: "read" | "write",
   quantity: number,
@@ -280,7 +280,7 @@ function unexpectedResponseKindError(
   });
 }
 
-/** 连续地址列表（codec 路径把 sentAddress+quantity 映射为地址列表，ADR-040）。 */
+/** 连续地址列表（codec 路径把 sentAddress+quantity 映射为地址列表）。 */
 function contiguousAddresses(start: number, quantity: number): number[] {
   return Array.from(
     { length: quantity },
@@ -361,13 +361,13 @@ export interface SessionOptions {
   clock: Clock;
   /** 连接配置快照；超时、重试、Rx Delay 的修改对后续请求生效。 */
   config: RtuConnectionProfile | TcpConnectionProfile;
-  /** 协议：rtu（默认）/ tcp / 注册表 codecId（ADR-040 插件 Phase B）。 */
+  /** 协议：rtu（默认）/ tcp / 注册表 codecId（插件）。 */
   protocol?: SessionProtocol | string;
-  /** codec 注册表：protocol 为 codecId 时用于解析 codec（ADR-040）。 */
+  /** codec 注册表：protocol 为 codecId 时用于解析 codec。 */
   codecRegistry?: CodecRegistry;
-  /** 初始从站地址（RTU，默认 1）；连接后可经 setSlaveAddress 动态更新（2026-08-19）。 */
+  /** 初始从站地址（RTU，默认 1）；连接后可经 setSlaveAddress 动态更新。 */
   slaveAddress?: number;
-  /** TCP Unit ID（MBAP 单元标识，默认 0）：连接时由 profile 确定，连接后可经 setUnitId 动态更新（2026-08-25）。 */
+  /** TCP Unit ID（MBAP 单元标识，默认 0）：连接时由 profile 确定，连接后可经 setUnitId 动态更新。 */
   unitId?: number;
   onLog?: (event: CommunicationLogEvent) => void;
   onStateChange?: (state: ConnectionState) => void;
@@ -379,13 +379,13 @@ export class CommunicationSession {
   private readonly options: SessionOptions;
   private readonly scheduler: RequestScheduler;
   private pendingExchange: PendingExchange | null = null;
-  /** 会话协议：rtu / tcp / codecId（ADR-040）。 */
+  /** 会话协议：rtu / tcp / codecId。 */
   private readonly protocol: string;
   /** 自定义协议 codec（protocol 为 codecId 时非空；内置 rtu/tcp 为 null，走内置路径）。 */
   private readonly codec: ProtocolCodec | null;
-  /** TCP Unit ID（MBAP 单元标识，默认 0）：连接后可经 setUnitId 动态更新（2026-08-25）。 */
+  /** TCP Unit ID（MBAP 单元标识，默认 0）：连接后可经 setUnitId 动态更新。 */
   private unitId: number;
-  /** 当前从站地址（RTU）：连接后可动态更新（每表独立设置，2026-08-19）。 */
+  /** 当前从站地址（RTU）：连接后可动态更新（每表独立设置）。 */
   private slaveAddress: number;
   /** TCP Transaction ID 计数器：16 位递增回绕，连接时重置（§8.7）。 */
   private nextTransactionId = 0;
@@ -393,7 +393,7 @@ export class CommunicationSession {
   constructor(options: SessionOptions) {
     this.options = options;
     this.protocol = options.protocol ?? "rtu";
-    // ADR-040 决策 2（1B 通用注册表）：内置 rtu/tcp 走既有内置路径（双轨零回归）；
+    // 通用注册表）：内置 rtu/tcp 走既有内置路径（双轨零回归）；
     // codecId 从注册表解析，未知即构造期报错（不静默回退）。
     if (this.protocol !== "rtu" && this.protocol !== "tcp") {
       const codec = options.codecRegistry?.get(this.protocol);
@@ -496,8 +496,8 @@ export class CommunicationSession {
   }
 
   /**
-   * 动态更新当前从站地址（RTU）：对后续所有请求（读/写/轮询/追踪）生效（2026-08-19）。
-   * TCP 的 Unit ID 由 setUnitId 更新（2026-08-25），两者互不影响。
+   * 动态更新当前从站地址（RTU）：对后续所有请求（读/写/轮询/追踪）生效。
+   * TCP 的 Unit ID 由 setUnitId 更新，两者互不影响。
    */
   setSlaveAddress(slave: number): void {
     this.slaveAddress = slave;
@@ -505,7 +505,7 @@ export class CommunicationSession {
 
   /**
    * 动态更新当前 TCP Unit ID（MBAP 单元标识）：对后续所有请求（读/写/轮询/追踪）生效
-   * （2026-08-25，打通 ADR-022 已知限制）。RTU 从站地址由 setSlaveAddress 更新，两者互不影响。
+   * （打通已知限制）。RTU 从站地址由 setSlaveAddress 更新，两者互不影响。
    */
   setUnitId(unitId: number): void {
     this.unitId = unitId;
@@ -601,7 +601,7 @@ export class CommunicationSession {
     );
   }
 
-  /** 多寄存器读取（ADR-030）：一次 FC03 读 quantity 个连续寄存器。codec 路径映射为连续地址列表。 */
+  /** 多寄存器读取：一次 FC03 读 quantity 个连续寄存器。codec 路径映射为连续地址列表。 */
   readRegisters(
     sentAddress: number,
     quantity: number,
@@ -638,7 +638,7 @@ export class CommunicationSession {
   }
 
   /**
-   * codec 路径：按寄存器编号列表非连续读取（ADR-040）。内置 rtu/tcp 不支持，返回能力错误。
+   * codec 路径：按寄存器编号列表非连续读取。内置 rtu/tcp 不支持，返回能力错误。
    * 一次请求可读任意不连续寄存器（如安川 MEMOBUS 67/010D，≤120）。
    */
   readRegistersAt(
@@ -676,7 +676,7 @@ export class CommunicationSession {
     return this.writeRegisters(sentAddress, [rawValue], meta);
   }
 
-  /** 多寄存器写入（ADR-030）：一次 FC0x10 写 values.length 个连续寄存器。codec 路径映射为连续条目。 */
+  /** 多寄存器写入：一次 FC0x10 写 values.length 个连续寄存器。codec 路径映射为连续条目。 */
   writeRegisters(
     sentAddress: number,
     values: number[],
@@ -710,7 +710,7 @@ export class CommunicationSession {
   }
 
   /**
-   * codec 路径：按（地址, 值）列表非连续写入（ADR-040）。内置 rtu/tcp 不支持，返回能力错误。
+   * codec 路径：按（地址, 值）列表非连续写入。内置 rtu/tcp 不支持，返回能力错误。
    * 一次请求可写任意不连续寄存器（如安川 MEMOBUS 67/010E，≤60）。
    */
   writeRegistersAt(
@@ -814,7 +814,7 @@ export class CommunicationSession {
     );
   }
 
-  /** codec 路径读执行（ADR-040）：编解码与分帧全委托 codec。 */
+  /** codec 路径读执行：编解码与分帧全委托 codec。 */
   private async executeCodecRead(
     addresses: number[],
     meta: ReadRegistersMeta,
@@ -844,7 +844,7 @@ export class CommunicationSession {
     return fail(unexpectedResponseKindError("codec read", decoded.value));
   }
 
-  /** codec 路径写执行（ADR-040）：编解码与分帧全委托 codec。 */
+  /** codec 路径写执行：编解码与分帧全委托 codec。 */
   private async executeCodecWrite(
     entries: CodecWriteEntry[],
     meta: WriteRegistersMeta,
@@ -1088,7 +1088,7 @@ export class CommunicationSession {
     };
   }
 
-  /** 构建单次写尝试（frame + expect，FC0x10 多值，ADR-030）：TCP 每次尝试使用新 Transaction ID。 */
+  /** 构建单次写尝试（frame + expect，FC0x10 多值）：TCP 每次尝试使用新 Transaction ID。 */
   private buildWriteAttempt(
     sentAddress: number,
     values: number[],

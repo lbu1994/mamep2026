@@ -1,9 +1,9 @@
 /**
- * PluginCommunicationApi 工厂（docs/architecture/ports/plugin-api/插件契约.md §4，ADR-039）。
+ * PluginCommunicationApi 工厂（docs/architecture/ports/plugin-api/插件契约.md §4）。
  * 组装 CommunicationSession 的插件通信面：请求经统一调度器（RequestScheduler）执行，
  * 元数据 source:"plugin" + pluginId + RequestPriority:"plugin-background"，日志携带
  * pluginId（CommunicationLogEvent.pluginId）。不暴露 Transport / socket 句柄。
- * Phase A 实现 readRegisters / writeRegisters；batchRead / trace 随 Phase F 扩展。
+ *  实现 readRegisters / writeRegisters；batchRead / trace 随扩展。
  */
 import type { CommunicationSession } from "@mamep2026/communication";
 import {
@@ -35,7 +35,7 @@ function unavailableError(operation: string) {
   });
 }
 
-/** 构造插件通信面（ADR-039）；宿主在装配 PluginRegistry 时注入。 */
+/** 构造插件通信面；宿主在装配 PluginRegistry 时注入。 */
 export function createPluginCommunicationApi(
   deps: PluginCommunicationDeps,
 ): PluginCommunicationApi {

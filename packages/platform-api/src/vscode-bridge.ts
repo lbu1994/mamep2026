@@ -140,7 +140,7 @@ export function createVscodeBridge(
       };
       for (const listener of listeners) listener(hostEvent);
     }
-    // type === "request"：宿主不向 Webview 发 request（骨架阶段），忽略。
+    // type === "request"：宿主不向 Webview 发 request，忽略。
   });
 
   return {
@@ -157,7 +157,7 @@ export function createVscodeBridge(
     getColorTheme: () => postRequest<ColorThemeKind>("get-color-theme", {}),
     getDebugState: () =>
       postRequest<VscodeHostDebugState | null>("debug:get-state", {}),
-    // ---- RTU 会话（VSCode 接线，2026-08-23）----
+    // ---- RTU 会话（VSCode 接线）----
     enumerateSerialPorts: () =>
       postRequest<SerialPortOption[]>("serial-enumerate", {}),
     sessionConnect: (payload: SessionConnectPayload) =>
@@ -233,7 +233,7 @@ export function createVscodeBridge(
           ? { suggestedName: options.suggestedName }
           : {}),
       }),
-    // ---- 工作区文件仓储（2026-08-30，ADR-036）：VSCode filesystem 维持 unsupported，
+    // ---- 工作区文件仓储：VSCode filesystem 维持 unsupported，
     // 宿主返回能力错误；转发保留契约一致性（VscodeHostApi 继承 MamepHostApi）。----
     workspaceLoad: () =>
       postRequest<WorkspaceLoadResponse>("workspace-load", {}),
@@ -242,13 +242,13 @@ export function createVscodeBridge(
     workspaceClear: () => postRequest<null>("workspace-clear", {}),
     workspaceCreateBackup: () =>
       postRequest<null>("workspace-create-backup", {}),
-    // ---- 插件存储（2026-08-30，ADR-038）：VSCode 由 Extension Host globalState 承载，
+    // ---- 插件存储：VSCode 由 Extension Host globalState 承载，
     // 经 plugin-store-load/save 转发。----
     pluginStoreLoad: () =>
       postRequest<PluginStoreDataResponse>("plugin-store-load", {}),
     pluginStoreSave: (data: PluginStoreDataPayload) =>
       postRequest<null>("plugin-store-save", { data }),
-    // ---- 插件运行时桥（2026-08-31，ADR-039）：Phase A 宿主返回能力错误，契约就位。----
+    // ---- 插件运行时桥： 宿主返回能力错误，契约就位。----
     pluginRuntimeLoad: (payload: PluginRuntimeLoadPayload) =>
       postRequest<null>("plugin-runtime-load", payload),
     pluginRuntimeUnload: (payload: PluginRuntimeUnloadPayload) =>

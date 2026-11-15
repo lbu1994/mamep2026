@@ -1,5 +1,5 @@
 /**
- * `@capacitor/app` 生命周期桥（ADR-050 Phase 3）。
+ * `@capacitor/app` 生命周期桥。
  *
  * 单独子路径导出（`@mamep2026/platform-android/capacitor-app`）：只有 Android 装配才加载
  * `@capacitor/app`，浏览器 / Electron / VSCode 构建不引入该依赖。

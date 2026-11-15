@@ -1,13 +1,12 @@
 /**
- * 宿主侧插件执行面（ADR-055，2026-09-12）。
+ * 宿主侧插件执行面。
  *
  * Electron 主进程 / VSCode Extension Host 从**同一份插件存储**（主进程 plugins.json /
  * Extension Host globalState，即渲染端 `plugin-store-save` 的落点）加载插件并执行，
- * 使插件贡献的 **codec / addressTransform** 在宿主侧真正可用（此前由宿主静态 import
- * 插件包提供，ADR-054 §7.1 把它列为已知限制）。
+ * 使插件贡献的 **codec / addressTransform** 在宿主侧可用。
  *
  * 关键语义：
- * - **只执行 `executionMode === "same-process"` 且 enabled 的可执行插件**（ADR-055 决策 2）：
+ * - **只执行 `executionMode === "same-process"` 且 enabled 的可执行插件**：
  *   隔离线程插件无法向宿主会话贡献同步 codec/transform，故宿主跳过；纯清单插件无执行面，
  *   同样跳过（其贡献点由渲染端消费）；**已禁用插件同样卸载**（不在宿主侧残留同步能力）。
  * - 触发：宿主启动时一次 + 渲染端每次 `plugin-store-save` 后一次。
@@ -18,12 +17,12 @@
  *   与渲染端（能力矩阵已移除）不一致。插件数量极少、同步很稀疏，重建成本可忽略。
  * - `codecRegistry` 是**稳定引用**（宿主会话在构造时持有）：`CodecRegistry` 无注销 API，
  *   卸载后其 codec 仍留在宿主注册表中 —— 该残留无害（渲染端已移除该协议入口，
- *   宿主不会再收到该 codecId 的会话请求），属已知限制（见 ADR-055）。
+ *   宿主不会再收到该 codecId 的会话请求）。
  * - `ctx.registries` 由宿主提供：codec（宿主会话 codec 注册表）、dataType（Node 侧
  *   `createDataTypeResolver()`，纯 TS 可在宿主运行）、addressTransform（宿主注册表）。
  * - 错误隔离：加载 / activate 失败只影响该插件（记录错误），不影响宿主会话与其它插件。
- * - **不做跨进程能力回传**（ADR-055 决策 3）：宿主加载失败时渲染端仍会显示该协议，
- *   表现为连接失败（已在 ADR / 指南中明示）。
+ * - **不做跨进程能力回传**：宿主加载失败时渲染端仍会显示该协议，
+ *   表现为连接失败（见开发指南）。
  */
 import {
   createDataTypeResolver,

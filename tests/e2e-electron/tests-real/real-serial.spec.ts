@@ -13,7 +13,7 @@
  * 场景与浏览器 real-serial 一致：连接 Online → FC03 读 / FC10 写 + 读回 → 写值门控
  * → 异常区 → no-response 超时 → 边界 → 扩展（分片/延迟）→ 通信日志 → 断开 → 无 console 错误。
  *
- * 2026-09-12（ADR-054）：插件不再随包分发/首启安装，故本 spec 在基础表用例前**先经
+ * 插件不再随包分发/首启安装，故本 spec 在基础表用例前**先经
  * Settings → Plugins 安装** `custom-function-code` 插件（`pnpm build:plugins` 产物，
  * 安装时授权「同进程执行」——codec / dataType 属同步注册面），否则侧边栏不会出现
  * 自定义功能码分组。
@@ -104,7 +104,7 @@ let app: ElectronApplication;
 let page: Page;
 const consoleErrors: string[] = [];
 
-/** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。 */
+/** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
 async function setRadixHex(p: Page): Promise<void> {
   // 限定到活动表选项卡的工具栏（多 Sheet 时每个表各有工具栏，不得命中隐藏表）。
   const toolbar = p.locator(
@@ -118,11 +118,11 @@ async function setRadixHex(p: Page): Promise<void> {
   await expect(toolbar).toContainText("HEX", { timeout: 5000 });
 }
 /**
- * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时已改为 50ms
- * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
- * 2026-09-16 增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
- * 改为「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
- * 2026-09-17：收窄方式由 `keyboard.type` 改为**直接 fill 搜索框**（与 e2e-vscode 同源）——
+ * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时为 50ms
+ * 对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
+ *  增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
+ * 使用「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
+ * 收窄方式为**直接 fill 搜索框**（与 e2e-vscode 同源）——
  * 键盘输入依赖窗口焦点，失焦时列表不收敛 → 虚拟列表不渲染目标档位 → 点选超时。
  */
 async function setRtuTimeoutSelect(
@@ -160,13 +160,13 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
   await cell.click();
   // 等待进入编辑态：click 触发 React 重渲染渲染出 input（生产构建高负载下可能延迟，
   // 且前序读/写操作的行重渲染尚未 settle 时点击可能命中旧节点）。toBeEditable 自动
-  // 重试直到 input 出现，比裸 waitForTimeout 可靠（2026-08-26 real e2e 竞态）。
+  // 重试直到 input 出现，比裸 waitForTimeout 可靠（real e2e 竞态）。
   const input = activeTable(p).getByLabel("Address", { exact: true }).first();
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
   // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
-  // 短路——real e2e 曾致地址提交被跳过）。改 fill("")+pressSequentially 逐字符输入
-  // （真实键盘事件，onChange 必然触发），toHaveValue 确认受控值同步后再 Enter。
+  // 短路）。使用 fill("")+pressSequentially 逐字符输入（真实键盘事件，onChange 必然触发），
+  // toHaveValue 确认受控值同步后再 Enter。
   await input.fill("");
   await input.pressSequentially(addressHex, { delay: 10 });
   await expect(input).toHaveValue(addressHex);
@@ -256,7 +256,7 @@ async function reconnectAsActiveSheet(p: Page): Promise<void> {
 }
 
 /**
- * 经 Settings → Plugins 安装 custom-function-code 插件产物（ADR-054：插件一律手动安装）。
+ * 经 Settings → Plugins 安装 custom-function-code 插件产物（插件一律手动安装）。
  * 生产构建下「Install Plugin」走主进程 `open-text-file` → `dialog.showOpenDialog`
  * （系统对话框无法自动化），故与 `plugin-host-execution.spec.ts` 同法用 `app.evaluate`
  * 桩替换对话框；该插件贡献 codec / dataType（同步纯函数），确认框中须选「同进程执行」。
@@ -321,10 +321,10 @@ test.beforeAll(async () => {
       if (db.name !== undefined) indexedDB.deleteDatabase(db.name);
     }
   });
-  // 工作区持久化已改为文件仓储（ADR-036，2026-08-30）：IndexedDB 清理不再清除工作区，
+  // 工作区持久化使用文件仓储：IndexedDB 清理不涉及工作区，
   // 一并删除 userData 下 workspace.json(.bak)，避免跨测试/跨运行污染。
   await clearWorkspaceFile(app);
-  // 插件存储同理（ADR-054）：删掉 plugins.json(.bak)，保证本 spec 从「未安装任何插件」基线
+  // 插件存储同理：删掉 plugins.json(.bak)，保证本 spec 从「未安装任何插件」基线
   // 开始（否则上次运行安装的插件会让侧边栏多出分组、重复安装而注册失败）。
   const userDataDir = await app.evaluate(async ({ app: electronApp }) =>
     electronApp.getPath("userData"),
@@ -352,7 +352,7 @@ test("RTU 自动选择 COM4（来自 config/connections.json）+ 连接 Online",
   const modal = page.locator(".ant-modal-container:visible");
 
   // 打开端口下拉框（用户手势触发枚举 → 主进程转发端口列表 → 选项出现）。
-  // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除，ADR-034）。
+  // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除）。
   await modal
     .locator(".ant-form-item")
     .filter({ hasText: "Port" })
@@ -506,10 +506,10 @@ test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", 
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 50ms ×
   // retryCount+1 共 2 次 ≈ 100ms）之后才到达；若此时立即发起新读，RTU 无 Transaction ID
-  // 会把迟到的 0x0700 响应当作新读的响应（真实串口时序竞态，曾致读 0x0000 返回 0x0700
-  // 的值 0000）。两次重试（attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
+  // 会把迟到的 0x0700 响应当作新读的响应，污染 0x0000 的新读。两次重试
+  // （attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
   // 后 ~2500ms 到达（~2500 / ~2550ms）。等两帧迟到响应都在无活动请求时（pendingExchange
-  // 为空）到达并被丢弃，再读回正常区（2026-09-06：默认超时改 50ms，等待 3000ms 覆盖）。
+  // 为空）到达并被丢弃，再读回正常区（默认超时改 50ms，等待 3000ms 覆盖）。
   await page.waitForTimeout(3000);
   await setRowAddress(page, "0000");
   await readRow(page);
@@ -536,7 +536,7 @@ test("通信日志：请求/响应/异常帧字节", async () => {
   const list = page.locator(".comm-log .ant-listy-holder");
   // Listy 虚拟列表默认停在底部（最新帧可见）；最早帧（写门控异常 01 90 03）可能被挤出
   // 视口（延迟响应的迟到帧也会占用视口）。滚动到顶部让最早帧渲染后断言，再滚回底部
-  // 断言最新帧（2026-08-26 real e2e 修复）。
+  // 断言最新帧。
   await list.evaluate((el) => {
     el.scrollTop = 0;
   });
@@ -573,7 +573,7 @@ test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成�
 test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Type=String → Data 显示字符串", async () => {
   // 从站保持寄存器 0x0010–0x001F 预置 32 字符 ASCII（16 寄存器 × 2 字符，高字节在前）；
   // 该区间未命中任何规则 → 回退正常行为。应用侧用范围行 + Type=String 一次 FC03 读回，
-  // Data 列直接显示可读 ASCII 字符串（ADR-030 字符串语义）。
+  // Data 列直接显示可读 ASCII 字符串（字符串语义）。
   const ascii = asciiStringRegion();
   await setRowAddress(page, "0010-001F");
   await setRowType(page, "String");
@@ -643,9 +643,9 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
     timeout: CONNECTED_TIMEOUT,
   });
 
-  // 自定义功能码表（ADR-043 E-4）：FC65 读保持寄存器 1（此前 FC10 写 0x12AB）→ "12AB"；
+  // 自定义功能码表：FC65 读保持寄存器 1（此前 FC10 写 0x12AB）→ "12AB"；
   // FC66 写 3=0xABCD → 回执；并用通信日志断言帧字节（FC65/FC66 与 FC03/FC10 同构，须靠帧区分）。
-  // 前置：custom-function-code 插件已在前一用例经 Settings → Plugins 安装（ADR-054）。
+  // 前置：custom-function-code 插件已在前一用例经 Settings → Plugins 安装。
   await addBasicSheet(page, CUSTOM_FC_GROUP_LABEL);
   await setRadixHex(page);
   await reconnectAsActiveSheet(page);
@@ -660,7 +660,7 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
 
   // 通信日志：清空后重建目标帧（FC65 读 + FC66 写），断言函数码字节。
   // Listy 虚拟列表只渲染视口内行：最早帧（FC65 读请求）可能被挤出，先滚到顶部断言
-  // 最早帧，再滚回底部断言最新帧（与既有「通信日志」用例一致，2026-08-26 real e2e 修复）。
+  // 最早帧，再滚回底部断言最新帧（与既有「通信日志」用例一致）。
   await page.getByRole("tab", { name: "Comm Log" }).click();
   await page.getByRole("button", { name: /Clear/i }).click();
   await setRowAddress(page, "0001");
@@ -689,7 +689,7 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
 });
 
 test("断开连接 → Offline，可重连 → Online（稳定性）", async () => {
-  // 断开（Header 连接按钮已整合 2026-09-06，断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定）。
+  // 断开（Header 连接按钮已整合，断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定）。
   await page.getByRole("button", { name: /Disconnect/i }).click();
   await expect(
     page.locator(".connection-cluster__button[data-conn-state='disconnected']"),
@@ -705,7 +705,7 @@ test("断开连接 → Offline，可重连 → Online（稳定性）", async () 
   const modal = page.locator(".ant-modal-container:visible");
   const rtu = rtuConfig();
   // 打开下拉触发枚举（用户手势），等待 COM4 选项后选择。
-  // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除，ADR-034）。
+  // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除）。
   await modal
     .locator(".ant-form-item")
     .filter({ hasText: "Port" })

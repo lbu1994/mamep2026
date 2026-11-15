@@ -1,5 +1,5 @@
 /**
- * VSCode 端主题完整适配 e2e（UI 级，ADR-027）。
+ * VSCode 端主题完整适配 e2e（UI 级）。
  *
  * 生产 webview（vscode-webview:// frame）内验证：ui-theme 把 --vscode-* 主题色映射为
  * antd cssVar token（--ant-color-*），antd 表面 token 实时跟随 VSCode 主题（container=
@@ -19,9 +19,9 @@ test.skip(
 
 /**
  * 等待承载共享 UI 的 webview 内容 frame 出现。
- * VSCode 1.134 webview 为两层：容器 frame（vscode-webview://.../index.html）内嵌
- * 内容 frame（vscode-webview://.../fake.html，承载 #root/.ant-app 共享 UI）。
- * 按 url 前缀会误匹配容器 frame，须定位含 UI 的内容 frame（2026-08-25 实测）。
+ * VSCode 1.134 webview 为两层：容器 frame（vscode-webview://。/index.html）内嵌
+ * 内容 frame（vscode-webview://。/fake.html，承载 #root/.ant-app 共享 UI）。
+ * 按 url 前缀会误匹配容器 frame，须定位含 UI 的内容 frame（实测）。
  */
 async function waitForWebviewFrame(page: Page): Promise<Frame> {
   const deadline = Date.now() + 30_000;
@@ -127,7 +127,7 @@ test("VSCode 主题完整适配（UI 级）：跟随 + 实时切换 + 面板重�
     if (msg.type() !== "error") return;
     // VS Code 自身基础设施（扩展市场查询 / 网络资源加载）的报错与 webview 应用无关，
     // 且为网络环境性 flaky，不纳入「无 console 错误」断言；只统计来自共享 UI webview
-    // （vscode-webview://）的 console 错误（2026-08-26 real e2e 修复）。
+    // （vscode-webview://）的 console 错误。
     const sourceUrl = msg.location()?.url ?? "";
     if (!sourceUrl.startsWith("vscode-webview://")) return;
     consoleErrors.push(`CONSOLE: ${msg.text()}`);

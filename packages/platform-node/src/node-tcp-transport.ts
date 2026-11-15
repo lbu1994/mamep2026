@@ -1,5 +1,5 @@
 /**
- * Node TCP 传输适配器（docs/TECH_DESIGN.md §34.3.16、ADR-020 后续 Node TCP Adapter）。
+ * Node TCP 传输适配器（docs/TECH_DESIGN.md §34.3.16 后续 Node TCP Adapter）。
  * 只处理打开/关闭/字节读写与事件；不理解 Modbus 或寄存器表（MBAP 组帧/分帧归协议与会话层）。
  * 关闭幂等；重复连接不泄漏监听器（§34.3.13）；错误经 mapTcpError 映射后上抛。
  */

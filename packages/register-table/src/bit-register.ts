@@ -1,5 +1,5 @@
 /**
- * 位明细展开的领域逻辑（ADR-052，2026-09-11）。
+ * 位明细展开的领域逻辑。
  *
  * 语义：
  * - 单寄存器行（registerCount=1）或范围行的寄存器子行（该寄存器自身 dataType 为 binary）
@@ -7,9 +7,9 @@
  * - 位值切换只更新**当前值**（`registerValues[registerIndex]` + 父行 `cellText`），
  *   **不触发任何设备写入**（是否写设备仍由用户按 Write 决定）；
  * - 未读取（`registerValues` 缺失）时以「父行 `cellText` 派生，失败全 0」为基准
- *   （与 `commitChildCellText` 同语义，ADR-031/ADR-052 决策 4）；
+ *   （与 `commitChildCellText` 同语义）；
  * - 位注释存 `RegisterRow.bitComments`（外层=寄存器序号，内层长度 16、下标=bit 号），
- *   按需创建；某寄存器全空存 `null`、整体全空 `bitComments = null`（ADR-052 决策 2）；
+ *   按需创建；某寄存器全空存 `null`、整体全空 `bitComments = null`；
  * - 纯函数、不可变、不依赖 UI/store；设备请求路径不经过本模块。
  */
 import {
@@ -42,13 +42,13 @@ export interface BitEntry {
   value: BitValue | null;
   /** 位掩码文本（如 `0x8000`、`0x0001`）。 */
   maskText: string;
-  /** 位名称（无名称为空串；ADR-052 需求追加，位 Name 列可编辑）。 */
+  /** 位名称：无名称为空串，位 Name 列可编辑。 */
   name: string;
   /** 位注释（无注释为空串）。 */
   comment: string;
 }
 
-/** 模块级缺省解析器（仅内置；ADR-043 E-3 插件类型由 UI 注入 resolver）。 */
+/** 模块级缺省解析器（仅内置插件类型由 UI 注入 resolver）。 */
 const defaultResolver: DataTypeResolver = createDataTypeResolver();
 
 function bitError(code: string, technicalMessage: string) {

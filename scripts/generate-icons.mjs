@@ -3,14 +3,14 @@
  * 应用图标生成脚本：build/AppIcon.svg（单一事实源）→ 各端打包所需格式。
  *
  * 产出：
- *   - apps/vscode-extension/icon.png   VSCode 扩展图标（VS Code 市场要求 PNG，256×256）
- *   - build/icon.ico                   Electron Windows 图标（多尺寸 PNG 压缩 ICO，
+ *   - apps/vscode-extension/icon.png VSCode 扩展图标（VS Code 市场要求 PNG，256×256）
+ *   - build/icon.ico Electron Windows 图标（多尺寸 PNG 压缩 ICO，
  *                                      electron-builder 的 win.icon 指向，rcedit 写入 exe 资源）
- *   - Android 启动图标（2026-09-11 新增，用户要求"全白底 + 黑色线条"）：
- *       apps/android/android/app/src/main/res/mipmap-<density>/ic_launcher.png            （白底方形）
- *       apps/android/android/app/src/main/res/mipmap-<density>/ic_launcher_round.png      （白底圆形）
+ *   - Android 启动图标（新增，用户要求"全白底 + 黑色线条"）：
+ *       apps/android/android/app/src/main/res/mipmap-<density>/ic_launcher.png （白底方形）
+ *       apps/android/android/app/src/main/res/mipmap-<density>/ic_launcher_round.png （白底圆形）
  *       apps/android/android/app/src/main/res/mipmap-<density>/ic_launcher_foreground.png（透明底，自适应图标前景）
- *       apps/android/android/app/src/main/res/values/ic_launcher_background.xml   （背景色 #FFFFFF）
+ *       apps/android/android/app/src/main/res/values/ic_launcher_background.xml （背景色 #FFFFFF）
  *
  * 说明：源 SVG 线条为黑色、背景透明；打包图标（exe/市场/VSIX/Android）需在暗黑模式下可读，
  *       渲染时统一 flatten 合成白色背景（黑色线条 + 白底）。
@@ -85,7 +85,7 @@ function buildIco(entries) {
 await mkdir(path.dirname(ELECTRON_ICO), { recursive: true });
 await writeFile(ELECTRON_ICO, buildIco(pngs));
 
-// 3. Android 启动图标（2026-09-11，用户要求：全白底 + 黑色线条）
+// 3. Android 启动图标（用户要求：全白底 + 黑色线条）
 //
 //    - legacy `ic_launcher.png` / `ic_launcher_round.png`：白底 + 黑线条；
 //      图形占画布 LEGACY_CONTENT_RATIO（留白，避免图形贴边显得过大）。

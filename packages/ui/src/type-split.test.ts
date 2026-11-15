@@ -1,5 +1,5 @@
 /**
- * type-split（ADR-030 Type 双列拆分）单测：进制/scale ↔ DataType 映射。
+ * type-split（Type 双列拆分）单测：进制/scale ↔ DataType 映射。
  */
 import { describe, expect, it } from "vitest";
 import {

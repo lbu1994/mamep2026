@@ -1,5 +1,5 @@
 /**
- * ElectronAppHost 单测（ADR-017，2026-08-21；2026-08-21 扩展为下拉框枚举）：
+ * ElectronAppHost 单测（扩展为下拉框枚举）：
  * 能力翻转（RTU 支持 / serialPorts enumerated）、enumerated 串口选择（requestPort 直接
  * resolve 的已授权快照路径 + 主进程事件转发路径）、connect/读写委托走通、
  * 工作区经注入仓储、剪贴板透传 preload 桥。
@@ -99,7 +99,7 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
-    // ---- 主进程 TCP 会话 RPC（2026-08-23 两端 TCP 接线）----
+    // ---- 主进程 TCP 会话 RPC（两端 TCP 接线）----
     sessionTcpConnect: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
@@ -179,7 +179,7 @@ function createFakeBridge(): {
       ok: true,
       value: { content: '{"schemaVersion":4}' },
     })),
-    // ---- 工作区文件仓储桥（2026-08-30，ADR-036：主进程文件持久化；ADR-049 增 recoveryInfo）----
+    // ---- 工作区文件仓储桥（主进程文件持久化增 recoveryInfo）----
     workspaceLoad: vi.fn(async (): Promise<Result<WorkspaceLoadResponse>> => ({
       ok: true,
       value: { content: '{"schemaVersion":4}', recoveryInfo: null },
@@ -196,7 +196,7 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
-    // ---- 插件存储桥（2026-08-30，ADR-038：主进程 plugins.json 持久化）----
+    // ---- 插件存储桥（主进程 plugins.json 持久化）----
     pluginStoreLoad: vi.fn(
       async (): Promise<Result<PluginStoreDataResponse>> => ({
         ok: true,
@@ -207,7 +207,7 @@ function createFakeBridge(): {
       ok: true,
       value: null,
     })),
-    // ---- 插件运行时桥（2026-08-31，ADR-039：Phase A 契约，测试不实际调用）----
+    // ---- 插件运行时桥（契约，测试不实际调用）----
     pluginRuntimeLoad: vi.fn(async (): Promise<Result<null>> => ({
       ok: true,
       value: null,
@@ -358,7 +358,7 @@ describe("ElectronAppHost（ADR-017 扩展：enumerated 下拉框选择）", () 
     expect(host.capabilities.modbusRtu).toBe(true);
     expect(host.capabilities.modbusTcp).toBe(true);
     expect(host.capabilities.serialPorts).toBe("enumerated");
-    // 文件持久化已落地（2026-08-30，ADR-036）：主进程文件仓储。
+    // 文件持久化使用主进程文件仓储。
     expect(host.capabilities.filesystem).toBe("full");
     expect(host.isMockMode).toBe(false);
     expect(host.supportsWebSerial()).toBe(true);
@@ -777,7 +777,7 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
         },
       },
     });
-    // 修复前：host1 + host2 各投递一次 → 2 条；修复后：仅 host2 → 1 条。
+    // 只允许当前 host 投递：仅 host2 → 1 条。
     expect(logs).toEqual([[0, 1, 0, 0, 0, 6]]);
   });
 

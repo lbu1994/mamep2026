@@ -1,12 +1,12 @@
 /**
- * 插件权限模型（docs/architecture/ports/plugin-api/插件契约.md §4，ADR-039）。
+ * 插件权限模型（docs/architecture/ports/plugin-api/插件契约.md §4）。
  * Manifest v2 将 permissions 从自由 string[] 收敛为类型化枚举；未知权限直接拒绝安装。
  * 权限到消费能力的强制在 PluginCommunicationApi 落地（communication 权限门）。
  */
 import { z } from "zod";
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
 
-/** 类型化权限枚举（ADR-039）。新权限 = 追加枚举 + 标签映射 + 消费方强制，不破坏存量插件。 */
+/** 类型化权限枚举。新权限 = 追加枚举 + 标签映射 + 消费方强制，不破坏存量插件。 */
 export const PERMISSION_IDS = [
   "communication",
   "device-write",

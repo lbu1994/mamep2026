@@ -174,7 +174,7 @@ describe("TcpSessionHost 读/写", () => {
     const h = createHarness(3);
     await connect(h);
 
-    // 会话内动态修改 Unit ID 为 9（2026-08-25，ADR-022 已知限制打通）。
+    // 会话内动态修改 Unit ID 为 9（已知限制打通）。
     h.host.setUnitId(9);
     const row = makeRow(0x0001, "");
     const promise = h.host.readRow(row);

@@ -1,5 +1,5 @@
 /**
- * dev-fake-dialog 单测（2026-08-29，ADR-033 方案 A）。
+ * dev-fake-dialog 单测（方案 A）。
  * 覆盖：路径解析（环境变量覆盖 > 缺省约定路径）、fake 打开（文件存在读回 / ENOENT=取消
  * content:null 非错误 / 其他错误结构化失败）、fake 保存（写入 + saved:true + 路径）。
  */

@@ -7,7 +7,7 @@ import { NodePlatformHost, displayLabel } from "./node-platform-host";
 import { FakeSerialPortFactory } from "./testing/fake-serial-port";
 import { FakeNetFactory } from "./testing/fake-socket";
 
-/** 完整 TCP 连接配置（openTcpTransport 入参，2026-08-23 TCP 接线）。 */
+/** 完整 TCP 连接配置（openTcpTransport 入参 TCP 接线）。 */
 function tcpProfile(
   host: string,
   port: number,

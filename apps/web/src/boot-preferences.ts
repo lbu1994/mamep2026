@@ -1,5 +1,5 @@
 /**
- * 首屏偏好缓存 + 渲染前 hydrate（2026-09-16，修复「刷新后主题 / 语言首屏闪烁」FOUC）。
+ * 首屏偏好缓存 + 渲染前 hydrate，避免刷新时主题 / 语言首屏闪烁。
  *
  * ## 为什么需要它
  * 偏好的唯一事实源是**工作区**（`workspace.preferences.theme / themePrimary / language`），
@@ -10,17 +10,17 @@
  *
  * 本模块提供一份**可同步读取**的启动提示缓存（`localStorage`）：
  * - 写：`installPreferencesCache()` 订阅 store 的偏好（主题 / 主题色预设 / 主色种子 / 语言），
- *   变化即写回（含工作区加载 / 导入 / 重置后的 hydrate），保证缓存始终跟随用户最近一次选择；
+ * 变化即写回（含工作区加载 / 导入 / 重置后的 hydrate），保证缓存始终跟随用户最近一次选择；
  * - 读：`hydrateBootPreferences()` 在 `createRoot().render()` **之前**调用，把偏好落到
- *   store（`theme` / `themePrimary`）、i18n 语言与 `<html data-mamep-theme>` / `<html lang>` 上。
+ * store（`theme` / `themePrimary`）、i18n 语言与 `<html data-mamep-theme>` / `<html lang>` 上。
  *
  * ## 边界
  * - 缓存**不是**事实源：工作区加载完成后仍由 `setWorkspace` 覆盖（两者一致，故无可见跳变）；
- *   工作区被外部改动时，最坏情况只是首帧用了旧偏好。
+ * 工作区被外部改动时，最坏情况只是首帧用了旧偏好。
  * - 全程 best-effort：storage 不可用（隐私模式 / 被策略禁用）/ JSON 损坏 / 版本不符 / 字段非法
- *   → 一律退回默认值，**不抛错、不影响任何流程**（与 ADR-049 的 flush 同一态度）。
+ * → 一律退回默认值，**不抛错、不影响任何流程**（与的 flush 同一态度）。
  * - 四端渲染器共用本模块（浏览器 / Electron / VSCode / Android），故放在 `apps/web`（组合根）：
- *   `packages/ui` 保持不接触具体存储实现的平台无关性。
+ * `packages/ui` 保持不接触具体存储实现的平台无关性。
  */
 import { initI18n, useAppStore, type AppLanguage } from "@mamep2026/ui";
 
@@ -35,11 +35,11 @@ export type BootTheme = "light" | "dark";
 /** 首屏需要应用的偏好（工作区 `preferences` 的启动子集）。 */
 export interface BootPreferences {
   theme: BootTheme;
-  /** 所选主题色预设（ADR-047）：null=内置默认蓝；插件色 = `<pluginId>:<colorId>`。 */
+  /** 所选主题色预设：null=内置默认蓝；插件色 = `<pluginId>:<colorId>`。 */
   themePrimary: string | null;
   /**
-   * `themePrimary` 上次**解析出**的主色（种子，2026-09-16）：插件贡献晚于首帧到达，首帧用它
-   * 过渡着色，避免「插件主题色先默认蓝再变插件色」。旧缓存无此字段 → null（行为同修复前）。
+   * `themePrimary` 上次**解析出**的主色（种子）：插件贡献晚于首帧到达，首帧用它
+   * 过渡着色，避免「插件主题色先默认蓝再变插件色」。旧缓存无此字段 → null。
    */
   themePrimarySeed: string | null;
   language: AppLanguage;

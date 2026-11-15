@@ -1,12 +1,12 @@
 /**
  * 装配编排测试（node 环境；不依赖 React / store / DOM）。
  *
- * 覆盖（对应 2026-09-13「按运行时平台动态 import 宿主」的回归防线）：
+ * 覆盖（对应「按运行时平台动态 import 宿主」的回归防线）：
  * - 按平台加载工厂，透传上下文 / 桥 / 取消信号；
  * - 成功路径的接线与启动顺序（插件 → 注入解析器 → 注册 host → 订阅 → 加载工作区）；
  * - 装配失败兜底：提示 `messages.hostLoadFailed` + 失败态，且不接线、不抛；
  * - **取消竞态**：pending 期间与「工厂已构造后」取消均不得接线，已构造的 host 立即释放
- *   （旧 host 残留订阅会导致通信日志重复投递，2026-08-23 已修 bug 的防护）；
+ *   （旧 host 残留订阅会导致通信日志重复投递已修 bug 的防护）；
  * - visibilitychange：隐藏时挂起后台并 flush，abort 时退订并释放。
  */
 import { describe, expect, it, vi } from "vitest";
@@ -163,7 +163,7 @@ describe("startAppHost", () => {
     await startAppHost(deps, controller.signal);
 
     expect(host.startPlugins).toHaveBeenCalledTimes(1);
-    // 插件就绪：`startPlugins()` 落定后置位（2026-09-16 插件主题色首帧修复）。
+    // 插件就绪：`startPlugins()` 落定后置位。
     await vi.waitFor(() => {
       expect(deps.sinks.setPluginsReady).toHaveBeenCalledWith(true);
     });
@@ -186,7 +186,7 @@ describe("startAppHost", () => {
     // 非 mock：启动自动弹出 Connection Settings（与外壳同一批更新，不再「外壳先出现、弹窗后弹」）。
     expect(deps.sinks.setConnectionModalOpen).toHaveBeenCalledWith(true);
     expect(host.connect).not.toHaveBeenCalled();
-    // 就绪门（2026-09-17）：工作区加载落定后才切换外壳（此前不得 ready —— 否则外壳会先渲染
+    // 就绪门：工作区加载落定后才切换外壳（未就绪时不得 ready，否则外壳会先渲染
     // 默认工作区，出现「侧栏/Tab/底部面板先默认后切换」的首屏闪烁）。
     await vi.waitFor(() => {
       expect(deps.sinks.setHostStatus).toHaveBeenLastCalledWith("ready");

@@ -32,7 +32,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Mamep2026 Android 原生通信插件（ADR-050）。
+ * Mamep2026 Android 原生通信插件。
  *
  * **只做字节搬运**：打开 TCP/USB 串口 / 写字节 / 来字节 / 关闭。帧编码、CRC、MBAP 分帧、超时与重试
  * 全部留在共享 JS 层（packages/communication），因此上层会话/调度/协调器与三端同源。
@@ -43,12 +43,12 @@ import java.util.concurrent.TimeUnit
  * - 事件：data（**整帧聚合**后单次投递）/ closed / error；
  * - 一次只允许一个活动传输（打开新的会先关闭旧的）；
  * - 错误码：TCP_CONNECT_FAILED / TCP_OPEN_FAILED / NOT_OPEN / WRITE_FAILED / REMOTE_CLOSED /
- *   CONNECTION_RESET / USB_PERMISSION_DENIED / USB_DEVICE_NOT_FOUND / USB_DEVICE_BUSY /
- *   USB_DRIVER_UNSUPPORTED / USB_PARAMETERS_UNSUPPORTED / USB_OPEN_FAILED / USB_ENUMERATE_FAILED /
- *   USB_DETACHED / PLUGIN_UNAVAILABLE（由 JS 侧映射为项目错误）。
+ * CONNECTION_RESET / USB_PERMISSION_DENIED / USB_DEVICE_NOT_FOUND / USB_DEVICE_BUSY /
+ * USB_DRIVER_UNSUPPORTED / USB_PARAMETERS_UNSUPPORTED / USB_OPEN_FAILED / USB_ENUMERATE_FAILED /
+ * USB_DETACHED / PLUGIN_UNAVAILABLE（由 JS 侧映射为项目错误）。
  *
  * 读回聚合：TCP 用 `available()` 立即吸收；USB 串口是流式字节，改用 **10ms 空闲窗口**聚合
- * （用户决策 2026-09-10 Q6），既避免分片事件风暴，也远小于 300ms 请求超时预算。
+ * （用户决策 Q6），既避免分片事件风暴，也远小于 300ms 请求超时预算。
  */
 @CapacitorPlugin(name = "MamepTransport")
 class MamepTransportPlugin : Plugin() {
@@ -56,7 +56,7 @@ class MamepTransportPlugin : Plugin() {
     private var socket: Socket? = null
     private var reader: Thread? = null
 
-    // ---- USB-RS485（Phase 2）----
+    // ---- USB-RS485----
     private var usbPort: UsbSerialPort? = null
     private var usbConnection: UsbDeviceConnection? = null
     private var usbIoManager: SerialInputOutputManager? = null
@@ -189,7 +189,7 @@ class MamepTransportPlugin : Plugin() {
                     stopBits,
                     parityConstant(parity),
                 )
-                // 流控：先查驱动是否真支持（不静默忽略，用户决策 2026-09-10 Q5），
+                // 流控：先查驱动是否真支持（不静默忽略，用户决策 Q5），
                 // 不支持一律按 USB_PARAMETERS_UNSUPPORTED 如实上报。
                 val requested = flowControlConstant(flowControl ?: "off")
                 if (requested != UsbSerialPort.FlowControl.NONE &&
@@ -285,7 +285,7 @@ class MamepTransportPlugin : Plugin() {
     }
 
     /**
-     * 屏幕常亮（KeepAwake，ADR-050 Phase 3）：持续轮询/追踪期间保持屏幕不休眠。
+     * 屏幕常亮（KeepAwake）：持续轮询/追踪期间保持屏幕不休眠。
      * 与活动传输无关，故在 closeActiveTransport 中**不**清除；幂等。
      */
     @PluginMethod

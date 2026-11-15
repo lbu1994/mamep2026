@@ -1,10 +1,10 @@
 // @vitest-environment node
 /**
  * Webview dev HTML 生成单测（webview/html.ts 纯函数）。
- * 覆盖修复要点（2026-08-23）：dev 模式主 frame 以 iframe 加载 Vite dev server（渲染正常），
+ * 覆盖要点：dev 模式主 frame 以 iframe 加载 Vite dev server（渲染正常），
  * 主 frame 中继脚本在 iframe ↔ 扩展宿主之间转发 HostMessage Envelope；iframe 内应用
  * （apps/web/src/vscode-dev-bridge.ts）用 postMessage 桥建立 window.mamepHost →
- * VscodeAppHost → serial-enumerate RPC（修复浏览器 Web Serial 权限策略报错）。
+ * VscodeAppHost → serial-enumerate RPC（避免浏览器 Web Serial 权限策略报错）。
  */
 import { describe, expect, it } from "vitest";
 import { getDevHtml } from "./html";

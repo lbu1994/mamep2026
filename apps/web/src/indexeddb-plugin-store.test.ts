@@ -1,5 +1,5 @@
 /**
- * IndexedDBPluginStore 单测（ADR-038，2026-08-30）。
+ * IndexedDBPluginStore 单测。
  * 注入 fake KeyValueStore，覆盖：首次 load（无 key）空存储、roundtrip、损坏数据错误、
  * 非法数据拒绝写入、存储异常错误映射（category plugin）。
  */

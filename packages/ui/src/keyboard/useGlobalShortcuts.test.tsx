@@ -1,5 +1,5 @@
 /**
- * useGlobalShortcuts hook 单测（PRD §8.3 P1，2026-08-30，ADR-037）。
+ * useGlobalShortcuts hook 单测（PRD §8.3 P1）。
  * 覆盖：命中注册表分发、文本输入守卫、弹窗打开抑制、动作映射经 ref 防陈旧闭包。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";

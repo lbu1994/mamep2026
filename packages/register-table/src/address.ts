@@ -1,11 +1,11 @@
 /**
- * 地址提交与 Address Adjust（docs/AGENTS.md §17.2、ADR-013、ADR-014、ADR-030）。
+ * 地址提交与 Address Adjust（docs/AGENTS.md §17.2）。
  * - 编辑态 addressDraft 与提交值 addressValue 分离；
  * - 校验失败保留用户输入并返回结构化错误；
- * - 成功提交后按进制规范化（ADR-051，2026-09-11）：HEX 4 位大写补零；DEC 去前导零（不再保留
+ * - 成功提交后按进制规范化：HEX 4 位大写补零；DEC 去前导零（不再保留
  *   用户原文）；范围行两端各自规范化；空输入归一为 ""；
- * - 范围行（ADR-030）：draft 支持 `start-end`，提交后更新 registerCount（覆盖寄存器数）；
- * - Address Adjust（ADR-042 插件 Phase D；2026-09-02 插件外部化）：表级 addressTransform 配置
+ * - 范围行：draft 支持 `start-end`，提交后更新 registerCount（覆盖寄存器数）；
+ * - Address Adjust（插件插件外部化）：表级 addressTransform 配置
  *   → 运行时变换 apply，ON 时发送地址 = 用户地址 − 1（0 下溢报错），日志记录双地址。
  *   变换本身由随应用分发的 `@mamep2026/address-adjust` 插件提供（经应用装配点注入 resolver；
  *   核心不再内置任何厂商/适配变换）。
@@ -40,7 +40,7 @@ export function commitAddress(
     parsedValue === null ? null : RegisterAddress.create(parsedValue.value);
   if (addressResult !== null && !addressResult.ok) return addressResult;
   const count = parsedValue === null ? 1 : parsedValue.count;
-  // 规范化（ADR-051）：HEX 4 位大写补零；DEC 去前导零；范围行两端各自规范化；空输入归一为 ""。
+  // 规范化：HEX 4 位大写补零；DEC 去前导零；范围行两端各自规范化；空输入归一为 ""。
   const normalizedDraft =
     parsedValue === null
       ? ""
@@ -50,18 +50,18 @@ export function commitAddress(
     addressDraft: normalizedDraft,
     addressValue: addressResult === null ? null : addressResult.value,
     registerCount: count,
-    // 范围长度变化时旧读值不再对齐，清空 registerValues（ADR-030）。
+    // 范围长度变化时旧读值不再对齐，清空 registerValues。
     registerValues: count === row.registerCount ? row.registerValues : null,
-    // 子行元数据按索引保留/截断/补齐（2026-08-27，不随值清空）。
+    // 子行元数据按索引保留/截断/补齐（不随值清空）。
     registers: resizeRegisters(row, count),
-    // 位级注释/名称按寄存器序号保留/截断/补齐（ADR-052，不随值清空）。
+    // 位级注释/名称按寄存器序号保留/截断/补齐（不随值清空）。
     bitComments: resizeBitComments(row.bitComments, count),
     bitNames: resizeBitNames(row.bitNames, count),
     updatedAt: Date.now(),
   });
 }
 
-/** 校验行「范围长度 × 类型合法集」（ADR-030 决策 7/8/10）：不匹配时禁止读写并在类型列报错。 */
+/** 校验行「范围长度 × 类型合法集」：不匹配时禁止读写并在类型列报错。 */
 export function isRowTypeCountValid(
   row: Pick<RegisterRow, "dataType" | "registerCount">,
 ): boolean {

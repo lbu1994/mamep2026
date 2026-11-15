@@ -1,5 +1,5 @@
 /**
- * panels 贡献点消费方单测（jsdom，2026-09-12）。
+ * panels 贡献点消费方单测（jsdom）。
  * 覆盖：插件自带翻译 `title` 优先；无 `title` 时回退应用 i18n `titleKey`；
  * 面板占位内容渲染；`host` 为空时不渲染。
  */

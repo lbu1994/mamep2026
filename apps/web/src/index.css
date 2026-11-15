@@ -8,11 +8,11 @@
 
 /* ---------------- 语义设计令牌（设计系统基础） ----------------
    命名与任务清单一一对应；组件样式不得散落固定颜色，统一取这里的变量。
-   Light（:root）与 Dark（[data-mamep-theme="dark"]）使用相同 Token 名，仅赋值不同。
+   Light（root）与 Dark（[data-mamep-theme="dark"]）使用相同 Token 名，仅赋值不同。
    注意：antd cssVar 的 --ant-* 变量只在 antd 组件作用域（.ant 后代）可解析，
-   :root 上无法引用。品牌/焦点环/信息色（--mamep-brand-primary / --mamep-focus-ring /
+   root 上无法引用。品牌/焦点环/信息色（--mamep-brand-primary / --mamep-focus-ring /
    --mamep-status-info）为「默认主题色」映射，直接在 .ant-app 作用域引用 antd CSS 变量
-   （ADR-048：零硬编码、随库升级自动跟随）；其余令牌为独立设计值显式赋值
+   （零硬编码、随库升级自动跟随）；其余令牌为独立设计值显式赋值
    （与 scripts/check-contrast.mjs 的调色板保持一致）。 */
 
 :root {
@@ -44,7 +44,7 @@
   --mamep-border-default: #d9d9d9;
   --mamep-border-strong: rgba(0, 0, 0, 0.15);
 
-  /* 状态（Light）：品牌/信息色与默认主题色由 .ant-app 作用域映射 antd cssVar（ADR-048） */
+  /* 状态（Light）：品牌/信息色与默认主题色由 .ant-app 作用域映射 antd cssVar */
   --mamep-status-success: #389e0d;
   --mamep-status-warning: #c08a00;
   --mamep-status-error: #cf1322;
@@ -95,8 +95,8 @@
   --mamep-scrollbar-track: transparent;
 }
 
-/* 默认主题色（品牌/信息/焦点环）跟随 antd cssVar（ADR-048）：
-   --ant-* 仅在 antd 组件作用域（.ant 后代）可解析，:root 不可引用，
+/* 默认主题色（品牌/信息/焦点环）跟随 antd cssVar：
+   --ant-* 仅在 antd 组件作用域（.ant 后代）可解析：root 不可引用，
    故在此声明；消费点（主表/侧栏/追踪窗/工具栏）均位于 .ant-app 子树内，
    弹窗 portal 由 MamepApp 注入 effect（同源 antd 令牌）覆盖。 */
 .ant-app {
@@ -120,7 +120,7 @@ body {
 
 /* ---------------- 布局骨架 ---------------- */
 
-/* 启动骨架屏（2026-09-13）：Host 按运行时平台动态加载期间的占位（见 AppStartupPlaceholder）。
+/* 启动骨架屏：Host 按运行时平台动态加载期间的占位（见 AppStartupPlaceholder）。
    100dvh 优先（移动端地址栏收起/展开时视口高度稳定），不支持时回退 100vh。 */
 .app-startup {
   height: 100vh;
@@ -146,7 +146,7 @@ body {
 }
 
 .mamep-main {
-  /* 主区域现为水平 Splitter（2026-09-08 侧边栏可拖宽）：作为外层 Layout 列的方向弹性项，
+  /* 主区域现为水平 Splitter（侧边栏可拖宽）：作为外层 Layout 列的方向弹性项，
      Splitter 自身负责 display:flex；flex:1 填满 Header 以下剩余高度。 */
   flex: 1;
   min-width: 0;
@@ -297,7 +297,7 @@ body {
   border-inline-end: 0;
   background: transparent;
   /* 覆盖 antd `.ant-menu-inline { width:100% }`：配合 .sheet-sidebar__list 的 4px 水平 margin，
-     避免根菜单溢出容器产生水平滚动条（2026-09-08）。 */
+     避免根菜单溢出容器产生水平滚动条。 */
   width: auto;
 }
 
@@ -323,7 +323,7 @@ body {
   min-width: 0;
 }
 
-/* 方案 A（2026-09-08）：隐藏 antd 折叠箭头，整行分组头可点击折叠；「+」为唯一右侧操作。
+/* 方案 A：隐藏 antd 折叠箭头，整行分组头可点击折叠；「+」为唯一右侧操作。
    避免 `^` 箭头与「+」按钮重叠（原 `.ant-menu-submenu-arrow` 与 `.sheet-sidebar__group-action` 撞位）。 */
 .sheet-sidebar__menu.ant-menu-inline
   .ant-menu-submenu-title
@@ -415,7 +415,7 @@ body {
   border-radius: 4px;
   font: inherit;
   /* 跟随主题：输入框不继承父元素 color/background，需显式用 antd 主题令牌，
-     否则暗色下回退到浏览器 UA 默认「白底黑字」（2026-09-07 修复）。
+     否则暗色下回退到浏览器 UA 默认「白底黑字」（修复）。
      对齐 .sheet-tab__input 的取色方式。 */
   background: var(--ant-color-bg-container);
   color: var(--ant-color-text);
@@ -441,9 +441,9 @@ body {
   color: var(--ant-color-text-tertiary);
 }
 
-/* ---- 侧边栏协议分组（ADR-041 决策②）---- */
+/* ---- 侧边栏协议分组---- */
 .sheet-sidebar__groups {
-  /* flex:1 填满剩余高度：使任何水平滚动条贴合侧边栏底部，而非跟随最后一项（2026-09-08）。 */
+  /* flex:1 填满剩余高度：使任何水平滚动条贴合侧边栏底部，而非跟随最后一项。 */
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -481,7 +481,7 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ant-color-text-tertiary);
-  /* flex:1 + min-width:0：长标题收缩并省略号显示，避免横向溢出（2026-09-08）。 */
+  /* flex:1 + min-width:0：长标题收缩并省略号显示，避免横向溢出。 */
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -494,7 +494,7 @@ body {
 }
 
 /* 折叠窄条分组 Menu：收缩为图标入口，悬停弹出该组表项。
-   2026-09-16 修复「图标不居中 + 窄条横向溢出」，两条独立成因：
+ 修复「图标不居中 + 窄条横向溢出」，两条独立成因：
    1) 原 `width: 36px` 与 `.sheet-sidebar__list` 的 4px 水平 margin 叠加 = 实占 44px，
       塞进 36px 窄条（内容区 35px，含 1px 右边框）→ 撑出横向滚动条。
       改为 `width: 100%` + 去掉水平 margin（宽度自适应，不再写死数值）。
@@ -554,7 +554,7 @@ body {
 }
 
 /* 折叠窄条：隐藏分组头「＋」按钮。
-   折叠态侧栏**不提供新建表入口**（按设计，2026-09-16 确认）：窄条只保留折叠按钮与各分组图标；
+   折叠态侧栏**不提供新建表入口**（按设计确认）：窄条只保留折叠按钮与各分组图标；
    新建表请展开侧栏后用分组头「＋」，或直接按 Ctrl+Alt+N。
    此处隐藏同时避免其 Tooltip/热区干扰折叠图标入口的悬停弹出。 */
 .sheet-sidebar.ant-layout-sider-collapsed .sheet-sidebar__group-action {
@@ -562,7 +562,7 @@ body {
 }
 
 /* footer 贴底：侧边栏面板本身已是 flex 列（.sheet-sidebar display:flex;flex-direction:column），
-   footer 的 margin-top:auto 生效；Splitter 面板无 .ant-layout-sider-children 包裹层（2026-09-08）。 */
+   footer 的 margin-top:auto 生效；Splitter 面板无 .ant-layout-sider-children 包裹层。 */
 .sheet-sidebar__footer {
   margin-top: auto;
   flex: none;
@@ -877,7 +877,7 @@ body {
   border-color: var(--ant-color-error);
 }
 
-/* 只读可编辑单元格（ADR-052 位明细行；只读表）：无 hover 边框与手型，仅展示文本。 */
+/* 只读可编辑单元格（位明细行；只读表）：无 hover 边框与手型，仅展示文本。 */
 .register-table__editable-cell-value-wrap--readonly {
   cursor: default;
 }
@@ -886,7 +886,7 @@ body {
   border-color: transparent;
 }
 
-/* ---------------- 位明细行（ADR-052，2026-09-11） ----------------
+/* ---------------- 位明细行 ----------------
    位行 = 二进制寄存器展开出的 16 行（bit15 → bit0）：弱化前景色 + 等宽文本，
    与范围行子行一起形成「父行 > 寄存器/位」的视觉层级。
    Row 高沿用桌面 29px / 移动 44px（与 TS 常量一致，虚拟滚动按行高固定）。 */
@@ -908,7 +908,7 @@ body {
   background: var(--ant-table-row-hover-bg);
 }
 
-/* 位行 Data 列：仅一个开关（1/0），未读取时开关内显示「—」代替 0（2026-09-17 起在开关**内部**，
+/* 位行 Data 列：仅一个开关（1/0），未读取时开关内显示「—」代替 0（起在开关**内部**，
    不再用开关外侧的占位；由 `unCheckedChildren` 动态切换）。
    - 开关在单元格内**水平居中**；
    - 用 antd **默认尺寸**（不传 `size`）而非 `size="small"`：高度 = `fontSize × lineHeight`
@@ -919,7 +919,7 @@ body {
      默认也是 13px，但因 `:where()` 优先级低可被直接覆盖）；
    - 行高约束：本行单元格内容区 = 29px − padding 2×2 − 底边框 1px = **24px**（由固定 24px 高的
      `.register-table__editable-cell-value-wrap` 决定），开关高度 ≤ 24px 不会撑高行（实测 25px 起行高 = 开关高 + 5px）；
-   - 移动端保证触摸命中区 ≥32px（ADR-050 Phase 3）。 */
+   - 移动端保证触摸命中区 ≥32px。 */
 .register-table__bit-value {
   display: flex;
   align-items: center;
@@ -994,7 +994,7 @@ body {
   font-family: var(--mamep-font-ui);
 }
 
-/* No 列（行号 + antd 树形展开图标，2026-08-27）：列宽按本表最大行号位数自适应
+/* No 列（行号 + antd 树形展开图标）：列宽按本表最大行号位数自适应
    （见 packages/ui/src/no-column-width.ts），此处 nowrap 兜底防换行——
    换行会把行高从 29px 撑到 47px（两行）。列级 className 同时作用于 th 与 td，
    表头 nowrap 无副作用。 */
@@ -1136,7 +1136,7 @@ body {
   background: var(--ant-color-primary-bg);
 }
 
-/* 侧边栏水平分割条（2026-09-08 侧边栏可拖宽）：col-resize + hover 高亮，与底部面板视觉一致 */
+/* 侧边栏水平分割条（侧边栏可拖宽）：col-resize + hover 高亮，与底部面板视觉一致 */
 .sidebar-panel__resize {
   cursor: col-resize;
   touch-action: none;
@@ -1270,7 +1270,7 @@ body {
   margin-bottom: 4px;
 }
 
-/* Comm Log 工具栏（2026-08-19 精修）：与主表 toolbar 同源——透明无底，
+/* Comm Log 工具栏（精修）：与主表 toolbar 同源——透明无底，
    仅保留分组 + 1px 竖分隔（Auto scroll 视图开关 | Copy/Clear 操作），融入面板背景。 */
 .comm-log__toolbar {
   gap: 6px;
@@ -1506,7 +1506,7 @@ body {
 }
 
 /* =========================================================
-   2026-08-19 视觉精修（ui-ux-pro-max：Data-Dense 工程工具方向）
+ 视觉精修（ui-ux-pro-max：Data-Dense 工程工具方向）
    纯界面打磨：不改变任何行为/契约，取色全部走既有令牌。
    新增展示钩子：连接按钮 data-conn-state（仅 CSS 消费；状态点颜色内联注入）。
    ========================================================= */
@@ -1731,7 +1731,7 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* Comm Log / Messages 日志内容精修（2026-08-19）：
+/* Comm Log / Messages 日志内容精修：
    方向/级别 Tag 统一为软胶囊（antd 语义态 token，浅/深自适应） */
 .log-row .ant-tag {
   margin-inline-end: 0;
@@ -1858,7 +1858,7 @@ textarea:focus-visible {
   }
 }
 
-/* ---------------- 6. 键盘快捷键总览（Help 弹窗，2026-08-30，PRD §8.3 P1） ---------------- */
+/* ---------------- 6. 键盘快捷键总览（Help 弹窗，PRD §8.3 P1） ---------------- */
 
 .keyboard-shortcuts {
   display: flex;
@@ -1879,7 +1879,7 @@ textarea:focus-visible {
   font-size: 12px;
 }
 
-/* ---------------- 7. 帮助抽屉（PRD §8.3 完整用户帮助，2026-09-05） ---------------- */
+/* ---------------- 7. 帮助抽屉（PRD §8.3 完整用户帮助） ---------------- */
 
 .help-drawer .ant-drawer-body {
   padding-block: 12px;
@@ -1918,7 +1918,7 @@ textarea:focus-visible {
   padding: 3px 5px;
 }
 
-/* ---------------- 8. Settings 抽屉（2026-09-12，容器由 Modal 改为 Drawer） ---------------- */
+/* ---------------- 8. Settings 抽屉 ---------------- */
 
 /*
  * 宽度用数值 size={420}（antd v6 的 width/height 已弃用，非纯数字字符串会触发 rc-drawer

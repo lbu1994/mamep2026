@@ -1,5 +1,5 @@
 /**
- * panels 贡献示例插件 e2e（mockTransport=1，浏览器端，2026-09-12）。
+ * panels 贡献示例插件 e2e（mockTransport=1，浏览器端）。
  *
  * 覆盖：
  * - 安装 `example-panel`（纯清单 manifest，`ui-contribution` 权限）→ 底部面板出现「Plugins」页签，
@@ -66,7 +66,7 @@ test("安装示例插件：底部面板出现 Plugins 页签并渲染面板", as
   const panels = page.locator('.bottom-panel [data-testid="plugin-panels"]');
   await expect(panels).toBeVisible();
   await expect(panels).toContainText(PLUGIN_NAME);
-  // 占位内容（交互式面板组件机制属 Phase F）。
+  // 占位内容（交互式面板组件机制属）。
   await expect(panels).toContainText(
     "Plugin panel content will be provided by the plugin runtime.",
   );

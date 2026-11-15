@@ -1,14 +1,14 @@
 /**
- * Web Serial 最小授权（docs/adr/ADR-017：Electron MVP 复用浏览器 Web Serial 路径；
- * 2026-08-21 扩展：Electron 端串口改为下拉框选择）。
+ * Web Serial 最小授权（Electron 复用浏览器 Web Serial 路径；
+ *  Electron 端串口使用下拉框选择）。
  * 与 ipc.ts 同风格的可测纯逻辑：外部能力（Session）经参数注入，单测用 fake session 验证
  * 权限判定与端口选择，不 mock electron 运行时。
  *
- * 安全取舍（MVP/开发阶段）：仅对本应用 origin 放行 serial 权限（最小授权）；
+ * 安全取舍：仅对本应用 origin 放行 serial 权限（最小授权）；
  * select-serial-port 默认不再自动选择，而是把端口列表转发给渲染进程（onPortsAvailable）、
  * 由用户在应用内下拉框选择，选择结果经安全 IPC（select-serial-port invoke）回传后再
  * callback(portId)（空串 = 用户取消）。设置 selectPort 策略则回到「自动选择」模式
- * （供测试/无人值守场景）。后续 Node Serial Adapter 落地后由主进程接管枚举/连接。
+ * （供测试/无人值守场景）。
  */
 
 /** select-serial-port 端口列表项（Electron 提供的字段子集）。 */
@@ -92,7 +92,7 @@ export function deriveAllowedOrigins(
 
 /**
  * 归一化 origin：仅对 http(s) 用 new URL().origin 规范化（去尾斜杠/默认端口等）。
- * 背景（2026-08-22 实测）：dev 下 permissionCheck 上报 details.securityOrigin 为
+ * 背景（实测）：dev 下 permissionCheck 上报 details.securityOrigin 为
  * `http://localhost:5173/`（带尾斜杠），而 deriveAllowedOrigins 生成的是
  * `new URL().origin`（无尾斜杠），直接精确匹配会把 serial 权限误拒（刷不出串口）。
  * file://（file:///）保持原样：allowlist 已含两个变体，且 URL API 会把 file origin
@@ -112,7 +112,7 @@ export function normalizeOrigin(
   return origin;
 }
 
-/** MVP 端口选择策略：自动选第一个可用端口；无可用设备返回空串（取消请求）。 */
+/** 端口选择策略：自动选第一个可用端口；无可用设备返回空串（取消请求）。 */
 export function selectFirstPort(portList: readonly SerialPortChoice[]): string {
   return portList[0]?.portId ?? "";
 }

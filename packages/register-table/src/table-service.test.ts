@@ -17,7 +17,7 @@ import {
 import { appendCrc } from "@mamep2026/protocol-modbus";
 import { RegisterTableService } from "./table-service";
 
-/** 注入式 Address Adjust 变换（2026-09-02 插件外部化：测试模拟随包插件提供）。 */
+/** 注入式 Address Adjust 变换（插件外部化：测试模拟随包插件提供）。 */
 const minusOneTransform = {
   id: "builtin.address-adjust",
   protocol: "rtu",

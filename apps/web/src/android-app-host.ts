@@ -1,13 +1,13 @@
 /**
- * Android WebView Host（ADR-050 §3、§4）。
+ * Android WebView Host（§4）。
  *
  * **本地混合宿主**（与 `ElectronAppHost` 同构，但全部在同进程内）：
  * - 通用能力（工作区/插件/剪贴板/消息/日志存储/`MockTransport`）委托 `BrowserAppHost`（inner）；
- * - 会话按协议路由：RTU 走 inner（Phase 1 无串口，能力矩阵如实声明不支持），TCP 走本地
+ * - 会话按协议路由：RTU 经 Android USB 串口宿主与 inner 会话共享调度，TCP 走本地
  *   `TcpSessionHost` + `CapacitorTcpTransport`（原生 socket 经 Capacitor 桥）。
  *
  * 为什么不像 VSCode 那样把会话下沉原生：Webview 的 `navigator.serial` 被权限策略拒绝才必须下沉，
- * Android 无此约束；会话留在 JS 才能 100% 复用 `packages/application` 的调度与协调器（ADR-050 §4）。
+ * Android 无此约束；会话留在 JS 才能 100% 复用 `packages/application` 的调度与协调器。
  *
  * 边界：**本类不直接调用 Capacitor 插件**——传输桥由 composition root 注入（`platform-android`）。
  */
@@ -74,7 +74,7 @@ export interface AndroidAppHostOptions {
   repository: WorkspaceRepositoryPort;
   pluginStore?: PluginStorePort | undefined;
   codecRegistry?: CodecRegistry | undefined;
-  /** 同步贡献注册面（ADR-054）：透传 inner，供插件 activate 经 ctx.registries 注册。 */
+  /** 同步贡献注册面：透传 inner，供插件 activate 经 ctx.registries 注册。 */
   syncRegistries?: PluginSyncRegistries | undefined;
   resolveAddressTransform?:
     ((transformId: string) => AddressTransform | null) | undefined;
@@ -85,12 +85,12 @@ export interface AndroidAppHostOptions {
   /** dev mock 传输（`?mockTransport=1`）；Android 正常情况下为 false。 */
   mockTransport?: boolean | undefined;
   /**
-   * 应用生命周期桥（`@capacitor/app`，ADR-050 Phase 3）：硬件返回键 + 前后台状态。
+   * 应用生命周期桥（`@capacitor/app`）：硬件返回键 + 前后台状态。
    * 生产 = `createCapacitorAppLifecycleBridge()`（composition root 注入）；测试注入 fake。
    */
   appLifecycle?: AndroidAppLifecycleBridge | null | undefined;
   /**
-   * 基础能力矩阵（ADR-056）：`executablePlugins` 由装配期运行时探测决定，故由 composition root
+   * 基础能力矩阵：`executablePlugins` 由装配期运行时探测决定，故由 composition root
    * 经 `resolveAndroidHostCapabilities()` 注入；缺省为静态 `androidCapabilities`
    * （fail-closed，不误报可执行插件）。
    */
@@ -98,9 +98,9 @@ export interface AndroidAppHostOptions {
 }
 
 export class AndroidAppHost implements AppHost {
-  /** 基础能力（ADR-056）：装配期由 composition root 注入（含运行时探测结果）。 */
+  /** 基础能力：装配期由 composition root 注入（含运行时探测结果）。 */
   private readonly baseCapabilities: PlatformCapabilities;
-  /** 能力矩阵派生（ADR-054）：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
+  /** 能力矩阵派生：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
   get capabilities(): PlatformCapabilities {
     return deriveCapabilities(this.baseCapabilities, this.pluginRegistry);
   }
@@ -116,10 +116,10 @@ export class AndroidAppHost implements AppHost {
   private readonly tcp: TcpSessionHost;
   /** 平台宿主的串口面（enumerated 平台专用）；注入的自定义宿主不提供则为 null。 */
   private readonly serialHost: AndroidSerialHostPort | null;
-  /** 应用生命周期桥（`@capacitor/app`，ADR-050 Phase 3）；未注入时为 null（无硬件返回键）。 */
+  /** 应用生命周期桥（`@capacitor/app`）；未注入时为 null（无硬件返回键）。 */
   private readonly appLifecycle: AndroidAppLifecycleBridge | null;
 
-  /** 当前活动协议（Phase 1 仅 tcp 可达；rtu 保留以便 Phase 2 直接复用）。 */
+  /** 当前活动协议（rtu / tcp）。 */
   private activeProtocol: "rtu" | "tcp" | null = null;
   /** TCP 连接配置本地镜像（通信属性摘要用）。 */
   private tcpProfile: TcpConnectionProfile | null = null;
@@ -177,7 +177,7 @@ export class AndroidAppHost implements AppHost {
     });
     this.pluginRegistry = this.inner.pluginRegistry;
 
-    // TCP 会话（本地）：传输经平台宿主打开；自动重连复用同一工厂（ADR-035）。
+    // TCP 会话（本地）：传输经平台宿主打开；自动重连复用同一工厂。
     this.tcp = new TcpSessionHost({
       clock: options.clock ?? this.platformHost.clock,
       events: {
@@ -224,7 +224,7 @@ export class AndroidAppHost implements AppHost {
     });
   }
 
-  // ---- 插件系统（委托 inner：加载已安装插件并装配执行面，ADR-054）----
+  // ---- 插件系统（委托 inner：加载已安装插件并装配执行面）----
   startPlugins(): Promise<void> {
     return this.inner.startPlugins();
   }
@@ -258,7 +258,7 @@ export class AndroidAppHost implements AppHost {
     return this.inner.subscribeSaveStatus(listener);
   }
 
-  // ---- 串口（Phase 2：USB-RS485，USB Host + enumerated 下拉）----
+  // ---- 串口（USB-RS485，USB Host + enumerated 下拉）----
   /** Android 无 Web Serial（能力矩阵 `serialPorts:"enumerated"`，UI 走下拉分支）。 */
   supportsWebSerial(): boolean {
     return false;
@@ -297,7 +297,7 @@ export class AndroidAppHost implements AppHost {
   }
 
   /**
-   * 应用进入/离开后台（ADR-050 Phase 3）：按活动协议路由到本地会话宿主。
+   * 应用进入/离开后台：按活动协议路由到本地会话宿主。
    * 后台暂停轮询/追踪（保留配置），回前台按原配置恢复；幂等。
    */
   setBackgroundSuspended(suspended: boolean): void {
@@ -320,7 +320,7 @@ export class AndroidAppHost implements AppHost {
   }
 
   /**
-   * 硬件返回键（ADR-050 Phase 3）：`handler` 返回 `true`（已关掉覆盖层）时不做事；
+   * 硬件返回键：`handler` 返回 `true`（已关掉覆盖层）时不做事；
    * 未消费时最小化应用（Android 惯例：根页面退到后台而非退出进程）。
    *
    * 桥不可用（`@capacitor/app` 未装配）时返回 `null`，调用方退回系统默认行为。
@@ -370,7 +370,7 @@ export class AndroidAppHost implements AppHost {
   }
 
   async connectTcp(profile: TcpConnectionProfile): Promise<Result<void>> {
-    // Android 默认连接参数（ADR-050）：仅覆盖「仍为库默认值」的项，用户改过的值保留。
+    // Android 默认连接参数：仅覆盖「仍为库默认值」的项，用户改过的值保留。
     const effective = applyAndroidTcpDefaults(profile);
     const openResult = await this.platformHost.openTcpTransport(effective);
     if (!openResult.ok) return fail(openResult.error);
@@ -432,7 +432,7 @@ export class AndroidAppHost implements AppHost {
   }
 
   setSlaveAddress(slave: number): void {
-    // TCP 的「从站地址」即 Unit ID（每表独立，ADR-026）。
+    // TCP 的「从站地址」即 Unit ID（每表独立）。
     if (this.activeProtocol === "tcp") {
       this.tcp.setUnitId(slave);
       this.currentTcpUnitId = slave;
@@ -472,11 +472,11 @@ export class AndroidAppHost implements AppHost {
   }
 
   getSession(): CommunicationSession | null {
-    // 与 Electron TCP 路径一致：插件通信面在 TCP 活动时不可用（Phase 1 不新增远程会话面）。
+    // 与 Electron TCP 路径一致：插件通信面在 TCP 活动时不可用（不新增远程会话面）。
     return this.activeProtocol === "tcp" ? null : this.inner.getSession();
   }
 
-  /** 预览可执行插件 entry（ADR-054）。 */
+  /** 预览可执行插件 entry。 */
   previewPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
@@ -484,7 +484,7 @@ export class AndroidAppHost implements AppHost {
     return this.inner.previewPluginEntry(entrySource, executionMode);
   }
 
-  /** 安装可执行插件（ADR-054）：委托 inner（注册 + 持久化）。 */
+  /** 安装可执行插件：委托 inner（注册 + 持久化）。 */
   installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
@@ -638,7 +638,7 @@ export class AndroidAppHost implements AppHost {
     return this.inner.readTextFromClipboard();
   }
 
-  // ---- 文件（Phase 4 接 Capacitor Filesystem + SAF/分享；Phase 1 能力错误）----
+  // ---- 文件（当前返回能力错误）----
   async saveTextFile(_options: {
     suggestedName: string;
     content: string;

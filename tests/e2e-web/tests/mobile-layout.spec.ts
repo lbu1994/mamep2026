@@ -1,5 +1,5 @@
 /**
- * 移动布局 E2E（ADR-050 Phase 3）。
+ * 移动布局 E2E。
  *
  * 浏览器端以 900×800 视口（< 1024 断点）验证移动布局：侧栏 → 左抽屉、底部面板 → 底部抽屉、
  * 移动端不渲染 Splitter 的侧栏/底部面板面板、表格横向滚动 + 固定前两列 + 行高 44。
@@ -22,7 +22,7 @@ async function openMobileApp(page: Page): Promise<void> {
 }
 
 /**
- * 安装 Address Adjust 插件（ADR-054：地址变换由插件贡献，不再随包安装）。
+ * 安装 Address Adjust 插件（地址变换由插件贡献，不再随包安装）。
  * 在**桌面视口**下安装（Settings 入口在窄视口下可能收进「更多」菜单）：
  * 先以默认视口进入应用 → 安装（同进程，同步能力必需）→ 再切到移动视口重载（已持久化）。
  */
@@ -99,7 +99,7 @@ test("移动表格：横向滚动 + 无固定列 + 行高 44", async ({ page }) 
   );
   expect(scrollable).toBe(true);
 
-  // 窄屏**不做任何列固定**（2026-09-11 用户决策）：固定列在多列横滑时占用可视宽度且
+  // 窄屏**不做任何列固定**（用户决策）：固定列在多列横滑时占用可视宽度且
   // 与触摸横滑手势争抢，故与桌面一致都不固定。
   // antd v6 固定列会带 `ant-table-cell-fix*` 类（v5 的 -fix-left 在 v6 已不存在）。
   await expect(sheet.locator('[class*="ant-table-cell-fix"]')).toHaveCount(0);
@@ -114,7 +114,7 @@ test("移动表格：横向滚动 + 无固定列 + 行高 44", async ({ page }) 
 test("移动工具栏：次要控件收进「更多」面板，主操作仍在工具栏", async ({
   page,
 }) => {
-  // Address Adjust 现为插件贡献（ADR-054）：先安装（同进程）再切移动视口。
+  // Address Adjust 现为插件贡献：先安装（同进程）再切移动视口。
   await installAddressAdjust(page);
   await openMobileApp(page);
 

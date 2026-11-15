@@ -1,5 +1,5 @@
 /**
- * 默认主题色运行时跟随 Ant Design（ADR-048）单测。
+ * 默认主题色运行时跟随 Ant Design单测。
  * 验证：
  * - getAntdDefaultBrandColors 与 antd 公开 API theme.getDesignToken({ algorithm }) 一致（浅/深）；
  * - 模拟 antd 默认色变化（仅颜色值）→ 本软件取值自动跟随（无需改代码）；

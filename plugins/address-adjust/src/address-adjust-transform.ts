@@ -1,7 +1,7 @@
 /**
- * Address Adjust 地址变换（2026-09-02，插件外部化：自 packages/register-table/src/address.ts 移出）。
- * 保留现名（用户决策 2026-09-02）：transformId "builtin.address-adjust" 不变（工作区数据零迁移）。
- * 语义：ON 时发送地址 = 用户地址 − 1，0 下溢报错（ADR-042 决策）。
+ * Address Adjust 地址变换（插件外部化：自 packages/register-table/src/address.ts 移出）。
+ * 保留现名（用户决策）：transformId "builtin.address-adjust" 不变（工作区数据零迁移）。
+ * 语义：ON 时发送地址 = 用户地址 − 1，0 下溢报错（决策）。
  */
 import {
   BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID,

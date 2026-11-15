@@ -1,5 +1,5 @@
 /**
- * App 级全局快捷键 hook（PRD §8.3 P1，2026-08-30，ADR-037）。
+ * App 级全局快捷键 hook（PRD §8.3 P1）。
  * 窗口级 keydown 监听只绑定一次，经 ref 读取最新动作映射（keydownRef 模式，
  * 与 RegisterTable 一致，防陈旧闭包）。
  * 守卫顺序：① 焦点在文本输入控件 → 忽略；② 任一弹窗打开 → 忽略；

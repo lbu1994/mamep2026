@@ -94,7 +94,7 @@ const api: MamepHostApi = {
     const result = await invoke<null>("select-serial-port", { portId });
     return result;
   },
-  /** 打开并连接主进程 TCP 会话（session-tcp-connect；Electron TCP 走主进程，2026-08-23）。 */
+  /** 打开并连接主进程 TCP 会话（session-tcp-connect；Electron TCP 走主进程）。 */
   async sessionTcpConnect(
     payload: SessionTcpConnectPayload,
   ): Promise<Result<null>> {
@@ -103,7 +103,7 @@ const api: MamepHostApi = {
     });
     return result;
   },
-  /** 保存文本文件（save-text-file，2026-08-28 通信日志 CSV 导出）：主进程弹保存对话框落盘。 */
+  /** 保存文本文件（save-text-file 通信日志 CSV 导出）：主进程弹保存对话框落盘。 */
   saveTextFile(options: {
     suggestedName: string;
     content: string;
@@ -115,7 +115,7 @@ const api: MamepHostApi = {
       ...(options.mimeType !== undefined ? { mimeType: options.mimeType } : {}),
     });
   },
-  /** 打开文件对话框并读取 UTF-8 文本（open-text-file，2026-08-29 工作区导入）。 */
+  /** 打开文件对话框并读取 UTF-8 文本（open-text-file 工作区导入）。 */
   openTextFile(options?: {
     suggestedName?: string;
   }): Promise<Result<OpenTextFileResponse>> {
@@ -125,31 +125,31 @@ const api: MamepHostApi = {
         : {}),
     });
   },
-  /** 加载主进程文件仓储工作区（workspace-load，2026-08-30，ADR-036）。 */
+  /** 加载主进程文件仓储工作区（workspace-load）。 */
   workspaceLoad(): Promise<Result<WorkspaceLoadResponse>> {
     return invoke<WorkspaceLoadResponse>("workspace-load", {});
   },
-  /** 保存工作区到主进程文件仓储（workspace-save，2026-08-30，ADR-036）。 */
+  /** 保存工作区到主进程文件仓储（workspace-save）。 */
   workspaceSave(content: string): Promise<Result<null>> {
     return invoke<null>("workspace-save", { content });
   },
-  /** 清除主进程文件仓储（workspace-clear，2026-08-30，ADR-036）。 */
+  /** 清除主进程文件仓储（workspace-clear）。 */
   workspaceClear(): Promise<Result<null>> {
     return invoke<null>("workspace-clear", {});
   },
-  /** 创建主进程文件仓储备份（workspace-create-backup，2026-09-04，ADR-049）。 */
+  /** 创建主进程文件仓储备份（workspace-create-backup）。 */
   workspaceCreateBackup(): Promise<Result<null>> {
     return invoke<null>("workspace-create-backup", {});
   },
-  /** 加载插件存储（plugin-store-load，2026-08-30，ADR-038）。 */
+  /** 加载插件存储（plugin-store-load）。 */
   pluginStoreLoad(): Promise<Result<PluginStoreDataResponse>> {
     return invoke<PluginStoreDataResponse>("plugin-store-load", {});
   },
-  /** 保存插件存储（plugin-store-save，2026-08-30，ADR-038）。 */
+  /** 保存插件存储（plugin-store-save）。 */
   pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>> {
     return invoke<null>("plugin-store-save", { data });
   },
-  // ---- 插件运行时桥（2026-08-31，ADR-039）：Phase A 主进程返回能力错误，契约就位。----
+  // ---- 插件运行时桥： 主进程返回能力错误，契约就位。----
   pluginRuntimeLoad(payload: PluginRuntimeLoadPayload): Promise<Result<null>> {
     return invoke<null>("plugin-runtime-load", payload);
   },
@@ -181,7 +181,7 @@ const api: MamepHostApi = {
   sessionSetUnitId(unitId: number): Promise<Result<null>> {
     return invoke<null>("session-set-unit-id", { unitId });
   },
-  // 表级 Address Adjust（2026-09-01，ADR-042）：Electron RTU 会话在 Renderer，本桥保留契约；
+  // 表级 Address Adjust：Electron RTU 会话在 Renderer，本桥保留契约；
   // 主进程返回 SESSION_NOT_AVAILABLE 能力错误（穷尽守卫）。
   sessionSetAddressTransform(config: {
     transformId: string;

@@ -1,5 +1,5 @@
 /**
- * tree-rows（ADR-030 范围行树形数据）单测。
+ * tree-rows（范围行树形数据）单测。
  */
 import { describe, expect, it } from "vitest";
 import { createEmptyRow, newRowId, type RegisterRow } from "@mamep2026/domain";

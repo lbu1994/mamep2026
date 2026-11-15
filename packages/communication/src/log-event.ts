@@ -19,7 +19,7 @@ export interface CommunicationLogEvent {
   timestamp: number;
   direction: "request" | "response";
   bytes: Uint8Array;
-  /** 协议：rtu / tcp / codecId（2026-08-23 TCP 接线；2026-08-31 ADR-040 开放为 codecId）。 */
+  /** 协议：rtu / tcp / codecId（TCP 接线开放为 codecId）。 */
   protocol: string;
   /** slaveAddressOrUnitId：RTU 为从站地址，TCP 为 Unit ID。 */
   slaveAddress: number | null;
@@ -34,7 +34,7 @@ export interface CommunicationLogEvent {
   errorCode: string | null;
   exceptionCode: number | null;
   source: RequestSource;
-  /** 发起插件 id（source="plugin" 时非 null；TECH_DESIGN §8.3，ADR-039）。 */
+  /** 发起插件 id（source="plugin" 时非 null；TECH_DESIGN §8.3）。 */
   pluginId: string | null;
   durationMs: number | null;
 }

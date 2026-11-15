@@ -266,7 +266,7 @@ describe("MockTransport 成功/失败场景（按地址区间规则）", () => {
     expect(actual).toBe(expected);
   });
 
-  // ---- 多寄存器（ADR-030）----
+  // ---- 多寄存器----
 
   /** 发送多寄存器读请求（FC03, quantity）。 */
   async function readMany(

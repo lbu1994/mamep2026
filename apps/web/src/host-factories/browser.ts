@@ -1,5 +1,5 @@
 /**
- * 浏览器 Host 工厂（2026-09-13）。
+ * 浏览器 Host 工厂。
  *
  * **静态装配**：`BrowserAppHost` 同时是 Electron / Android 宿主的 inner（三端共用浏览器路径：
  * Web Serial + IndexedDB），故本工厂不做动态 `import()`（避免所有平台首屏多一次异步跳）。
@@ -27,11 +27,11 @@ export const createBrowserHost: PlatformHostFactory = ({ context }) => {
     compatibilityEnv: context.compatibilityEnv,
     repository: new IndexedDBWorkspaceRepository(kv),
     mockTransport: context.mockTransport,
-    // 插件持久化（2026-08-30，ADR-038）：IndexedDB 独立 key。
+    // 插件持久化：IndexedDB 独立 key。
     pluginStore: new IndexedDBPluginStore(kv),
-    // codec 注册表（ADR-041 决策 A）。
+    // codec 注册表。
     codecRegistry: context.codecRegistry,
-    // 插件同步贡献注册面 + 地址变换解析（ADR-054）。
+    // 插件同步贡献注册面 + 地址变换解析。
     syncRegistries: context.syncRegistries,
     resolveAddressTransform: context.resolveAddressTransform,
   });

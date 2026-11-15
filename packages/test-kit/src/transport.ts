@@ -8,8 +8,8 @@ import { fail, ok } from "@mamep2026/domain";
 import type { Clock, TransportPort } from "@mamep2026/communication";
 import { appendCrc } from "@mamep2026/protocol-modbus";
 
-/** 可编程 Modbus RTU 模拟设备：寄存器表 + 自动应答 FC03/FC0x10（含多寄存器，ADR-030），
- * 以及基础表 FC01/FC02/FC04/FC0F（线圈/离散输入/输入寄存器，ADR-043 E-1）。 */
+/** 可编程 Modbus RTU 模拟设备：寄存器表 + 自动应答 FC03/FC0x10（含多寄存器），
+ * 以及基础表 FC01/FC02/FC04/FC0F（线圈/离散输入/输入寄存器）。 */
 export class ScriptedModbusRtuDevice {
   readonly registers = new Map<number, number>();
   /** 线圈（FC01 读 / FC0F 写），值为 0/1。 */
@@ -19,7 +19,7 @@ export class ScriptedModbusRtuDevice {
   /** 输入寄存器（FC04 读）。 */
   readonly inputRegisters = new Map<number, number>();
   /**
-   * 「must-multi」区起始地址（null=关闭，ADR-030）：该地址起，
+   * 「must-multi」区起始地址（null=关闭）：该地址起，
    * 单寄存器读/写（quantity===1）返回异常 0x02，多寄存器读/写（quantity>1）正常——
    * 模拟真实设备「某些寄存器必须连续读写」的约束，供测试断言。
    */

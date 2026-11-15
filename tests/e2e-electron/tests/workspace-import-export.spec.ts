@@ -1,5 +1,5 @@
 /**
- * Electron 工作区导入/导出 RPC 闭环 E2E（2026-08-29，PRD §8.3 P1）。
+ * Electron 工作区导入/导出 RPC 闭环 E2E（PRD §8.3 P1）。
  * 生产构建路径启动（dist-electron/main.js + apps/web/dist-electron/，loadFile）。
  * 本环境 Electron 窗口存在系统性渲染不稳定（元素稳定检查超时，与功能无关），
  * 故本套件经 window.mamepHost 白名单 RPC 直接驱动（真实 preload 桥 → 安全 IPC →
@@ -143,7 +143,7 @@ test("open-text-file 读取工作区文件（主进程 dialog+fs 路径），用
 });
 
 test("导出→导入内容 roundtrip（序列化内容经两端口往返不丢字段）", async () => {
-  // 恢复打开对话框桩（前序测试可能已改为「取消」）。
+  // 恢复打开对话框桩为「取消」路径。
   await app.evaluate(
     async ({ dialog }, paths) => {
       (dialog as unknown as { showOpenDialog: unknown }).showOpenDialog =

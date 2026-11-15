@@ -1,5 +1,5 @@
 /**
- * 自定义功能码示例插件（ADR-043 E-4）E2E（mock 传输）：
+ * 自定义功能码示例插件E2E（mock 传输）：
  * - 侧边栏显示 "Custom FC 65H/66H" 分组并可新建自定义表
  * - 以 custom-function-code 协议重连后 FC65 读 / FC66 写闭环
  * - 插件 dataType（custom-function-code:scaled）出现在 Type 下拉且可编辑
@@ -14,7 +14,7 @@ async function openApp(page: Page): Promise<void> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
-  // ADR-054：示例插件不再随包安装——先手动安装并授权同进程执行
+  //示例插件不再随包安装——先手动安装并授权同进程执行
   // （codec 与插件 dataType 均为同步注册面）。
   await installExecutablePlugin(page, {
     pluginId: "custom-function-code",

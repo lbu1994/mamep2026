@@ -1,5 +1,5 @@
 /**
- * 插件执行能力运行时探测单测（2026-09-13，ADR-056）。
+ * 插件执行能力运行时探测单测。
  * jsdom 无真 Worker：注入 fake Worker 驱动 postMessage 协议 + 手工时钟，
  * 覆盖「可用 → true」「Worker 报错 → false」「超时 → false」「工厂抛错 → false」
  * 与「无论结果都 terminate Worker、都取消计时器」。

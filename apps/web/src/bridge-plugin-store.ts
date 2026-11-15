@@ -1,5 +1,5 @@
 /**
- * Renderer 插件存储薄桥（ADR-038，2026-08-30）。
+ * Renderer 插件存储薄桥。
  * 实现 PluginStorePort：经 preload/vscode-bridge 白名单桥（window.mamepHost）调用
  * 主进程/扩展宿主持久化（plugin-store-load / plugin-store-save）。Electron 主进程
  * userData plugins.json、VSCode Extension Host globalState；Renderer 不直接触碰

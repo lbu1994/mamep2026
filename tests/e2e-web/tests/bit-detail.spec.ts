@@ -1,8 +1,8 @@
 /**
- * 寄存器位明细展开（ADR-052，2026-09-11）E2E：
+ * 寄存器位明细展开E2E：
  * - 单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）：Address 列「寄存器地址 + Bit 序号」、
  *   位掩码 hover 提示、位值开关（`1`/`0`）、位名称（Name 列，可编辑）、位注释（Comment 列，可编辑）；
- * - 位行 Data 只有开关、**没有输入框**（2026-09-16 交互简化）；未读取时开关内显示 `—` 代替 `0`；
+ * - 位行 Data 只有开关、**没有输入框**（交互简化）；未读取时开关内显示 `—` 代替 `0`；
  * - 点击开关改位值 → 父行 Data 立即更新（只改当前值，不写设备）；
  * - 范围行寄存器子行可再展开位明细（两层嵌套）；
  * - 位名称/位注释编辑后随工作区持久化（reload 恢复）；
@@ -140,7 +140,7 @@ test("单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）", asy
   // 中间位为 0。
   await expectBit(bitRows(page).nth(1), 14, "0");
 
-  // 位行 Data 只有开关、没有输入框（2026-09-16 交互简化）。
+  // 位行 Data 只有开关、没有输入框（交互简化）。
   await expect(bitRows(page).locator(".register-table__bit-value")).toHaveCount(
     16,
   );
@@ -179,7 +179,7 @@ test("点击切换位值同步父行当前值（不写设备、不进入编辑�
 test("范围行寄存器子行可再展开位明细（两层嵌套）", async ({ page }) => {
   await openApp(page);
   const first = parentRow(page, 0);
-  // 先切 Type 再填范围：子行元数据在范围创建时继承父行 Type（ADR-031）。
+  // 先切 Type 再填范围：子行元数据在范围创建时继承父行 Type。
   await setBinaryType(page, first);
   await setAddress(first, "0-1");
   await mockSet(page, 0, 0x8001);

@@ -1,5 +1,5 @@
 /**
- * createPluginCommunicationApi 单测（ADR-039，2026-08-31）。
+ * createPluginCommunicationApi 单测。
  * 覆盖：read/write 经 CommunicationSession 执行且日志携带 source=plugin + pluginId、
  * 无会话时返回 PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误。
  */

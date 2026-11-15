@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useAppStore } from "@mamep2026/ui";
 import "./index.css";
-// 移动布局（< 1024px，ADR-050 Phase 3）：桌面媒体查询内不生效。
+// 移动布局（< 1024px）：桌面媒体查询内不生效。
 import "./mobile.css";
 import App from "./App.tsx";
 import {
@@ -11,7 +11,7 @@ import {
 } from "./boot-preferences";
 import { installVscodeDevBridgeIfNeeded } from "./vscode-dev-bridge";
 
-// 首屏偏好（2026-09-16，修复刷新后主题 / 语言闪烁）：偏好的事实源（工作区）由宿主仓储**异步**
+// 首屏偏好：偏好的事实源（工作区）由宿主仓储**异步**
 // 加载，若等到 `setWorkspace` 才应用，首帧必是「明亮 + 默认语言」。这里用可同步读取的启动缓存
 // 先把主题 / 主题色预设 / 语言落到 store、i18n 与 `<html>` 上——**必须早于首次渲染**，
 // 故内联在此而非 App 内 effect（缓存缺席 / 损坏时退回默认值，见 boot-preferences.ts）。
@@ -21,7 +21,7 @@ installPreferencesCache();
 // dev（MAMEP_DEV_URL）：webview iframe 内先建立 window.mamepHost（postMessage 桥），
 // 保证 App 装配时读到 VscodeAppHost。生产/浏览器/Electron 无副作用。
 installVscodeDevBridgeIfNeeded();
-// 启动骨架（2026-09-13）：宿主实现按运行时平台动态加载，先标记「装配中」让 MamepApp 显示占位。
+// 启动骨架：宿主实现按运行时平台动态加载，先标记「装配中」让 MamepApp 显示占位。
 // 起点必须**早于首次渲染**（故在此内联，而非 App 内 effect）；终态由 host-assembly 改写
 // （成功 "ready" / 失败 "failed"），失败时不占位、应用以「无 Host」保持可操作。
 useAppStore.setState({ hostStatus: "assembling" });

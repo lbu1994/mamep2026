@@ -2,11 +2,11 @@
  * Data 单元格提交（docs/AGENTS.md §17、§23；TECH_DESIGN.md §6.8）。
  * 对称于 address.ts 的 commitAddress：
  * - 按 Type 校验（parseCellText / parseCompositeText），失败返回结构化错误、由调用方保留输入；
- * - 成功提交写回**规范显示形式**（ADR-051，2026-09-11）：即设备读回后 `formatRawValue` /
+ * - 成功提交写回**规范显示形式**：即设备读回后 `formatRawValue` /
  *   `formatRawValues` / 插件 resolver.format 的同一形式（单一当前值模型 §15.1：cellText 即
  *   用户可见的当前值，输入/粘贴/读取三条路径收敛到同一形式）；
- * - 成功提交**同时同步 `registerValues`**（2026-09-11 bug 修复）：保持「原始值单一事实源」
- *   不变式（ADR-030/031），使派生展示（范围行子行 `tree-rows`、位明细 `bit-register`）与位切换
+ * - 成功提交**同时同步 `registerValues`**：保持「原始值单一事实源」
+ *   不变式，使派生展示（范围行子行 `tree-rows`、位明细 `bit-register`）与位切换
  *   基准跟随父行文本，而不是停在旧读值。
  * - 规范化不做任何舍入或截断：超范围/超小数位仍返回结构化错误。
  */
@@ -59,7 +59,7 @@ function canonicalizeCell(
 }
 
 /**
- * 计算规范显示文本（ADR-051）：解析成功后按类型格式化。
+ * 计算规范显示文本：解析成功后按类型格式化。
  * - 范围行（registerCount>1）：`formatRawValues`（组合文本，如 hex `1234 ABCD`、binary 每 8 位分组）；
  * - 单寄存器：`resolver.format`（内置类型或插件类型）。
  * 解析失败返回结构化错误（调用方保留用户输入，§23）。提交与粘贴共用本函数。
@@ -73,10 +73,10 @@ export function canonicalCellText(
   return canonical.ok ? ok(canonical.value.text) : canonical;
 }
 
-/** 提交 Data 单元格草稿：按 Type 校验（失败返回结构化错误，成功写回规范显示文本，ADR-051）。
- *  多寄存器行（ADR-030）：组合文本按 parseCompositeText 校验（范围长度 × 类型合法集）。
- *  2026-09-11：成功时同步 `registerValues`（解析出的原始值），保证子行/位明细与父行文本一致。
- *  ADR-043 E-3：插件类型经 resolver 解析/格式化（缺省仅内置）。 */
+/** 提交 Data 单元格草稿：按 Type 校验（失败返回结构化错误，成功写回规范显示文本）。
+ *  多寄存器行：组合文本按 parseCompositeText 校验（范围长度 × 类型合法集）。
+ * 成功时同步 `registerValues`（解析出的原始值），保证子行/位明细与父行文本一致。
+ * 插件类型经 resolver 解析/格式化（缺省仅内置）。 */
 export function commitCellText(
   row: RegisterRow,
   text: string,
@@ -102,7 +102,7 @@ export function commitCellText(
 const defaultResolver: DataTypeResolver = createDataTypeResolver();
 
 /**
- * Type/Scale 切换时即时刷新显示文本（ADR-053，2026-09-11）：
+ * Type/Scale 切换时即时刷新显示文本：
  * 把当前值按新 Type 重新显示，**原始值不变** ——
  * - 先用**切换前**的 `row.dataType` 解析当前文本（范围行 `parseCompositeText` / 单寄存器 `resolver.parse`）；
  * - 解析成功 → 按新 `dataType` 格式化写回（范围行 `formatRawValues` / 单寄存器 `resolver.format`）；

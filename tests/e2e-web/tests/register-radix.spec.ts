@@ -15,7 +15,7 @@ async function openApp(page: Page): Promise<void> {
   });
 }
 
-/** 表格上方工具栏里的 DEC/HEX 切换控件（ADR-014；Address Adjust 也是 Segmented，需收窄到 __radix 容器）。 */
+/** 表格上方工具栏里的 DEC/HEX 切换控件（Address Adjust 也是 Segmented，需收窄到 __radix 容器）。 */
 function radixGroup(page: Page) {
   return page.locator(".table-toolbar__radix .ant-segmented");
 }
@@ -38,7 +38,7 @@ function addressInput(page: Page) {
   return page.getByLabel("Address", { exact: true }).first();
 }
 
-/** 进入可编辑单元格编辑态并填充（非编辑态是 div[role=button]，需先点击，2026-08-15 编辑模式设计）。 */
+/** 进入可编辑单元格编辑态并填充（非编辑态是 div[role=button]，需先点击编辑模式设计）。 */
 async function clickAndFill(locator: Locator, value: string): Promise<void> {
   await locator.click();
   await locator.fill(value);
@@ -62,7 +62,7 @@ test("Address column defaults to DEC and the header reflects it", async ({
   await expect(
     radixGroup(page).locator(".ant-segmented-item-selected"),
   ).toContainText("DEC");
-  // 标签说明该控件作用于地址列（ADR-014 工具栏提示）。
+  // 标签说明该控件作用于地址列（工具栏提示）。
   await expect(page.locator(".table-toolbar__radix-label")).toContainText(
     "Address:",
   );

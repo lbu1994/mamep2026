@@ -1,5 +1,5 @@
 /**
- * Android 端构建（ADR-050）：web 产物（--mode android）→ Capacitor 同步 → Gradle 打包。
+ * Android 端构建：web 产物（--mode android）→ Capacitor 同步 → Gradle 打包。
  *
  * **JDK 约束（必读）**：Capacitor 8 模板固定 Gradle 8.14.3 + AGP 8.13，其最高只支持 Java 24；
  * Android Studio 自带的 JBR 25 会报 `Unsupported class file major version 69`
@@ -7,11 +7,11 @@
  * 都不可用时**明确报错并给出指引**（不静默降级、不尝试自行安装）。
  *
  * 用法：
- *   node scripts/build-android.mjs [--skip-web]             # debug APK（默认；真机 e2e 用）
- *   node scripts/build-android.mjs --release                # release APK + AAB（ADR-050 Phase 5）
- *   node scripts/build-android.mjs --release --aab-only     # 仅 AAB
+ *   node scripts/build-android.mjs [--skip-web] # debug APK（默认；真机 e2e 用）
+ *   node scripts/build-android.mjs --release # release APK + AAB
+ *   node scripts/build-android.mjs --release --aab-only # 仅 AAB
  *
- * 发布签名（ADR-056）：密钥与口令**不入库**，由 app/keystore.properties（已 gitignore）
+ * 发布签名：密钥与口令**不入库**，由 app/keystore.properties（已 gitignore）
  * 或 MAMEP_ANDROID_KEYSTORE_* 环境变量提供；未提供时 release 产出 **unsigned** APK
  * （绝不静默用 debug key 冒充）。*本脚本不接收也不打印任何口令。*
  */
@@ -172,7 +172,7 @@ if (release) {
   );
 }
 
-// 图标随构建同步（2026-09-11）：mipmap 各密度由 scripts/generate-icons.mjs 从
+// 图标随构建同步：mipmap 各密度由 scripts/generate-icons.mjs 从
 // build/AppIcon.svg 生成（白底 + 黑色线条），避免改了源 SVG 却忘记重跑 pnpm icons
 // 导致 APK 里仍是旧图标。与 dist:portable / dist:vscode 同一约定。
 run("node", ["scripts/generate-icons.mjs"], { cwd: ROOT });

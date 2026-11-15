@@ -1,19 +1,12 @@
 /**
- * 首屏偏好（主题 / 语言）应用时序 e2e（mockTransport=1，浏览器端，2026-09-16）。
+ * 首屏偏好（主题 / 语言）应用时序 e2e（mockTransport=1，浏览器端）。
  *
- * **Bug**（ToDoList 阶段二 `[bug] 暗黑模式 / 语言刷新 FOUC`）：刷新网页时先按「明亮模式 /
- * 默认语言（en-US）」渲染，随后才切换为已保存的暗黑模式 / 中文 —— 偏好的唯一事实源是
- * **异步加载**的工作区（`workspace.preferences.theme / themePrimary / language`），而
- * `main.tsx` 首屏渲染时 store 只有默认值（`theme: "light"` + i18n `lng: "en-US"`），
- * 要等宿主装配 + 仓储读取完成后（`setWorkspace`）才回填。
+ * 偏好的事实源是工作区（`workspace.preferences.theme / themePrimary / language`），
+ * 由宿主仓储异步加载。`main.tsx` 在首屏渲染前使用 `mamep:preferences` 启动缓存
+ * hydrate store、i18n 与 `<html>` 标记。
  *
- * **复现（红）**：切暗色 + 中文 → 等自动保存 → 注册记录器 → reload；
- * 记录器在「`#root` 首次出现子节点」（= 首帧渲染完成）时抓取 `<html data-mamep-theme>` 与
- * `<html lang>`。修复前：此刻 `data-mamep-theme` 尚未设置（`useEffect` 在首次绘制之后才跑）、
- * `lang` 仍是 `index.html` 硬编码的 `en` → 两条断言失败。
- *
- * **修复（绿）**：首屏渲染前 hydrate 持久化偏好（localStorage 缓存 `mamep:preferences`）→
- * 首帧渲染时标记即为已保存值，且主题标记序列中**不出现** `light`（无明亮 → 暗色跳变）。
+ * 验证：切暗色 + 中文 → 等自动保存 → reload；首帧渲染时标记即为已保存值，
+ * 且主题标记序列中**不出现** `light`（无明亮 → 暗色跳变）。
  *
  * 全程无 console 错误。
  */
@@ -45,7 +38,7 @@ async function openApp(page: Page): Promise<string[]> {
   return errors;
 }
 
-/** 打开 Settings 抽屉（容器为 Drawer，2026-09-12）。 */
+/** 打开 Settings 抽屉（容器为 Drawer）。 */
 async function openSettings(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: "Settings" })
@@ -90,7 +83,7 @@ async function selectChinese(page: Page): Promise<void> {
  * 记录两类事实：
  * - `themeSequence` / `langSequence`：`<html>` 上两个标记的变化序列（可看出是否出现过明亮）；
  * - `themeAtFirstRender` / `langAtFirstRender`：`#root` 首次出现子节点那一刻的标记值
- *   （= 首帧渲染时的状态，即用户看到的「首屏」）。
+ * （= 首帧渲染时的状态，即用户看到的「首屏」）。
  */
 async function installBootRecorder(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -170,7 +163,7 @@ test("刷新后首帧渲染即已保存的主题 / 语言（无 FOUC）", async 
   });
 
   const record = await readBootRecord(page);
-  // 关键断言（修复红 / 绿分界）：首帧渲染时标记已是已保存偏好。
+  // 首帧渲染时标记已是已保存偏好。
   expect(record.themeAtFirstRender).toBe("dark");
   expect(record.langAtFirstRender).toBe("zh-CN");
   // 全程未出现过「明亮」主题标记（无 明亮 → 暗色 跳变）。

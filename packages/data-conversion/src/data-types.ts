@@ -24,7 +24,7 @@ const SCALE_DIGITS: Partial<Record<DataType, number>> = {
 
 /**
  * 错误码 → i18n userMessageKey（packages/ui/src/i18n 驼峰 key，en-US 主 + zh-CN）。
- * 必须与 i18n 文案 key 一致（回归：曾机械生成全小写 code，导致错误文案断链）。
+ * 必须与 i18n 文案 key 一致，避免错误文案断链。
  */
 const DATA_ERROR_MESSAGE_KEY: Record<string, string> = {
   DATA_EMPTY: "errors.dataEmpty",
@@ -55,7 +55,7 @@ export function isScaled(type: DataType): boolean {
 }
 
 /**
- * 是否为有符号内置类型（ADR-043 E-3：查内置表而非前缀推断，避免插件类型名如
+ * 是否为有符号内置类型（查内置表而非前缀推断，避免插件类型名如
  * "signed-custom" 被误判为有符号缩放类型）。
  */
 export function isSigned(type: DataType): boolean {
@@ -64,13 +64,13 @@ export function isSigned(type: DataType): boolean {
   );
 }
 
-/** 缩放位数（0.1→1 … 0.0001→4）；非缩放类型返回 0（ADR-030 导出供组合转换复用）。 */
+/** 缩放位数（0.1→1 … 0.0001→4）；非缩放类型返回 0（导出供组合转换复用）。 */
 export function getScaleDigits(type: DataType): number {
   return SCALE_DIGITS[type] ?? 0;
 }
 
 /**
- * 二进制位串按每 8 位（1 字节）一组加单空格（ADR-051）：
+ * 二进制位串按每 8 位（1 字节）一组加单空格：
  * 16 位 → `00000000 11111111`；32 位 4 组、48 位 6 组、64 位 8 组。
  * 单寄存器与范围行共用（范围行不额外强调寄存器边界，统一单空格）。
  */
@@ -149,7 +149,7 @@ export function parseCellText(text: string, type: DataType): Result<number> {
   }
 }
 
-/** bool（ADR-043 E-2）：仅接受 0/1（线圈/离散输入位值）。 */
+/** bool：仅接受 0/1（线圈/离散输入位值）。 */
 function parseBool(text: string): Result<number> {
   if (text === "0") return ok(0);
   if (text === "1") return ok(1);
@@ -184,7 +184,7 @@ function parseHex(text: string): Result<number> {
 }
 
 /**
- * 二进制解析（ADR-051）：忽略任意空白（空格/制表/换行）后校验，位数上限按去空白后的位数判定；
+ * 二进制解析：忽略任意空白（空格/制表/换行）后校验，位数上限按去空白后的位数判定；
  * 与范围行 `parseCompositeBinary` 对称，便于粘贴已分组的文本（如 `0000 0000 1111 1111`）。
  * 仍不接受 `0b` 前缀。
  */
@@ -209,7 +209,7 @@ function parseBinary(text: string): Result<number> {
   return ok(Number.parseInt(compact, 2));
 }
 
-/** 单寄存器字符串（registerCount=1，ADR-030）：最多 2 字符，高字节在前，不足补空格。 */
+/** 单寄存器字符串（registerCount=1）：最多 2 字符，高字节在前，不足补空格。 */
 function parseSingleString(text: string): Result<number> {
   if (text.length > 2) {
     return fail(

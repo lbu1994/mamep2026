@@ -1,9 +1,9 @@
 /**
- * Settings 抽屉单测（jsdom，2026-09-12 插件管理并入）。
+ * Settings 抽屉单测（jsdom 插件管理并入）。
  * 覆盖：
  * - 页签结构：`General` / `Plugins` 两个页签，默认停在 `General`（既有设置项可见）；
  * - `Plugins` 页签内渲染插件管理区块（`PluginManagerSection`：插件列表 + Install Plugin）；
- * - 插件 settings 贡献分区（ADR-039）归属 `Plugins` 页签，无贡献时不渲染。
+ * - 插件 settings 贡献分区归属 `Plugins` 页签，无贡献时不渲染。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -140,7 +140,7 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
 
     clickTab("Plugins");
     const section = screen.getByTestId("plugin-settings");
-    // 贡献标题经 i18n 解析 + 占位说明（Phase A 声明式标题）。
+    // 贡献标题经 i18n 解析 + 占位说明（声明式标题）。
     expect(section.textContent).toContain("Author");
     expect(section.textContent).toContain(
       "Plugin settings will be provided by the plugin runtime.",

@@ -1,9 +1,9 @@
 /**
- * Android 构建产物代码分割验证（2026-09-13）——四端共用的「懒加载 + rolldown 默认分包」
+ * Android 构建产物代码分割验证——四端共用的「懒加载 + rolldown 默认分包」
  * 在 Capacitor WebView（**生产产物** `https://localhost`）下的回归。
  *
  * 为什么必须在本套件验证：浏览器 dev server（`test:e2e:web`）不打包，跑不出分包类问题
- * （2026-09-11 实测：自定义 `codeSplitting.groups` 把同一 npm 包的循环依赖切到不同 chunk
+ * （实测：自定义 `codeSplitting.groups` 把同一 npm 包的循环依赖切到不同 chunk
  * → Electron 生产构建整体白屏 `TypeError: Class extends value undefined`）。Android 与
  * Electron / VSCode / 浏览器共用同一份 `apps/web/vite.config.ts` 与同一套分包结果。
  *
@@ -13,11 +13,11 @@
  * ② 懒加载覆盖层**按需加载**：打开前对应 chunk 不在已加载集合中，打开后才出现；
  * ③ 启动自动弹出 Connection Settings 不回归 + 全程无 console 错误。
  *
- * 说明：待办条目里的「Plugin Manager」弹窗已于 2026-09-12 并入 Settings（`SettingsDrawer`），
+ * 说明：待办条目里的「Plugin Manager」弹窗已于并入 Settings（`SettingsDrawer`），
  * 实际懒加载覆盖层为 4 个：HelpDrawer / SettingsDrawer / WorkspaceImportModal / TraceWindow。
  * 其中 `WorkspaceImportModal` 在 Android 上**不可达**（`androidCapabilities.workspaceImport ===
- * "unsupported"`，文件导入属 Phase 4），故本用例断言其「点击给出能力提示 + 不加载其 chunk」，
- * 而非「能打开」；顺带验证 2026-09-13 修复的「能力不支持时不再静默无操作」。
+ * "unsupported"`，文件导入属），故本用例断言其「点击给出能力提示 + 不加载其 chunk」，
+ * 而非「能打开」；并验证能力不支持时不得静默无操作。
  */
 import { expect, test, type Locator } from "@playwright/test";
 import {
@@ -58,7 +58,7 @@ test.afterAll(async () => {
  * 已加载的同源 JS chunk **文件名**（生产产物全部经 `https://localhost/assets/*.js` 提供）。
  *
  * 只取名字：Android WebView 的 resource timing **不填充 body size**
- *（`decodedBodySize` / `encodedBodySize` 恒为 0，2026-09-13 实测），故体积另用
+ *（`decodedBodySize` / `encodedBodySize` 恒为 0 实测），故体积另用
  * {@link chunkSizes} 实测，避免「字节数与 0 比较」导致的假通过。
  */
 async function loadedChunkNames(page: AppSession["page"]): Promise<string[]> {
@@ -155,7 +155,7 @@ test("① 分包与启动：多 chunk 加载、单 chunk < 500 kB、React 挂载
   expect(chunks.length).toBeGreaterThanOrEqual(10);
   expect(entry, "入口 chunk（index-*.js）应已加载").not.toBeNull();
   // ① 没有任何 chunk 超过 Vite 的 500 kB 告警阈值；bytes>0 同时守住「度量本身失效」
-  // （Android WebView 的 resource timing body size 恒为 0，曾导致与 0 比较的假通过）。
+  // （Android WebView 的 resource timing body size 恒为 0，不能只与 0 比较）。
   for (const chunk of chunks) {
     expect(chunk.bytes, `${chunk.name} = ${chunk.bytes}B`).toBeGreaterThan(0);
     expect(chunk.bytes, `${chunk.name} = ${chunk.bytes}B`).toBeLessThan(
@@ -211,7 +211,7 @@ test("② 懒加载覆盖层按需加载（Help / Settings / Trace Window；Impo
   const settingsDrawer = page.locator(".settings-drawer");
   await expect(settingsDrawer).toHaveClass(/ant-drawer-open/);
 
-  // —— Workspace Import / Export：Android 能力位均为 `unsupported`（Phase 4 才接 SAF / 分享），
+  // —— Workspace Import / Export：Android 能力位均为 `unsupported`（才接 SAF / 分享），
   // 故导入弹窗不可达 → 断言「给出能力提示（非静默无操作）+ 不加载其 chunk + 不报错」。
   await settingsDrawer
     .getByRole("button", { name: "Import Workspace" })

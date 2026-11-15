@@ -10,7 +10,7 @@ import { useAppStore } from "../app-store";
 import { PluginManagerSection } from "./PluginManagerSection";
 
 // PluginManagerSection 使用 App.useApp()（antd message/modal），测试渲染必须包 <AntApp>。
-// 2026-09-12：由独立弹窗改为 Settings「Plugins」页签内的内联区块，无需开合状态。
+// 插件管理为 Settings「Plugins」页签内的内联区块，无需开合状态。
 function renderSection(): ReturnType<typeof render> {
   return render(
     <AntApp>
@@ -76,7 +76,7 @@ function setHostWithPlugin(
       pluginRegistry: registry,
       capabilities: browserCaps,
       openTextFile: vi.fn(),
-      // ADR-054：安装入口改为「预览 + 安装」两步（host 承担 entry 加载）。
+      // 安装入口为「预览 + 安装」两步（host 承担 entry 加载）。
       startPlugins: vi.fn(async () => undefined),
       previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
       installPluginEntry: vi.fn(async () => pluginEntryUnavailable()),

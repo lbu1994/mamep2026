@@ -1,7 +1,7 @@
 /**
- * Modbus TCP ADU（MBAP + PDU）编解码（docs/TECH_DESIGN.md §34.3.16、ADR-020 后续 Node TCP Adapter）。
+ * Modbus TCP ADU（MBAP + PDU）编解码（docs/TECH_DESIGN.md §34.3.16 后续 Node TCP Adapter）。
  * FC03 读保持寄存器（quantity 可 >1）、FC0x10 写保持寄存器（单值或多值，与 rtu-frame.ts 对齐，
- * ADR-030）。
+ * ）。
  *
  * MBAP 头（7 字节）：
  * - transactionId(2) + protocolId(2, 恒为 0x0000) + length(2, 其后字节数 = unitId+PDU) + unitId(1)
@@ -30,7 +30,7 @@ export interface TcpWriteSingleRegisterRequest {
   rawValue: number;
 }
 
-/** FC0x10 多寄存器写入（TCP，ADR-030）：一次请求写多个连续寄存器（quantity = values.length）。 */
+/** FC0x10 多寄存器写入（TCP）：一次请求写多个连续寄存器（quantity = values.length）。 */
 export interface TcpWriteMultipleRegistersRequest {
   transactionId: number;
   unitId: number;
@@ -128,7 +128,7 @@ export function encodeTcpWriteSingleRegisterRequest(
   return buildTcpFrame(request.transactionId, request.unitId, pdu);
 }
 
-/** FC0x10 多寄存器写入（TCP，ADR-030）：quantity = values.length、byteCount = 2N、值大端。 */
+/** FC0x10 多寄存器写入（TCP）：quantity = values.length、byteCount = 2N、值大端。 */
 export function encodeTcpWriteMultipleRegistersRequest(
   request: TcpWriteMultipleRegistersRequest,
 ): Uint8Array {

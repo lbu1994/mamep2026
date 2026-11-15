@@ -1,6 +1,6 @@
 /**
- * Android 宿主能力解析单测（2026-09-13，ADR-056）。
- * 探测端口注入：成功 / 失败 / 抛错 三态 + 不误改其他能力字段。
+ * Android 宿主能力解析单测。
+ * 探测端口注入：成功 / 失败 / 抛错三态 + 不误改其他能力字段。
  */
 import { describe, expect, it, vi } from "vitest";
 import { androidCapabilities } from "@mamep2026/platform-android";

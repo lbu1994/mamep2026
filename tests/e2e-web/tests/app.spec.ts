@@ -69,12 +69,12 @@ test("non-mock startup opens Connection Settings modal with RTU defaults", async
 
   const modal = page.locator(".ant-modal-container:visible");
   await expect(modal).toContainText("Connection Settings");
-  // Defaults: Timeout=50, Retry=1.（Rx Delay 已移除，2026-09-06）
-  // 从站地址已迁移为每表独立设置（2026-08-19），不再属于连接设置。
+  // Defaults: Timeout=50, Retry=1.（Rx Delay 已移除）
+  // 从站地址已迁移为每表独立设置，不再属于连接设置。
   await expect(modal).not.toContainText("Slave Address");
-  // 全局 Address Adjust 已移出核心（ADR-042）：Connection Settings 不再有该选项。
+  // 全局 Address Adjust 已移出核心：Connection Settings 不再有该选项。
   await expect(modal).not.toContainText("Address Adjust");
-  // Rx Delay 已移除（2026-09-06）：Connection Settings 不再有该选项。
+  // Rx Delay 已移除：Connection Settings 不再有该选项。
   await expect(modal).not.toContainText("Rx Delay");
   // No Modbus TCP entry in the browser.
   await expect(modal).not.toContainText("Modbus TCP");
@@ -412,7 +412,7 @@ test("plugins tab in Settings shows the (empty) plugin list with the install ent
 }) => {
   await openApp(page);
 
-  // 插件管理已并入 Settings（2026-09-12）：顶栏 Settings → Plugins 页签。
+  // 插件管理已并入 Settings：顶栏 Settings → Plugins 页签。
   await page
     .getByRole("button", { name: "Settings" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -425,7 +425,7 @@ test("plugins tab in Settings shows the (empty) plugin list with the install ent
     .click();
   const modal = page.getByTestId("plugin-manager");
   await expect(modal).toBeVisible();
-  // ADR-054：不再随包分发插件 → 初始为空态，安装入口保持可用。
+  //不再随包分发插件 → 初始为空态，安装入口保持可用。
   await expect(modal).toContainText("No built-in plugins registered.");
   await expect(
     modal.getByRole("button", { name: "Install Plugin" }),

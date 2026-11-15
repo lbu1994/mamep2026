@@ -1,5 +1,5 @@
 /**
- * 插件分发产物构建（ADR-054，2026-09-12）：插件一律由用户手动安装，故需产出可安装文件。
+ * 插件分发产物构建：插件一律由用户手动安装，故需产出可安装文件。
  *
  * 产物（`release/plugins/<pluginId>/`，`release/` 已 gitignore）：
  * - 可执行插件：单文件 `.mjs`（`export const manifest` + `export function activate(ctx)`，
@@ -7,7 +7,7 @@
  * - 纯清单插件（主题色 / panels 示例）：直接拷贝包内 `manifest.json`。
  *
  * 用户在 Settings → Plugins → Install Plugin 中选择 `.json`（纯清单）或 `.mjs`（可执行）安装；
- * 可执行插件安装时需在确认框中显式授权「同进程执行」（ADR-054）。
+ * 可执行插件安装时需在确认框中显式授权「同进程执行」。
  *
  * 用法：`pnpm build:plugins`
  */

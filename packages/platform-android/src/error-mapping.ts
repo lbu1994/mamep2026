@@ -1,5 +1,5 @@
 /**
- * Android 原生错误码 → 统一错误模型（ADR-050 §6）。
+ * Android 原生错误码 → 统一错误模型。
  *
  * 原生侧（Kotlin 插件）只报稳定错误码 + 技术消息，映射规则集中在此：
  * 复用 `platform-node` 的 TCP / 串口错误码与 i18n key，避免同类问题在不同端出现两套错误码与文案。
@@ -15,7 +15,7 @@ export const ANDROID_NATIVE_ERROR_CODES = {
   remoteClosed: "REMOTE_CLOSED",
   connectionReset: "CONNECTION_RESET",
   pluginUnavailable: "PLUGIN_UNAVAILABLE",
-  // USB 串口（Phase 2）
+  // USB 串口
   usbPermissionDenied: "USB_PERMISSION_DENIED",
   usbDeviceNotFound: "USB_DEVICE_NOT_FOUND",
   usbDeviceBusy: "USB_DEVICE_BUSY",
@@ -51,7 +51,7 @@ export function mapAndroidNativeError(
     });
   }
 
-  // ---- TCP（Phase 1）----
+  // ---- TCP----
   if (
     code === native.connectFailed ||
     code === native.remoteClosed ||
@@ -76,7 +76,7 @@ export function mapAndroidNativeError(
     });
   }
 
-  // ---- USB 串口（Phase 2）----
+  // ---- USB 串口 ----
   if (code === native.usbPermissionDenied) {
     return createMamepError({
       code: "SERIAL_PERMISSION_DENIED",

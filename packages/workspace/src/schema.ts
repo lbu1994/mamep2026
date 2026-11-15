@@ -22,7 +22,7 @@ import { z } from "zod";
 import { migrateData, migrations } from "./migrations";
 
 /**
- * dataType（ADR-043 E-3）：开放字符串——内置字面量 + 插件类型（单寄存器）；
+ * dataType：开放字符串——内置字面量 + 插件类型（单寄存器）；
  * 不校验内容（插件类型在插件未加载时仍应可持久化往返）。
  */
 const dataTypeSchema = z.string().min(1);
@@ -34,15 +34,15 @@ const rowSchema = z.object({
   comment: z.string(),
   addressDraft: z.string(),
   addressValue: z.number().int().min(0).max(65535).nullable(),
-  /** 覆盖的连续寄存器数（ADR-030）：默认 1（单寄存器）；老数据缺省补默认，由 v2→v3 迁移补齐 */
+  /** 覆盖的连续寄存器数：默认 1（单寄存器）；老数据缺省补默认，由 v2→v3 迁移补齐 */
   registerCount: z.number().int().min(1).default(1),
   dataType: dataTypeSchema,
   pollingEnabled: z.boolean(),
   traceEnabled: z.boolean(),
   cellText: z.string(),
-  /** 各寄存器原始值（ADR-030，替代 lastKnownRawValue）：null=未读 */
+  /** 各寄存器原始值（替代 lastKnownRawValue）：null=未读 */
   registerValues: z.array(z.number().int().min(0).max(65535)).nullable(),
-  /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据；范围行长度=registerCount，缺省补默认 */
+  /** 范围行子行元数据：null=单寄存器行或老数据；范围行长度=registerCount，缺省补默认 */
   registers: z
     .array(
       z.object({
@@ -53,9 +53,9 @@ const rowSchema = z.object({
     )
     .nullable()
     .default(null),
-  /** 位级注释（ADR-052，2026-09-11）：外层长度=registerCount，内层长度 16（下标=bit 号）；缺省 null（老数据） */
+  /** 位级注释：外层长度=registerCount，内层长度 16（下标=bit 号）；缺省 null（老数据） */
   bitComments: z.array(z.array(z.string()).nullable()).nullable().default(null),
-  /** 位级名称（ADR-052 需求追加，2026-09-11）：结构同 bitComments；缺省 null（老数据） */
+  /** 位级名称：结构同 bitComments；缺省 null。 */
   bitNames: z.array(z.array(z.string()).nullable()).nullable().default(null),
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -64,7 +64,8 @@ const rowSchema = z.object({
 const sheetSchema = z.object({
   sheetId: z.string(),
   name: z.string(),
-  /** 表类型（ADR-041）：核心 "holding-register" 或 "<pluginId>:<tableTypeId>"；老数据由 v4→v5 迁移补齐。ADR-043 E-2：核心再增 coil/discrete-input/input-register。 */
+  /** 表类型：核心 "holding-register" / "coil" / "discrete-input" / "input-register"，
+   * 或插件类型 "<pluginId>:<tableTypeId>"；老数据由迁移补齐。 */
   type: z
     .union([
       z.literal("holding-register"),
@@ -80,18 +81,18 @@ const sheetSchema = z.object({
     ])
     .default("holding-register"),
   order: z.number().int(),
-  /** 打开/关闭状态（2026-08-21）：关闭的表仍在工作区中（侧边栏保留），仅从页签栏隐藏；老数据缺省补 true，无需迁移 */
+  /** 打开/关闭状态：关闭的表仍在工作区中（侧边栏保留），仅从页签栏隐藏；老数据缺省补 true，无需迁移 */
   open: z.boolean().default(true),
   rows: z.array(rowSchema),
-  /** Register 地址列进制：默认 DEC（ADR-014）；老数据缺省时补默认值，无需迁移 */
+  /** Register 地址列进制：默认 DEC；老数据缺省时补默认值，无需迁移 */
   registerRadix: z.enum(["dec", "hex"]).default("dec"),
-  /** 各列拖拽宽度（随表持久化，2026-08-18）；老数据缺省补默认 {}，无需迁移 */
+  /** 各列拖拽宽度（随表持久化）；老数据缺省补默认 {}，无需迁移 */
   columnWidths: z
     .record(z.string(), z.number().finite().positive())
     .default({}),
-  /** 各列拖拽后的排列顺序（随表持久化，2026-08-18）；老数据缺省补 null（默认顺序），无需迁移 */
+  /** 各列拖拽后的排列顺序（随表持久化）；老数据缺省补 null（默认顺序），无需迁移 */
   columnOrder: z.array(z.string()).nullable().default(null),
-  /** Slave Address（每表独立，随表持久化，2026-08-19）；老数据缺省补默认 1，无需迁移 */
+  /** Slave Address（每表独立，随表持久化）；老数据缺省补默认 1，无需迁移 */
   slaveAddress: z
     .number()
     .int()
@@ -99,14 +100,14 @@ const sheetSchema = z.object({
     .max(255)
     .default(
       1,
-    ) /** 写后回读配置（每表独立，随工作区持久化，2026-08-26）；老数据由 v1→v2 迁移补齐，缺省再补默认立即回读 */,
+    ) /** 写后回读配置（每表独立，随工作区持久化）；老数据由 v1→v2 迁移补齐，缺省再补默认立即回读 */,
   writeVerify: z
     .object({
       mode: z.enum(["off", "immediate", "delayed"]),
       delayMs: z.number().nullable(),
     })
     .default({ mode: "immediate", delayMs: null }),
-  /** 表级地址变换配置（每表独立，随工作区持久化，2026-09-01 ADR-042）；老数据由 v5→v6 迁移补齐，缺省再补 null */
+  /** 表级地址变换配置（每表独立，随工作区持久化）；老数据由 v5→v6 迁移补齐，缺省再补 null */
   addressTransform: z
     .object({
       transformId: z.string().min(1),
@@ -119,9 +120,9 @@ const sheetSchema = z.object({
 });
 
 /**
- * RTU 连接配置完整持久化（2026-08-17 确认）：除串口/端口选择外，波特率、数据位、
+ * RTU 连接配置完整持久化（确认）：除串口/端口选择外，波特率、数据位、
  * 停止位、校验位、流控等端口参数与超时、重试、请求间隔、Address Adjust
- * 均随工作区持久化（从站地址已按表独立设置，2026-08-19，见 sheetSchema.slaveAddress）。
+ * 均随工作区持久化（从站地址已按表独立设置，见 sheetSchema.slaveAddress）。
  * 串口/端口选择本身是运行时会话状态，不进入持久化；
  * recentPortHint 仅作端口提示（docs/AGENTS.md §19.3），不用于自动连接。
  * 端口字段带默认值：兼容「端口参数未持久化」期间写入的旧数据（缺省回填默认值，无需迁移）。
@@ -149,7 +150,7 @@ const rtuProfileSchema = z.object({
 });
 
 /**
- * TCP 连接配置持久化（2026-08-23 确认：入 workspace，恢复 host/port/unitId/超时/重试；
+ * TCP 连接配置持久化（确认：入 workspace，恢复 host/port/unitId/超时/重试；
  * 保持离线、不自动连接）。unitId 0~255 默认 0；autoReconnect 为 P1 能力默认 false（UI 灰显）。
  */
 const tcpProfileSchema = z.object({
@@ -191,7 +192,7 @@ export const workspaceSchema = z.object({
   }),
   panelLayout: z.object({
     sidebarCollapsed: z.boolean(),
-    /** 侧边栏展开态宽度（px，2026-09-08 可拖宽；老数据缺省补默认，无需迁移）。 */
+    /** 侧边栏展开态宽度（px 可拖宽；老数据缺省补默认，无需迁移）。 */
     sidebarWidth: z.number().default(DEFAULT_SIDEBAR_WIDTH),
     bottomPanelCollapsed: z.boolean(),
     bottomPanelHeight: z.number(),
@@ -201,7 +202,7 @@ export const workspaceSchema = z.object({
     theme: z.enum(["light", "dark"]),
     /** 界面语言：默认 en-US；老数据缺省时补默认值，无需迁移。 */
     language: z.enum(["en-US", "zh-CN"]).default("en-US"),
-    /** 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色 = `<pluginId>:<colorId>`；老数据缺省补 null。 */
+    /** 所选主题色预设：null=内置 Ant Design 默认蓝；插件色 = `<pluginId>:<colorId>`；老数据缺省补 null。 */
     themePrimary: z.string().nullable().default(null),
   }),
   notes: z.string(),
@@ -246,7 +247,7 @@ export function serializeWorkspace(workspace: Workspace): string {
 
 /** 解析并校验持久化数据，重建领域对象（受控工厂恢复值对象）。 */
 export function parseWorkspace(input: unknown): Result<Workspace> {
-  // 迁移框架（docs/AGENTS.md §19.6）：先按版本链迁移再校验。v1→v2（2026-08-26）：
+  // 迁移框架（docs/AGENTS.md §19.6）：先按版本链迁移再校验。v1→v2：
   // 写后回读配置从 workspace 全局 readVerifySettings 迁移到各 sheet.writeVerify。
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return fail(schemaInvalidError("workspace data must be an object"));

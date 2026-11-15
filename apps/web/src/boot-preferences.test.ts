@@ -1,5 +1,5 @@
 /**
- * 首屏偏好缓存单测（node 环境，2026-09-16；e2e 侧见
+ * 首屏偏好缓存单测（node 环境；e2e 侧见
  * `tests/e2e-web/tests/boot-preferences.spec.ts`）。
  *
  * 覆盖：
@@ -181,7 +181,7 @@ describe("hydrateBootPreferences", () => {
       const state = useAppStore.getState();
       expect(state.theme).toBe("dark");
       expect(state.themePrimary).toBe("example-theme:indigo");
-      // 关键（插件主题色首帧修复）：主色种子也要落到 store，首帧才能直接着色。
+      // 主色种子也要落到 store，首帧才能直接着色。
       expect(state.themeColorSeed).toBe("#4f46e5");
       // 关键：`<html lang>` effect 读的是 workspace 偏好，必须同步写入（否则会被默认 en-US 顶回）。
       expect(state.workspace.preferences).toMatchObject({

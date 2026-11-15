@@ -40,7 +40,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!--
-      USB-RS485（ADR-050 Phase 2）：USB Host（OTG）能力。
+      USB-RS485：USB Host（OTG）能力。
       required="false"：无 OTG 的设备仍可安装并使用 Modbus TCP / 工作区；
       权限采用运行时 UsbManager.requestPermission（无需 manifest 声明权限）；
       不加 USB_DEVICE_ATTACHED intent-filter（避免插线自动拉起应用，属行为变化）。

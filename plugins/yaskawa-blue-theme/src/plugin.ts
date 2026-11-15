@@ -1,12 +1,12 @@
 /**
- * 安川蓝主题色插件（2026-09-08）。
- * 典型 theme 贡献点场景：把安川品牌蓝（#005BB6）注册为 Settings → 主题色 可选预设。
+ * 安川蓝主题色插件。
+ * 典型 theme 贡献点场景：把安川品牌蓝（#005BB6）注册为 Settings → 主题色可选预设。
  * 仅声明式贡献，无代码执行（无 runtime）；**不随包一次性安装**——需在 Plugin Manager
  * 通过「Install Plugin」手动安装本包内的 `manifest.json`（source:"installed"），
- * 遵循 ADR-045 禁止新增内置插件规范。
- * i18n（2026-09-03 方案 A）：插件经 `title` 字段自带翻译（en-US / zh-CN），
+ * 插件由用户手动安装，不随应用内置。
+ * i18n（方案 A）：插件经 `title` 字段自带翻译（en-US / zh-CN），
  * 缺失语言时消费方回退英文（title["en-US"]），再回退应用 i18n 的 titleKey。
- * 仅提供单一明亮模式主色（种子），暗色/链接/hover/active 由 antd 色彩算法自动派生（ADR-048）。
+ * 仅提供单一明亮模式主色（种子），暗色/链接/hover/active 由 antd 色彩算法自动派生。
  */
 import {
   PLUGIN_API_VERSION,

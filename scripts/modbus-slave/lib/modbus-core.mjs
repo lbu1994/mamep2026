@@ -25,7 +25,7 @@ export const FUNCTION_READ_HOLDING = 0x03;
 export const FUNCTION_READ_INPUT_REGISTERS = 0x04;
 export const FUNCTION_WRITE_MULTIPLE_COILS = 0x0f;
 export const FUNCTION_WRITE_MULTIPLE = 0x10;
-/** 自定义功能码（ADR-043 E-4 示例插件）：0x65 读 / 0x66 写连续寄存器。 */
+/** 自定义功能码（示例插件）：0x65 读 / 0x66 写连续寄存器。 */
 export const CUSTOM_READ_FUNCTION = 0x65;
 export const CUSTOM_WRITE_FUNCTION = 0x66;
 
@@ -33,11 +33,11 @@ export const CUSTOM_WRITE_FUNCTION = 0x66;
 export const MAX_READ_BITS_QUANTITY = 2000;
 /** FC0F 单次请求最大写入线圈数（Modbus 规范 1968）。 */
 export const MAX_WRITE_COILS_QUANTITY = 1968;
-/** FC04/FC03 单次请求最大读取寄存器数（ADR-030）。 */
+/** FC04/FC03 单次请求最大读取寄存器数。 */
 export const MAX_READ_QUANTITY = 125;
 
 // ---------------------------------------------------------------------------
-// 表类型（ADR-043 E-1：基础表与保持寄存器地址空间可重叠）
+// 表类型（基础表与保持寄存器地址空间可重叠）
 // ---------------------------------------------------------------------------
 export const TABLE_TYPE_HOLDING = "holding";
 export const TABLE_TYPE_COIL = "coil";
@@ -129,9 +129,9 @@ export function createLogger(level = "info", logFrames = true) {
  * - 0x0500–0x050f 不支持功能：读/写均回异常 0x01
  * - 0x0600–0x060f 设备无响应：读/写均不回任何帧
  * - 0x0800–0x080f 多寄存器区（must-multi）：单读/单写回异常 0x02，多读/多写正常
- *   （模拟真实设备「某些寄存器必须连续读写」，ADR-030）
+ *   （模拟真实设备「某些寄存器必须连续读写」）
  * - 0x0900–0x090f 写忽略区：读/写均成功回执，但写入不实际落盘（读回仍为旧值）
- * - 基础表（ADR-043 E-1，含 tableType，地址空间与保持寄存器 0x0000–0x000f 重叠）：
+ * - 基础表（含 tableType，地址空间与保持寄存器 0x0000–0x000f 重叠）：
  *   coil（FC01 读 / FC0F 写正常）、discrete-input（FC02 只读，写回异常 0x02）、
  *   input-register（FC04 只读，写回异常 0x02）。
  *   与 DEFAULT_MOCK_BASIC_TABLE_SCENARIOS 一一对应。
@@ -180,7 +180,7 @@ export const DEFAULT_RULES = [
     write: { kind: "no-response" },
   },
   {
-    // ADR-030：单读/单写回异常 0x02；多读/多写正常（必须连续读写）。
+    //单读/单写回异常 0x02；多读/多写正常（必须连续读写）。
     start: 0x0800,
     end: 0x080f,
     read: { kind: "normal" },
@@ -193,7 +193,7 @@ export const DEFAULT_RULES = [
     read: { kind: "normal" },
     write: { kind: "write-ignore" },
   },
-  // 基础表（ADR-043 E-1）：地址空间与保持寄存器 0x0000–0x000f 重叠，靠 tableType 区分。
+  // 基础表：地址空间与保持寄存器 0x0000–0x000f 重叠，靠 tableType 区分。
   {
     tableType: TABLE_TYPE_COIL,
     start: 0x0000,
@@ -292,9 +292,9 @@ export function normalizeRules(rules) {
       end: rule.end & 0xffff,
       read: normalizeBehavior(rule.read ?? "normal", `rules[${index}].read`),
       write: normalizeBehavior(rule.write ?? "normal", `rules[${index}].write`),
-      // ADR-030：must-multi 区（单读/单写异常，多读/多写正常）。
+      //must-multi 区（单读/单写异常，多读/多写正常）。
       ...(rule.mustMulti === true ? { mustMulti: true } : {}),
-      // ADR-043 E-1：表类型专用规则（基础表与保持寄存器地址空间可重叠）。
+      //表类型专用规则（基础表与保持寄存器地址空间可重叠）。
       ...(rule.tableType !== undefined ? { tableType: rule.tableType } : {}),
     };
   });
@@ -302,7 +302,7 @@ export function normalizeRules(rules) {
 
 /**
  * 命中地址所在规则（顺序匹配，第一条命中生效）；未命中返回 null（回退正常行为）。
- * 表类型专用规则优先于通用规则（ADR-043 E-1：基础表与保持寄存器地址空间可重叠）。
+ * 表类型专用规则优先于通用规则（基础表与保持寄存器地址空间可重叠）。
  */
 export function matchRule(rules, address, tableType = TABLE_TYPE_HOLDING) {
   // 先匹配该表类型专用规则。
@@ -344,13 +344,13 @@ export function parseRegisters(registers) {
 }
 
 // ---------------------------------------------------------------------------
-// ASCII 字符串区（2026-09-14）
+// ASCII 字符串区
 // ---------------------------------------------------------------------------
 /**
  * 从站内置 ASCII 字符串样例区（保持寄存器）：
  * - 地址 0x0010–0x001F 共 16 个连续寄存器 = 32 个字符；
  * - 该区间**不命中任何规则** → 按「规则外回退正常行为」读写均正常（无需新增规则）；
- * - 编码语义与应用的 String 数据类型完全一致（ADR-030）：ASCII、每寄存器 2 字符、
+ * - 编码语义与应用的 String 数据类型完全一致：ASCII、每寄存器 2 字符、
  *   高字节在前、不足补空格（权威：packages/data-conversion/src/multi-register.ts 的
  *   decodeAscii / parseCompositeString）；
  * - 用途：验证「连续寄存器可读出正常 ASCII 字符串」。真实端口 e2e 经 UI（范围行 + Type=String）
@@ -407,7 +407,7 @@ export function asciiStringReadPduHex(values = asciiStringRegisters()) {
 }
 
 /**
- * 位打包读辅助（FC01/FC02，ADR-043 E-1）：逐位取 map 值（非 0 视为 1），LSB 在前。
+ * 位打包读辅助（FC01/FC02）：逐位取 map 值（非 0 视为 1），LSB 在前。
  * @param {Map<number, number>} map 位值存储（coil/离散输入）
  * @param {number} address 起始地址
  * @param {number} quantity 读取位数
@@ -427,7 +427,7 @@ export function packRawBits(map, address, quantity) {
 }
 
 /**
- * 位打包写辅助（FC0F，ADR-043 E-1）：values 为 0/1，byteCount=ceil(n/8)，字节内 LSB 在前。
+ * 位打包写辅助（FC0F）：values 为 0/1，byteCount=ceil(n/8)，字节内 LSB 在前。
  * @param {Uint8Array} data 请求中的位打包数据（由调用方定位）
  * @param {number} startOffset data 中位数据偏移（RTU=7 / TCP=8）
  * @param {number} byteCount 请求携带的 byteCount

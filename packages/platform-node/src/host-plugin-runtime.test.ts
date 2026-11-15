@@ -1,5 +1,5 @@
 /**
- * HostPluginRuntime 单测（ADR-055，2026-09-12）。
+ * HostPluginRuntime 单测。
  *
  * 覆盖：只加载「已启用 + same-process + 可执行」插件、同步能力（addressTransform / codec）
  * 真正注册到宿主注册表、幂等、卸载 / 禁用后无残留、entrySource 变化重建、加载与激活错误隔离。

@@ -41,7 +41,7 @@ function makeSyncRegistries(
   };
 }
 
-/** 插件上下文（ADR-054）：由装配层/注册表注入。 */
+/** 插件上下文：由装配层/注册表注入。 */
 function makeContext(registries: PluginSyncRegistries): PluginContext {
   return {
     pluginId: ADDRESS_ADJUST_PLUGIN_ID,

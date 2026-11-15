@@ -1,5 +1,5 @@
 /**
- * Web Serial 最小授权单测（ADR-017；2026-08-21 扩展：延迟选择模式）。
+ * Web Serial 最小授权单测（扩展：延迟选择模式）。
  * 权限判定（仅本 origin）、端口列表转发（onPortsAvailable）、挂起选择解析
  * （resolvePendingSelection）、自动选择策略、origin 推导。
  * fake session 捕获 handler 并可直接触发 select-serial-port；不 mock electron 运行时。

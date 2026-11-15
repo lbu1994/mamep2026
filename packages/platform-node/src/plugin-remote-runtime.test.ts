@@ -1,5 +1,5 @@
 /**
- * NodePluginRemoteRuntime 集成测试（ADR-044 Phase F-2，2026-09-01）。
+ * NodePluginRemoteRuntime 集成测试。
  * 真实 worker_threads 端到端：entry（data URL ESM）加载/激活/通信桥/停用/关闭。
  */
 import { describe, expect, it, vi } from "vitest";

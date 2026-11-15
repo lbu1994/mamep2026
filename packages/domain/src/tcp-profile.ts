@@ -1,8 +1,8 @@
 /**
- * Modbus TCP 连接配置（docs/TECH_DESIGN.md §18.4、ADR-020 后续 Node TCP Adapter）。
+ * Modbus TCP 连接配置（docs/TECH_DESIGN.md §18.4 后续 Node TCP Adapter）。
  * - host 视为不透明字符串原样传递，不解析/不归一化 IP（§34.3.4 路径/主机名不解析原则）；
- * - unitId 为 MBAP 单元标识：0~255，默认 0（2026-08-23 确认）；0=广播（MVP 不实现广播写入）；
- * - autoReconnect 为 P1 能力（UI 灰显禁用，2026-08-23 确认），默认 false；
+ * - unitId 为 MBAP 单元标识：0~255，默认 0；0=广播（不实现广播写入）；
+ * - autoReconnect 为 P1 能力（UI 灰显禁用确认），默认 false；
  */
 import { createMamepError, type MamepError } from "./errors";
 import { fail, ok, type Result } from "./result";
@@ -15,7 +15,7 @@ export interface TcpConnectionProfile {
   protocol: "tcp";
   host: string;
   port: number;
-  /** MBAP 单元标识：0~255，默认 0（0=广播，MVP 不实现广播写入）。 */
+  /** MBAP 单元标识：0~255，默认 0（0=广播，不实现广播写入）。 */
   unitId: number;
   /** 连接超时（ms）。 */
   connectTimeoutMs: number;
@@ -23,7 +23,7 @@ export interface TcpConnectionProfile {
   requestTimeoutMs: number;
   /** 首次请求失败后的额外重试次数。 */
   retryCount: number;
-  /** 自动重连：P1 能力（UI 灰显禁用，2026-08-23 确认），默认 false。 */
+  /** 自动重连：P1 能力（UI 灰显禁用确认），默认 false。 */
   autoReconnect: boolean;
 }
 

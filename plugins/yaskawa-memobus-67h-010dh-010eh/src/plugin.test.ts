@@ -19,7 +19,7 @@ import {
 } from "./plugin";
 
 /**
- * 装配测试夹具（ADR-054）：真 codec 注册表作为同步注册面，按装配层同样方式把单文件 entry
+ * 装配测试夹具：真 codec 注册表作为同步注册面，按装配层同样方式把单文件 entry
  * 注册为 installed + same-process 插件。
  */
 function makeHarness(
@@ -120,7 +120,7 @@ describe("Yaskawa MEMOBUS 插件（ADR-041；ADR-054 单文件手动安装）", 
       "yaskawa.enter-ram",
     ]);
 
-    // 寄存器手册（ADR-043 E-5）：documentation 贡献点含 markdown。
+    // 寄存器手册：documentation 贡献点含 markdown。
     const docs = contributionRegistry.getContributions<{
       id: string;
       titleKey: string;

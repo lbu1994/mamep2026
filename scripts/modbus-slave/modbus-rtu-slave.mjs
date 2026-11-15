@@ -302,7 +302,7 @@ class ModbusRtuSlave {
         return;
       }
       const quantity = ((bytes[4] ?? 0) << 8) | (bytes[5] ?? 0);
-      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      // must-multi 区：单读返回非法数据地址异常。
       if (rule?.mustMulti === true && quantity === 1) {
         this.logException(
           functionCode,
@@ -365,7 +365,7 @@ class ModbusRtuSlave {
         );
         return;
       }
-      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      // must-multi 区：单写返回非法数据地址异常。
       if (rule?.mustMulti === true && quantity === 1) {
         this.logException(
           functionCode,
@@ -439,7 +439,7 @@ class ModbusRtuSlave {
       return;
     }
 
-    // FC01/FC02 读位（线圈/离散输入，ADR-043 E-1）：按表类型规则读位。
+    // FC01/FC02 读位（线圈/离散输入）：按表类型规则读位。
     if (
       functionCode === FUNCTION_READ_COILS ||
       functionCode === FUNCTION_READ_DISCRETE_INPUTS
@@ -474,7 +474,7 @@ class ModbusRtuSlave {
       return;
     }
 
-    // FC04 读输入寄存器（ADR-043 E-1）：按 input-register 表类型规则读。
+    // FC04 读输入寄存器：按 input-register 表类型规则读。
     if (functionCode === FUNCTION_READ_INPUT_REGISTERS) {
       const readRule = matchRule(
         this.config.rules,
@@ -516,7 +516,7 @@ class ModbusRtuSlave {
       return;
     }
 
-    // FC0F 写多线圈（ADR-043 E-1）：按 coil 表类型规则写（位打包）。
+    // FC0F 写多线圈：按 coil 表类型规则写（位打包）。
     if (functionCode === FUNCTION_WRITE_MULTIPLE_COILS) {
       const writeRule = matchRule(this.config.rules, address, TABLE_TYPE_COIL);
       const behavior = writeRule?.write ?? { kind: "normal" };
@@ -558,7 +558,7 @@ class ModbusRtuSlave {
       return;
     }
 
-    // 自定义功能码（ADR-043 E-4）：0x65 读 / 0x66 写连续寄存器（走通用 holding 规则）。
+    // 自定义功能码：0x65 读 / 0x66 写连续寄存器（走通用 holding 规则）。
     if (
       functionCode === CUSTOM_READ_FUNCTION ||
       functionCode === CUSTOM_WRITE_FUNCTION

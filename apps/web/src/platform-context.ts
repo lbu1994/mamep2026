@@ -1,5 +1,5 @@
 /**
- * 跨平台共享装配上下文（composition root，2026-09-13）。
+ * 跨平台共享装配上下文（composition root）。
  *
  * 平台 Host 工厂（`host-factories/*`）所需的一切平台无关依赖在此一次性装配：codec / 数据类型 /
  * 地址变换注册表 + 插件同步贡献注册面 + 运行模式标记。平台专属部分（串口、桥、仓储实现）由各
@@ -25,13 +25,13 @@ import { createIdbKeyValueStore } from "@mamep2026/platform-web";
 import { createPluginSyncRegistries } from "./sync-registries";
 
 export interface PlatformHostContext {
-  /** codec 注册表（ADR-041 决策 A）：基础表 codec 已注册，插件经 `syncRegistries` 追加。 */
+  /** codec 注册表：基础表 codec 已注册，插件经 `syncRegistries` 追加。 */
   codecRegistry: CodecRegistry;
-  /** 数据类型解析器（ADR-043 E-3）：装配后注入 UI store。 */
+  /** 数据类型解析器：装配后注入 UI store。 */
   dataTypeResolver: DataTypeResolver;
-  /** 同步贡献注册面（ADR-054）：插件 `activate(ctx)` 的唯一注入点。 */
+  /** 同步贡献注册面：插件 `activate(ctx)` 的唯一注入点。 */
   syncRegistries: PluginSyncRegistries;
-  /** 地址变换解析（ADR-042 / ADR-054）：表级 Address Adjust 经此解析。 */
+  /** 地址变换解析：表级 Address Adjust 经此解析。 */
   resolveAddressTransform: (transformId: string) => AddressTransform | null;
   /** dev mock 传输（`?mockTransport=1`，仅 dev 生效；浏览器/Android 使用）。 */
   mockTransport: boolean;
@@ -55,12 +55,12 @@ export interface PlatformContextEnv {
 export function createPlatformHostContext(
   env: PlatformContextEnv,
 ): PlatformHostContext {
-  // codec 注册表（ADR-041 决策 A）：插件 activate 经 ctx.registries 填充，connect 按活动表协议路由。
+  // codec 注册表：插件 activate 经 ctx.registries 填充，connect 按活动表协议路由。
   const codecRegistry = createCodecRegistry();
-  // 基础表 codec（ADR-043 E-2）：coil/discrete-input/input-register，三端共享装配（核心能力）。
+  // 基础表 codec：coil/discrete-input/input-register，三端共享装配（核心能力）。
   registerBasicTablesCodecs(codecRegistry);
-  // 地址变换注册表（ADR-042）+ 数据类型解析器（ADR-043 E-3）：插件 activate 经 ctx.registries
-  // 注册（ADR-054：插件一律手动安装，核心不再内置任何插件）。
+  // 地址变换注册表+ 数据类型解析器：插件 activate 经 ctx.registries
+  // 注册（插件一律手动安装，核心不再内置任何插件）。
   const transformRegistry = createAddressTransformRegistry();
   const dataTypeResolver = createDataTypeResolver();
   const resolveAddressTransform = (transformId: string) =>

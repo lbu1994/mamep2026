@@ -9,7 +9,7 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.0'
         classpath 'com.google.gms:google-services:4.4.4'
-        // app 内自研通信插件用 Kotlin（ADR-050）；版本与 Gradle 8.14.3 / AGP 8.13 兼容。
+        // app 内自研通信插件用 Kotlin；版本与 Gradle 8.14.3 / AGP 8.13 兼容。
         classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20'
 
         // NOTE: Do not place your application dependencies here; they belong
@@ -23,7 +23,7 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // usb-serial-for-android 仅在 JitPack 发布（ADR-050 Phase 2）。
+        // usb-serial-for-android 仅在 JitPack 发布。
         maven { url 'https://jitpack.io' }
     }
 }

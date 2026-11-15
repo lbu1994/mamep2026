@@ -1,5 +1,5 @@
 /**
- * 工作区导入/导出 e2e（mockTransport=1，浏览器端，2026-08-29，PRD §8.3 P1）。
+ * 工作区导入/导出 e2e（mockTransport=1，浏览器端，PRD §8.3 P1）。
  * 覆盖：
  * - 导出：Settings → Export Workspace 触发浏览器下载（Blob），文件名 mamep-workspace-*.json，
  *   内容为版本化 JSON（schemaVersion），含当前工作区行数据；
@@ -34,7 +34,7 @@ async function setName(page: Page, index: number, name: string): Promise<void> {
 }
 
 /**
- * 打开 Settings 抽屉（顶栏按钮；2026-09-12：容器由 Modal 改为 Drawer），返回抽屉定位器。
+ * 打开 Settings 抽屉（顶栏按钮），返回抽屉定位器。
  * 注意：开合类 `.ant-drawer-open` 在抽屉**根元素**上（antd v6 的 `className` 落在内容面板
  * `.ant-drawer-section`，故组件用 `rootClassName`）；关闭后根元素仍留在 DOM（仅内容 wrapper
  * 被置 `display:none`），因此开合判定一律用 `.settings-drawer.ant-drawer-open`。
@@ -222,7 +222,7 @@ test("导入含 connectionProfiles 的工作区：Connection Settings 恢复连�
   const settings = await openSettings(page);
 
   // 导出当前工作区 JSON，注入含自定义 baudRate 的 RTU 连接对象后重新导入。
-  // 原「Connection Settings → Import JSON…」已移除，连接对象导入由工作区导入承担（ADR-033）。
+  // 原「Connection Settings → Import JSON…」已移除，连接对象导入由工作区导入承担。
   const downloadPromise = page.waitForEvent("download");
   await settings.getByRole("button", { name: "Export Workspace" }).click();
   const download = await downloadPromise;

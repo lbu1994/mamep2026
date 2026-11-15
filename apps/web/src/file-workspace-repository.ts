@@ -1,5 +1,5 @@
 /**
- * Electron Renderer 工作区文件仓储薄桥（docs/TECH_DESIGN.md §19.4、ADR-036，2026-08-30）。
+ * Electron Renderer 工作区文件仓储薄桥（docs/TECH_DESIGN.md §19.4）。
  * 实现 WorkspaceRepositoryPort：经 preload 白名单桥（window.mamepHost）调用主进程文件仓储
  * （workspace-load / workspace-save / workspace-clear，content 传序列化 JSON 字符串）。
  * 序列化/反序列化在本层完成（对齐 IndexedDBWorkspaceRepository 的 parse/serialize 位置）；
@@ -23,7 +23,7 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
     | "workspaceClear"
     | "workspaceCreateBackup"
   >;
-  /** workspace-load 响应带回来的恢复元数据（ADR-049）。 */
+  /** workspace-load 响应带回来的恢复元数据。 */
   private recoveryInfo: WorkspaceRecoveryInfo | null = null;
 
   constructor(

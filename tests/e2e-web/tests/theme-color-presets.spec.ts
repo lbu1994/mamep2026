@@ -1,8 +1,8 @@
 /**
- * 主题色预设选择器 e2e（mockTransport=1，浏览器端，2026-09-02，ADR-047；ADR-048 去字面量；
- * 2026-09-03：主题色示例已剥离为独立插件 `plugins/example-theme`，不随包，需手动安装）。
+ * 主题色预设选择器 e2e（mockTransport=1，浏览器端去字面量；
+ * 主题色示例已剥离为独立插件 `plugins/example-theme`，不随包，需手动安装）。
  * 验证：
- * - 内置仅一个选项：Ant Design 默认蓝（其值由 antd 运行时令牌决定，ADR-048：不写死色值）；
+ * - 内置仅一个选项：Ant Design 默认蓝（其值由 antd 运行时令牌决定：不写死色值）；
  *   --mamep-brand-primary 与页面 --ant-color-primary 同步（浅/深）；
  * - 默认（未安装 example-theme）仅默认蓝；经 Settings → Plugins 手动安装后可选主题色出现且**不自动应用**；
  * - 选中插件色 → antd token / --mamep-brand-primary 同步 + reload 持久化；
@@ -34,13 +34,13 @@ async function openApp(page: Page): Promise<string[]> {
   return errors;
 }
 
-/** 切到 Settings 抽屉的指定页签（2026-09-12：抽屉内含 General / Plugins 页签）。 */
+/** 切到 Settings 抽屉的指定页签（抽屉内含 General / Plugins 页签）。 */
 async function clickSettingsTab(page: Page, name: string): Promise<void> {
   await page.locator(".settings-drawer").getByRole("tab", { name }).click();
 }
 
 /** 打开 Settings 抽屉并停在 General 页签（已打开时幂等）。
- * 2026-09-12：容器由 Modal 改为 Drawer（类名 .settings-drawer）；插件管理并入后页签会保留上次选择，
+ * 容器为 Drawer（类名 .settings-drawer）；插件管理页签会保留上次选择，
  * 故助手显式回到 General，供主题/语言类断言使用。 */
 async function openSettings(page: Page): Promise<void> {
   if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
@@ -80,7 +80,7 @@ async function openPluginManager(page: Page) {
 }
 
 /** 经 Settings → Plugins 手动安装 example-theme（浏览器 pluginInstall==="upload" 路径，
- * 选 plugins/example-theme/manifest.json）。2026-09-03：该示例不随包，需手动安装。 */
+ * 选 plugins/example-theme/manifest.json）。：该示例不随包，需手动安装。 */
 async function installExampleTheme(page: Page): Promise<void> {
   const section = await openPluginManager(page);
   await section.getByRole("button", { name: "Install Plugin" }).click();
@@ -104,7 +104,7 @@ async function installExampleTheme(page: Page): Promise<void> {
   await closeSettings(page);
 }
 
-/** 读取 .ant-app 上的 --mamep-brand-primary（.ant-app 作用域映射 var(--ant-color-primary)，ADR-048）。 */
+/** 读取 .ant-app 上的 --mamep-brand-primary（.ant-app 作用域映射 var(--ant-color-primary)）。 */
 async function brandPrimary(page: Page): Promise<string> {
   const value = await page.evaluate(() => {
     const el = document.querySelector(".ant-app");

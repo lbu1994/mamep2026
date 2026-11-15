@@ -1,5 +1,5 @@
 /**
- * 插件 API 版本兼容性判定（docs/architecture/ports/plugin-api/插件契约.md §3，ADR-039）。
+ * 插件 API 版本兼容性判定（docs/architecture/ports/plugin-api/插件契约.md §3）。
  * apiVersion 采用语义化 major.minor：major 不同 → 禁止加载（forbidden）；minor 不同 →
  * 可加载但警告（loadable-warning）。破坏性变更提升 major 并递增 PLUGIN_API_VERSION。
  */

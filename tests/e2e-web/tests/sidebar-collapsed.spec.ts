@@ -81,9 +81,9 @@ test("collapsed sidebar centers group icons and does not overflow horizontally",
     /ant-layout-sider-collapsed/,
   );
 
-  // 折叠窄条几何（2026-09-16 修复守护）：
-  //  - 分组图标中心须与顶部折叠按钮中心同一竖轴（= 窄条内容区中线；修复前偏左 4px）；
-  //  - `.sheet-sidebar__groups` 不得横向溢出（修复前 scrollWidth 44 > clientWidth 35，出横向滚动条）。
+  // 折叠窄条几何：
+  //  - 分组图标中心须与顶部折叠按钮中心同一竖轴（= 窄条内容区中线）；
+  //  - `.sheet-sidebar__groups` 不得横向溢出。
   const geometry = await page.evaluate(() => {
     const strip = document.querySelector<HTMLElement>(".sheet-sidebar");
     const button = document.querySelector<HTMLElement>(
@@ -102,8 +102,7 @@ test("collapsed sidebar centers group icons and does not overflow horizontally",
       axisCenter: centerOf(button.getBoundingClientRect()),
       titleCount: document.querySelectorAll(titleSelector).length,
       // 每个分组标题的 DOM 里除**分组图标**外还有一个隐藏的展开箭头（同为 `.anticon`、零尺寸），
-      // 故只统计可见图标（宽高 > 0）——此前按全部 `.anticon` 计数会把箭头算进来（4 组 → 8 个），
-      // 断言必然失败（2026-09-17 修正；与「首帧闪烁」修复无关，属用例自身度量缺陷）。
+      // 故只统计可见图标（宽高 > 0），排除零尺寸的展开箭头。
       iconCenters: [
         ...document.querySelectorAll<HTMLElement>(`${titleSelector} .anticon`),
       ]

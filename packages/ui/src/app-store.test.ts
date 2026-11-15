@@ -1500,7 +1500,7 @@ describe("commitCellText（Data 单元格提交校验）", () => {
     expect(row?.cellText).toBe("FFFF 0000");
     // 原始值单一事实源随提交同步（子行 / 位明细数据源）。
     expect(row?.registerValues?.map((v) => v.value)).toEqual([0xffff, 0x0000]);
-    // 子行显示与父行文本一致（修复前仍为上次读取值 1234 / ABCD）。
+    // 子行显示与父行文本一致。
     const parent = buildTreeRows(row === undefined ? [] : [row])[0] as {
       children?: VirtualChildRow[];
     };

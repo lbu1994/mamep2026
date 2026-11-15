@@ -1,6 +1,6 @@
 /**
- * Read All（全表读取）完成结果的富内容全局提示（antd message，2026-08-28）。
- * 展示批次摘要：标题 + 成功/失败/跳过/取消 统计（语义色分层）+ 耗时。
+ * Read All（全表读取）完成结果的富内容全局提示（antd message）。
+ * 展示批次摘要：标题 + 成功/失败/跳过/取消统计（语义色分层）+ 耗时。
  *
  * 纯展示组件：数据来自 BatchReadSummary；文案走 i18n（table.* 命名空间）。
  * 由 RegisterTable.handleReadAll 经 App.useApp().message.open({ content }) 弹出，

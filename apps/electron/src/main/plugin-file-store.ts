@@ -1,8 +1,8 @@
 /**
- * Electron 主进程插件文件仓储（ADR-038，2026-08-30）。
+ * Electron 主进程插件文件仓储。
  * 实现 PluginStorePort：应用数据目录（app.getPath("userData")）下 plugins.json
  * （schemaVersion 1，结构对齐 plugin-api PluginStoreData）。原子保存 + 单份 .bak 轮转 +
- * 损坏从备份恢复自愈，与 WorkspaceFileRepository（ADR-036）同一模式；主文件缺失 = 首次
+ * 损坏从备份恢复自愈，与 WorkspaceFileRepository同一模式；主文件缺失 = 首次
  * 启动返回空存储。路径与权限由主进程控制，Renderer 不直接触碰文件系统；跨边界经
  * HostMessage v2 plugin-store-load / plugin-store-save（载荷为结构化插件存储数据）。
  */

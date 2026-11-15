@@ -1,14 +1,10 @@
 /**
- * 侧边栏重命名编辑态下 sheet 项不可拖拽 e2e（mockTransport=1，浏览器端，2026-09-08）。
- * Bug：侧边栏 sheet 进入 Rename 编辑态后，想用鼠标选中输入框全文，却把整个 sheet 拖走了。
- * 根因：MamepApp.tsx 的 useEffect 把侧边栏所有 li[data-sheet-id] 的 draggable 设为 true
- * （拖拽排序），编辑输入框渲染在该可拖拽 li 内，鼠标按住+移动被视为「拖拽表项」而非「文本选择」。
+ * 侧边栏重命名编辑态下 sheet 项不可拖拽 e2e（mockTransport=1，浏览器端）。
  *
- * 复现（红）：
+ * 验证：
  * - 侧边栏右键 Rename → `.sheet-item__input` 可见；
- * - 断言正在编辑的 li[data-sheet-id] 的 draggable 为 "false" → 修复前全为 "true"，断言失败。
- * 修复（绿）：
- * - 编辑态的 li draggable 为 "false"（可正常选中文本），其余 sheet 项仍为 "true"（拖拽排序不受影响）。
+ * - 编辑态的 li[data-sheet-id] 的 draggable 为 "false"（可正常选中文本）；
+ * - 其余 sheet 项仍为 "true"（拖拽排序不受影响）。
  */
 import { expect, test, type Page } from "@playwright/test";
 

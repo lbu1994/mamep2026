@@ -1,5 +1,5 @@
 /**
- * 插件执行能力运行时探测（2026-09-13，ADR-056）。
+ * 插件执行能力运行时探测。
  *
  * ## 为什么需要
  * 浏览器 / Electron / VSCode 静态声明 `executablePlugins: true`，但 **Android WebView 的

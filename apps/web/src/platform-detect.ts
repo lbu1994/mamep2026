@@ -1,5 +1,5 @@
 /**
- * 运行时平台探测（2026-09-13，composition root 专用）。
+ * 运行时平台探测（composition root 专用）。
  *
  * 装配按平台分流前**必须先同步判定平台**（装配是首屏路径，不能依赖任何懒 chunk），因此本模块
  * 只依赖 `@mamep2026/platform-android` 的 `isAndroidPlatform`（纯读 `globalThis.Capacitor`，

@@ -3,7 +3,7 @@
 //
 // 颜色值来源：
 //   - antd 公开令牌 theme.getDesignToken({ algorithm })（品牌色 / 链接色 / 选中态，
-//     2026-09-02，ADR-048：随库升级自动跟随，无硬编码字面量）
+//随库升级自动跟随，无硬编码字面量）
 //   - packages/ui-theme/src/base.ts 的 token 覆盖（文字灰阶 / 背景）
 //
 // 用法：node scripts/check-contrast.mjs
@@ -56,7 +56,7 @@ const LIGHT = {
   textSecondary: "#595959", // rgba(0,0,0,0.65)
   textTertiary: "#737373", // rgba(0,0,0,0.55)
   textDisabled: "#949494", // rgba(0,0,0,0.42)
-  brandPrimary: lightToken.colorPrimary, // Primary 按钮/焦点（antd 运行时令牌，ADR-048）
+  brandPrimary: lightToken.colorPrimary, // Primary 按钮/焦点（antd 运行时令牌）
   link: lightToken.colorLink, // colorLink（浅，antd 运行时令牌）
   brandBg: lightToken.colorPrimaryBg, // antd primaryBg（浅）
   brandOnBrandBg: lightToken.colorPrimaryText, // antd primaryText（浅，选中态文字）

@@ -1,6 +1,6 @@
 /**
- * loadNodePluginEntry 单测（ADR-055，2026-09-12）：宿主同进程加载单文件 JS 插件 entry。
- * 真实 `import(data:text/javascript;base64,...)`（与生产同路径）。
+ * loadNodePluginEntry 单测：宿主同进程加载单文件 JS 插件 entry。
+ * 真实 `import(data:text/javascript;base64,。)`（与生产同路径）。
  */
 import { describe, expect, it } from "vitest";
 import {

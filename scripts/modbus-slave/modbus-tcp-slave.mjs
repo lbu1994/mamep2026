@@ -14,13 +14,13 @@
  * - 健壮性：协议标识不匹配丢弃、unitId 不匹配忽略、Length 非法重同步。
  *
  * 默认 host/port/unitId 来自 config/connections.json 的 tcp-local-slave（唯一事实源，
- * ADR-023）；registers/rules 来自本脚本同目录 modbus-tcp-slave.config.json（不存在则
+ * ）；registers/rules 来自本脚本同目录 modbus-tcp-slave.config.json（不存在则
  * 用内建默认配置）。可用 --config / --host / --port 覆盖。
  *
  * 用法：
- *   node scripts/modbus-slave/modbus-tcp-slave.mjs                        # 默认读取 config/connections.json + 同目录 config
- *   node scripts/modbus-slave/modbus-tcp-slave.mjs --config <path.json>   # 自定义配置文件
- *   node scripts/modbus-slave/modbus-tcp-slave.mjs --self-test            # 回环自测（临时端口，无需预先起服务）
+ *   node scripts/modbus-slave/modbus-tcp-slave.mjs # 默认读取 config/connections.json + 同目录 config
+ *   node scripts/modbus-slave/modbus-tcp-slave.mjs --config <path.json> # 自定义配置文件
+ *   node scripts/modbus-slave/modbus-tcp-slave.mjs --self-test # 回环自测（临时端口，无需预先起服务）
  *   node scripts/modbus-slave/modbus-tcp-slave.mjs --help
  */
 import * as net from "node:net";
@@ -310,7 +310,7 @@ class ModbusTcpSlave {
       }
       // PDU：fc + addr(2) + qty(2)
       const quantity = ((pdu[3] ?? 0) << 8) | (pdu[4] ?? 0);
-      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      // must-multi 区：单读返回非法数据地址异常。
       if (rule?.mustMulti === true && quantity === 1) {
         this.logException(
           functionCode,
@@ -377,7 +377,7 @@ class ModbusTcpSlave {
         );
         return;
       }
-      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      // must-multi 区：单写返回非法数据地址异常。
       if (rule?.mustMulti === true && quantity === 1) {
         this.logException(
           functionCode,
@@ -459,7 +459,7 @@ class ModbusTcpSlave {
       return;
     }
 
-    // FC01/FC02 读位（线圈/离散输入，ADR-043 E-1）：按表类型规则读位。
+    // FC01/FC02 读位（线圈/离散输入）：按表类型规则读位。
     if (
       functionCode === FUNCTION_READ_COILS ||
       functionCode === FUNCTION_READ_DISCRETE_INPUTS
@@ -500,7 +500,7 @@ class ModbusTcpSlave {
       return;
     }
 
-    // FC04 读输入寄存器（ADR-043 E-1）：按 input-register 表类型规则读。
+    // FC04 读输入寄存器：按 input-register 表类型规则读。
     if (functionCode === FUNCTION_READ_INPUT_REGISTERS) {
       const readRule = matchRule(
         this.config.rules,
@@ -547,7 +547,7 @@ class ModbusTcpSlave {
       return;
     }
 
-    // FC0F 写多线圈（ADR-043 E-1）：按 coil 表类型规则写（位打包）。
+    // FC0F 写多线圈：按 coil 表类型规则写（位打包）。
     if (functionCode === FUNCTION_WRITE_MULTIPLE_COILS) {
       const writeRule = matchRule(this.config.rules, address, TABLE_TYPE_COIL);
       const behavior = writeRule?.write ?? { kind: "normal" };
@@ -594,7 +594,7 @@ class ModbusTcpSlave {
       return;
     }
 
-    // 自定义功能码（ADR-043 E-4）：0x65 读 / 0x66 写连续寄存器（走通用 holding 规则）。
+    // 自定义功能码：0x65 读 / 0x66 写连续寄存器（走通用 holding 规则）。
     if (
       functionCode === CUSTOM_READ_FUNCTION ||
       functionCode === CUSTOM_WRITE_FUNCTION

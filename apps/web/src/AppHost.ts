@@ -99,30 +99,30 @@ export interface AppHostOptions {
   repository: WorkspaceRepositoryPort;
   mockTransport: boolean;
   /**
-   * 插件存储端口（2026-08-30，ADR-038）：提供时启动时加载已安装插件并按 executionMode
+   * 插件存储端口：提供时启动时加载已安装插件并按 executionMode
    * 装配执行面、在注册/启用变化时持久化。浏览器=IndexedDB、Electron/VSCode=主进程/扩展宿主
    * 持久化经桥。缺省不装配（无持久化，则无手动安装能力）。
    */
   pluginStore?: PluginStorePort | undefined;
   /**
-   * codec 注册表（ADR-041 决策 A）：插件 activate 经 ctx.registries.codec 填充；connect 时按
+   * codec 注册表：插件 activate 经 ctx.registries.codec 填充；connect 时按
    * 活动表类型路由 codecId 会话（软件仅提供调用接口）。缺省不装配（纯 RTU/TCP）。
    */
   codecRegistry?: CodecRegistry | undefined;
   /**
-   * 同步贡献注册面（ADR-054）：插件 `activate(ctx)` 经 `ctx.registries` 注册
+   * 同步贡献注册面：插件 `activate(ctx)` 经 `ctx.registries` 注册
    * codec / dataType / addressTransform；由组合根（apps/web App.tsx）装配后注入注册表。
    */
   syncRegistries?: PluginSyncRegistries | undefined;
   /**
-   * 地址变换解析（2026-09-02 插件外部化）：经随包 address-adjust 插件的
+   * 地址变换解析：经 address-adjust 插件的
    * AddressTransformRegistry 解析 transformId → 变换；缺省不调整（核心不再内置变换）。
    */
   resolveAddressTransform?:
     ((transformId: string) => AddressTransform | null) | undefined;
 }
 
-/** 插件清单校验失败（安装/启动加载路径，ADR-054）。 */
+/** 插件清单校验失败（安装/启动加载路径）。 */
 function pluginManifestInvalidError(message: string) {
   return createMamepError({
     code: "PLUGIN_MANIFEST_INVALID",
@@ -135,9 +135,9 @@ function pluginManifestInvalidError(message: string) {
 }
 
 /**
- * 能力矩阵派生（ADR-054）：协议扩展 / 表类型 = 平台基础值 + **已启用**插件贡献
+ * 能力矩阵派生：协议扩展 / 表类型 = 平台基础值 + **已启用**插件贡献
  * （平台不支持的能力仍不得由插件引入，基础值来自 platform-web / platform-node / platform-android）。
- * `getContributions` 已按插件启用状态与激活失败过滤（ADR-039）。
+ * `getContributions` 已按插件启用状态与激活失败过滤。
  */
 export function deriveCapabilities(
   base: PlatformCapabilities,
@@ -164,11 +164,11 @@ export function deriveCapabilities(
 }
 
 export class BrowserAppHost implements AppHost {
-  /** 基础能力（ADR-054）：协议扩展 / 表类型由 `get capabilities()` 叠加插件贡献派生。 */
+  /** 基础能力：协议扩展 / 表类型由 `get capabilities()` 叠加插件贡献派生。 */
   private readonly baseCapabilities: PlatformCapabilities;
   /**
    * 平台能力矩阵（docs/TECH_DESIGN.md §7）：基础能力 + 已启用插件贡献的协议扩展/表类型。
-   * 读取即派生（ADR-054）——UI 需在插件安装/启停后重新渲染才能看到新能力
+   * 读取即派生——UI 需在插件安装/启停后重新渲染才能看到新能力
    * （app-store 的 pluginsVersion 承担响应式信号）。
    */
   get capabilities(): PlatformCapabilities {
@@ -177,7 +177,7 @@ export class BrowserAppHost implements AppHost {
   readonly appVersion = __APP_VERSION__;
   readonly platform = "browser" as const;
   readonly pluginRegistry: PluginRegistry;
-  /** 贡献点注册表（ADR-039）：注册内置贡献点并注入 PluginRegistry 校验插件 contributes。 */
+  /** 贡献点注册表：注册内置贡献点并注入 PluginRegistry 校验插件 contributes。 */
   private readonly contributionRegistry: ContributionPointRegistry;
   readonly isMockMode: boolean;
   /** 浏览器兼容性检测结果（PRD §8.3 / §15.7 / TECH_DESIGN §40.2）。 */
@@ -189,18 +189,18 @@ export class BrowserAppHost implements AppHost {
   private readonly messageStore = new ApplicationMessageStore(2000);
   private readonly commLogStore = new CommunicationLogStore(10000);
   private readonly autoSave: AutoSaveCoordinator;
-  /** 插件持久化协调器（2026-08-30，ADR-038）：null = 未注入插件存储端口（纯内存）。 */
+  /** 插件持久化协调器：null = 未注入插件存储端口（纯内存）。 */
   private readonly pluginPersistence: PluginPersistenceCoordinator | null;
-  /** 插件存储端口（ADR-038/054）：null = 无手动安装能力（纯内存 / 测试）。 */
+  /** 插件存储端口：null = 无手动安装能力（纯内存 / 测试）。 */
   private readonly pluginStore: PluginStorePort | null;
-  /** codec 注册表（ADR-041 决策 A）：插件 activate 填充；connect 按活动表协议路由。 */
+  /** codec 注册表：插件 activate 填充；connect 按活动表协议路由。 */
   private readonly codecRegistry: CodecRegistry | null;
-  /** 地址变换解析（2026-09-02 插件外部化）：随包 address-adjust 插件注册表经装配注入。 */
+  /** 地址变换解析：address-adjust 插件注册表经装配注入。 */
   private readonly resolveAddressTransform:
     ((transformId: string) => AddressTransform | null) | null;
   /** RTU 会话宿主（Application 层）：会话/轮询/追踪/读写的单一编排，浏览器与 VSCode 共用。 */
   private readonly rtu: RtuSessionHost;
-  /** 当前会话从站地址（每表独立，2026-08-19）：UI 切换表/修改值时同步，连接时作为初始值。 */
+  /** 当前会话从站地址（每表独立）：UI 切换表/修改值时同步，连接时作为初始值。 */
   private currentSlaveAddress = 1;
   /** 当前选中端口显示标签（connect 时传给 rtu 供通信属性展示）。 */
   private portLabel: string | null = null;
@@ -234,7 +234,7 @@ export class BrowserAppHost implements AppHost {
       : detectBrowserCompatibility(
           options.compatibilityEnv ?? detectFromBrowser(),
         );
-    // 贡献点注册表（2026-08-31，ADR-039）：注册 10 个内置贡献点，插件 contributes 按点校验；
+    // 贡献点注册表：注册 10 个内置贡献点，插件 contributes 按点校验；
     // 消费方由 UI 层经 host.pluginRegistry.getContributions(id) 读取（启用/失败过滤）。
     this.contributionRegistry = new ContributionPointRegistry();
     for (const point of BUILTIN_CONTRIBUTION_POINTS) {
@@ -242,8 +242,8 @@ export class BrowserAppHost implements AppHost {
     }
     this.pluginRegistry = new PluginRegistry({
       contributionRegistry: this.contributionRegistry,
-      // 同进程 runtime 的插件通信面按 pluginId 绑定（2026-09-02 插件外部化）：
-      // 请求经统一调度器执行，日志携带来源插件 id（ADR-039 §3.4）。
+      // 同进程 runtime 的插件通信面按 pluginId 绑定（插件外部化）：
+      // 请求经统一调度器执行，日志携带来源插件 id。
       communicationApiFactory: (pluginId) =>
         createPluginCommunicationApi({
           getSession: () => this.rtu.getSession(),
@@ -254,7 +254,7 @@ export class BrowserAppHost implements AppHost {
             },
           pluginId,
         }),
-      // 同步贡献注册面（ADR-054）：插件 activate 经 ctx.registries 注册同步能力。
+      // 同步贡献注册面：插件 activate 经 ctx.registries 注册同步能力。
       ...(options.syncRegistries !== undefined
         ? { syncRegistries: options.syncRegistries }
         : {}),
@@ -281,8 +281,8 @@ export class BrowserAppHost implements AppHost {
     this.autoSave.onStatusChange((status) => {
       for (const listener of this.saveListeners) listener(status);
     });
-    // 插件持久化（2026-08-30，ADR-038）：注入存储端口时装配协调器；启动由 startPlugins()
-    // 显式执行（先加载已安装插件的执行面再带 runtime 注册，ADR-054）。
+    // 插件持久化：注入存储端口时装配协调器；启动由 startPlugins()
+    // 显式执行（先加载已安装插件的执行面再带 runtime 注册）。
     this.pluginPersistence =
       options.pluginStore !== undefined
         ? new PluginPersistenceCoordinator(
@@ -292,7 +292,7 @@ export class BrowserAppHost implements AppHost {
         : null;
     this.pluginStore = options.pluginStore ?? null;
     this.resolveAddressTransform = options.resolveAddressTransform ?? null;
-    // codec 注册表（ADR-041 决策 A）：随包插件 activate 填充；connect 按活动表协议路由。
+    // codec 注册表：插件 activate 填充；connect 按活动表协议路由。
     this.codecRegistry = options.codecRegistry ?? null;
     this.messageStore.subscribe((message) => {
       for (const listener of this.messageListeners) listener(message);
@@ -326,7 +326,7 @@ export class BrowserAppHost implements AppHost {
   }
 
   /**
-   * 启动插件系统（ADR-038 / ADR-054；App 装配后显式调用）：
+   * 启动插件系统（App 装配后显式调用）：
    * 1. 从插件存储加载已安装插件（无存储端口则跳过——无手动安装能力）；
    * 2. 逐个按 `executionMode` 加载执行面（same-process = 用户授权同进程 import；
    *    isolated = Web Worker 隔离线程）后带 runtime 注册为 installed 插件，并恢复启用状态；
@@ -347,7 +347,7 @@ export class BrowserAppHost implements AppHost {
   }
 
   /**
-   * 预览可执行插件 entry（ADR-054）：按 executionMode 加载 entry 并校验 manifest（**不注册**）。
+   * 预览可执行插件 entry：按 executionMode 加载 entry 并校验 manifest（**不注册**）。
    * 安装确认框据此展示插件信息；确认后再调 installPluginEntry（安装时会重新加载一次）。
    */
   async previewPluginEntry(
@@ -360,7 +360,7 @@ export class BrowserAppHost implements AppHost {
   }
 
   /**
-   * 安装可执行插件（ADR-054）：按 executionMode 装配执行面并注册为 installed 插件
+   * 安装可执行插件：按 executionMode 装配执行面并注册为 installed 插件
    * （持久化由 PluginPersistenceCoordinator 承担）。entry 内嵌的 manifest 为权威清单。
    */
   async installPluginEntry(
@@ -416,7 +416,7 @@ export class BrowserAppHost implements AppHost {
   }
 
   /**
-   * 注册存储中的插件（启动恢复，ADR-054）：可执行插件先加载执行面再注册
+   * 注册存储中的插件（启动恢复）：可执行插件先加载执行面再注册
    * （manifest 以 entry 为准，插件包升级随之生效）；纯清单插件按存储清单注册。
    */
   private async registerStoredPlugin(stored: StoredPlugin): Promise<void> {
@@ -472,7 +472,7 @@ export class BrowserAppHost implements AppHost {
     });
   }
 
-  /** 插件隔离运行时（ADR-044 Phase F-2）：Web Worker 加载 entry；通信面按插件 id 绑定。 */
+  /** 插件隔离运行时：Web Worker 加载 entry；通信面按插件 id 绑定。 */
   private createRemoteRuntime(entrySource: string): PluginRemoteRuntime {
     return createWebPluginRemoteRuntime(entrySource, (pluginId) =>
       createPluginCommunicationApi({
@@ -546,13 +546,13 @@ export class BrowserAppHost implements AppHost {
     this.autoSave.scheduleSave(workspace);
   }
 
-  /** 立即保存当前待写快照（应用关闭/页面隐藏前调用，ADR-049）。 */
+  /** 立即保存当前待写快照（应用关闭/页面隐藏前调用）。 */
   async flush(): Promise<Result<void>> {
     return this.autoSave.flush();
   }
 
   /**
-   * 应用进入/离开后台（移动端生命周期，ADR-050 Phase 3）：暂停/恢复轮询与追踪。
+   * 应用进入/离开后台（移动端生命周期）：暂停/恢复轮询与追踪。
    * 配置（pollingTargets / activeTraces）保留在会话宿主内，回前台按原配置重启。
    */
   setBackgroundSuspended(suspended: boolean): void {
@@ -563,7 +563,7 @@ export class BrowserAppHost implements AppHost {
     }
   }
 
-  /** 最近一次加载的恢复元数据（ADR-049 恢复提示）。 */
+  /** 最近一次加载的恢复元数据（恢复提示）。 */
   getWorkspaceRecoveryInfo(): WorkspaceRecoveryInfo | null {
     return this.repository.getRecoveryInfo();
   }
@@ -670,7 +670,7 @@ export class BrowserAppHost implements AppHost {
       transport = openResult.value;
     }
 
-    // 协议路由（ADR-041 决策 A）：缺省 rtu；活动表为安川表时 protocol=codecId，
+    // 协议路由：缺省 rtu；活动表为安川表时 protocol=codecId，
     // 需 codecRegistry 已装配（内置安川插件 activate 填充），否则返回能力错误而非崩溃。
     const protocol = options?.protocol ?? "rtu";
     if (protocol !== "rtu" && this.codecRegistry === null) {
@@ -754,7 +754,7 @@ export class BrowserAppHost implements AppHost {
     }
   }
 
-  // ---- 通信日志 CSV 导出（2026-08-28，PRD §8.3 P1）：浏览器 Blob 下载 ----
+  // ---- 通信日志 CSV 导出（PRD §8.3 P1）：浏览器 Blob 下载 ----
 
   async saveTextFile(options: {
     suggestedName: string;
@@ -787,7 +787,7 @@ export class BrowserAppHost implements AppHost {
     }
   }
 
-  // ---- 工作区导入（2026-08-29，PRD §8.3 P1）：浏览器走客户端文件选择（Upload），
+  // ---- 工作区导入（PRD §8.3 P1）：浏览器走客户端文件选择（Upload），
   // 不走本端口；本方法按能力矩阵如实返回能力错误（UI 依 workspaceImport === "upload" 分支）。----
 
   openTextFile(_options?: {
@@ -806,8 +806,8 @@ export class BrowserAppHost implements AppHost {
     );
   }
 
-  // ---- 插件运行时桥（2026-08-31，ADR-039）：浏览器无宿主桥，如实返回能力错误；
-  // 契约与穷尽守卫先行，运行时语义 Phase F 补齐。----
+  // ---- 插件运行时桥：浏览器无宿主桥，如实返回能力错误；
+  // 契约与穷尽守卫先行，运行时语义补齐。----
 
   pluginRuntimeLoad(_payload: PluginRuntimeLoadPayload): Promise<Result<null>> {
     return Promise.resolve(fail(pluginRuntimeUnavailableError()));
@@ -833,7 +833,7 @@ export class BrowserAppHost implements AppHost {
     return this.rtu.getConnectionState();
   }
 
-  /** 当前会话（ADR-044 Phase F-2）：插件通信面经统一调度器访问；未连接返回 null。 */
+  /** 当前会话：插件通信面经统一调度器访问；未连接返回 null。 */
   getSession(): CommunicationSession | null {
     return this.rtu.getSession();
   }
@@ -869,7 +869,7 @@ export class BrowserAppHost implements AppHost {
     this.rtu.setSlaveAddress(slave);
   }
 
-  /** 更新活动表地址变换配置（ADR-042）：浏览器 RTU 会话在本地，直接同步。 */
+  /** 更新活动表地址变换配置：浏览器 RTU 会话在本地，直接同步。 */
   setAddressTransform(
     config: {
       transformId: string;
@@ -998,7 +998,7 @@ function clipboardUnavailableError() {
   });
 }
 
-/** 插件运行时不可用（Phase A 无执行/无宿主桥）时返回的结构化能力错误（ADR-039）。 */
+/** 插件运行时不可用（无执行/无宿主桥）时返回的结构化能力错误。 */
 function pluginRuntimeUnavailableError() {
   return createMamepError({
     code: PLUGIN_RUNTIME_NOT_AVAILABLE,

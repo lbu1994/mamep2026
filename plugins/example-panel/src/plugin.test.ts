@@ -38,7 +38,7 @@ describe("example-panel 插件（panels 贡献示例，2026-09-12）", () => {
     expect(panels).toHaveLength(1);
     expect(panels[0]?.id).toBe("overview");
     expect(panels[0]?.titleKey).toBe("plugins.examplePanelTitle");
-    // 方案 A（2026-09-12）：插件自带 i18n title；缺失语言回退英文。
+    // 方案 A：插件自带 i18n title；缺失语言回退英文。
     expect(panels[0]?.title?.["en-US"]).toBe("Example Panel");
     expect(panels[0]?.title?.["zh-CN"]).toBe("示例面板");
   });

@@ -1,5 +1,5 @@
 /**
- * Capacitor 桥实现（ADR-050 §5）：`@capacitor/core` 的 `registerPlugin` 包装。
+ * Capacitor 桥实现：`@capacitor/core` 的 `registerPlugin` 包装。
  *
  * 单独子路径导出（`@mamep2026/platform-android/capacitor`）：只有 Android 装配才加载 `@capacitor/core`，
  * 浏览器 / Electron / VSCode 构建不引入该依赖。

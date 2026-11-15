@@ -32,7 +32,7 @@ function writeExpect(
 
 const codec = new MemobusCodec();
 
-// 手册表 6.11 / 6.12 向量（docs/安川MEMOBUS公开协议参考.md §6，用户 2026-08-31 已确认 CRC 一致）。
+// 手册表 6.11 / 6.12 向量（docs/安川MEMOBUS公开协议参考.md §6，用户已确认 CRC 一致）。
 const READ_REQ = hex("01 67 01 0D 00 02 00 24 00 28 8B 29");
 const READ_RES = hex("01 67 01 0D 00 04 17 70 03 E8 47 ED");
 const EXCEPTION = hex("01 E7 02 EA 31");

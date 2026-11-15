@@ -1,5 +1,5 @@
 /**
- * 多寄存器范围行（ADR-030）E2E：
+ * 多寄存器范围行E2E：
  * - Type 双列（进制 + scale，scale 仅 unsigned/signed 可用）
  * - 范围地址输入 → antd 树形展开子行（每寄存器一行，只读、不可多选/拖拽）
  * - 范围行多寄存器读（FC03 quantity>1）与写（FC0x10 多值 + 写后回读）
@@ -174,7 +174,7 @@ test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", as
   await expect(childRows.nth(0).locator("td").nth(7)).toHaveText("1111");
   await expect(childRows.nth(1).locator("td").nth(7)).toHaveText("2222");
 
-  // 仅手工编辑父行组合文本（不读不写）：子行须随父行文本更新（修复前仍显示旧读值）。
+  // 仅手工编辑父行组合文本（不读不写）：子行须随父行文本更新。
   const data = first.getByLabel("Data");
   await data.click();
   await data.fill("FFFF 0000");

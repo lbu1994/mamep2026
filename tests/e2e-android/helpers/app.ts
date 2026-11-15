@@ -1,5 +1,5 @@
 /**
- * Android e2e 公共辅助（ADR-050 Phase 2 新增）。
+ * Android e2e 公共辅助（新增）。
  *
  * 与 `tcp-loop.spec.ts` 中内联的实现**语义一致**，只是抽出来供新的 RTU 用例复用；
  * 既有 TCP 用例保持原样（已全绿，不做无谓改动）。

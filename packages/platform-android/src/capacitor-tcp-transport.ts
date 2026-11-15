@@ -1,5 +1,5 @@
 /**
- * Capacitor TCP 传输（`TransportPort`，ADR-050 §5）。
+ * Capacitor TCP 传输（`TransportPort`）。
  *
  * 只处理「打开 / 写字节 / 来字节 / 关闭」：帧编码、CRC、MBAP 分帧、超时与重试全部留在 JS 共享层
  * （`packages/communication`），因此上层 `TcpSessionHost` 与三端完全同源。

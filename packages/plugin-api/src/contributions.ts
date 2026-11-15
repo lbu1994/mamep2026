@@ -1,5 +1,5 @@
 /**
- * 贡献点注册表（docs/architecture/ports/plugin-api/插件契约.md §3，ADR-039）——可扩展性底座（需求⑥）。
+ * 贡献点注册表（docs/architecture/ports/plugin-api/插件契约.md §3）——可扩展性底座（需求⑥）。
  * 核心注册贡献点（id + Zod schema），插件向贡献点提交贡献；新能力 = 核心注册新贡献点并
  * 扩展 contributes 类型，不破坏存量插件。未登记贡献点 → PLUGIN_CONTRIBUTION_UNKNOWN，
  * 错误隔离，不影响其他贡献点加载。
@@ -77,7 +77,7 @@ export class ContributionPointRegistry {
   }
 
   /**
-   * 校验并登记插件贡献（ADR-039）：未知点 → PLUGIN_CONTRIBUTION_UNKNOWN；payload 不合法 →
+   * 校验并登记插件贡献：未知点 → PLUGIN_CONTRIBUTION_UNKNOWN；payload 不合法 →
    * PLUGIN_CONTRIBUTION_INVALID。返回逐点校验错误数组，调用方决定是否阻断整个注册。
    */
   addContributions(

@@ -1,5 +1,5 @@
 /**
- * Electron Modbus TCP 自动重连 E2E（2026-08-30，PRD §8.3 P1 / ADR-022 已知限制打通）。
+ * Electron Modbus TCP 自动重连 E2E（PRD §8.3 P1 已知限制打通）。
  * 生产构建路径启动（dist-electron/main.js + apps/web/dist-electron/，loadFile）。
  * 测试进程内启动本地回环 Modbus TCP Server（net，内联 MBAP responder），支持：
  * - dropClients()：断开当前客户端连接（模拟设备断线），服务器继续监听；
@@ -165,7 +165,7 @@ test.beforeEach(async () => {
       if (db.name !== undefined) indexedDB.deleteDatabase(db.name);
     }
   });
-  // 工作区持久化已改为文件仓储（ADR-036，2026-08-30）：IndexedDB 清理不再清除工作区，
+  // 工作区持久化使用文件仓储：IndexedDB 清理不涉及工作区，
   // 一并删除 userData 下 workspace.json(.bak)，避免跨测试/跨运行污染。
   await clearWorkspaceFile(app);
   await page.reload();
@@ -188,7 +188,7 @@ test.afterAll(async () => {
  * 经 Connection Settings 连接假 TCP 设备（可选开启 autoReconnect）。
  * 启动弹窗存在竞态（IndexedDB 清理/加载，全量套件下偶发弹窗未打开或已关闭），
  * 故每次先确认弹窗可见，不可见则经顶栏 Connect 重新打开；并对 TCP 表单/Switch
- * 显式等待后再交互，避免对未渲染元素长时挂起（2026-08-30 偶发 flake 加固）。
+ * 显式等待后再交互，避免对未渲染元素长时挂起（偶发 flake 加固）。
  */
 async function connectViaUi(autoReconnect: boolean): Promise<void> {
   const modal = page.locator(".ant-modal-container:visible");
@@ -210,8 +210,8 @@ async function connectViaUi(autoReconnect: boolean): Promise<void> {
   const portInput = modal.locator(".ant-input-number-input").first();
   await portInput.click();
   await portInput.fill(String(device.port));
-  // 显式确保 autoReconnect 开关处于期望状态（2026-09-04 加固）：刷新前「清工作区→reload」
-  // 的隔离假设已被 ADR-049 的关闭时 flush 覆盖（保留最后状态），故不再依赖默认关闭，
+  // 显式确保 autoReconnect 开关处于期望状态（加固）：刷新前「清工作区→reload」
+  // 的隔离假设已被的关闭时 flush 覆盖（保留最后状态），故不再依赖默认关闭，
   // 而是按期望值显式开/关，避免前序用例残留 autoReconnect=true 污染本用例。
   const switchEl = modal.locator(".ant-switch");
   await expect(switchEl).toBeVisible({ timeout: 5000 });

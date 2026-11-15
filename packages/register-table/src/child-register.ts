@@ -1,5 +1,5 @@
 /**
- * 范围行子行（每寄存器）编辑逻辑（2026-08-27）。
+ * 范围行子行（每寄存器）编辑逻辑。
  *
  * 数据模型：父行 `RegisterRow.registers[i]` 存子行独立元数据（name/comment/dataType），
  * `registerValues[i]` 存该寄存器原始值（单一事实源）。子行 Type/Scale 只影响该子行对
@@ -29,7 +29,7 @@ import {
   type DataTypeResolver,
 } from "@mamep2026/data-conversion";
 
-/** 模块级缺省解析器（仅内置；ADR-043 E-3 插件类型由 UI 注入 resolver）。 */
+/** 模块级缺省解析器（仅内置插件类型由 UI 注入 resolver）。 */
 const defaultResolver: DataTypeResolver = createDataTypeResolver();
 
 /** 子行元数据补丁（name/comment/dataType 任意子集）。 */

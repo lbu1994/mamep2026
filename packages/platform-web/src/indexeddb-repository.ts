@@ -60,7 +60,7 @@ function persistenceError(
 
 export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
   private readonly store: KeyValueStore;
-  /** 最近一次 `load()` 的恢复元数据（ADR-049）。 */
+  /** 最近一次 `load()` 的恢复元数据。 */
   private recoveryInfo: WorkspaceRecoveryInfo | null = null;
 
   constructor(store: KeyValueStore) {

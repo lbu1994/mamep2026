@@ -1,21 +1,20 @@
 /**
- * 插件 Manifest v2（docs/architecture/ports/plugin-api/插件契约.md §3、ADR-039；基线 docs/TECH_DESIGN.md §6.11、
+ * 插件 Manifest v2（docs/architecture/ports/plugin-api/插件契约.md §3；基线 docs/TECH_DESIGN.md §6.11、
  * docs/AGENTS.md §24）。
  * - `apiVersion`：插件 API 版本（compatibility 判定依据，语义化 major.minor）；
- * - `entry`：可执行入口模块路径（Phase A 不加载，Phase F 隔离机制落地后使用）；
+ * - `entry`：可执行入口模块路径，由隔离运行时加载；
  * - `requiredCapabilities`：平台能力要求（如 ["modbus-rtu"]）；
- * - `contributions`：固定 `panels` 改为 `Record<ContributionPointId, unknown>`——key = 贡献点
+ * - `contributions`：`Record<ContributionPointId, unknown>`，key = 贡献点
  *   ID，value = 该点 payload（单对象或数组，按贡献点 schema 校验）；
- * - `permissions`：自由 string[] 收敛为类型化 PermissionId[]。
+ * - `permissions`：类型化 PermissionId[]。
  */
 import { z } from "zod";
 import { PERMISSION_IDS } from "./permissions";
 
 /**
- * 当前插件 API 版本（Manifest v2，ADR-039）。破坏性契约变更时递增 major。
- * 2.0（2026-09-12，ADR-054）：插件上下文新增同步贡献面 `ctx.registries`（codec/dataType/
- * addressTransform 注册），且插件改为用户手动安装 —— 1.x 插件不同步贡献面，major 不同
- * 即禁止加载（compatibility.checkCompatibility）。
+ * 当前插件 API 版本（Manifest v2）。破坏性契约变更时递增 major。
+ * 插件由用户手动安装；插件上下文提供同步贡献面 `ctx.registries`
+ * （codec/dataType/addressTransform 注册）。major 不兼容时禁止加载。
  */
 export const PLUGIN_API_VERSION = "2.0" as const;
 

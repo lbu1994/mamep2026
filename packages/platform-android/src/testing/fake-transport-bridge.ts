@@ -1,5 +1,5 @@
 /**
- * 测试用假桥（ADR-050 §4；沿用 platform-node 的 `SerialPortLike` 注入先例）。
+ * 测试用假桥（沿用 platform-node 的 `SerialPortLike` 注入先例）。
  * 记录调用、可注入失败、可驱动事件——单测无需 Android 环境即可覆盖传输语义。
  */
 import type {
@@ -28,7 +28,7 @@ export class FakeTransportBridge implements MamepTransportBridge {
   readonly serialOpenCalls: BridgeOpenSerialParams[] = [];
   /** write 收到的 base64 载荷（按调用顺序）。 */
   readonly writeCalls: string[] = [];
-  /** setKeepScreenOn 调用序列（Phase 3 KeepAwake）。 */
+  /** setKeepScreenOn 调用序列（KeepAwake）。 */
   readonly keepScreenOnCalls: boolean[] = [];
   /** listSerialPorts 的回包（可注入非法形状以覆盖契约违规）。 */
   serialPortsResult: unknown = { ports: [] };

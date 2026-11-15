@@ -1,5 +1,5 @@
 /**
- * plugin-registries 消费方单测：protocolForSheetType（ADR-041/043 E-2）。
+ * plugin-registries 消费方单测：protocolForSheetType。
  */
 import { describe, expect, it } from "vitest";
 import {

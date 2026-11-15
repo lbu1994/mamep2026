@@ -70,7 +70,7 @@ function createHarness(): Harness {
   const host = new RtuSessionHost({
     clock,
     events: events as RtuSessionHostEvents,
-    // 地址变换解析（2026-09-02 插件外部化）：模拟随包 address-adjust 插件提供的 resolver。
+    // 地址变换解析（插件外部化）：模拟随包 address-adjust 插件提供的 resolver。
     resolveAddressTransform: (id) =>
       id === "builtin.address-adjust"
         ? {
@@ -299,7 +299,7 @@ describe("RtuSessionHost 全表读取", () => {
       ],
       "batch-cancel-1",
     );
-    // 第一行已入执行（在飞）；取消令牌使后续排队行取消（ADR-025 语义与本地路径一致）。
+    // 第一行已入执行（在飞）；取消令牌使后续排队行取消（语义与本地路径一致）。
     h.host.cancelBatch("batch-cancel-1");
     const summary = await handle.promise;
     expect(summary.ok).toBe(true);

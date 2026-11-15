@@ -1,9 +1,9 @@
 /**
- * 主题色示例插件（2026-09-03，自 example-panel 剥离）。
+ * 主题色示例插件（自 example-panel 剥离）。
  * 演示 theme 贡献点：注册一个可选主题色「靛蓝」供用户选择（不再自动应用，Settings 选择器展示）。
  * 仅声明式贡献，无代码执行（无 runtime）；**不随包一次性安装**——需在 Plugin Manager
  * 通过「Install Plugin」手动安装本包内的 `manifest.json`（source:"installed"）。
- * i18n（2026-09-03 方案 A）：插件经 `title` 字段自带翻译（en-US / zh-CN），
+ * i18n（方案 A）：插件经 `title` 字段自带翻译（en-US / zh-CN），
  * 缺失语言时消费方回退英文（title["en-US"]），再回退应用 i18n 的 titleKey。
  */
 import {

@@ -79,7 +79,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const host = useAppStore((s) => s.host);
   const workspace = useAppStore((s) => s.workspace);
   const connectionState = useAppStore((s) => s.connectionState);
-  // 会话内已选串口 / 端口 ID / 连接错误（2026-09-06 Header Connect 直连：提升到 store 供 Header 判定/回退展示）。
+  // 会话内已选串口 / 端口 ID / 连接错误（Header Connect 直连：提升到 store 供 Header 判定/回退展示）。
   const selectedHandle = useAppStore((s) => s.selectedSerialHandle);
   const selectedPortId = useAppStore((s) => s.selectedSerialPortId);
   const connectError = useAppStore((s) => s.connectError);
@@ -106,8 +106,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const supportsTcp = host?.capabilities.modbusTcp ?? false;
   const supportsRtu = host?.capabilities.modbusRtu ?? true;
   // 默认表单值跟随存储 profile 的协议（重开弹窗恢复上次选择的协议与参数）。
-  // 但平台只支持一种协议时（Android Phase 1 仅 TCP / 浏览器仅 RTU），默认值必须落在该协议上：
-  // 否则隐藏的协议字段会把连接推到不可用的传输（ADR-050，2026-09-10）。
+  // 但平台只支持一种协议时（Android 仅 TCP / 浏览器仅 RTU），默认值必须落在该协议上：
+  // 否则隐藏的协议字段会把连接推到不可用的传输。
   const onlySupportedProtocol: "rtu" | "tcp" | null =
     supportsTcp === supportsRtu ? null : supportsTcp ? "tcp" : "rtu";
   const defaultProfile =
@@ -128,7 +128,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
   // 当前协议（Segmented 选择）：RTU/TCP 表单互斥展示；能力门控隐藏不可用协议的入口。
   const protocol =
     useWatch({ control, name: "protocol" }) ?? onlySupportedProtocol ?? "rtu";
-  // 浏览器仅支持 RTU：协议 Segmented 单选项冗余 → 隐藏「协议」分组；两类都有则保留切换（2026-09-06）。
+  // 浏览器仅支持 RTU：协议 Segmented 单选项冗余 → 隐藏「协议」分组；两类都有则保留切换。
   const showProtocolSwitcher =
     (supportsRtu ? 1 : 0) + (supportsTcp ? 1 : 0) > 1;
 
@@ -139,11 +139,11 @@ export function ConnectionSettingsModal(): React.ReactNode {
   // 浏览器兼容性（PRD §8.3 / §15.7）：检测失败时明确提示替代方案并禁用 CONNECT，
   // 禁止执行不可用的串口操作，但工作区仍可查看。
   const compat = host?.browserCompatibility ?? null;
-  // 串口缺失只影响 RTU：平台仅支持 TCP 时（Android Phase 1）不得因此禁用 CONNECT（ADR-050）。
+  // 串口缺失只影响 RTU：平台仅支持 TCP 时（Android）不得因此禁用 CONNECT。
   const serialBlocked =
     !isMock && !supportsSerial && !isEnumerated && protocol === "rtu";
 
-  // 连接协议由活动表类型决定（ADR-041 决策 A）：核心表 → rtu；安川表 → codec 协议。
+  // 连接协议由活动表类型决定：核心表 → rtu；安川表 → codec 协议。
   // tableType 贡献（插件声明）提供 表类型 → protocolId 映射；协议不在平台能力矩阵内回退 rtu。
   const tableTypeContributions = usePluginContributions<TableTypeContribution>(
     host,
@@ -668,7 +668,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                       label={t("connection.autoReconnect")}
                       tooltip={t("connection.autoReconnectHint")}
                     >
-                      {/* 自动重连：PRD §8.3 P1（2026-08-30 落地，有限次数 + 指数退避）。 */}
+                      {/* 自动重连：PRD §8.3 P1（落地，有限次数 + 指数退避）。 */}
                       <Switch
                         checked={field.value}
                         onChange={(checked) => field.onChange(checked)}

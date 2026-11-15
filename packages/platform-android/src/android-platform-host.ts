@@ -1,11 +1,11 @@
 /**
- * Android 平台 Host（`PlatformHost`，ADR-050 §3、§6）。
+ * Android 平台 Host（`PlatformHost`、§6）。
  *
  * 与 `NodePlatformHost` / `BrowserPlatformHost` 平级：只提供平台能力与传输打开，
  * 不含任何 Modbus 语义；会话编排由 `packages/application` 的共享宿主承担。
  *
- * Phase 1：TCP（原生 socket）。Phase 2：USB-RS485（USB Host + 枚举 + 打开），
- * 能力矩阵相应翻转为 `modbusRtu:true` / `serialPorts:"enumerated"`。
+ * 支持 TCP（原生 socket）与 USB-RS485（USB Host + 枚举 + 打开），
+ * 能力矩阵声明为 `modbusRtu:true` / `modbusTcp:true` / `serialPorts:"enumerated"`。
  *
  * 枚举结果会在本类内**缓存**，`selectSerialPort(portId)` 从缓存取 handle（Android 无浏览器式 picker，
  * 也不需要用户手势）；缓存未命中（如页面重载）时重新枚举一次，仍无则返回 `ok(null)`。
@@ -63,7 +63,7 @@ export class AndroidPlatformHost implements PlatformHost {
   }
 
   /**
-   * 枚举 USB 串口（`serialPorts: "enumerated"` 的能力实现，ADR-050 Phase 2）。
+   * 枚举 USB 串口（`serialPorts: "enumerated"` 的能力实现）。
    * 回包一律经 Zod 校验；枚举失败按「串口打开」上下文映射（权限/驱动异常等）。
    */
   async listSerialPorts(): Promise<Result<SerialPortOption[]>> {
@@ -177,7 +177,7 @@ export class AndroidPlatformHost implements PlatformHost {
   }
 
   /**
-   * 屏幕常亮（KeepAwake，ADR-050 Phase 3）：由 UI 依据「是否存在持续轮询/追踪」驱动。
+   * 屏幕常亮（KeepAwake）：由 UI 依据「是否存在持续轮询/追踪」驱动。
    * 幂等；失败不抛出（屏幕常亮属体验优化，不应影响通信主流程）。
    */
   setKeepScreenOn(enabled: boolean): void {

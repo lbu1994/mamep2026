@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildWebCsp } from "./csp";
 
 /**
- * 生产构建 CSP 回归保护（2026-09-10，ADR-050；2026-09-12 ADR-055 补齐 script-src）。
- * 重点是两条 blob: 放行：`worker-src ... blob:`（创建 Blob Worker）与 `script-src ... blob:`
+ * 生产构建 CSP 回归保护（补齐 script-src）。
+ * 重点是两条 blob: 放行：`worker-src 。 blob:`（创建 Blob Worker）与 `script-src 。 blob:`
  * （Worker 内 / 文档内的插件 entry 动态 import）——任一缺失都会在打包产物中拦截可执行插件。
  */
 describe("buildWebCsp (docs/TECH_DESIGN.md §22.1)", () => {

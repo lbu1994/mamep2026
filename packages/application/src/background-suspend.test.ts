@@ -1,5 +1,5 @@
 /**
- * 后台挂起/恢复（移动端生命周期，ADR-050 Phase 3）单测。
+ * 后台挂起/恢复（移动端生命周期）单测。
  *
  * 语义：进后台暂停轮询与追踪（**配置保留**），回前台按原配置恢复；幂等；离线时恢复不启动。
  * 复用 RtuSessionHost + FakeTransport + ScriptedModbusRtuDevice + VirtualClock（与既有宿主测试同源）。

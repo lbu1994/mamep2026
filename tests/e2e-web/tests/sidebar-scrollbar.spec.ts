@@ -20,9 +20,8 @@ function collectConsoleErrors(page: Page): string[] {
 }
 
 /**
- * 复现（待修复）：侧边栏展开态，协议分组标题文本过长时产生水平滚动条。
- * 修复目标：分组标题收缩并省略号显示（flex:1;min-width:0）+ 分组容器填满剩余高度（flex:1），
- * 使容器不再产生水平溢出/滚动条、贴合侧边栏底部。
+ * 侧边栏展开态，协议分组标题文本过长时不得产生水平滚动条。
+ * 分组标题收缩并省略号显示（flex:1;min-width:0），分组容器填满剩余高度（flex:1）。
  */
 test("expanded sidebar has no horizontal scrollbar even with long group titles", async ({
   page,

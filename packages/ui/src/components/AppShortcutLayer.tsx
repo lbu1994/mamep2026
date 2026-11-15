@@ -1,5 +1,5 @@
 /**
- * App 级快捷键装配层（PRD §8.3 P1「更完整的键盘操作」，2026-08-30，ADR-037）。
+ * App 级快捷键装配层（PRD §8.3 P1「更完整的键盘操作」）。
  * 渲染在 MamepApp 的 <AntApp> 之内（App.useApp() message 可用，供导入/导出提示）。
  * 动作经 store/宿主直达；帮助弹窗经 props 回调（helpModalOpen 已入 store 供弹窗抑制）。
  * 同时渲染浏览器端导入所需的隐藏 <input type="file">（workspaceImport === "upload"）。

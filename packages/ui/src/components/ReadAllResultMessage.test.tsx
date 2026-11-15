@@ -1,5 +1,5 @@
 /**
- * ReadAllResultMessage 富内容渲染测试（jsdom，2026-08-28）。
+ * ReadAllResultMessage 富内容渲染测试（jsdom）。
  * 断言标题、统计 Tag（语义色分层）、耗时；全成功/有失败时标题图标切换。
  * 组件用 theme.useToken（无 ConfigProvider 时返回默认 token）与 useTranslation
  * （全局 i18n 实例），自身不调用 message，渲染无需 <AntApp>。

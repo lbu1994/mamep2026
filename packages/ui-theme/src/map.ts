@@ -10,7 +10,7 @@ import { pick, type VscodeThemeColors } from "./theme-colors";
 /**
  * VSCode Theme Color → antd token 覆盖（叠加在 buildTheme(dark) 之上，见 build.ts）。
  *
- * 决策（2026-08-25，ADR-027）：中性色/表面色/边框/输入态/选择态跟随 VSCode 主题；
+ * 决策：中性色/表面色/边框/输入态/选择态跟随 VSCode 主题；
  * 品牌蓝与状态语义色（success/warning/error/link）、字号、间距、圆角来自 base 保留。
  * 文字灰阶由 editor-foreground 推导 alpha，并用 ensureContrast 保证 WCAG 2.2 AA
  * （正文/次级 ≥4.5:1，quaternary/placeholder ≥3:1），不随主题出现低对比回归。

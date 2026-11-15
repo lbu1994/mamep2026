@@ -1,5 +1,5 @@
 /**
- * 基础表 RTU 编解码器（ADR-043 E-2）。
+ * 基础表 RTU 编解码器。
  *
  * 核心内置：coil / discrete-input / input-register 三个基础表类型各一个 codec 实例，
  * protocolId = "modbus-basic-tables:<tableType>"（见 domain `basicTablesProtocolId`）。

@@ -106,7 +106,7 @@ export interface TraceWindowModel {
   average: string | null;
 }
 
-/** 工作区导入预览摘要（2026-08-29，PRD §8.3 P1）：确认导入前展示给用户。 */
+/** 工作区导入预览摘要（PRD §8.3 P1）：确认导入前展示给用户。 */
 export interface WorkspaceImportPreview {
   name: string;
   sheets: number;
@@ -122,7 +122,7 @@ export interface WorkspaceImportDraft {
 }
 
 /**
- * Host 装配状态（2026-09-13 启动骨架）：宿主实现按运行时平台动态加载（composition root
+ * Host 装配状态（启动骨架）：宿主实现按运行时平台动态加载（composition root
  * 在渲染前置 `"assembling"`），MamepApp 据此显示启动占位；装配失败以 `"failed"` 保持
  * 「无 Host 可操作」（能力入口依 host 为空自然禁用），不阻断应用。
  */
@@ -140,41 +140,41 @@ export interface AppStoreState {
   connectionState: ConnectionState;
   activeSheetId: SheetId | null;
   connectionModalOpen: boolean;
-  /** 会话内已选串口（2026-09-06 Header Connect 直连）：仅会话内存，不持久化（§19.3）。 */
+  /** 会话内已选串口（Header Connect 直连）：仅会话内存，不持久化（§19.3）。 */
   selectedSerialHandle: SerialDeviceHandle | null;
   /** 会话内已选串口端口 ID（enumerated 下拉框 value）；与 selectedSerialHandle 成对。 */
   selectedSerialPortId: string | null;
   /** 连接设置/直连的错误展示（决策 5）：Header 直连失败回退弹窗时经此显示；会话内，不持久化。 */
   connectError: string | null;
   settingsModalOpen: boolean;
-  /** 帮助/关于弹窗（2026-08-30 键盘操作：Ctrl+/ 或 ? 打开，入 store 供快捷键弹窗抑制）。 */
+  /** 帮助/关于弹窗（键盘操作：Ctrl+/ 或 ? 打开，入 store 供快捷键弹窗抑制）。 */
   helpModalOpen: boolean;
   pendingDeleteSheetId: SheetId | null;
   /** 批量关闭（关闭其他/右侧）确认弹窗状态；null 表示未在确认。 */
   pendingBulkClose: { kind: "others" | "right"; sheetId: SheetId } | null;
   theme: "light" | "dark";
-  /** 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。 */
+  /** 所选主题色预设：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。 */
   themePrimary: string | null;
   /**
-   * 首帧主色种子（2026-09-16，修复「插件主题色首帧默认蓝」）：所选插件主题色**上次解析出**的
+   * 首帧主色种子：所选插件主题色**上次解析出**的
    * `colorPrimary`（启动缓存恢复写入，插件就绪后由 `MamepApp` 回写）。仅用于「插件贡献尚未就绪」的
    * 过渡着色 —— 主题色的唯一事实源仍是工作区 `preferences.themePrimary`。
    */
   themeColorSeed: string | null;
   /**
-   * 插件注册表就绪（`host.startPlugins()` 落定，2026-09-16）：就绪后主色以注册表为准
+   * 插件注册表就绪（`host.startPlugins()` 落定）：就绪后主色以注册表为准
    * （解析不到 = 插件已禁用/卸载 → 回退默认蓝）；装配编排经 sinks 置位。
    */
   pluginsReady: boolean;
   /**
-   * 宿主提供的完整 antd 主题（VSCode 完整令牌映射，ui-theme buildVscodeTheme 产出，ADR-027）；
+   * 宿主提供的完整 antd 主题（VSCode 完整令牌映射，ui-theme buildVscodeTheme 产出）；
    * null=回退 buildTheme 两态。运行时派生（随宿主主题事件更新），不持久化。
    */
   themeConfig: ThemeConfig | null;
-  /** 数据类型解析器（ADR-043 E-3）：内置 + 插件类型；App.tsx 装配后注入。 */
+  /** 数据类型解析器：内置 + 插件类型；App.tsx 装配后注入。 */
   dataTypeResolver: DataTypeResolver;
   saveStatus: SaveStatus;
-  /** 工作区加载恢复元数据（ADR-049 恢复提示）：加载后由 App.tsx 写入；null=无恢复。 */
+  /** 工作区加载恢复元数据（恢复提示）：加载后由 App.tsx 写入；null=无恢复。 */
   workspaceRecovery: WorkspaceRecoveryInfo | null;
   /** 撤销/重做历史栈（TECH_DESIGN §24.4；纯内存会话状态，不随工作区持久化）。 */
   undoStack: UndoEntry[];
@@ -193,9 +193,9 @@ export interface AppStoreState {
   workspaceImportDraft: WorkspaceImportDraft | null;
 
   setHost: (host: AppHost) => void;
-  /** 设置 Host 装配状态（2026-09-13 启动骨架；由装配编排调用）。 */
+  /** 设置 Host 装配状态（启动骨架；由装配编排调用）。 */
   setHostStatus: (status: HostStatus) => void;
-  /** 注入数据类型解析器（ADR-043 E-3）：App.tsx 装配插件 dataType 运行时后调用。 */
+  /** 注入数据类型解析器：App.tsx 装配插件 dataType 运行时后调用。 */
   setDataTypeResolver: (resolver: DataTypeResolver) => void;
   setWorkspace: (workspace: Workspace) => void;
   /** 设置工作区导入草稿（解析通过待确认）；null 清除/关闭预览。 */
@@ -218,7 +218,7 @@ export interface AppStoreState {
   ) => void;
   setTheme: (theme: "light" | "dark") => void;
   /**
-   * 所选主题色预设（ADR-047）：null=内置默认蓝；插件色 = `<pluginId>:<colorId>`（完整预设 ID）。
+   * 所选主题色预设：null=内置默认蓝；插件色 = `<pluginId>:<colorId>`（完整预设 ID）。
    * 持久化到 workspace.preferences.themePrimary（随自动保存）。
    */
   setThemePrimary: (primary: string | null) => void;
@@ -237,7 +237,7 @@ export interface AppStoreState {
   /** 更新活动连接配置的持久化设置（除串口/端口选择外的全部参数），随自动保存持久化。 */
   setConnectionSettings: (settings: PersistedConnectionSettings) => void;
   setSaveStatus: (status: SaveStatus) => void;
-  /** 设置工作区加载恢复元数据（ADR-049 恢复提示）；null 清除。 */
+  /** 设置工作区加载恢复元数据（恢复提示）；null 清除。 */
   setWorkspaceRecovery: (recovery: WorkspaceRecoveryInfo | null) => void;
   setActiveSheetId: (sheetId: SheetId) => void;
   /** 更新工作区面板布局（侧栏/底部面板折叠、高度、活动 tab），随自动保存持久化。 */
@@ -253,20 +253,20 @@ export interface AppStoreState {
   commitRowAddress: (rowId: RowId, draft: string) => Result<RegisterRow>;
   /** 提交 Data 单元格文本：按 Type 校验；失败保留输入并记录校验错误（§17/§23）。 */
   commitCellText: (rowId: RowId, text: string) => Result<RegisterRow>;
-  /** 提交范围行子行 Data：按子行自身 Type 校验/解析，回写父行 registerValues[i] 并重算父行组合文本（2026-08-27）。 */
+  /** 提交范围行子行 Data：按子行自身 Type 校验/解析，回写父行 registerValues[i] 并重算父行组合文本。 */
   commitChildCellText: (
     parentRowId: RowId,
     index: number,
     text: string,
   ) => Result<RegisterRow>;
-  /** 更新范围行子行独立元数据（name/comment/dataType），随父行持久化（2026-08-27）。 */
+  /** 更新范围行子行独立元数据（name/comment/dataType），随父行持久化。 */
   setChildMeta: (
     parentRowId: RowId,
     index: number,
     patch: ChildMetaPatch,
   ) => void;
   /**
-   * 位明细（ADR-052）：设置某寄存器的一位（0/1）。
+   * 位明细：设置某寄存器的一位（0/1）。
    * 只改当前值（registerValues + 父行 cellText），**不写设备、不入撤销栈**（与 Data 编辑一致）。
    * `registerRowId`：该寄存器所在行（单寄存器行=自身；范围行=父行），`registerIndex` 为寄存器序号。
    */
@@ -277,8 +277,8 @@ export interface AppStoreState {
     value: 0 | 1,
   ) => void;
   /**
-   * 位明细（ADR-052）：写入某寄存器的位注释（空串=清除）。
-   * 属编辑字段（同 Name/Comment），随工作区持久化并**入撤销栈**（ADR-032）。
+   * 位明细：写入某寄存器的位注释（空串=清除）。
+   * 属编辑字段（同 Name/Comment），随工作区持久化并**入撤销栈**。
    */
   setBitComment: (
     parentRowId: RowId,
@@ -287,7 +287,7 @@ export interface AppStoreState {
     comment: string,
   ) => void;
   /**
-   * 位明细（ADR-052 需求追加）：写入某寄存器的位名称（空串=清除）。
+   * 位明细：写入某寄存器的位名称（空串=清除）。
    * 与 `setBitComment` 完全对称（编辑字段、入撤销栈）。
    */
   setBitName: (
@@ -306,7 +306,7 @@ export interface AppStoreState {
   selectedRowIds: RowId[];
   /** 应用内剪贴板（行级）：copy/cut 填充，paste 优先系统剪贴板、回退此处。 */
   clipboardPayload: RowClipboardData[] | null;
-  /** 剪贴板来源表类型（ADR-041 决策⑥）：跨类型粘贴被拒；null=无来源（外部 CSV）不限制。 */
+  /** 剪贴板来源表类型：跨类型粘贴被拒；null=无来源（外部 CSV）不限制。 */
   clipboardSourceSheetType: SheetType | null;
   setSelectedRowIds: (rowIds: RowId[]) => void;
   insertRowAfter: (sheetId: SheetId, rowId: RowId) => void;
@@ -317,7 +317,7 @@ export interface AppStoreState {
   cutSelectedRows: (sheetId: SheetId) => void;
   /** 粘贴到 afterRowId 之后；afterRowId 为 null 时追加到表尾。 */
   pasteRows: (sheetId: SheetId, afterRowId: RowId | null) => Promise<void>;
-  /** 新建表（ADR-041）：type 缺省 holding-register；插件表类型（如安川表）由分组头新建入口传入。 */
+  /** 新建表：type 缺省 holding-register；插件表类型（如安川表）由分组头新建入口传入。 */
   addSheet: (type?: SheetType) => void;
   renameSheet: (sheetId: SheetId, name: string) => void;
   /** 关闭一张表（非破坏性）：表仍保留在工作区（侧边栏可见），仅从页签栏隐藏。 */
@@ -333,13 +333,13 @@ export interface AppStoreState {
   duplicateSheet: (sheetId: SheetId) => void;
   moveSheetTo: (sheetId: SheetId, toIndex: number) => void;
   setRowDataType: (rowId: RowId, dataType: DataType) => void;
-  /** 设置某张表的 Register 地址列进制（DEC/HEX），随自动保存持久化（ADR-014）。 */
+  /** 设置某张表的 Register 地址列进制（DEC/HEX），随自动保存持久化。 */
   setSheetRegisterRadix: (sheetId: SheetId, radix: RegisterRadix) => void;
-  /** 设置某张表的 Slave Address（每表独立，随表持久化，IndexedDB 自动保存，2026-08-19）。 */
+  /** 设置某张表的 Slave Address（每表独立，随表持久化，IndexedDB 自动保存）。 */
   setSheetSlaveAddress: (sheetId: SheetId, slave: number) => void;
-  /** 设置某张表的写后回读配置（每表独立，随表持久化，2026-08-26）。 */
+  /** 设置某张表的写后回读配置（每表独立，随表持久化）。 */
   setSheetWriteVerify: (sheetId: SheetId, settings: ReadVerifySettings) => void;
-  /** 设置某张表的表级地址变换配置（每表独立，随表持久化，ADR-042；可撤销）。 */
+  /** 设置某张表的表级地址变换配置（每表独立，随表持久化；可撤销）。 */
   setSheetAddressTransform: (
     sheetId: SheetId,
     config: AddressTransformConfig | null,
@@ -447,7 +447,7 @@ function commitRowEdit(
 }
 
 /** 活动表修复：activeSheetId 指向**不存在或未打开**的表时回退到首个打开的表。
- * 2026-09-17 起要求目标表已打开：未打开的表不出现在 Tab 栏，指针落在它上面会让界面卡在
+ *  起要求目标表已打开：未打开的表不出现在 Tab 栏，指针落在它上面会让界面卡在
  * 「没有打开的表」空态（导入 / 外部编辑工作区文件 / 插件卸载均可能造出这种指针）。 */
 function fixActiveSheetId(
   sheets: RegisterSheet[],
@@ -463,7 +463,7 @@ function fixActiveSheetId(
 }
 
 /**
- * 撤销/重做应用表快照后，把「快照恢复的 Type」与「未回退的运行时文本」对齐（ADR-053）。
+ * 撤销/重做应用表快照后，把「快照恢复的 Type」与「未回退的运行时文本」对齐。
  * `cellText` 属运行时字段（§24.4 不随撤销回退），若快照恢复的 `dataType` 与当前不同，
  * 必须按「现类型解析现文本 → 恢复类型格式化」刷新，否则会残留「类型 A + 文本 B」
  * （并发作写入时按新类型解析旧文本的隐患）。
@@ -488,7 +488,7 @@ function retargetSnapshotRowTypes(
   return changed ? { ...restored, rows } : restored;
 }
 
-/** 把表编辑快照应用到工作区：表存在→恢复结构（并同步 Type ↔ 文本，ADR-053）；
+/** 把表编辑快照应用到工作区：表存在→恢复结构（并同步 Type ↔ 文本）；
  *  不存在→重建并放回原 order 位置。 */
 function applySheetSnapshotToWorkspace(
   workspace: Workspace,
@@ -568,7 +568,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   themeColorSeed: null,
   pluginsReady: false,
   themeConfig: null,
-  // 缺省仅内置（ADR-043 E-3）；App.tsx 装配插件 dataType 运行时后 setDataTypeResolver 替换。
+  // 缺省仅内置；App.tsx 装配插件 dataType 运行时后 setDataTypeResolver 替换。
   dataTypeResolver: createDataTypeResolver(),
   saveStatus: "idle",
   workspaceRecovery: null,
@@ -592,7 +592,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   applyWorkspaceImport: () => {
     const draft = get().workspaceImportDraft;
     if (draft === null) return;
-    // 导入语义对齐 setWorkspace：恢复语言/主题偏好 + 清空撤销栈（ADR-032）。
+    // 导入语义对齐 setWorkspace：恢复语言/主题偏好 + 清空撤销栈。
     // 持久化由 App 层 workspace 变更订阅（scheduleSave）自动触发，无需手动保存。
     get().setWorkspace(draft.workspace);
     set({ workspaceImportDraft: null });
@@ -600,7 +600,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setWorkspace: (workspace) => {
     // 加载/重置工作区时恢复持久化的语言偏好（刷新后保持上次选择）。
     applyLanguage(workspace.preferences.language);
-    // 失效指向兜底（2026-09-17）：仅在确有修正时新建对象（否则不产生多余的自动保存）。
+    // 失效指向兜底：仅在确有修正时新建对象（否则不产生多余的自动保存）。
     const correctedActiveSheetId = fixActiveSheetId(
       workspace.sheets,
       workspace.activeSheetId,
@@ -615,7 +615,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       activeSheetId: null,
       // 加载工作区时回填持久化的主题，避免刷新后恒为浅色。
       theme: workspace.preferences.theme ?? state.theme,
-      // 加载工作区时回填用户自定义主题主色（ADR-042；null=默认品牌蓝）。
+      // 加载工作区时回填用户自定义主题主色（null=默认品牌蓝）。
       themePrimary: workspace.preferences.themePrimary ?? null,
       // 加载/重置工作区后撤销历史无意义（新上下文），清空（会话状态不持久化，§24.4）。
       undoStack: [],
@@ -841,7 +841,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     })),
 
   commitRowAddress: (rowId, draft) => {
-    // 按 rowId 在全部表中定位所属表，取该表的地址进制（每表独立，ADR-014）。
+    // 按 rowId 在全部表中定位所属表，取该表的地址进制（每表独立）。
     const sheets = get().workspace.sheets;
     const sheet = sheets.find((s) => s.rows.some((r) => r.rowId === rowId));
     const row = sheet?.rows.find((r) => r.rowId === rowId);
@@ -891,7 +891,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         rowId,
         result,
       );
-      // 范围长度 × 类型合法集校验（ADR-030）：不匹配在类型列报错（禁止读写）。
+      // 范围长度 × 类型合法集校验：不匹配在类型列报错（禁止读写）。
       const withType = applyTypeValidation(
         next,
         rowId,
@@ -932,7 +932,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         : { ...r, cellText: text, updatedAt: Date.now() },
     );
     // 校验结果 → 行状态：成功清校验错误并置编辑完成态；失败记录校验错误、清设备失败/成功态。
-    // after 用规范化后的文本（ADR-051）：输入等价形式（如 00AB 手输 00ab）不视为值变化。
+    // after 用规范化后的文本：输入等价形式（如 00AB 手输 00ab）不视为值变化。
     set((state) => {
       const next = applyCellCommit(
         {
@@ -1031,7 +1031,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       get().dataTypeResolver,
     );
     if (!result.ok) return;
-    // 位值=当前值变更（与 Data 编辑一致，ADR-052/ADR-032）：不入撤销栈、不写设备。
+    // 位值=当前值变更（与 Data 编辑一致）：不入撤销栈、不写设备。
     get().updateRow(registerRowId, (r) =>
       r.rowId === result.value.rowId ? result.value : r,
     );
@@ -1046,7 +1046,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     if (row === undefined || sheet === undefined) return;
     const result = setBitCommentUseCase(row, registerIndex, bit, comment);
     if (!result.ok) return;
-    // 位注释=编辑字段（可撤销，§24.4 / ADR-052 决策 5）。
+    // 位注释=编辑字段（可撤销，§24.4）。
     const before = snapshotSheet(sheet);
     get().updateRow(parentRowId, (r) =>
       r.rowId === result.value.rowId ? result.value : r,
@@ -1072,7 +1072,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     if (row === undefined || sheet === undefined) return;
     const result = setBitNameUseCase(row, registerIndex, bit, name);
     if (!result.ok) return;
-    // 位名称=编辑字段（可撤销，ADR-052 需求追加，与位注释一致）。
+    // 位名称=编辑字段（可撤销，与位注释一致）。
     const before = snapshotSheet(sheet);
     get().updateRow(parentRowId, (r) =>
       r.rowId === result.value.rowId ? result.value : r,
@@ -1365,7 +1365,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const state = get();
     const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
     if (sheet === undefined) return;
-    // 跨类型粘贴被拒（ADR-041 决策⑥）：不同类型表之间不可复制粘贴；外部 CSV（无来源）不限制。
+    // 跨类型粘贴被拒：不同类型表之间不可复制粘贴；外部 CSV（无来源）不限制。
     if (
       state.clipboardSourceSheetType !== null &&
       state.clipboardSourceSheetType !== sheet.type
@@ -1406,7 +1406,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       targetId,
       payload,
       sheet.registerRadix,
-      // Data 文本按行 Type 规范化（ADR-051）：插件类型经注入 resolver。
+      // Data 文本按行 Type 规范化：插件类型经注入 resolver。
       get().dataTypeResolver,
     );
     const allIssues = [...issues, ...pasteIssues];
@@ -1723,7 +1723,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const currentRow = sheet?.rows.find((r) => r.rowId === rowId);
     if (currentRow === undefined || sheet === undefined) return;
     const beforeSnapshot = snapshotSheet(sheet);
-    // Type/Scale 切换即时刷新显示文本（ADR-053）：按旧 Type 解析当前文本 → 新 Type 格式化写回；
+    // Type/Scale 切换即时刷新显示文本：按旧 Type 解析当前文本 → 新 Type 格式化写回；
     // 原始值不变、绝不按新进制重解释；解析失败/空文本保留原文。不算编辑（不置脏标记/完成态）。
     get().updateRow(rowId, (row) =>
       retargetRowDataType(row, dataType, get().dataTypeResolver),
@@ -1739,7 +1739,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         snapshotSheet(afterSheet),
       );
     }
-    // 范围长度 × 类型合法集校验（ADR-030）：类型切换后按当前 registerCount 重算类型列错误。
+    // 范围长度 × 类型合法集校验：类型切换后按当前 registerCount 重算类型列错误。
     const sheets = get().workspace.sheets;
     const row = sheets.flatMap((sh) => sh.rows).find((r) => r.rowId === rowId);
     if (row === undefined) return;

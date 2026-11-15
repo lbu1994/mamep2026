@@ -26,9 +26,9 @@ const extensionTestsPath = path.resolve(
 // responder）：确定性、无真实设备依赖；runTests 子进程继承本环境变量。
 process.env.MAMEP_FAKE_SERIAL = "1";
 process.env.MAMEP_FAKE_TCP = "1";
-// 假 TCP 设备每条响应附加延迟（2026-09-06 移除 Rx Delay 后，为批任务取消 e2e 提供可取消窗口）。
+// 假 TCP 设备每条响应附加延迟（移除 Rx Delay 后，为批任务取消 e2e 提供可取消窗口）。
 process.env.MAMEP_FAKE_TCP_DELAY_MS = "40";
-// dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1，ADR-033 方案 A）：测试宿主与扩展宿主跨进程、
+// dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1 方案 A）：测试宿主与扩展宿主跨进程、
 // 无法桩替换 vscode.window 对话框，扩展宿主在 isDev 门控下把 save/open 对话框替换为对
 // 固定路径的读写（工作区导入导出闭环确定性自动化）。路径经环境变量暴露给测试用例。
 process.env.MAMEP_FAKE_DIALOG = "1";
@@ -40,7 +40,7 @@ process.env.MAMEP_FAKE_DIALOG_SAVE_PATH = path.join(
   os.tmpdir(),
   "mamep-e2e-dialog-save.json",
 );
-// 宿主侧插件执行面 e2e（ADR-055）：插件产物路径经环境变量暴露给用例（需先 `pnpm build:plugins`，
+// 宿主侧插件执行面 e2e：插件产物路径经环境变量暴露给用例（需先 `pnpm build:plugins`，
 // 根 test:e2e:vscode 已自动执行）。测试宿主与扩展宿主为同一进程外的两个世界，用例不猜路径。
 const PLUGIN_DIR = path.join(
   ROOT,

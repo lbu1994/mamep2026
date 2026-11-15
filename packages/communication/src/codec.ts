@@ -1,5 +1,5 @@
 /**
- * 协议编解码器抽象（ADR-040 插件 Phase B）。
+ * 协议编解码器抽象（插件）。
  *
  * 让 CommunicationSession 支持「协议可注入」：内置 "rtu"/"tcp" 之外，可通过 CodecRegistry
  * 注册自定义协议（如安川 MEMOBUS 67/010D、67/010E），会话按 codecId 委托编解码与分帧。
@@ -47,7 +47,7 @@ export interface FrameParser {
     | { done: true; outcome: Result<CodecDecodedResponse>; frame: Uint8Array };
 }
 
-/** 协议编解码器（ADR-040 决策 1）。 */
+/** 协议编解码器。 */
 export interface ProtocolCodec {
   /** 协议唯一 ID（如 "yaskawa-memobus"），即会话 protocol 的 codecId。 */
   protocolId: string;
@@ -70,7 +70,7 @@ export interface ProtocolCodec {
   mapException?(exceptionCode: number): MamepError;
 }
 
-/** 通用 codec 注册表（ADR-040 决策 2，1B）。 */
+/** 通用 codec 注册表（1B）。 */
 export interface CodecRegistry {
   register(codec: ProtocolCodec): void;
   get(id: string): ProtocolCodec | undefined;

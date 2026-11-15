@@ -98,7 +98,7 @@ describe("commitAddress (dec)", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.addressValue).toBeNull();
-      // 空输入归一为 ""（ADR-051）。
+      // 空输入归一为 ""。
       expect(result.value.addressDraft).toBe("");
     }
   });

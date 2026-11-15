@@ -1,5 +1,5 @@
 /**
- * Electron TCP Unit ID 会话内动态修改 E2E（2026-08-25，ADR-022 已知限制打通）。
+ * Electron TCP Unit ID 会话内动态修改 E2E（已知限制打通）。
  * 生产构建路径启动（dist-electron/main.js + apps/web/dist-electron/，loadFile）。
  * 测试进程内启动本地回环 Modbus TCP Server（记录收到的请求帧 Unit ID）。
  * 走真实路径：Connection Settings TCP 表单 → 主进程 ElectronSessionHost →
@@ -140,7 +140,7 @@ test.beforeAll(async () => {
       if (db.name !== undefined) indexedDB.deleteDatabase(db.name);
     }
   });
-  // 工作区持久化已改为文件仓储（ADR-036，2026-08-30）：IndexedDB 清理不再清除工作区，
+  // 工作区持久化使用文件仓储：IndexedDB 清理不涉及工作区，
   // 一并删除 userData 下 workspace.json(.bak)，避免跨测试/跨运行污染。
   await clearWorkspaceFile(app);
   await page.reload();

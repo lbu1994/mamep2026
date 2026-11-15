@@ -1,5 +1,5 @@
 /**
- * 手动安装插件的 e2e 助手（ADR-054，2026-09-12）。
+ * 手动安装插件的 e2e 助手。
  *
  * 插件不再随应用一次性安装：e2e 用例需要先经 Settings → Plugins → Install Plugin 安装
  * `pnpm build:plugins` 产出的插件文件（`release/plugins/<pluginId>/`），

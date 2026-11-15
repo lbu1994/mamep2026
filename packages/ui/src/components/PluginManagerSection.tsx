@@ -1,9 +1,8 @@
 /**
- * 插件管理区块（2026-09-12：由独立 `PluginManagerModal` 弹窗改为内联区块，嵌入 Settings
- * 抽屉的「Plugins」页签）。入口整合后删除顶栏 Plugin Manager 按钮与窄窗口 More 项，
+ * 插件管理区块，嵌入 Settings 抽屉的「Plugins」页签。
  * 插件管理统一从 Settings 进入。
  *
- * 功能与行为（ADR-038 安装 / ADR-044 卸载与隔离 / ADR-054 手动安装 + 同进程授权）：安装
+ * 功能与行为（安装卸载与隔离手动安装 + 同进程授权）：安装
  * （manifest JSON 或单文件 JS）、启用/禁用、卸载（仅 installed）、加载错误展示；
  * 安装/卸载确认继续用 `App.useApp().modal.confirm`（渲染到 body portal，不受 Drawer 影响）。
  */
@@ -32,7 +31,7 @@ import {
 } from "@mamep2026/plugin-api";
 import { useAppStore } from "../app-store";
 
-/** 权限 → i18n 标签键映射（ADR-039）：共享自 plugin-api，未登记权限回退显示原始字符串。 */
+/** 权限 → i18n 标签键映射：共享自 plugin-api，未登记权限回退显示原始字符串。 */
 function permissionLabel(
   t: (key: string) => string,
   permission: PermissionId,
@@ -53,7 +52,7 @@ export function PluginManagerSection(): React.ReactNode {
   const loadErrors = registry?.getLoadErrors() ?? [];
 
   /**
-   * 单文件 JS 插件安装（ADR-054）：entry 含 manifest + activate。
+   * 单文件 JS 插件安装：entry 含 manifest + activate。
    * 1) 预览（按隔离模式加载 entry 提取 manifest，**不注册**）；
    * 2) §6.10.4 安全确认（含「运行位置」选择：隔离线程 / 同进程执行）；
    * 3) 按所选模式安装（同进程 = 用户显式授权：插件代码获得与应用同等权限）。
@@ -308,7 +307,7 @@ export function PluginManagerSection(): React.ReactNode {
   };
 
   /**
-   * 卸载插件（ADR-044 Phase F-1）：仅 installed 来源显示按钮；确认 →
+   * 卸载插件：仅 installed 来源显示按钮；确认 →
    * registry.unregister（回收贡献点 + 持久化删除，由 PluginPersistenceCoordinator 承担）。
    */
   const handleUninstall = (pluginId: string): void => {
@@ -351,7 +350,7 @@ export function PluginManagerSection(): React.ReactNode {
           <input
             ref={fileInputRef}
             type="file"
-            // 仅按扩展名过滤（ADR-056）：部分 ROM 的文件选择器按 MIME 过滤，把
+            // 仅按扩展名过滤：部分 ROM 的文件选择器按 MIME 过滤，把
             // `.mjs` 归为 application/octet-stream 而不可选；放宽为扩展名可规避，
             // 文件内容仍经清单 schema 校验（选错文件有结构化错误提示）。
             accept=".json,.mjs,.js"

@@ -1,5 +1,5 @@
 /**
- * Android 宿主能力解析（2026-09-13，ADR-056）。
+ * Android 宿主能力解析。
  *
  * 把「平台能力组合」（`packages/platform-android`，纯函数）与「WebView 运行时探测」
  * （`packages/platform-web`，依赖 Worker/Blob 的 DOM 能力）接在一起。

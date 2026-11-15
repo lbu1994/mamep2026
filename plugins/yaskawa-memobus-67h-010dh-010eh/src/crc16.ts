@@ -1,5 +1,5 @@
 /**
- * 标准 CRC-16/MODBUS（安川 MEMOBUS 与 Modbus RTU 共用；用户 2026-08-31 已确认与手册向量一致，
+ * 标准 CRC-16/MODBUS（安川 MEMOBUS 与 Modbus RTU 共用；用户已确认与手册向量一致，
  * 见 docs/安川MEMOBUS公开协议参考.md §6）。poly 0x8005（反射 0xA001）、init 0xFFFF、xorout 0x0000，
  * 线序低字节在前。
  *

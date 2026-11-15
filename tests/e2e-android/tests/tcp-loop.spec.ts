@@ -1,5 +1,5 @@
 /**
- * Android Modbus TCP 闭环 E2E（ADR-050 Phase 1）。
+ * Android Modbus TCP 闭环 E2E。
  *
  * 真实路径（无任何桩）：真机 WebView（`https://localhost/`）加载共享 UI →
  * `AndroidAppHost` → `AndroidPlatformHost.openTcpTransport` → `CapacitorTcpTransport` →
@@ -225,7 +225,7 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
   );
   expect(page.url()).toContain("https://localhost");
 
-  // Phase 2 后 Android 同时支持 RTU 与 TCP → 协议分组可见；本用例显式切到 TCP。
+  //  Android 同时支持 RTU 与 TCP → 协议分组可见；本用例显式切到 TCP。
   await expect(page.locator(".ant-modal-container")).toContainText(
     "Modbus TCP",
   );

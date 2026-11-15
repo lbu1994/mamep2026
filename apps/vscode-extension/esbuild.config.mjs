@@ -28,7 +28,7 @@ export async function buildExtensionBundle() {
     target: "node18",
     // vscode 模块由 VSCode 扩展宿主在运行时提供，不打进 bundle。
     // serialport 为原生绑定模块（@serialport/bindings-cpp），必须 external，由扩展
-    // 运行时从 node_modules 加载（ADR-020：Node Serial Adapter 注入面隔离库类型）。
+    // 运行时从 node_modules 加载（Node Serial Adapter 注入面隔离库类型）。
     external: ["vscode", "serialport", "@serialport/*"],
     sourcemap: true,
     logLevel: "info",

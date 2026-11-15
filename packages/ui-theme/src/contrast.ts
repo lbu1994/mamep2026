@@ -106,7 +106,7 @@ export function ensureContrast(fg: Color, bg: Color, minRatio: number): string {
   return toRgbaString(withAlpha(fg, alpha));
 }
 
-/** 白字 on 主色是否满足 WCAG AA（≥4.5:1，用于主按钮/选中态文字；ADR-042 主题色校验）。 */
+/** 白字 on 主色是否满足 WCAG AA（≥4.5:1，用于主按钮/选中态文字主题色校验）。 */
 export function isWhiteOnPrimaryAa(color: string): boolean {
   const parsed = parseColor(color);
   if (parsed === null) return false;

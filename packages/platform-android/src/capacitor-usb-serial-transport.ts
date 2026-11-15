@@ -1,5 +1,5 @@
 /**
- * Capacitor USB 串口传输（`TransportPort`，ADR-050 Phase 2）。
+ * Capacitor USB 串口传输（`TransportPort`）。
  *
  * 与 `CapacitorTcpTransport` 同构（刻意保持两份可对照的实现，而非过早抽象）：
  * - 先注册桥事件再 open，避免首帧丢失；

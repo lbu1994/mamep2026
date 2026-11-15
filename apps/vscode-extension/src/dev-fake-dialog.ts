@@ -2,7 +2,7 @@
  * dev/e2e 假文件对话框（MAMEP_FAKE_DIALOG=1 && isDev 门控，不进生产打包路径）。
  *
  * 系统文件对话框无法被测试桩替换：@vscode/test-electron 的测试宿主与扩展宿主为不同进程，
- * vscode.window.showSaveDialog/showOpenDialog 在测试内桩替换对扩展不生效（ADR-033 验证）。
+ * vscode.window.showSaveDialog/showOpenDialog 在测试内桩替换对扩展不生效（验证）。
  * 故与 MAMEP_FAKE_SERIAL / MAMEP_FAKE_TCP 同模式：扩展宿主在 isDev 门控下把 save/open
  * 对话框替换为对固定路径的读写，使 e2e 能确定性走通「真实 RPC → 扩展宿主对话框边界 →
  * workspace.fs 真实读写」闭环。

@@ -1,5 +1,5 @@
 /**
- * 插件安装入口 e2e（mockTransport=1，浏览器端，2026-08-30，PRD §8.3 P1，ADR-038）。
+ * 插件安装入口 e2e（mockTransport=1，浏览器端，PRD §8.3 P1）。
  * 覆盖：
  * - 安装成功：Settings → Plugins 页签 → Install Plugin → 客户端文件选择 → §6.10.4 安全确认弹窗
  *   （来源/版本/权限/平台/风险）→ 确认 → 列表出现「Installed」标签；
@@ -7,7 +7,7 @@
  * - 取消安全确认：不注册；
  * - 重启持久化：安装 + 启停状态经 IndexedDB 落盘，reload 后仍在（Installed 标签 + 启用开关）；
  * - 全程无 console 错误。
- * 2026-09-12：插件管理并入 Settings（删除顶栏 Plugin Manager 入口），助手按 Settings → Plugins 导航。
+ * 插件管理并入 Settings（删除顶栏 Plugin Manager 入口），助手按 Settings → Plugins 导航。
  * 注意：隐藏文件输入框随插件管理区块挂载（在 Settings 的 Plugins 页签内），安装前必须先打开该页签。
  */
 import { expect, test, type Page } from "@playwright/test";
@@ -35,7 +35,7 @@ async function openApp(page: Page): Promise<void> {
 }
 
 /** 打开 Settings 抽屉的 Plugins 页签，返回插件管理区块定位器
- * （2026-09-12：插件管理由独立弹窗并入 Settings）。 */
+ * （插件管理由独立弹窗并入 Settings）。 */
 async function openPluginManager(page: Page) {
   if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
     await page
@@ -122,7 +122,7 @@ test("坏文件：非法 JSON 报错且不注册", async ({ page }) => {
 
   await pickManifestFile(page, "bad.json", "{ not-json");
   await expect(page.getByText("The plugin manifest is invalid.")).toBeVisible();
-  // 断言按目标插件名（ADR-054：插件一律手动安装，不与任何随包插件混同）。
+  // 断言按目标插件名（插件一律手动安装，不与任何随包插件混同）。
   await expect(modal).not.toContainText("E2E Installed");
   expect(errors).toEqual([]);
 });
@@ -170,7 +170,7 @@ test("重启持久化：安装 + 启停状态 reload 后仍在", async ({ page }
     .locator(".ant-switch");
   await switchControl.click();
 
-  // 等 IndexedDB 自动保存落盘（防抖）再 reload（ADR-031 踩坑）。
+  // 等 IndexedDB 自动保存落盘（防抖）再 reload（踩坑）。
   await page.waitForTimeout(1000);
   await page.reload();
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
@@ -188,7 +188,7 @@ test("重启持久化：安装 + 启停状态 reload 后仍在", async ({ page }
   const checked = await restoredSwitch.evaluate((el) =>
     el.classList.contains("ant-switch-checked"),
   );
-  // 安装前曾关闭 → 持久化 enabled=false，reload 后应保持未勾选。
+  // 安装时关闭 → 持久化 enabled=false，reload 后应保持未勾选。
   expect(checked).toBe(false);
   expect(errors).toEqual([]);
 });
@@ -203,7 +203,7 @@ test("卸载：确认后从列表移除并提示成功", async ({ page }) => {
   await openApp(page);
   const modal = await openPluginManager(page);
 
-  // ADR-054：插件一律由用户手动安装（无随包插件）→ 初始为空态。
+  //插件一律由用户手动安装（无随包插件）→ 初始为空态。
   await expect(modal).toContainText("No built-in plugins registered.");
 
   // 安装一个插件。

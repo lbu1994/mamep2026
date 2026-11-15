@@ -1,6 +1,6 @@
 /**
  * Modbus RTU ADU 编解码（FC03 读保持寄存器（quantity 可 >1）、FC0x10 写保持寄存器（单值或多值）、
- * FC01/FC02/FC04/FC0F 基础表（线圈/离散输入/输入寄存器，ADR-043 Phase E））。
+ * FC01/FC02/FC04/FC0F 基础表（线圈/离散输入/输入寄存器））。
  *
  * 帧结构：
  * - FC03/FC04 正常响应：slave(1) + fc(1) + byteCount(1) + data(quantity*2) + crc(2)
@@ -8,10 +8,10 @@
  * - FC0x10/FC0F 正常响应：slave(1) + fc(1) + startAddr(2) + quantity(2) + crc(2) = 8 字节
  * - 异常响应：slave(1) + fc|0x80(1) + exceptionCode(1) + crc(2) = 5 字节
  *
- * 多寄存器（ADR-030，2026-08-27）：读路径 quantity 任意（≤ MAX_READ_QUANTITY）；写路径支持
+ * 多寄存器：读路径 quantity 任意（≤ MAX_READ_QUANTITY）；写路径支持
  * 单值（WriteSingleRegisterRequest，FC0x10 quantity=1）与多值（WriteMultipleRegistersRequest，
  * FC0x10 quantity=N、byteCount=2N、值大端）。
- * 基础表（ADR-043，2026-09-01）：FC01/FC02 位打包（byteCount=ceil(q/8)，字节内 LSB 在前）；
+ * 基础表：FC01/FC02 位打包（byteCount=ceil(q/8)，字节内 LSB 在前）；
  * FC0F 写多线圈同理位打包；FC04 与 FC03 同构（16 位寄存器）。
  *
  * 本包只处理最终已验证的实际发送地址，不了解 Address Adjust（docs/TECH_DESIGN.md §17.3）。
@@ -32,9 +32,9 @@ export const EXCEPTION_ILLEGAL_FUNCTION = 0x01;
 export const EXCEPTION_ILLEGAL_DATA_ADDRESS = 0x02;
 export const EXCEPTION_ILLEGAL_DATA_VALUE = 0x03;
 
-/** RTU 单次请求最大读取寄存器数（ADU≤256B → PDU≤253B：1+1+2q+2 ≤ 253 → q ≤ 125，ADR-030）。 */
+/** RTU 单次请求最大读取寄存器数（ADU≤256B → PDU≤253B：1+1+2q+2 ≤ 253 → q ≤ 125）。 */
 export const MAX_READ_QUANTITY = 125;
-/** RTU 单次请求最大写入寄存器数（1+1+2+2+1+2q ≤ 253 → q ≤ 123，ADR-030）。 */
+/** RTU 单次请求最大写入寄存器数（1+1+2+2+1+2q ≤ 253 → q ≤ 123）。 */
 export const MAX_WRITE_QUANTITY = 123;
 /** FC01/FC02 单次请求最大读取位（线圈/离散输入）数（Modbus 规范 2000）。 */
 export const MAX_READ_BITS_QUANTITY = 2000;
@@ -53,7 +53,7 @@ export interface WriteSingleRegisterRequest {
   rawValue: number;
 }
 
-/** FC0x10 多寄存器写入（ADR-030）：一次请求写多个连续寄存器（quantity = values.length）。 */
+/** FC0x10 多寄存器写入：一次请求写多个连续寄存器（quantity = values.length）。 */
 export interface WriteMultipleRegistersRequest {
   slaveAddress: number;
   startAddress: number;
@@ -206,7 +206,7 @@ export function encodeReadInputRegistersRequest(
 }
 
 /**
- * FC0F 写多线圈（ADR-043）：values 为 0/1，位打包（byteCount=ceil(n/8)，字节内 LSB 在前），
+ * FC0F 写多线圈：values 为 0/1，位打包（byteCount=ceil(n/8)，字节内 LSB 在前），
  * 末字节高位补 0。
  */
 export function encodeWriteMultipleCoilsRequest(
@@ -250,7 +250,7 @@ export function encodeWriteSingleRegisterRequest(
   return appendCrc(body);
 }
 
-/** FC0x10 多寄存器写入（ADR-030）：quantity = values.length、byteCount = 2N、值大端。 */
+/** FC0x10 多寄存器写入：quantity = values.length、byteCount = 2N、值大端。 */
 export function encodeWriteMultipleRegistersRequest(
   request: WriteMultipleRegistersRequest,
 ): Uint8Array {

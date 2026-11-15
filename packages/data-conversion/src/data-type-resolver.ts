@@ -1,5 +1,5 @@
 /**
- * 数据类型解析器（ADR-043 E-3）：内置类型 + 插件类型（单寄存器）。
+ * 数据类型解析器：内置类型 + 插件类型（单寄存器）。
  *
  * 内置实现复用 data-types.ts / multi-register.ts（builtin 契约）；插件类型由调用方
  * 经 `register` 注入（函数不进贡献点 payload，仿 AddressTransformRegistry/CodecRegistry 模式，
@@ -16,7 +16,7 @@ import {
 import { formatRawValue, parseCellText } from "./data-types";
 import { allowedRegisterCounts, isValidRegisterCount } from "./multi-register";
 
-/** 插件数据类型解析处理函数（ADR-043 E-3 范围收敛：仅单寄存器插件类型）。 */
+/** 插件数据类型解析处理函数（范围收敛：仅单寄存器插件类型）。 */
 export interface PluginDataTypeHandlers {
   /** 解析单元格文本为 16 位原始值（0..65535）。 */
   parse(text: string): Result<number>;
@@ -38,7 +38,7 @@ export interface DataTypeResolver {
   /** 注册插件类型处理函数；同 id 重复注册返回错误（不覆盖）。 */
   register(type: string, handlers: PluginDataTypeHandlers): Result<void>;
   /**
-   * 取已注册插件类型处理函数（2026-09-12，ADR-054）：使本解析器结构上满足 plugin-api
+   * 取已注册插件类型处理函数：使本解析器结构上满足 plugin-api
    * 的 DataTypeRegistry（插件 `ctx.registries.dataType` 直接以此为注册面）。
    */
   get(type: string): PluginDataTypeHandlers | undefined;

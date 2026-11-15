@@ -1,6 +1,5 @@
 /**
- * 安川 MEMOBUS 插件（ADR-041 插件 Phase C，决策 ①1A / ⑤；2026-09-12 ADR-054：改为**用户手动安装**
- * 的单文件插件）。
+ * 安川 MEMOBUS 插件（**用户手动安装**的单文件插件）。
  * manifest 声明式贡献（protocolExtension / tableType / toolbarAction / command / documentation）；
  * 单文件 entry 导出 `manifest` + `activate(ctx)` + `handleToolbarAction(actionId, ctx)`，由平台侧
  * 同进程加载器加载（安装时用户需在确认框中显式授权「同进程执行」）：
@@ -58,7 +57,7 @@ export const yaskawaMemobusManifest: PluginManifest = {
         scope: "table-toolbar",
         targetTableType: "holding-register",
         requiresConfirm: true,
-        // 确认文案 i18n key（2026-09-02 插件外部化：确认弹窗文案由插件贡献声明）。
+        // 确认文案 i18n key（插件外部化：确认弹窗文案由插件贡献声明）。
         confirmKey: "table.enterRomConfirm",
       },
       {
@@ -75,7 +74,7 @@ export const yaskawaMemobusManifest: PluginManifest = {
       { id: "yaskawa.enter-rom", titleKey: "table.enterRom" },
       { id: "yaskawa.enter-ram", titleKey: "table.enterRam" },
     ],
-    // 寄存器手册（ADR-043 E-5）：documentation 贡献点，Help 弹窗轻量渲染。
+    // 寄存器手册：documentation 贡献点，Help 弹窗轻量渲染。
     documentation: {
       id: "yaskawa.register-manual",
       titleKey: "plugins.yaskawaManualTitle",
@@ -114,7 +113,7 @@ export const yaskawaMemobusManifest: PluginManifest = {
 };
 
 /**
- * 单文件 entry 导出（ADR-044 F-3 / ADR-054）：安装时同进程加载器 import 本模块，从 entry
+ * 单文件 entry 导出：安装时同进程加载器 import 本模块，从 entry
  * 提取 manifest 并调用 `activate`；工具栏动作由 entry 的 `handleToolbarAction` 处理。
  */
 export const manifest: PluginManifest = yaskawaMemobusManifest;
@@ -123,7 +122,7 @@ export function activate(ctx: PluginContext): void {
   ctx.registries.codec.register(new MemobusCodec());
 }
 
-/** ROM/RAM 确定指令（Phase C 决策③④：值 0、不回读、不触发轮询刷新）。 */
+/** ROM/RAM 确定指令（决策③④：值 0、不回读、不触发轮询刷新）。 */
 export function handleToolbarAction(
   actionId: string,
   ctx: PluginContext,

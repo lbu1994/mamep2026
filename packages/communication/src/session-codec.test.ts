@@ -23,7 +23,7 @@ import { FakeTransport } from "./testing/fake-transport";
 import { ManualClock, advanceUntil } from "./testing/manual-clock";
 
 /**
- * 极简 MEMOBUS 形状的 fake codec（FC 0x67 + 子功能 010D/010E，ADR-040）：
+ * 极简 MEMOBUS 形状的 fake codec（FC 0x67 + 子功能 010D/010E）：
  * 用于验证会话 codec 注入路径（编解码细节由 protocol-memobus 包专项覆盖）。
  */
 class FakeMemobusCodec implements ProtocolCodec {

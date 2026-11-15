@@ -1,5 +1,5 @@
 /**
- * 传输桥接口（ADR-050 §5）：`packages/platform-android` 与原生插件之间的最小面。
+ * 传输桥接口：`packages/platform-android` 与原生插件之间的最小面。
  *
  * 真实实现见 `./capacitor-bridge.ts`（`@capacitor/core`，独立子路径导出，避免非 Android 构建被迫加载）；
  * 单测注入 `./testing/fake-transport-bridge.ts`（沿用 platform-node 的 `SerialPortLike` 注入先例）。
@@ -25,7 +25,7 @@ export interface BridgeEventHandlerMap {
 
 export interface MamepTransportBridge {
   /**
-   * 枚举 USB 串口（Phase 2）。返回**原始回包**（unknown），由消费侧 `parseBridgePayload` 校验；
+   * 枚举 USB 串口。返回**原始回包**（unknown），由消费侧 `parseBridgePayload` 校验；
    * 这样“未知形状一律拒绝”的姿态在传输/Host 层统一实现，桥实现无需重复校验。
    */
   listSerialPorts(): Promise<unknown>;
@@ -42,14 +42,14 @@ export interface MamepTransportBridge {
     handler: BridgeEventHandlerMap[E],
   ): Promise<BridgeListenerHandle>;
   /**
-   * 屏幕常亮开关（KeepAwake，ADR-050 Phase 3）：与活动传输**无关**，
+   * 屏幕常亮开关（KeepAwake）：与活动传输**无关**，
    * 而是由「是否存在持续轮询/追踪」驱动；幂等。
    */
   setKeepScreenOn(params: BridgeKeepScreenOnParams): Promise<void>;
 }
 
 /**
- * 应用生命周期桥（`@capacitor/app`，ADR-050 Phase 3）。
+ * 应用生命周期桥（`@capacitor/app`）。
  *
  * 真实实现见 `./capacitor-app.ts`（独立子路径导出，非 Android 构建不加载 `@capacitor/app`）；
  * 与 `MamepTransportBridge` 分开是因为它服务的是 UI 生命周期（返回键/前后台），

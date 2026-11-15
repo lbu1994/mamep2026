@@ -1,5 +1,5 @@
 /**
- * 装配编排 → UI store 的适配（composition root，2026-09-13）。
+ * 装配编排 → UI store 的适配（composition root）。
  *
  * `host-assembly.ts` 只依赖 `HostAssemblySinks` 接口（不 import store / React，便于 node 环境
  * 单测）；真实实现放在此处，经 `useAppStore.getState()` **按调用时刻取最新状态**（避免闭包捕获

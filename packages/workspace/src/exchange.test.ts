@@ -1,5 +1,5 @@
 /**
- * 工作区公开交换格式辅助测试（2026-08-29，PRD §8.3 P1）。
+ * 工作区公开交换格式辅助测试（PRD §8.3 P1）。
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -30,7 +30,7 @@ describe("sanitizeWorkspaceNameForFile", () => {
 });
 
 describe("workspaceExportFileName", () => {
-  const now = new Date(2026, 7, 29, 10, 20, 30).getTime(); // 2026-08-29 10:20:30
+  const now = new Date(2026, 7, 29, 10, 20, 30).getTime(); // 10:20:30
 
   it("builds mamep-workspace-<name>-<timestamp>.json", () => {
     expect(workspaceExportFileName("My Workspace", now)).toBe(

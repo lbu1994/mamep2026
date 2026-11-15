@@ -27,7 +27,7 @@ import type { CommunicationSession, WriteOutcome } from "./session";
 export interface WriteVerifyMeta {
   /** 用户输入地址（Address Adjust 之前的地址，日志用）。 */
   userAddress?: number;
-  /** 外部取消令牌（2026-08-26）：延迟中取消 → cancelled-before-verify；缺省仅受 disconnect 影响。 */
+  /** 外部取消令牌：延迟中取消 → cancelled-before-verify；缺省仅受 disconnect 影响。 */
   cancelToken?: CancellationToken;
   /** 写入与回读共同使用的不可变路由快照。 */
   route?: RequestRoute;
@@ -42,7 +42,7 @@ export class WriteVerifyCoordinator {
     this.clock = clock;
   }
 
-  /** 写后回读全流程（单寄存器，ADR-030 后委托多值实现，values=[rawValue]）。 */
+  /** 写后回读全流程（单寄存器后委托多值实现，values=[rawValue]）。 */
   async writeWithVerify(
     sentAddress: number,
     rawValue: number,
@@ -53,7 +53,7 @@ export class WriteVerifyCoordinator {
   }
 
   /**
-   * 写后回读全流程（多寄存器，ADR-030）：一次 FC0x10 写 values 全部，回读 FC03 读 N 个
+   * 写后回读全流程（多寄存器）：一次 FC0x10 写 values 全部，回读 FC03 读 N 个
    * 连续寄存器并逐项比较。settings.mode==="off" 时不回读（默认写入成功即成功态）。
    */
   async writeWithVerifyMany(
@@ -83,7 +83,7 @@ export class WriteVerifyCoordinator {
     // 取消令牌贯穿延迟与回读：延迟中取消立即结束（cancelled-before-verify），
     // 回读任务携带同一令牌（disconnect/scheduler.cancelAll 会取消它）。
     const cancelToken = createCancellationToken();
-    // 外部取消（未来 UI 取消入口，ADR-025 模式）联动内部令牌。
+    // 外部取消（未来 UI 取消入口模式）联动内部令牌。
     const unsubscribeExternal =
       meta.cancelToken?.onCancel(() =>
         cancelToken.cancel("write-verify-cancelled"),

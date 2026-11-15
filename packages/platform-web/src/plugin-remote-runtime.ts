@@ -1,5 +1,5 @@
 /**
- * 浏览器 Web Worker 插件隔离运行时（ADR-044 Phase F-2，2026-09-01）。
+ * 浏览器 Web Worker 插件隔离运行时。
  *
  * 实现 plugin-api 的 PluginRemoteRuntime：第三方单文件 JS 插件 entry 在 Web Worker
  * （Blob URL）中加载执行，经 postMessage 协议（见 plugin-worker-bootstrap.ts）与主线程

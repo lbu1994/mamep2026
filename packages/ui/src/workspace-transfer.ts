@@ -1,5 +1,5 @@
 /**
- * 工作区导入/导出逻辑（2026-08-29 ADR-033；2026-08-30 ADR-037 键盘快捷键复用）。
+ * 工作区导入/导出逻辑（键盘快捷键复用）。
  * WorkspaceFileActions（Settings 弹窗按钮）与 AppShortcutLayer（Ctrl+Shift+S 导出 /
  * Ctrl+Alt+O 导入）共用同一 hook，避免两处复制。
  * 要求调用方位于 antd <App> context 内（App.useApp() 的 message）。
@@ -119,8 +119,8 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
       // 浏览器端：客户端文件选择读取（浏览器原生能力，不走 HostMessage）。
       importFileInputRef.current?.click();
     } else {
-      // 能力不支持（如 Android 在 Phase 4 接入 SAF / 文件选择前）：**必须给出反馈**，
-      // 否则用户点了按钮毫无反应（静默无操作会被当成 bug，2026-09-13 实测）。
+      // 能力不支持（如 Android 在接入 SAF / 文件选择前）：**必须给出反馈**，
+      // 否则用户点了按钮毫无反应（静默无操作会被当成 bug 实测）。
       void message.open({
         type: "warning",
         content: t("errors.workspaceImportUnsupported"),

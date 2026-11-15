@@ -1,5 +1,5 @@
 /**
- * Android 平台包（ADR-050）：Capacitor 原生通信适配。
+ * Android 平台包：Capacitor 原生通信适配。
  *
  * 注意：`./capacitor-bridge` **不在此导出**（改用子路径 `@mamep2026/platform-android/capacitor`），
  * 使浏览器 / Electron / VSCode 构建不被迫加载 `@capacitor/core`。

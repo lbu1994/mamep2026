@@ -1,5 +1,5 @@
 /**
- * Help 弹窗「键盘快捷键」总览（PRD §8.3 P1，2026-08-30，ADR-037）。
+ * Help 弹窗「键盘快捷键」总览（PRD §8.3 P1）。
  * 数据源 = keyboard/shortcuts.ts 注册表（唯一事实源），按 scope（app/table）分组展示；
  * 别名快捷键（如 "?" = Ctrl+/）不重复展示。
  * 优先用 antd Table 既有能力（size="small"、pagination={false}）。

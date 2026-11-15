@@ -1,10 +1,10 @@
 /**
- * 插件持久化协调器（ADR-038，2026-08-30；ADR-054 2026-09-12 去除随包插件一次性安装）。
+ * 插件持久化协调器（去除随包插件一次性安装）。
  * 对齐 packages/workspace 的 AutoSaveCoordinator 模式：
  * - start()：订阅 registry 事件（registered / enabled-changed / unregistered）并立即保存快照
  *   （插件数量小、无防抖必要）；hydrate 由装配方承担（需先异步加载执行面，见 start 注释）；
  * - 保存失败不丢内存状态，经 onError 回调上报（宿主可接入 app-message 提示）。
- * 插件一律由用户手动安装（ADR-054），不再有「随包自动安装」与 seeded 装配状态；
+ * 插件一律由用户手动安装，不再有「随包自动安装」与 seeded 装配状态；
  * 执行面（同进程 / 隔离）由 StoredPlugin.executionMode 记录，重启后由装配方按此重建。
  */
 import type { Result } from "@mamep2026/domain";
@@ -34,7 +34,7 @@ export class PluginPersistenceCoordinator {
 
   /**
    * 订阅注册表事件并持久化（幂等，重复调用为 no-op）。
-   * hydrate 由装配方承担（ADR-054）：它需先异步加载插件执行面（同进程 / 隔离）才能带 runtime
+   * hydrate 由装配方承担：它需先异步加载插件执行面（同进程 / 隔离）才能带 runtime
    * 注册，故本协调器不再自行 load/hydrate。
    */
   start(): void {

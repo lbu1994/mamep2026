@@ -1,9 +1,9 @@
 /**
- * 插件注册表（浏览器 MVP：仅内置插件，清单驱动，启用/禁用，错误隔离）。
+ * 插件注册表：用户手动安装的清单/可执行插件，支持启用/禁用、贡献点注册与错误隔离。
  * 平台能力过滤：浏览器不接受 node-only 插件；加载错误不阻止应用启动。
- * 来源标记（2026-08-30，ADR-038）：builtin=随应用构建的内置插件（不持久化），
+ * 来源标记：builtin=随应用构建的内置插件（不持久化），
  * installed=用户经安装入口注册的插件（持久化 manifest + 启用状态）。
- * 可执行化扩展（2026-08-31，ADR-039）：register 校验兼容性（apiVersion 三级判定）、
+ * 可执行化扩展：register 校验兼容性（apiVersion 三级判定）、
  * 经贡献点注册表登记 contributes（逐点错误隔离）、可选内置同进程 runtime 激活
  * （activate/deactivate + PLUGIN_HOOK_FAILED 错误隔离，贡献随状态过滤）。
  */
@@ -54,24 +54,24 @@ export type PluginRegistryEvent =
   | { type: "lifecycle-changed"; pluginId: string; state: PluginLifecycleState }
   | { type: "unregistered"; pluginId: string };
 
-/** 卸载错误码（ADR-044 Phase F-1）。 */
+/** 卸载错误码。 */
 export const PLUGIN_NOT_FOUND = "PLUGIN_NOT_FOUND";
 export const PLUGIN_BUILTIN_NOT_REMOVABLE = "PLUGIN_BUILTIN_NOT_REMOVABLE";
-/** 工具栏动作错误码（2026-09-02 插件外部化）：插件未声明/无法处理该动作。 */
+/** 工具栏动作错误码（插件外部化）：插件未声明/无法处理该动作。 */
 export const PLUGIN_ACTION_NOT_HANDLED = "PLUGIN_ACTION_NOT_HANDLED";
 
 export interface PluginRegistryOptions {
-  /** 贡献点注册表（ADR-039）：未提供则跳过 contributes 校验与聚合。 */
+  /** 贡献点注册表：未提供则跳过 contributes 校验与聚合。 */
   contributionRegistry?: ContributionPointRegistry;
-  /** 插件通信面（ADR-039）：未提供则使用「无会话」兜底（返回能力错误）。 */
+  /** 插件通信面：未提供则使用「无会话」兜底（返回能力错误）。 */
   communicationApi?: PluginCommunicationApi;
   /**
-   * 按插件 id 动态构造通信面（2026-09-02，插件外部化）：同进程 runtime 的 ctx.communication
+   * 按插件 id 动态构造通信面（插件外部化）：同进程 runtime 的 ctx.communication
    * 按 pluginId 绑定，经统一调度器记录来源插件；优先于 communicationApi。
    */
   communicationApiFactory?: (pluginId: string) => PluginCommunicationApi;
   /**
-   * 同步贡献注册面（2026-09-12，ADR-054）：插件 `activate(ctx)` 经 `ctx.registries` 注册
+   * 同步贡献注册面：插件 `activate(ctx)` 经 `ctx.registries` 注册
    * codec/dataType/addressTransform。未提供则用「不可用」兜底（注册返回能力错误）。
    */
   syncRegistries?: PluginSyncRegistries;
@@ -105,11 +105,11 @@ interface RegisteredPlugin {
   enabled: boolean;
   source: PluginSource;
   runtime: PluginRuntime | undefined;
-  /** 隔离线程运行时（ADR-044 Phase F-2）：installed 第三方插件 entry 在此执行。 */
+  /** 隔离线程运行时：installed 第三方插件 entry 在此执行。 */
   remoteRuntime: PluginRemoteRuntime | undefined;
   /** 单文件 JS 插件源码（installed 可执行插件持久化用；纯清单插件为 null）。 */
   entrySource: string | null;
-  /** 执行模式（ADR-054）：随快照持久化，重启后据此重建执行面；无执行面时为 undefined。 */
+  /** 执行模式：随快照持久化，重启后据此重建执行面；无执行面时为 undefined。 */
   executionMode: PluginExecutionMode | undefined;
   lifecycleState: PluginLifecycleState;
 }
@@ -120,12 +120,12 @@ export class PluginRegistry {
   private readonly listeners = new Set<(event: PluginRegistryEvent) => void>();
   private readonly contributionRegistry: ContributionPointRegistry | undefined;
   private readonly communicationApi: PluginCommunicationApi;
-  /** 按插件 id 动态通信面工厂（2026-09-02 插件外部化）：优先于 communicationApi。 */
+  /** 按插件 id 动态通信面工厂（插件外部化）：优先于 communicationApi。 */
   private readonly communicationApiFactory:
     ((pluginId: string) => PluginCommunicationApi) | undefined;
-  /** 同步贡献注册面（ADR-054）：注入到插件 `ctx.registries`。 */
+  /** 同步贡献注册面：注入到插件 `ctx.registries`。 */
   private readonly syncRegistries: PluginSyncRegistries;
-  /** 变更版本号（注册/启停/生命周期变化时自增）：UI 消费方响应式订阅用（ADR-039）。 */
+  /** 变更版本号（注册/启停/生命周期变化时自增）：UI 消费方响应式订阅用。 */
   private version = 0;
 
   constructor(options: PluginRegistryOptions = {}) {
@@ -142,11 +142,11 @@ export class PluginRegistry {
     options?: {
       source?: PluginSource;
       runtime?: PluginRuntime;
-      /** 隔离线程运行时（ADR-044 Phase F-2）：installed 插件 entry 在 Worker/worker_threads 执行。 */
+      /** 隔离线程运行时：installed 插件 entry 在 Worker/worker_threads 执行。 */
       remoteRuntime?: PluginRemoteRuntime;
       /** 单文件 JS 插件源码（随快照持久化，重启后重新创建运行时）。 */
       entrySource?: string;
-      /** 执行模式（ADR-054）：缺省按提供的运行时推断（runtime → same-process / remoteRuntime → isolated）。 */
+      /** 执行模式：缺省按提供的运行时推断（runtime → same-process / remoteRuntime → isolated）。 */
       executionMode?: PluginExecutionMode;
     },
   ): Result<PluginManifest> {
@@ -216,7 +216,7 @@ export class PluginRegistry {
       );
     }
 
-    // 兼容性三级判定（ADR-039）：forbidden 阻断；loadable-warning 记录警告不阻断。
+    // 兼容性三级判定：forbidden 阻断；loadable-warning 记录警告不阻断。
     const compat: CompatibilityResult = checkCompatibility(manifest.apiVersion);
     if (compat.verdict === "forbidden") {
       this.loadErrors.push({
@@ -247,7 +247,7 @@ export class PluginRegistry {
       return fail(permissionResult.error);
     }
 
-    // runtime 允许 builtin 同进程（ADR-039 最小执行面）与 installed（ADR-054：用户安装时
+    // runtime 允许 builtin 同进程（最小执行面）与 installed（用户安装时
     // 显式授权「同进程执行」，用于贡献 codec/dataType/addressTransform 等同步能力）。
     // remoteRuntime（隔离执行）仅限 installed 来源；builtin 直接用同进程 runtime。
     if (remoteRuntime !== undefined && source !== "installed") {
@@ -267,7 +267,7 @@ export class PluginRegistry {
       );
     }
 
-    // 贡献点登记（ADR-039）：逐点校验，未知点/坏 payload 记错误但不阻断注册。
+    // 贡献点登记：逐点校验，未知点/坏 payload 记错误但不阻断注册。
     if (this.contributionRegistry) {
       const contribErrors = this.contributionRegistry.addContributions(
         manifest.id,
@@ -306,7 +306,7 @@ export class PluginRegistry {
   }
 
   /**
-   * 卸载插件（ADR-044 Phase F-1）：仅 installed 来源可卸载（builtin 随应用构建、不可卸载）。
+   * 卸载插件：仅 installed 来源可卸载（builtin 随应用构建、不可卸载）。
    * 流程：deactivate runtime（异常 → PLUGIN_HOOK_FAILED 错误隔离，仍继续卸载）→
    * 回收贡献点（removePluginContributions）→ 从注册表删除 → emit unregistered。
    * 未注册 → PLUGIN_NOT_FOUND；builtin → PLUGIN_BUILTIN_NOT_REMOVABLE。
@@ -341,7 +341,7 @@ export class PluginRegistry {
       }
     }
     if (plugin.remoteRuntime !== undefined) {
-      // 关闭隔离线程（ADR-044 Phase F-2）：deactivate + dispose，异常不阻断卸载。
+      // 关闭隔离线程：deactivate + dispose，异常不阻断卸载。
       void plugin.remoteRuntime
         .deactivate?.()
         .then(() => plugin.remoteRuntime?.dispose())
@@ -357,7 +357,7 @@ export class PluginRegistry {
     return [...this.plugins.values()].map((p) => p.manifest);
   }
 
-  /** 某插件生命周期状态（ADR-039）；未注册返回 null。 */
+  /** 某插件生命周期状态；未注册返回 null。 */
   getLifecycleState(pluginId: string): PluginLifecycleState | null {
     return this.plugins.get(pluginId)?.lifecycleState ?? null;
   }
@@ -366,17 +366,17 @@ export class PluginRegistry {
     return this.plugins.get(pluginId)?.enabled ?? false;
   }
 
-  /** 插件来源（2026-08-30，ADR-038）：未注册返回 null。 */
+  /** 插件来源：未注册返回 null。 */
   getSource(pluginId: string): PluginSource | null {
     return this.plugins.get(pluginId)?.source ?? null;
   }
 
-  /** 插件同进程 runtime（2026-09-02 插件外部化）：未注册/无 runtime 返回 undefined。 */
+  /** 插件同进程 runtime（插件外部化）：未注册/无 runtime 返回 undefined。 */
   getRuntime(pluginId: string): PluginRuntime | undefined {
     return this.plugins.get(pluginId)?.runtime;
   }
   /**
-   * 插件是否可处理工具栏动作（2026-09-02 插件外部化）：runtime 声明了 handler 且已注册。
+   * 插件是否可处理工具栏动作（插件外部化）：runtime 声明了 handler 且已注册。
    */
   canHandleToolbarAction(pluginId: string, _actionId: string): boolean {
     return (
@@ -386,7 +386,7 @@ export class PluginRegistry {
   }
 
   /**
-   * 执行插件工具栏动作（2026-09-02 插件外部化）：委托相应插件同进程 runtime 的
+   * 执行插件工具栏动作（插件外部化）：委托相应插件同进程 runtime 的
    * handleToolbarAction（经 PluginCommunicationApi 走统一调度器）。未注册/无 handler/
    * 已禁用 → PLUGIN_ACTION_NOT_HANDLED 能力错误（UI 层置灰，不会到这里）。
    */
@@ -470,7 +470,7 @@ export class PluginRegistry {
     this.emit({ type: "enabled-changed", pluginId, enabled });
   }
 
-  /** 聚合某贡献点的有效贡献（ADR-039；禁用/激活失败的插件贡献被过滤）。 */
+  /** 聚合某贡献点的有效贡献（禁用/激活失败的插件贡献被过滤）。 */
   getContributions<TSchema>(
     pointId: ContributionPointId,
   ): Contribution<TSchema>[] {
@@ -478,9 +478,9 @@ export class PluginRegistry {
   }
 
   /**
-   * 持久化快照（ADR-038）：返回全部 installed 来源插件 + 启用状态 + 执行模式；
+   * 持久化快照：返回全部 installed 来源插件 + 启用状态 + 执行模式；
    * builtin 插件不入库（避免重启重复注册报 PLUGIN_ALREADY_REGISTERED）。
-   * 插件一律由用户手动安装（ADR-054）。
+   * 插件一律由用户手动安装。
    */
   snapshot(): PluginStoreSnapshot {
     return {
@@ -499,8 +499,8 @@ export class PluginRegistry {
   }
 
   /**
-   * 从持久化数据恢复（ADR-038）：注册 stored 插件（source=installed）并应用启用状态。
-   * 执行面（同进程 / 隔离）由装配方按 executionMode + entrySource 重新加载（ADR-054）。
+   * 从持久化数据恢复：注册 stored 插件（source=installed）并应用启用状态。
+   * 执行面（同进程 / 隔离）由装配方按 executionMode + entrySource 重新加载。
    */
   hydrate(data: PluginStoreData): void {
     for (const stored of data.plugins) {
@@ -520,12 +520,12 @@ export class PluginRegistry {
     }
   }
 
-  /** 插件执行模式（ADR-054）：未注册/无执行面返回 null。 */
+  /** 插件执行模式：未注册/无执行面返回 null。 */
   getExecutionMode(pluginId: string): PluginExecutionMode | null {
     return this.plugins.get(pluginId)?.executionMode ?? null;
   }
 
-  /** 单文件 JS 插件源码（ADR-044 Phase F-2）：未注册/纯清单插件返回 null。 */
+  /** 单文件 JS 插件源码：未注册/纯清单插件返回 null。 */
   getEntrySource(pluginId: string): string | null {
     return this.plugins.get(pluginId)?.entrySource ?? null;
   }
@@ -534,7 +534,7 @@ export class PluginRegistry {
     return this.loadErrors;
   }
 
-  /** 注册表变更版本号（ADR-039）：每次 emit 自增，UI 消费方作为 useSyncExternalStore 快照。 */
+  /** 注册表变更版本号：每次 emit 自增，UI 消费方作为 useSyncExternalStore 快照。 */
   getVersion(): number {
     return this.version;
   }
@@ -568,7 +568,7 @@ export class PluginRegistry {
     }
   }
 
-  /** 隔离线程运行时激活（ADR-044 Phase F-2）：异步成功 → active；失败 → PLUGIN_HOOK_FAILED。 */
+  /** 隔离线程运行时激活：异步成功 → active；失败 → PLUGIN_HOOK_FAILED。 */
   private activateRemotePlugin(pluginId: string): void {
     const plugin = this.plugins.get(pluginId);
     if (plugin?.remoteRuntime === undefined) return;

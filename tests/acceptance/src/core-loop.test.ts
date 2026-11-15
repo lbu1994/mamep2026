@@ -153,7 +153,7 @@ describe("acceptance: browser RTU core loop", () => {
     const polling = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
     });
-    // 轮询结果可为单值或数组（ADR-030 多寄存器）；本用例仅单寄存器目标。
+    // 轮询结果可为单值或数组（多寄存器）；本用例仅单寄存器目标。
     const results: Array<{ address: number; value: number | number[] }> = [];
     polling.onResult((event) => {
       if (event.result.ok)

@@ -1,6 +1,6 @@
 /**
- * 「更完整的键盘操作」e2e（PRD §8.3 P1，2026-08-30，ADR-037）。
- * 覆盖 app 级（Ctrl+/、?、Ctrl+,、Ctrl+Enter、Ctrl+[ / Ctrl+]）与表格级
+ * 「更完整的键盘操作」e2e（PRD §8.3 P1）。
+ * 覆盖 app 级（Ctrl+/、?、Ctrl+、Ctrl+Enter、Ctrl+[ / Ctrl+]）与表格级
  * （F9、↑/↓、Alt+P）快捷键在真实浏览器（mockTransport）中的闭环，全程无 console 错误。
  * 运行前提：pnpm dev（http://localhost:5173）。
  */

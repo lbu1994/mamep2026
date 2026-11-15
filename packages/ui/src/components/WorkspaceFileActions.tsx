@@ -1,7 +1,7 @@
 /**
- * 工作区导入/导出操作（2026-08-29 ADR-033；2026-08-30 ADR-037 键盘快捷键复用）。
+ * 工作区导入/导出操作（键盘快捷键复用）。
  * 渲染在 Settings 弹窗内（MamepApp 的 <AntApp> 之内），故可用 App.useApp()（antd message）。
- * 逻辑统一在 useWorkspaceTransfer（../workspace-transfer）：与 AppShortcutLayer
+ * 逻辑统一在 useWorkspaceTransfer（。/workspace-transfer）：与 AppShortcutLayer
  * （Ctrl+Shift+S 导出 / Ctrl+Alt+O 导入）共用同一套序列化/解析/落盘/提示。
  * 组件保持薄：序列化/解析在 packages/workspace；替换工作区在 store.applyWorkspaceImport。
  */

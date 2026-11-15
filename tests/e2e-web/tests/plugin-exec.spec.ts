@@ -1,5 +1,5 @@
 /**
- * 可执行插件（单文件 JS）e2e（mockTransport=1，浏览器端，2026-09-01，ADR-044 Phase F-2/3）。
+ * 可执行插件（单文件 JS）e2e（mockTransport=1，浏览器端）。
  * 覆盖：
  * - 安装单文件 JS 插件：真实 Web Worker 加载 entry → 提取 manifest → 安全确认
  *   （含「Isolated worker」运行位置）→ 注册并激活（隔离线程执行 activate）；
@@ -61,7 +61,7 @@ async function openApp(page: Page): Promise<void> {
 }
 
 /** 打开 Settings 抽屉的 Plugins 页签，返回插件管理区块定位器
- * （2026-09-12：插件管理由独立弹窗并入 Settings）。 */
+ * （插件管理由独立弹窗并入 Settings）。 */
 async function openPluginManager(page: Page) {
   if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
     await page
@@ -109,7 +109,7 @@ test("安装单文件 JS 插件：隔离线程加载 manifest → 确认（Isola
   await modal.getByRole("button", { name: "Install Plugin" }).click();
   await pickPluginSource(page, "plugin.mjs", ENTRY_OK);
 
-  // 安全确认展示执行模式选择（默认隔离线程；ADR-054）。
+  // 安全确认展示执行模式选择（默认隔离线程）。
   const confirm = page
     .locator(".ant-modal-container")
     .filter({ hasText: "Install this plugin?" });
@@ -149,7 +149,7 @@ test("重启持久化：entrySource 落盘，reload 后恢复并重新激活", a
   await expect(confirm).toBeHidden();
   await expect(modal).toContainText("E2E Exec");
 
-  // 等 IndexedDB 自动保存落盘（防抖）再 reload（ADR-031 踩坑）。
+  // 等 IndexedDB 自动保存落盘（防抖）再 reload（踩坑）。
   await page.waitForTimeout(1200);
   await page.reload();
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {

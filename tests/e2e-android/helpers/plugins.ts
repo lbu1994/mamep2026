@@ -1,5 +1,5 @@
 /**
- * Android 插件 e2e 助手（ADR-056）。
+ * Android 插件 e2e 助手。
  *
  * 提供「插件构建产物路径」（`pnpm build:plugins` 输出 `release/plugins/<pluginId>/`）与
  * 「插件存储直读」（IndexedDB `mamep2026` → 对象仓 `kv` → 键 `plugins`，与

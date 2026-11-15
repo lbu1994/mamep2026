@@ -1,10 +1,9 @@
 /**
- * 插件生命周期骨架（docs/architecture/ports/plugin-api/插件契约.md §2、§4，ADR-039）。
- * 状态机 + 错误隔离：Phase A 不加载第三方 entry 代码（隔离机制属 Phase F，另立 ADR），
- * 仅支持内置同进程 runtime（activate/deactivate）作为最小执行面；activate 抛错 →
- * PLUGIN_HOOK_FAILED → 禁用故障贡献点 → 核心保持可用。
- * Phase F（2026-09-01，ADR-044）：新增 PluginRemoteRuntime——第三方 entry 在隔离线程
+ * 插件生命周期骨架（docs/architecture/ports/plugin-api/插件契约.md §2、§4）。
+ * 状态机 + 错误隔离：支持同进程 runtime（activate/deactivate）以及
+ * PluginRemoteRuntime。第三方 entry 在隔离线程
  * （web Worker / Node worker_threads）执行，经 PluginCommunicationApi 代理桥与主线程通信。
+ * activate 抛错 → PLUGIN_HOOK_FAILED → 禁用故障贡献点 → 核心保持可用。
  */
 import type { MamepError, Result } from "@mamep2026/domain";
 import type { PluginCommunicationApi } from "./plugin-communication-api";
@@ -18,14 +17,14 @@ export type PluginLifecycleState =
   | "deactivated" // 已禁用 / deactivate 已执行
   | "failed"; // activate/deactivate 抛错（贡献被禁用，插件仍可见于管理列表）
 
-/** 内置/预装同进程插件运行时（ADR-039 最小执行面；第三方代码隔离见 PluginRemoteRuntime）。 */
+/** 内置/预装同进程插件运行时（最小执行面；第三方代码隔离见 PluginRemoteRuntime）。 */
 export interface PluginRuntime {
   activate(ctx: PluginContext): void | Promise<void>;
   deactivate?(): void | Promise<void>;
   /** 释放运行时资源（可选；远程运行时关闭隔离线程用）。 */
   dispose?(): void | Promise<void>;
   /**
-   * 工具栏动作处理器（2026-09-02 插件外部化）：插件声明式 toolbarAction 贡献的执行面——
+   * 工具栏动作处理器（插件外部化）：插件声明式 toolbarAction 贡献的执行面——
    * 经 ctx.communication（PluginCommunicationApi，走统一调度器）完成设备操作
    * （如安川 ROM/RAM 确定指令写 0900H/0910H）。未声明 = 动作不可用（UI 置灰）。
    */
@@ -36,7 +35,7 @@ export interface PluginRuntime {
 }
 
 /**
- * 隔离线程插件运行时（2026-09-01，ADR-044 Phase F-2）：第三方 entry 在隔离线程加载执行。
+ * 隔离线程插件运行时：第三方 entry 在隔离线程加载执行。
  * 平台实现：浏览器 = Web Worker（Blob URL）；Node（Electron 主进程 / VSCode Extension Host）
  * = worker_threads。load() 在隔离线程 import entry 并提取 manifest（序列化回主线程），
  * activate 在隔离线程执行插件 activate；唯一外部通道为 PluginCommunicationApi 代理桥。
@@ -53,7 +52,7 @@ export interface PluginRemoteRuntime {
 }
 
 /**
- * 同进程插件 entry 模块形态（2026-09-12，ADR-054）：单文件 JS 插件的**同进程**加载结果
+ * 同进程插件 entry 模块形态：单文件 JS 插件的**同进程**加载结果
  * （`export const manifest` + `export function activate(ctx)` + 可选 `deactivate`）。
  * 加载器由平台侧提供（platform-web `loadWebPluginEntry` / platform-node `loadNodePluginEntry`）。
  */
@@ -112,7 +111,7 @@ export interface PluginFrameParser {
 /**
  * 插件提供的协议编解码器（结构镜像 communication.ProtocolCodec）。
  *
- * 分层说明（ADR-054）：plugin-api 只依赖 domain，不依赖 communication，故此处**镜像声明**
+ * 分层说明：plugin-api 只依赖 domain，不依赖 communication，故此处**镜像声明**
  * 同构接口；结构相同即互相可赋值，漂移会在各插件调用点与 apps/web 组合根的赋值校验处
  * 于 `pnpm typecheck` 阶段暴露。
  */
@@ -136,7 +135,7 @@ export interface PluginProtocolCodec {
 }
 
 /**
- * 同步贡献注册面（2026-09-12，ADR-054）：插件经 `ctx.registries` 注册**同步纯函数**贡献
+ * 同步贡献注册面：插件经 `ctx.registries` 注册**同步纯函数**贡献
  * （协议 codec / 插件数据类型 / 地址变换）——函数不可 JSON 序列化，不能进 manifest 的
  * `contributes` payload，只能在 `activate` 时注册。宿主（应用装配层）把自身注册表适配为
  * 本接口注入。
@@ -157,7 +156,7 @@ export interface PluginSyncRegistries {
   pluginId: string;
   /** 唯一通信面（不暴露 Transport / socket 句柄，经统一调度器）。 */
   communication: PluginCommunicationApi;
-  /** 同步贡献注册面（2026-09-12，ADR-054）：activate 时注册 codec/dataType/addressTransform。 */
+  /** 同步贡献注册面：activate 时注册 codec/dataType/addressTransform。 */
   registries: PluginSyncRegistries;
 }
 
@@ -165,7 +164,7 @@ export const PLUGIN_LOAD_FAILED = "PLUGIN_LOAD_FAILED";
 export const PLUGIN_HOOK_FAILED = "PLUGIN_HOOK_FAILED";
 
 /**
- * 把同进程 entry 模块装配为注册表可用的运行时（2026-09-12，ADR-054）：
+ * 把同进程 entry 模块装配为注册表可用的运行时：
  * 同进程加载器（`loadWebPluginEntry` / `loadNodePluginEntry`）与装配层共用的胶水，
  * 把 `PluginLocalEntry` 的 `activate`/`deactivate`/`handleToolbarAction` 映射为 `PluginRuntime`。
  */

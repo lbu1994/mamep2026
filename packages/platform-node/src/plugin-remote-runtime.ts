@@ -1,5 +1,5 @@
 /**
- * Node worker_threads 插件隔离运行时（ADR-044 Phase F-2，2026-09-01）。
+ * Node worker_threads 插件隔离运行时。
  *
  * 实现 plugin-api 的 PluginRemoteRuntime：第三方单文件 JS 插件 entry 在 worker_threads
  * （eval module，见 plugin-node-worker-bootstrap.ts）中加载执行，经与浏览器端一致的

@@ -1,11 +1,11 @@
 /**
  * Node TCP 平台宿主（仅 TCP，Electron 主进程用）。
  *
- * 背景（2026-08-23 修复）：`NodePlatformHost` 会静态引入 serialport 原生绑定
+ * `NodePlatformHost` 会静态引入 serialport 原生绑定
  * （`real-serial-port.ts` → `@serialport/bindings-cpp`，运行时用 `__dirname` 加载
  * `.node`），若被 Vite 打进 Electron 主进程 ESM bundle，会在模块初始化时抛
  * `ReferenceError: __dirname is not defined in ES module scope`。而 Electron 主进程
- * 仅承载 Modbus TCP 会话（RTU 在 Renderer，Web Serial，ADR-017），根本不需要串口。
+ * 仅承载 Modbus TCP 会话（RTU 在 Renderer，Web Serial），根本不需要串口。
  *
  * 因此本类只提供 TCP 打开能力（`openTcpTransport`）+ 时钟 + 能力声明，不引用任何
  * serialport 代码；经 `@mamep2026/platform-node/tcp` 子路径导出（package.json
@@ -27,7 +27,7 @@ import { NodeTcpTransport } from "./node-tcp-transport";
 import { nodeClock } from "./real-clock";
 
 /** 仅 TCP 的能力声明（Electron 主进程矩阵由 electronCapabilities 承担，本值备用/测试）。
- * hostPlugins:true——Node 侧宿主插件执行面已落地（`@mamep2026/platform-node/plugin`，ADR-055）。 */
+ * hostPlugins:true——Node 侧宿主插件执行面（`@mamep2026/platform-node/plugin`）。 */
 export const nodeTcpHostCapabilities: PlatformCapabilities = Object.freeze({
   modbusRtu: false,
   modbusTcp: true,

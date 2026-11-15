@@ -1,5 +1,5 @@
 /**
- * Android USB-RS485 UI 面 E2E（ADR-050 Phase 2）——**无需任何 USB 硬件即可在真机运行**。
+ * Android USB-RS485 UI 面 E2E——**无需任何 USB 硬件即可在真机运行**。
  *
  * 覆盖能力位翻转后的可观察结果：协议分组出现（RTU + TCP）、RTU 表单完整、
  * 串口下拉走 `serialPorts: "enumerated"` 分支且能打开（设备为空时显示空态而不是崩溃），

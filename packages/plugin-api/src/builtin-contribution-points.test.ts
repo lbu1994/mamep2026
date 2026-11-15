@@ -1,5 +1,5 @@
 /**
- * 内置贡献点 schema 单测（2026-09-12）：`title`（方案 A 插件自带翻译）。
+ * 内置贡献点 schema 单测：`title`（方案 A 插件自带翻译）。
  * theme 与 panels 共用同一个 `LOCALIZED_TITLE_SCHEMA`（`en-US` 必填非空、`zh-CN` 可选）。
  */
 import { describe, expect, it } from "vitest";

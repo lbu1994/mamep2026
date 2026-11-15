@@ -2,7 +2,7 @@ import type { ThemeConfig } from "antd";
 import { theme as antdTheme } from "antd";
 
 /**
- * Mamep2026 应用级主题（docs/AGENTS.md §25.1；2026-08-25 从 packages/ui/src/theme.ts
+ * Mamep2026 应用级主题（docs/AGENTS.md §25.1 从 packages/ui/src/theme.ts
  * 迁入 ui-theme，packages/ui/src/theme.ts 为兼容 re-export）。
  *
  * 基于 antd 默认 / 暗色算法，叠加面向工业调试工具的紧凑、专业 token：
@@ -31,7 +31,7 @@ export const MONO_FONT_STACK =
   '"PingFang SC", "Microsoft YaHei", monospace';
 
 /**
- * 默认品牌色组（2026-09-02，ADR-048）：运行时取自 antd 公开令牌（theme.getDesignToken），
+ * 默认品牌色组：运行时取自 antd 公开令牌（theme.getDesignToken），
  * 不再硬编码字面量——antd 升级仅改默认色值时，本软件零代码修改即自动跟随。
  */
 export interface DefaultBrandColors {
@@ -72,7 +72,7 @@ export function buildTheme(dark: boolean): ThemeConfig {
       controlHeight: 28,
       controlHeightSM: 24,
       borderRadius: 4,
-      // 品牌蓝（2026-09-02，ADR-048）：**不覆盖** colorPrimary/colorLink/colorLinkHover/
+      // 品牌蓝：**不覆盖** colorPrimary/colorLink/colorLinkHover/
       // colorLinkActive——直接采用 antd 默认种子（当前值即 antd 默认浅/暗主色），
       // 库升级改默认色自动跟随；覆盖会造成 antd 二次派生（暗色主色被再次映射）。
       // 接受浅色白字对比度约 4.1:1（antd 默认水平）。

@@ -1,13 +1,13 @@
 /**
- * Android 移动布局 + 硬件返回键 e2e（ADR-050 Phase 3）——**需要真机，不需要串口硬件**。
+ * Android 移动布局 + 硬件返回键 e2e——**需要真机，不需要串口硬件**。
  *
  * 覆盖手机竖屏（< 1024px 断点）下的可观察结果：
- * - 常驻侧栏 / 底部面板不再渲染，改为由顶栏按钮打开的抽屉；
+ * - 侧栏 / 底部面板由顶栏按钮打开的抽屉呈现；
  * - 工具栏次要控件（进制 / 从站地址 / 写后回读 / Address Adjust / 恢复列布局）收进「更多」面板，
  *   主操作（撤销/重做、新建行、Read All）仍在工具栏；
  * - 硬件返回键（`@capacitor/app`）：有覆盖层时关抽屉且不离开应用，无覆盖层时最小化到后台。
  *
- * **为何不用 `document.visibilityState` 判定后台**（2026-09-13 真机实测）：Playwright 经 CDP
+ * **为何不用 `document.visibilityState` 判定后台**（真机实测）：Playwright 经 CDP
  *（DevTools）附着页面时，Chromium 会把页面**强制视为 visible**，故最小化后 `visibilityState`
  * 仍为 `visible`（应用实际已退到 launcher）。改用**系统层面前台窗口**判定。
  *

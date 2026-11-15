@@ -1,15 +1,10 @@
 /**
- * 侧边栏重命名输入框暗色主题跟随 e2e（mockTransport=1，浏览器端，2026-09-07）。
- * Bug：暗黑模式下侧边栏 Rename 的内联输入框 `.sheet-item__input` 显示为「白底黑字」，
- * 未跟随主题（根因：该选择器未设置 background/color，输入框回退到浏览器 UA 默认样式，
- * 而 `.sheet-tab__input` 显式设置了 `--ant-color-bg-container`/`--ant-color-text`）。
+ * 侧边栏重命名输入框暗色主题跟随 e2e（mockTransport=1，浏览器端）。
  *
- * 复现（红）：
+ * 验证：
  * - 切暗色 → 侧边栏右键 Rename → `.sheet-item__input` 可见；
- * - 断言其 computed background 不为白、color 不为黑 → 修复前 UA 默认（白底黑字）使断言失败。
- * 修复（绿）：
- * - `.sheet-item__input` 补齐 `background: var(--ant-color-bg-container)` / `color: var(--ant-color-text)`，
- *   暗色下背景/文字跟随主题 → 断言通过。
+ * - `.sheet-item__input` 的 `background: var(--ant-color-bg-container)` /
+ *   `color: var(--ant-color-text)` 随主题切换，暗色下不出现浏览器默认白底黑字。
  *
  * 全程无 console 错误。
  */
@@ -36,7 +31,7 @@ function sidebarItem(page: Page, name: string) {
     .filter({ hasText: new RegExp(`^${name}$`) });
 }
 
-/** 打开 Settings 抽屉并把主题切到 Dark，随后关闭抽屉（2026-09-12：容器为 Drawer）。 */
+/** 打开 Settings 抽屉并把主题切到 Dark，随后关闭抽屉（容器为 Drawer）。 */
 async function switchToDarkTheme(page: Page): Promise<void> {
   await page
     .getByRole("button", { name: "Settings" })
@@ -75,7 +70,7 @@ test("暗黑模式侧边栏 Rename 输入框跟随主题（非白底黑字）", 
   const input = page.locator(".sheet-sidebar__list .sheet-item__input");
   await expect(input).toBeVisible();
 
-  // 关键断言（修复红/绿分界）：dark 下输入框不应是浏览器 UA 默认「白底黑字」。
+  // Dark 下输入框不应是浏览器默认「白底黑字」。
   const bg = await input.evaluate((el) => getComputedStyle(el).backgroundColor);
   const color = await input.evaluate((el) => getComputedStyle(el).color);
   expect(bg).not.toBe("rgb(255, 255, 255)");

@@ -1,7 +1,7 @@
 /**
  * Data 单元格提交用例测试（TDD，docs/AGENTS.md §17/§23）。
  * 对称于 address.ts 的 commitAddress：校验失败返回结构化错误、保留输入（由调用方回写）；
- * 成功提交写回规范显示文本（ADR-051，2026-09-11：与设备读回后格式化同源）。
+ * 成功提交写回规范显示文本（与设备读回后格式化同源）。
  */
 import { describe, expect, it } from "vitest";
 import { createEmptyRow, type DataType } from "@mamep2026/domain";

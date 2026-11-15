@@ -21,15 +21,15 @@ function createHost(bridge = new FakeTransportBridge()): {
 describe("androidCapabilities（如实声明，docs/AGENTS.md §8.4）", () => {
   it("Phase 2/5：TCP 与 USB 串口均支持，插件安装入口可用，文件通道仍如实声明未实现", () => {
     expect(androidCapabilities.modbusTcp).toBe(true);
-    // Phase 2（2026-09-10）已实现 USB-RS485 → 如实翻转为支持。
+    // 已实现 USB-RS485 → 如实翻转为支持。
     expect(androidCapabilities.modbusRtu).toBe(true);
     expect(androidCapabilities.serialPorts).toBe("enumerated");
     // WebView 原生支持 IndexedDB（与浏览器端同路径）。
     expect(androidCapabilities.filesystem).toBe("limited");
-    // 插件执行能力由运行时探测覆盖，基础常量是 fail-closed 基线（ADR-056）。
+    // 插件执行能力由运行时探测覆盖，基础常量是 fail-closed 基线。
     expect(androidCapabilities.executablePlugins).toBe(false);
     expect(androidCapabilities.hostPlugins).toBe(false);
-    // Phase 5（ADR-056）：WebView 文件选择器可用。
+    // WebView 文件选择器可用。
     expect(androidCapabilities.pluginInstall).toBe("upload");
     expect(androidCapabilities.logExport).toBe("unsupported");
     expect(androidCapabilities.workspaceImport).toBe("unsupported");

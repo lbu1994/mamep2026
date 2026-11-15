@@ -1,5 +1,5 @@
 /**
- * Android 桥契约（ADR-050 §5、§6）。
+ * Android 桥契约（§6）。
  *
  * 与 HostMessage v2（packages/platform-api）同安全姿态：**版本化方法白名单 + 入参/回包 Zod 校验**。
  * 原生侧只做「打开 / 写字节 / 来字节 / 关闭」，绝不理解 Modbus 语义；字节以 base64 字符串传递
@@ -46,7 +46,7 @@ export const bridgeWriteParamsSchema = z.object({
 export type BridgeWriteParams = z.infer<typeof bridgeWriteParamsSchema>;
 
 /**
- * listSerialPorts 回包（USB 串口枚举，Phase 2）。
+ * listSerialPorts 回包（USB 串口枚举）。
  * `deviceName` 是原生侧的唯一标识（如 `/dev/bus/usb/001/002`，重新插拔会变），
  * `label` 仅用于展示（驱动/厂商名 + 端口号）。
  */
@@ -67,7 +67,7 @@ export type BridgeListSerialPortsResult = z.infer<
 >;
 
 /**
- * openSerial 入参（USB-RS485，Phase 2）。
+ * openSerial 入参（USB-RS485）。
  * 链路参数直接来自 `RtuConnectionProfile`（无映射歧义）；`deviceName` 由 handle.id 透传。
  */
 export const bridgeOpenSerialParamsSchema = z.object({
@@ -82,7 +82,7 @@ export type BridgeOpenSerialParams = z.infer<
   typeof bridgeOpenSerialParamsSchema
 >;
 
-/** setKeepScreenOn 入参（ADR-050 Phase 3 KeepAwake）：持续轮询/追踪期间保持屏幕常亮。 */
+/** setKeepScreenOn 入参（KeepAwake）：持续轮询/追踪期间保持屏幕常亮。 */
 export const bridgeKeepScreenOnParamsSchema = z.object({
   enabled: z.boolean(),
 });

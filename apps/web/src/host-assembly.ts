@@ -1,12 +1,10 @@
 /**
- * 应用装配编排（2026-09-13）。
+ * 应用装配编排。
  *
  * ## 为什么有这一层
- * 宿主实现此前在 `App.tsx` 内**静态 import**，导致四端产物首屏都加载三端 Host 代码与
- * `@capacitor/core`（浏览器构建实测：入口 384.54 kB，且 `@capacitor/core` 被
- * `<link rel="modulepreload">` 预加载）。现改为**按运行时平台动态 `import()`**：
+ * 宿主实现按运行时平台加载，避免四端首屏都加载三端 Host 代码与 `@capacitor/core`：
  * 浏览器（三端 inner 同源）保持静态装配，Electron / VSCode / Android 各自一个懒 chunk
- * （实测口径：桩替换后入口 334.64 kB，−13%）。
+ * （经动态 `import()` 按平台加载）。
  *
  * ## 职责
  * 装配 + 接线 + 启动 + 释放的全部副作用集中在此，并只经 `HostAssemblySinks` 写 UI：
@@ -17,7 +15,7 @@
  * 装配是异步的（懒 chunk 加载），而 React StrictMode 会双挂载、页面可能随时卸载：
  * - 取消用 `AbortSignal`；`await` 与工厂调用后**各查一次 `signal.aborted`**，已取消则丢弃
  *   （已构造的 host 立即 `dispose()`，**不接线**）——否则旧 host 的订阅会与新 host 并存活，
- *   表现为通信日志一条变两条（2026-08-23 已修 bug 的回归防护）。
+ *   表现为通信日志一条变两条（已修 bug 的回归防护）。
  * - 释放由本模块的 abort 监听统一负责（退订 visibilitychange + `host.dispose()`）。
  */
 import type {
@@ -54,7 +52,7 @@ import type { PlatformHostContext } from "./platform-context";
 /**
  * 平台 Host 工厂：用组合根上下文构造宿主实现。
  * 加载已由 loader 完成；**允许返回 Promise**（Android 端在构造前需 await 插件执行能力探测，
- * ADR-056），`startAppHost` 统一 await 并保留取消语义。
+ * ），`startAppHost` 统一 await 并保留取消语义。
  */
 export type PlatformHostFactory = (input: {
   context: PlatformHostContext;
@@ -72,11 +70,11 @@ export type PlatformHostFactoryLoader = (
 /** 装配编排写入 UI 的唯一端口（由 composition root 用 store 动作实现，见 `store-sinks.ts`）。 */
 export interface HostAssemblySinks {
   /** 置 Host 装配状态（`"ready"` / `"failed"`；启动骨架据此切换）。
-   * 2026-09-17 起 `"ready"` 的含义是「宿主装配 + 工作区加载 + 插件就绪」（见 `wireHost` 的就绪门）：
+   *  起 `"ready"` 的含义是「宿主装配 + 工作区加载 + 插件就绪」（见 `wireHost` 的就绪门）：
    * 外壳的侧栏 / 底部面板 / 已打开 Tab / 表与行全部派生自工作区，必须等它就位再渲染，否则首屏闪烁。 */
   setHostStatus(status: HostStatus): void;
   /**
-   * 置插件注册表就绪（`host.startPlugins()` 落定后调用，2026-09-16）。
+   * 置插件注册表就绪（`host.startPlugins()` 落定后调用）。
    * 主题装配链据此区分「插件尚未加载」与「插件已禁用/卸载」（见 `resolveThemeColorSeed`）。
    */
   setPluginsReady(ready: boolean): void;
@@ -84,7 +82,7 @@ export interface HostAssemblySinks {
   setHost(host: AppHost): void;
   /** 登记活动 host（工作区变更订阅据其调用 `scheduleSave` / `updatePollingTargets`）。 */
   setActiveHost(host: AppHost): void;
-  /** 注入数据类型解析器（ADR-043 E-3）。 */
+  /** 注入数据类型解析器。 */
   setDataTypeResolver(resolver: PlatformHostContext["dataTypeResolver"]): void;
   setWorkspace(workspace: Workspace): void;
   setLoaded(): void;
@@ -111,7 +109,7 @@ export interface HostAssemblyDeps {
   loadHostFactory?: PlatformHostFactoryLoader;
   /**
    * 启动外壳就绪门超时（ms，默认 5000）：仓储 / 桥异常挂起时强制切换到真实外壳，
-   * 避免骨架常驻（2026-09-17）。供单测注入短超时。
+   * 避免骨架常驻。供单测注入短超时。
    */
   shellReadyTimeoutMs?: number;
   /** visibilitychange 监听目标（默认 `document`；测试注入，node 环境无 DOM）。 */
@@ -172,7 +170,7 @@ export async function startAppHost(
     const load = deps.loadHostFactory ?? loadPlatformHostFactory;
     const factory = await load(deps.platform);
     if (signal.aborted) return null;
-    // 工厂可异步（Android：构造前 await 能力探测，ADR-056）；await 后重新校验取消。
+    // 工厂可异步（Android：构造前 await 能力探测）；await 后重新校验取消。
     host = await factory({ context, bridge: deps.bridge, signal });
     if (signal.aborted) {
       // 装配期间被取消（StrictMode 双挂载 / 卸载）：立即释放且不接线。
@@ -195,8 +193,8 @@ function wireHost(
   signal: AbortSignal,
 ): void {
   const { context, sinks } = deps;
-  // 插件系统启动（ADR-054）：加载用户手动安装的插件并装配执行面。
-  // 落定后置「插件就绪」（2026-09-16 插件主题色首帧修复）：就绪前主题装配链用启动缓存里的色种子
+  // 插件系统启动：加载用户手动安装的插件并装配执行面。
+  // 落定后置「插件就绪」：就绪前主题装配链用启动缓存里的色种子
   // 过渡（避免一帧默认蓝），就绪后以注册表为准。**fail-open**：失败也置位，否则陈旧种子会长期生效。
   // 该 promise 同时是启动就绪门的一半（见末尾）。
   const markPluginsReady = (): void => sinks.setPluginsReady(true);
@@ -239,7 +237,7 @@ function wireHost(
     sinks.recordPollResult(pollResult.key as RowId, pollResult.result);
     if (!pollResult.result.ok) return;
     // 应用层纯函数完成 generation 校验与按 Type 格式化（§17）；地址变换按各行所属 sheet
-    // 应用（ADR-042 表级 Address Adjust；2026-09-02 插件外部化：变换经插件注册表解析）。
+    // 应用（表级 Address Adjust 插件外部化：变换经插件注册表解析）。
     const updated = applyPollResult(
       sheets,
       pollResult,
@@ -250,7 +248,7 @@ function wireHost(
       sinks.updateRow(pollResult.key as RowId, () => updated);
   });
 
-  // 关闭/页面隐藏前 flush（ADR-049 崩溃后状态恢复）：把待写快照落盘，减少 debounce 窗口内
+  // 关闭/页面隐藏前 flush（崩溃后状态恢复）：把待写快照落盘，减少 debounce 窗口内
   // 编辑在关闭/崩溃时的丢失。**仅**用 visibilitychange→hidden：
   // - 关闭窗口/切后台时页面会先进入 hidden（仍存活），IndexedDB/IPC 写入能可靠完成；
   // - 而 pagehide（页面卸载）会中断异步 IndexedDB 写入（e2e 验证），且 reload 也触发 pagehide，
@@ -259,7 +257,7 @@ function wireHost(
   const doc = deps.documentRef ?? document;
   const onVisibilityChange = (): void => {
     const hidden = doc.visibilityState === "hidden";
-    // 后台暂停轮询/追踪（移动端生命周期，ADR-050 Phase 3）：配置保留在会话宿主内，回前台按原
+    // 后台暂停轮询/追踪（移动端生命周期）：配置保留在会话宿主内，回前台按原
     // 配置恢复。非 Android 平台同样受益（切标签页/最小化时不再空转总线）。
     host.setBackgroundSuspended?.(hidden);
     if (hidden) {
@@ -279,10 +277,10 @@ function wireHost(
     { once: true },
   );
 
-  // 启动外壳就绪门（2026-09-17）：**工作区加载完成 + 插件注册表就绪**之后才切换真实外壳。
+  // 启动外壳就绪门：**工作区加载完成 + 插件注册表就绪**之后才切换真实外壳。
   // 外壳的侧栏折叠/宽度、底部面板、已打开 Tab、表与行、插件贡献全部派生自这两处异步加载，
   // 若在工作区就位前渲染，必然「先默认后切换」（首屏闪烁）。超时兜底：仓储/桥挂起时按上限强制
-  // 切换（退回「可操作但可能跳变一次」的旧行为），避免骨架常驻。取消后不再写 UI。
+  // 切换（以「可操作但可能跳变一次」作为兜底），避免骨架常驻。取消后不再写 UI。
   const workspaceSettled = applyWorkspace(host, sinks);
   void gateWithTimeout(
     Promise.allSettled([workspaceSettled, pluginsSettled]),
@@ -348,7 +346,7 @@ async function applyWorkspace(
         sinks.setWorkspace(host.createFreshWorkspace());
       }
     }
-    // 恢复提示（ADR-049）：加载后把恢复元数据写入 store，供主体顶部横幅展示。
+    // 恢复提示：加载后把恢复元数据写入 store，供主体顶部横幅展示。
     sinks.setWorkspaceRecovery(host.getWorkspaceRecoveryInfo());
     sinks.setLoaded();
     sinks.appendMessage({

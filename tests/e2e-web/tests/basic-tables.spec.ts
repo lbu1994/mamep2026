@@ -1,5 +1,5 @@
 /**
- * 基础表类型（ADR-043 E-2）E2E（mock 传输）：
+ * 基础表类型E2E（mock 传输）：
  * - 侧边栏基础表分组（COILS (R/W) / DISCRETE INPUTS (R) / INPUT REGISTERS (R)）新建表
  * - 线圈表：默认 Type=BOOL；FC01 读（位值）、FC0F 写、写后回读
  * - 离散输入表：只读（Write 禁用）；FC02 读

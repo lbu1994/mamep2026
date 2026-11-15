@@ -18,7 +18,7 @@ export const FAKE_TCP_PORT = 1502;
 /** e2e 可访问的共享寄存器状态（仅测试用）。 */
 export const devFakeTcpState = {
   registers: new Map<number, number>(),
-  /** must-multi 区起始地址（ADR-030）：null=关闭；该地址起单读/单写返回异常 0x02。 */
+  /** must-multi 区起始地址：null=关闭；该地址起单读/单写返回异常 0x02。 */
   mustMultiStart: null as number | null,
 };
 
@@ -47,7 +47,7 @@ function buildTcpFrame(
 export class DevFakeTcpServer {
   private readonly server: net.Server;
   private readonly sockets = new Set<net.Socket>();
-  /** 每条响应附加的延迟（ms，2026-09-06 移除 Rx Delay 后为批任务取消提供窗口）。 */
+  /** 每条响应附加的延迟（ms 移除 Rx Delay 后为批任务取消提供窗口）。 */
   private readonly responseDelayMs: number;
 
   constructor(responseDelayMs = 0) {
@@ -73,7 +73,7 @@ export class DevFakeTcpServer {
     });
   }
 
-  /** 断开当前客户端连接（模拟设备断线，2026-08-30 自动重连 e2e），服务器继续监听。 */
+  /** 断开当前客户端连接（模拟设备断线自动重连 e2e），服务器继续监听。 */
   dropClients(): void {
     for (const socket of this.sockets) socket.destroy();
     this.sockets.clear();
@@ -124,7 +124,7 @@ export class DevFakeTcpServer {
     if (functionCode === 0x03) {
       // FC03 读：PDU 从 frame[7]：fc + addr(2) + qty(2)。
       const quantity = ((frame[10] ?? 0) << 8) | (frame[11] ?? 0);
-      // must-multi 区（ADR-030）：单读返回非法数据地址异常。
+      // must-multi 区：单读返回非法数据地址异常。
       if (
         devFakeTcpState.mustMultiStart !== null &&
         address >= devFakeTcpState.mustMultiStart &&
@@ -150,7 +150,7 @@ export class DevFakeTcpServer {
       // FC10 写多寄存器请求 PDU：FC + addr(2) + qty(2) + byteCount(1) + data(2N)。
       // MBAP 7B 后：frame[7]=fc、[8..9]=addr、[10..11]=qty、[12]=byteCount、[13..]=值。
       const quantity = ((frame[10] ?? 0) << 8) | (frame[11] ?? 0);
-      // must-multi 区（ADR-030）：单写返回非法数据地址异常。
+      // must-multi 区：单写返回非法数据地址异常。
       if (
         devFakeTcpState.mustMultiStart !== null &&
         address >= devFakeTcpState.mustMultiStart &&

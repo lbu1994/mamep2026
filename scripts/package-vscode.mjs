@@ -2,7 +2,7 @@
 /**
  * VSCode 扩展 VSIX 打包（根 dist:vscode 调用，先 build:vscode 再打包，不发布）。
  *
- * 为什么用 staging 组装（vsce 3.9.2 行为，2026-08-23 从 node_modules/@vscode/vsce 源码确认）：
+ * 为什么用 staging 组装（vsce 3.9.2 行为从 node_modules/@vscode/vsce 源码确认）：
  *   - vsce 依赖收集走 `npm list --production`（或 yarn），pnpm monorepo 的
  *     `workspace:*` 协议 npm 无法解析 → 不能直接在 apps/vscode-extension 打包；
  *   - vsce 的 `--no-dependencies` 只扫扩展目录本身且硬编码忽略 `node_modules/**`，
@@ -10,7 +10,7 @@
  *     platform-node 的 real-serial-port.ts 静态 import serialport），必须在运行时从
  *     node_modules 加载 → 必须真实安装并让 vsce 通过 npm list 收集进 VSIX；
  *   - vsce 3.9 不会自动 `npm install`，要求 node_modules 已存在；
- *   - 因此流程：staging 组装 → npm install 生产依赖 → vsce package（与 ADR-018
+ *   - 因此流程：staging 组装 → npm install 生产依赖 → vsce package（与
  *     Electron 绿色版 staging 组装同模式）。
  *
  * 步骤：

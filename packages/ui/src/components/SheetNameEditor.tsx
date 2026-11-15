@@ -6,7 +6,7 @@
  * - onClick / onKeyDown 均 stopPropagation：阻止键盘事件冒泡到宿主容器
  *   （Tabs 的 .ant-tabs-tab-btn / 侧边栏 Menu 项）的键盘导航与删除逻辑。
  *   否则在输入框内按 Backspace/Delete 会触发 Tabs 删除页签或焦点转移导致
- *   编辑态异常退出（2026-08-21 修复）。
+ *   编辑态异常退出。
  */
 export interface SheetNameEditorProps {
   /** 输入框类名：页签头 `.sheet-tab__input` / 侧边栏 `.sheet-item__input`（样式/测试/e2e 选择器依赖）。 */

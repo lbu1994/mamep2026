@@ -1,5 +1,5 @@
 /**
- * 快捷键守卫单测（PRD §8.3 P1，2026-08-30，ADR-037）。
+ * 快捷键守卫单测（PRD §8.3 P1）。
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { createEmptyWorkspace } from "@mamep2026/domain";

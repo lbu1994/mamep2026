@@ -91,7 +91,7 @@ import { buildSheetMenuItems } from "./components/SheetMenu";
 import { useOpenedOnce } from "./opened-once";
 
 /**
- * 代码分割（2026-09-11 ToDoList「构建产物代码分割」）：仅按需打开的弹窗/抽屉改为
+ * 代码分割：仅按需打开的弹窗/抽屉使用
  * `React.lazy` 动态 import——antd 重组件与帮助正文等只在首次使用时下载，首个 chunk
  * 显著减小（与 vite.config.ts 的 vendor 分包配合）。
  *
@@ -99,10 +99,8 @@ import { useOpenedOnce } from "./opened-once";
  * 挂起时会把该 boundary 下的其余兄弟节点一并卸载（弹窗互相消失）。挂载门控见
  * `useOpenedOnce`（首次打开才挂载，此后常驻以保留 antd 关闭动画）。
  *
- * Settings 于 2026-09-12 由 Modal 改为右侧 Drawer（`SettingsDrawer`）；仍是懒加载 +
- * `useOpenedOnce` 门控，store 字段名（`settingsModalOpen`）保持不变。插件管理（原独立
- * `PluginManagerModal` 弹窗）已于 2026-09-12 并入 Settings 的「Plugins」页签，独立的
- * 懒加载映射与挂载门控随之移除。
+ * Settings 使用右侧 Drawer（`SettingsDrawer`），仍为懒加载 + `useOpenedOnce` 门控，
+ * store 字段名（`settingsModalOpen`）保持不变。插件管理位于 Settings 的「Plugins」页签。
  *
  * `ConnectionSettingsModal` **保持静态导入**：非 mock（浏览器/Electron/VSCode）启动后
  * 工作区加载完成即自动打开，属首屏路径——懒加载只会多一次异步跳变（实测会让「启动弹窗」
@@ -131,12 +129,12 @@ const COLLAPSED_BOTTOM_PANEL_HEIGHT = 40;
 /** Sheet 名重命名入口来源：页签头（tab）或侧边栏（sidebar），决定编辑态落在哪一处。 */
 type RenameSource = "tab" | "sidebar";
 
-/** 侧边栏分组折叠态图标（ADR-041 分组）：按表类型区分，插件/未知组回退通用图标。 */
+/** 侧边栏分组折叠态图标（分组）：按表类型区分，插件/未知组回退通用图标。 */
 function sidebarGroupIcon(sheetType: SheetType): ReactNode {
   // 分组图标为装饰性（组标题已表达分组语义）：aria-hidden 净化 a11y 名；
   // 同时把 aria-label 置空，避免其自带图标名（如 database）被
   // getByLabel("Data") 等子串匹配误命中（Playwright getByLabel 按原始 aria-label
-  // 匹配、不理会 aria-hidden，2026-09-08 修复）。
+  // 匹配、不理会 aria-hidden）。
   switch (sheetType) {
     case "holding-register":
       return <DatabaseOutlined aria-label="" aria-hidden />;
@@ -154,9 +152,9 @@ function sidebarGroupIcon(sheetType: SheetType): ReactNode {
 export function MamepApp(): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
-  // Host 装配状态（2026-09-13 启动骨架）：宿主实现按运行时平台动态加载期间显示占位。
+  // Host 装配状态（启动骨架）：宿主实现按运行时平台动态加载期间显示占位。
   const hostStatus = useAppStore((s) => s.hostStatus);
-  // 工作区加载恢复元数据（ADR-049 恢复提示）：加载后写入，用于主体顶部横幅。
+  // 工作区加载恢复元数据（恢复提示）：加载后写入，用于主体顶部横幅。
   const workspaceRecovery = useAppStore((s) => s.workspaceRecovery);
   // 仅订阅表元数据（id/name）与从站地址：行数据变化不触发本组件重渲染，
   // 避免单行更新（编辑/WP 轮询）级联重渲染整个应用树（性能优化）。
@@ -180,12 +178,12 @@ export function MamepApp(): React.ReactNode {
         sheetId,
         name: sheetNames[index] ?? "",
         open: sheetOpen[index] ?? true,
-        // 表类型（ADR-041）：侧边栏按协议分组用。
+        // 表类型：侧边栏按协议分组用。
         type: sheetTypes[index] ?? "holding-register",
       })),
     [sheetIds, sheetNames, sheetOpen, sheetTypes],
   );
-  // 当前活动表的 Slave Address（每表独立，2026-08-19）：切换表/修改当前表值时
+  // 当前活动表的 Slave Address（每表独立）：切换表/修改当前表值时
   // 同步到 host（会话请求使用当前表的值）。原语订阅不触发级联重渲染。
   const activeSheetSlaveAddress = useAppStore(
     (s) =>
@@ -200,7 +198,7 @@ export function MamepApp(): React.ReactNode {
   );
   const setActiveSheetId = useAppStore((s) => s.setActiveSheetId);
   const setConnectionModalOpen = useAppStore((s) => s.setConnectionModalOpen);
-  // Header Connect 直连（2026-09-06）：读存储 profile / 会话内已选串口 / 连接错误（回退弹窗展示）。
+  // Header Connect 直连：读存储 profile / 会话内已选串口 / 连接错误（回退弹窗展示）。
   const connectionProfile = useAppStore(
     (s) => s.workspace.connectionProfiles[0],
   );
@@ -211,22 +209,22 @@ export function MamepApp(): React.ReactNode {
   const theme = useAppStore((s) => s.theme);
   // 界面语言（持久化在 workspace.preferences.language）：同步到 <html lang>，见下方 effect。
   const language = useAppStore((s) => s.workspace.preferences.language);
-  // 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。
+  // 所选主题色预设：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`；随工作区持久化。
   const themePrimary = useAppStore((s) => s.themePrimary);
-  // 宿主完整主题（VSCode ui-theme 装配，ADR-027）；null=回退 buildTheme 两态。
+  // 宿主完整主题（VSCode ui-theme 装配）；null=回退 buildTheme 两态。
   const themeConfig = useAppStore((s) => s.themeConfig);
-  // 插件主题贡献（2026-09-02，ADR-047）：此处仅用于解析所选预设（选项列表由 SettingsDrawer
-  // 自行读取）；**不再自动应用**（ADR-042 插件层最高优先已移除）。
+  // 插件主题贡献：此处仅用于解析所选预设（选项列表由 SettingsDrawer
+  // 自行读取）；**不再自动应用**（插件层最高优先已移除）。
   const themeContributions = usePluginContributions<ThemeContribution>(
     host,
     "theme",
   );
-  // 首帧主色过渡（2026-09-16）：插件贡献晚于首帧到达，就绪前用启动缓存里上次解析出的色种子，
+  // 首帧主色过渡：插件贡献晚于首帧到达，就绪前用启动缓存里上次解析出的色种子，
   // 避免「先默认蓝再变插件色」（解析规则见 resolveThemeColorSeed）。
   const pluginsReady = useAppStore((s) => s.pluginsReady);
   const themeColorSeed = useAppStore((s) => s.themeColorSeed);
   const setThemeColorSeed = useAppStore((s) => s.setThemeColorSeed);
-  // 装配链（ADR-047）：base = VSCode 完整主题或 buildTheme 两态（ADR-027）→
+  // 装配链：base = VSCode 完整主题或 buildTheme 两态→
   // 用户所选预设（themePrimary 预设 ID；解析不到且插件已就绪 = 插件禁用/卸载 → 回退默认蓝）merge 覆盖。
   const baseThemeConfig = themeConfig ?? buildTheme(theme === "dark");
   const selectedThemeColor =
@@ -241,11 +239,11 @@ export function MamepApp(): React.ReactNode {
     colorSeed === null
       ? baseThemeConfig
       : mergeThemeConfig(baseThemeConfig, themeConfigForColorSeed(colorSeed));
-  // 文档贡献（ADR-043 E-5）：Help 弹窗渲染插件寄存器手册等。
-  // （settings 贡献消费方已随 Settings 抽出到 SettingsDrawer，2026-09-11 代码分割。）
+  // 文档贡献：Help 弹窗渲染插件寄存器手册等。
+  // （settings 贡献消费方已随 Settings 抽出到 SettingsDrawer 代码分割。）
   const documentationContributions =
     usePluginContributions<DocumentationContribution>(host, "documentation");
-  // 表类型贡献（ADR-041）：侧边栏按协议分组，插件组动态加载（插件启用 + 能力矩阵支持）。
+  // 表类型贡献：侧边栏按协议分组，插件组动态加载（插件启用 + 能力矩阵支持）。
   const tableTypeContributions = usePluginContributions<TableTypeContribution>(
     host,
     "tableType",
@@ -258,14 +256,14 @@ export function MamepApp(): React.ReactNode {
       titleKey: string;
     }> = [
       // 核心组：标准 Modbus 保持寄存器，恒存在。分组标题统一取核心表类型元数据
-      // （2026-09-13 列语义泛化：不再使用侧边栏专属的 03H/10H 文案键）。
+      // （列语义泛化：不再使用侧边栏专属的 03H/10H 文案键）。
       {
         key: "holding-register",
         sheetType: "holding-register",
         titleKey: "table.tableType.holdingRegister",
       },
     ];
-    // 核心基础表组（ADR-043 E-2）：coil/discrete-input/input-register，
+    // 核心基础表组：coil/discrete-input/input-register，
     // RTU 承载（codec 协议 ID），按能力矩阵 protocolExtensions 门控（VSCode 未接 codec 前不显示）。
     for (const meta of CORE_TABLE_TYPES) {
       if (meta.id === "holding-register") continue;
@@ -285,7 +283,7 @@ export function MamepApp(): React.ReactNode {
     }
     return groups;
   }, [host, tableTypeContributions]);
-  // 分组折叠状态（ADR-041 决策②）：受控 openKeys + 记忆用户手动折叠的组。
+  // 分组折叠状态：受控 openKeys + 记忆用户手动折叠的组。
   // 不用 defaultOpenKeys——插件贡献晚于 Menu 挂载加载时，新组会默认折叠、
   // 用户看不到「67H 组」入口；这里对未手动折叠的组恒展开（新组加入即展开）。
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
@@ -337,10 +335,10 @@ export function MamepApp(): React.ReactNode {
   const setPendingBulkClose = useAppStore((s) => s.setPendingBulkClose);
   const closeOtherSheets = useAppStore((s) => s.closeOtherSheets);
   const closeSheetsToRight = useAppStore((s) => s.closeSheetsToRight);
-  // 帮助/关于弹窗（PRD §8.3 键盘操作，2026-08-30）：入 store 便于快捷键弹窗抑制。
+  // 帮助/关于弹窗（PRD §8.3 键盘操作）：入 store 便于快捷键弹窗抑制。
   const helpOpen = useAppStore((s) => s.helpModalOpen);
   const setHelpOpen = useAppStore((s) => s.setHelpModalOpen);
-  // 懒加载弹窗/抽屉的挂载门控（代码分割，2026-09-11）：首次打开才挂载该组件（chunk 按需
+  // 懒加载弹窗/抽屉的挂载门控（代码分割）：首次打开才挂载该组件（chunk 按需
   // 下载），此后常驻以保留 antd 关闭动画。弹窗自身的开合仍由其内部读 store 的 open 控制。
   // （ConnectionSettingsModal 例外：启动即自动打开、属首屏路径，故静态导入、不门控。）
   const workspaceImportOpen = useAppStore(
@@ -356,8 +354,8 @@ export function MamepApp(): React.ReactNode {
   );
   const [sidebarRenamingSheetId, setSidebarRenamingSheetId] =
     useState<SheetId | null>(null);
-  // 移动布局（ADR-050 Phase 3）：< 1024px 时侧栏→左抽屉、底部面板→底部抽屉；
-  // 同一阈值也决定顶栏次要操作的收纳（Phase 3 前为 1100px，现统一为 1023px，避免两套阈值打架）。
+  // 移动布局：< 1024px 时侧栏→左抽屉、底部面板→底部抽屉；
+  // 同一阈值也决定顶栏次要操作的收纳（前为 1100px，现统一为 1023px，避免两套阈值打架）。
   const isMobileLayout = useIsMobileLayout();
   const narrow = isMobileLayout;
   // 移动端两个抽屉的开合（会话内状态，不入持久化）：返回键优先关它们（见 overlay-close）。
@@ -371,7 +369,7 @@ export function MamepApp(): React.ReactNode {
   const [dragSidebarWidth, setDragSidebarWidth] = useState<number | null>(null);
   const dragIndex = useRef<number | null>(null);
   const dragGroup = useRef<string | null>(null);
-  // 侧边栏分组（ADR-041）容器：antd Menu 无法通过 items 配置直接给 <li> 设 draggable，
+  // 侧边栏分组容器：antd Menu 无法通过 items 配置直接给 <li> 设 draggable，
   // 提交后在真实 DOM 上补齐（多个分组 Menu 统一经容器查找），保证表项可真实拖拽排序。
   const sidebarListRef = useRef<HTMLDivElement>(null);
 
@@ -380,7 +378,7 @@ export function MamepApp(): React.ReactNode {
       ?.querySelectorAll<HTMLLIElement>("li[data-sheet-id]")
       .forEach((el) => {
         // 正在重命名的表项不可拖拽：编辑输入框渲染在该 li 内，若 li 保持 draggable，
-        // 用户在输入框上按住+拖动会被当作拖拽表项而非文本选择（2026-09-08 修复）。
+        // 用户在输入框上按住+拖动执行文本选择，不触发拖拽表项。
         // 其余表项保持可拖拽排序；本 effect 每次渲染后执行，随 sidebarRenamingSheetId 更新。
         el.draggable = el.dataset.sheetId !== sidebarRenamingSheetId;
       });
@@ -397,7 +395,7 @@ export function MamepApp(): React.ReactNode {
   }, [host, setConnectionState]);
 
   // 活动表 Slave Address / TCP Unit ID -> 会话：切换表/修改当前表值，或连接建立时，
-  // 后续请求使用新值（2026-08-25：TCP Unit ID 会话内动态修改——连接后按活动表值覆盖
+  // 后续请求使用新值（TCP Unit ID 会话内动态修改——连接后按活动表值覆盖
   // profile.unitId 初始值，与「每表独立」语义一致）。
   useEffect(() => {
     if (host === null || host === undefined) return;
@@ -414,12 +412,12 @@ export function MamepApp(): React.ReactNode {
   }, [theme]);
 
   // 界面语言同步到 <html lang>（无障碍：屏幕阅读器据此选择发音；同时是「首屏偏好」的可观测
-  // 标记——首帧渲染前由组合根 hydrate，见 apps/web/src/boot-preferences.ts，2026-09-16）。
+  // 标记——首帧渲染前由组合根 hydrate，见 apps/web/src/boot-preferences.ts）。
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
 
-  // 主色种子回写（2026-09-16）：插件就绪后才把解析结果（或 null）写入 store → 启动缓存持久化，
+  // 主色种子回写：插件就绪后才把解析结果（或 null）写入 store → 启动缓存持久化，
   // 供下次刷新首帧直接着色。就绪前**不写**，否则会覆盖缓存种子（过渡着色依赖它）；
   // 值未变化则不写（避免 set → 重渲染 → effect 重复触发的循环）。
   useEffect(() => {
@@ -429,10 +427,10 @@ export function MamepApp(): React.ReactNode {
     setThemeColorSeed(resolvedSeed);
   }, [pluginsReady, selectedThemeColor, themeColorSeed, setThemeColorSeed]);
 
-  // 主题主色同步到 --mamep-brand-primary / --mamep-focus-ring（ADR-042）：
+  // 主题主色同步到 --mamep-brand-primary / --mamep-focus-ring：
   // 消除 index.css 的第二份硬编码品牌色副本——CSS 变量经 document root 内联覆盖
   // （内联样式优先于 :root / [data-mamep-theme] 规则）；CSS 保留默认值兜底。
-  // 2026-09-03：插件色只提供单一明亮主色（种子），暗色下 antd 算法会派生出不同主色，
+  //插件色只提供单一明亮主色（种子），暗色下 antd 算法会派生出不同主色，
   // 这里取「当前模式派生后的真实主色」写入变量，与 antd 实际渲染保持一致
   // （getDesignToken 只读计算，不喂回 ConfigProvider，避免二次派生）。
   useEffect(() => {
@@ -446,7 +444,7 @@ export function MamepApp(): React.ReactNode {
     document.documentElement.style.setProperty("--mamep-focus-ring", applied);
   }, [effectiveThemeConfig, theme]);
 
-  // 活动表 Address Transform（ADR-042 表级 Address Adjust）→ 会话：
+  // 活动表 Address Transform（表级 Address Adjust）→ 会话：
   // 切换表/修改当前表配置时同步（host 端会话经 session-set-address-transform RPC）。
   const activeSheetAddressTransform = useAppStore(
     (s) =>
@@ -459,7 +457,7 @@ export function MamepApp(): React.ReactNode {
     host.setAddressTransform(activeSheetAddressTransform);
   }, [host, activeSheetAddressTransform, connectionState]);
 
-  // 屏幕常亮（KeepAwake，ADR-050 Phase 3）：只要存在持续轮询或追踪就保持屏幕不休眠。
+  // 屏幕常亮（KeepAwake）：只要存在持续轮询或追踪就保持屏幕不休眠。
   // 仅 Android 实现（其余平台不实现该方法 → 可选链空操作）；值变化时才调用（幂等）。
   const hasContinuousWork = useAppStore((s) =>
     s.workspace.sheets.some((sheet) =>
@@ -470,7 +468,7 @@ export function MamepApp(): React.ReactNode {
     host?.setKeepScreenOn?.(hasContinuousWork);
   }, [host, hasContinuousWork]);
 
-  // 硬件返回键（Android，ADR-050 Phase 3）：先关最上层覆盖层（移动端抽屉等，经 overlay-close 栈），
+  // 硬件返回键（Android）：先关最上层覆盖层（移动端抽屉等，经 overlay-close 栈），
   // 无覆盖层时不消费 → 宿主兑底最小化应用（不退出进程）。浏览器/桌面无此能力 → 返回 null。
   useEffect(() => {
     const unsubscribe = host?.onHardwareBack?.(() => closeTopOverlay()) ?? null;
@@ -507,10 +505,10 @@ export function MamepApp(): React.ReactNode {
   );
 
   const connected = connectionState === "connected";
-  // 连接多功能按钮规格（2026-09-06 连接 UI 整合）：状态点 + 文字/图标随连接态切换；窄窗口收起文字。
+  // 连接多功能按钮规格（连接 UI 整合）：状态点 + 文字/图标随连接态切换；窄窗口收起文字。
   const connSpec = connectionButtonSpec(connectionState, narrow);
 
-  // Header 直连 codec 协议（ADR-041）：与连接设置弹窗同源（活动表类型 → 协议）。
+  // Header 直连 codec 协议：与连接设置弹窗同源（活动表类型 → 协议）。
   const directSheetProtocol = protocolForSheetType(
     currentSheet?.type ?? "holding-register",
     tableTypeContributions,
@@ -665,7 +663,7 @@ export function MamepApp(): React.ReactNode {
     },
   ];
 
-  // ---- 侧边栏分组（ADR-041 决策②）----
+  // ---- 侧边栏分组----
   // 单个表项的 Menu item（含拖拽属性；折叠态简化为仅切换的纯文本项，展开态保留右键/更多/重命名）。
   const sheetMenuItem = (
     sheet: { sheetId: SheetId; name: string; open: boolean },
@@ -730,7 +728,7 @@ export function MamepApp(): React.ReactNode {
     ),
   });
 
-  // 侧边栏分组菜单 items（ADR-041 决策②）：单 Menu + 每分组一个 SubMenu。
+  // 侧边栏分组菜单 items：单 Menu + 每分组一个 SubMenu。
   // 折叠态凭 SiderContext 自动收缩为图标并悬停弹出子项；展开态内联展示，组头可折叠、
   // 「＋」新建、组内拖拽（跨组禁拖，决策⑥——经 data-sheet-group 同组守卫）。
   const sidebarMenuItems: NonNullable<MenuProps["items"]> = sheetGroups.map(
@@ -781,10 +779,10 @@ export function MamepApp(): React.ReactNode {
     },
   );
 
-  // 启动骨架（2026-09-13）：Host 按运行时平台动态加载（含失败兜底）完成前显示占位——
+  // 启动骨架：Host 按运行时平台动态加载（含失败兜底）完成前显示占位——
   // 仍包 ConfigProvider/AntApp，保证主题（含 VSCode 完整令牌/暗色）与 antd 上下文一致，
   // 避免深色主题下白屏闪烁。`failed` 状态不占位：应用以「无 Host」保持可操作。
-  // 2026-09-17：骨架窗口扩展为「宿主装配 + 工作区加载 + 插件就绪」——外壳的侧栏/底部面板/
+  //骨架窗口扩展为「宿主装配 + 工作区加载 + 插件就绪」——外壳的侧栏/底部面板/
   // 已打开 Tab/表与行/插件贡献全部派生自工作区与插件存储，必须等它们就位再渲染（见
   // apps/web/src/host-assembly.ts 的启动就绪门），否则首屏会出现「先默认后切换」的闪烁。
   // 注意：必须位于全部 hook 调用之后（上方 hook 均无条件执行）。
@@ -968,7 +966,7 @@ export function MamepApp(): React.ReactNode {
                     />
                   </Tooltip>
                 </div>
-                {/* 分区标题保留（新建入口已移入各分组头右侧 +，ADR-041 决策②） */}
+                {/* 分区标题保留（新建入口已移入各分组头右侧 +） */}
                 <div className="sheet-sidebar__section">
                   <span className="sheet-sidebar__section-title">
                     {t("sidebar.registerTables")}
@@ -1017,7 +1015,7 @@ export function MamepApp(): React.ReactNode {
                       dragGroup.current = null;
                       if (li?.dataset.sheetIndex === undefined) return;
                       if (fromIndex === null) return;
-                      // 跨组禁拖（ADR-041 决策⑥）：源/目标分组不同则忽略。
+                      // 跨组禁拖：源/目标分组不同则忽略。
                       if (li.dataset.sheetGroup !== fromGroup) return;
                       const toIndex = Number(li.dataset.sheetIndex);
                       if (fromIndex === toIndex) return;
@@ -1050,7 +1048,7 @@ export function MamepApp(): React.ReactNode {
                   compatibility={host?.browserCompatibility ?? null}
                   isMock={host?.isMockMode ?? false}
                 />
-                {/* 工作区恢复提示（ADR-049）：从备份恢复 / 恢复失败重建为空时展示 */}
+                {/* 工作区恢复提示：从备份恢复 / 恢复失败重建为空时展示 */}
                 <RecoveryBanner recovery={workspaceRecovery} />
                 <Splitter
                   orientation="vertical"
@@ -1177,7 +1175,7 @@ export function MamepApp(): React.ReactNode {
           </Suspense>
         )}
 
-        {/* 移动端抽屉（ADR-050 Phase 3）：侧栏表列表 + 底部面板。
+        {/* 移动端抽屉：侧栏表列表 + 底部面板。
             开合为会话内状态（不入持久化）；返回键优先关它们（overlay-close 栈）。 */}
         <Drawer
           placement="left"

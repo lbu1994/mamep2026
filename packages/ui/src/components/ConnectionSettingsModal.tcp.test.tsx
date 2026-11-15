@@ -1,7 +1,7 @@
 /**
- * ConnectionSettingsModal TCP 分组测试（2026-08-23 两端 TCP 接线）：
+ * ConnectionSettingsModal TCP 分组测试（两端 TCP 接线）：
  * - 能力门控：modbusTcp=true 显示 TCP 协议选项；false（浏览器）不显示 TCP 入口；
- * - TCP 表单：切换协议后展示 host/port/unitId/超时/重试 + autoReconnect 开关（2026-08-30 启用）；
+ * - TCP 表单：切换协议后展示 host/port/unitId/超时/重试 + autoReconnect 开关（启用）；
  * - CONNECT 路由：TCP 走 host.connectTcp（携带 TCP profile，含 autoReconnect），空 host 校验阻止提交。
  */
 import { describe, expect, it, beforeEach, vi } from "vitest";
@@ -54,12 +54,12 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
       ...caps,
     },
     isMockMode: false,
-    // 真实注册表（Phase C：ConnectionSettingsModal 经 usePluginContributions 读取 tableType
+    // 真实注册表（ConnectionSettingsModal 经 usePluginContributions 读取 tableType
     // 贡献，空对象 mock 缺 getVersion 会崩）。
     pluginRegistry: new PluginRegistry(),
     appVersion: "0.0.0-test",
     platform: "browser",
-    // ADR-054：安装入口改为「预览 + 安装」两步。
+    // 安装入口为「预览 + 安装」两步。
     startPlugins: vi.fn(async () => undefined),
     previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
     installPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
@@ -122,7 +122,7 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
       ok: true as const,
       value: { content: null },
     })),
-    // 插件运行时桥（2026-08-31，ADR-039：Phase A 契约，测试不实际调用）。
+    // 插件运行时桥（契约，测试不实际调用）。
     pluginRuntimeLoad: vi.fn(async () => ({ ok: true as const, value: null })),
     pluginRuntimeUnload: vi.fn(async () => ({
       ok: true as const,
@@ -171,7 +171,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     });
     // TCP 模式下 InputNumber 控件：port / unitId / timeout / retry。
     expect(screen.getAllByRole("spinbutton")).toHaveLength(4);
-    // autoReconnect 开关可用（2026-08-30 落地，PRD §8.3 P1）。
+    // autoReconnect 开关可用（落地，PRD §8.3 P1）。
     const switchEl = screen.getByRole("switch");
     expect(switchEl).toBeTruthy();
     expect(switchEl.getAttribute("aria-checked")).toBe("false");
@@ -189,7 +189,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
   });
 
   it("仅 TCP 能力（Android Phase 1）：隐藏协议分组但表单直接落在 TCP，且不误报缺串口", async () => {
-    // Android Phase 1：modbusRtu=false / serialPorts=unsupported（能力矩阵如实声明）。
+    // Android ：modbusRtu=false / serialPorts=unsupported（能力矩阵如实声明）。
     const { host } = makeHost({
       modbusRtu: false,
       modbusTcp: true,
@@ -206,7 +206,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
       expect(screen.getByText("TCP Port")).toBeTruthy();
     });
     expect(screen.queryByText("Communication")).toBeNull();
-    // 串口缺失只影响 RTU：不得因缺串口提示 Web Serial 或禁用 CONNECT（ADR-050）。
+    // 串口缺失只影响 RTU：不得因缺串口提示 Web Serial 或禁用 CONNECT。
     expect(screen.queryByText(/Web Serial/i)).toBeNull();
     const connectButton = screen.getByText("CONNECT").closest("button");
     expect(connectButton?.disabled).toBe(false);

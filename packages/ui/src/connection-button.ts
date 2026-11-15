@@ -2,7 +2,7 @@ import type { ConnectionState } from "@mamep2026/communication";
 import { STATE_DOT_COLOR } from "./connection-state";
 
 /**
- * Header 连接多功能按钮（2026-09-06 连接 UI 整合）：
+ * Header 连接多功能按钮（连接 UI 整合）：
  * 把「连接状态显示」与「Connect/Disconnect 按钮」合并为一个一体化控件——
  * 状态点并入按钮 + 按钮文字随连接状态切换。
  *

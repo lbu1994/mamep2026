@@ -74,7 +74,7 @@ export function rtuConnectionProfileFromPayload(
   return { ...payload, id: payload.id as ConnectionProfileId };
 }
 
-// ---- TcpConnectionProfile（2026-08-23 TCP 接线）----
+// ---- TcpConnectionProfile（TCP 接线）----
 
 export const tcpConnectionProfilePayloadSchema = z.object({
   id: z.string(),
@@ -104,7 +104,7 @@ export function tcpConnectionProfileFromPayload(
   return { ...payload, id: payload.id as ConnectionProfileId };
 }
 
-/** session-tcp-connect 载荷（2026-08-23）：TCP 无串口句柄，profile 即完整连接参数。 */
+/** session-tcp-connect 载荷：TCP 无串口句柄，profile 即完整连接参数。 */
 export const sessionTcpConnectPayloadSchema = z.object({
   profile: tcpConnectionProfilePayloadSchema,
 });
@@ -121,7 +121,7 @@ export type RequestRoutePayload = z.infer<typeof requestRoutePayloadSchema>;
 
 // ---- RegisterRow ----
 
-/** dataType（ADR-043 E-3）：开放字符串，承载内置 + 插件类型。 */
+/** dataType：开放字符串，承载内置 + 插件类型。 */
 const dataTypeEnumSchema = z.string().min(1);
 
 export const registerAddressPayloadSchema = z.object({
@@ -131,7 +131,7 @@ export type RegisterAddressPayload = z.infer<
   typeof registerAddressPayloadSchema
 >;
 
-/** 范围行子行元数据（2026-08-27）：每寄存器独立 name/comment/dataType。 */
+/** 范围行子行元数据：每寄存器独立 name/comment/dataType。 */
 export const registerSubRowMetaPayloadSchema = z.object({
   name: z.string(),
   comment: z.string(),
@@ -148,19 +148,19 @@ export const registerRowPayloadSchema = z.object({
   comment: z.string(),
   addressDraft: z.string(),
   addressValue: registerAddressPayloadSchema.nullable(),
-  /** 覆盖的连续寄存器数（ADR-030）：1=单寄存器；范围行 >1 */
+  /** 覆盖的连续寄存器数：1=单寄存器；范围行 >1 */
   registerCount: z.number().int().min(1).default(1),
   dataType: dataTypeEnumSchema,
   pollingEnabled: z.boolean(),
   traceEnabled: z.boolean(),
   cellText: z.string(),
-  /** 各寄存器原始值（ADR-030，替代 lastKnownRawValue）：null=未读 */
+  /** 各寄存器原始值（替代 lastKnownRawValue）：null=未读 */
   registerValues: z.array(z.number().int().min(0).max(65535)).nullable(),
-  /** 范围行子行元数据（2026-08-27）：null=单寄存器行或老数据 */
+  /** 范围行子行元数据：null=单寄存器行或老数据 */
   registers: z.array(registerSubRowMetaPayloadSchema).nullable().default(null),
-  /** 位级注释（ADR-052，2026-09-11）：外层长度=registerCount，内层长度 16（下标=bit 号） */
+  /** 位级注释：外层长度=registerCount，内层长度 16（下标=bit 号） */
   bitComments: z.array(z.array(z.string()).nullable()).nullable().default(null),
-  /** 位级名称（ADR-052 需求追加）：结构同 bitComments */
+  /** 位级名称：结构同 bitComments */
   bitNames: z.array(z.array(z.string()).nullable()).nullable().default(null),
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -209,7 +209,7 @@ export function registerRowFromPayload(
   };
 }
 
-// ---- 写后回读配置（每表独立，2026-08-26）----
+// ---- 写后回读配置（每表独立）----
 
 export const readVerifySettingsPayloadSchema = z.object({
   mode: z.enum(["off", "immediate", "delayed"]),
@@ -249,7 +249,7 @@ export const batchReadRowPayloadSchema = z.object({
   sheetId: z.string(),
   /** null 表示地址为空或非法，将被跳过。 */
   address: z.number().nullable(),
-  /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
+  /** 覆盖的连续寄存器数：缺省/1=单寄存器。 */
   quantity: z.number().int().min(1).optional(),
 });
 export type BatchReadRowPayload = z.infer<typeof batchReadRowPayloadSchema>;
@@ -280,7 +280,7 @@ export function toBatchReadRowPayload(row: BatchReadRow): BatchReadRowPayload {
   return { ...row };
 }
 
-// ---- 批量读取请求（远程路径 batchId 由渲染端生成，ADR-025）----
+// ---- 批量读取请求（远程路径 batchId 由渲染端生成）----
 
 /** session-batch-read 请求载荷：batchId 供 session-batch-cancel 关联取消。 */
 export const sessionBatchReadPayloadSchema = z.object({
@@ -301,7 +301,7 @@ export type SessionBatchCancelPayload = z.infer<
 >;
 
 let batchSeq = 0;
-/** 生成跨边界批任务唯一 batchId（渲染端创建 BatchReadHandle 时使用，ADR-025）。 */
+/** 生成跨边界批任务唯一 batchId（渲染端创建 BatchReadHandle 时使用）。 */
 export function createBatchId(): string {
   batchSeq += 1;
   const time = Date.now().toString(36);
@@ -313,9 +313,9 @@ export function createBatchId(): string {
 // ---- WriteOutcome ----
 
 /**
- * 写入结果投影（docs/TECH_DESIGN.md §15.3、docs/AGENTS.md §18.2，2026-08-26）：
+ * 写入结果投影（docs/TECH_DESIGN.md §15.3、docs/AGENTS.md §18.2）：
  * 写后回读扩展为 5 种 kind 判别联合，与 communication WriteOutcome 一一对应。
- * 多寄存器（ADR-030，2026-08-27）：verify 结果携带 readValues/expectedValues 数组。
+ * 多寄存器：verify 结果携带 readValues/expectedValues 数组。
  */
 export const writeOutcomePayloadSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("write-succeeded-no-verify") }),
@@ -349,7 +349,7 @@ export const commLogEventPayloadSchema = z.object({
   timestamp: z.number(),
   direction: z.enum(["request", "response"]),
   bytesHex: z.string(),
-  /** 协议：rtu / tcp / codecId（2026-08-23 TCP 接线；2026-08-31 ADR-040 开放为 codecId）。 */
+  /** 协议：rtu / tcp / codecId（TCP 接线开放为 codecId）。 */
   protocol: z.string(),
   slaveAddress: z.number().nullable(),
   functionCode: z.number().nullable(),
@@ -370,7 +370,7 @@ export const commLogEventPayloadSchema = z.object({
     "plugin",
     "connection-control",
   ]),
-  /** 发起插件 id（source="plugin" 时非 null；ADR-039）。 */
+  /** 发起插件 id（source="plugin" 时非 null）。 */
   pluginId: z.string().nullable(),
   durationMs: z.number().nullable(),
 });
@@ -416,7 +416,7 @@ export function toAppMessagePayload(
   return { ...message };
 }
 
-// ---- 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038；v2 2026-08-31，ADR-039）----
+// ---- 插件存储（plugin-store-load / plugin-store-save；v2）----
 // 已安装插件（manifest + 启用状态）为应用级资产，三端经 HostMessage v2 往返：
 // 浏览器直连 IndexedDB（不跨边界）；Electron 主进程 userData plugins.json；
 // VSCode Extension Host globalState。manifest 投影与 @mamep2026/plugin-api 的
@@ -463,9 +463,9 @@ export type PluginManifestPayload = z.infer<typeof pluginManifestPayloadSchema>;
 export const storedPluginPayloadSchema = z.object({
   manifest: pluginManifestPayloadSchema,
   enabled: z.boolean(),
-  // 单文件 JS 插件源码（ADR-044）：跨边界往返必须无损，否则重启无法重建执行面（ADR-054）。
+  // 单文件 JS 插件源码：跨边界往返必须无损，否则重启无法重建执行面。
   entrySource: z.string().optional(),
-  // 执行模式（ADR-054）：isolated=隔离线程；same-process=同进程（用户显式授权）。
+  // 执行模式：isolated=隔离线程；same-process=同进程（用户显式授权）。
   executionMode: z.enum(["isolated", "same-process"]).optional(),
 });
 export type StoredPluginPayload = z.infer<typeof storedPluginPayloadSchema>;
@@ -484,9 +484,9 @@ export type PluginStoreDataResponse = z.infer<
   typeof pluginStoreDataResponseSchema
 >;
 
-// ---- 插件运行时桥（2026-08-31，ADR-039：Phase A 契约一次定型，宿主侧返回能力错误）----
+// ---- 插件运行时桥（契约一次定型，宿主侧返回能力错误）----
 
-/** plugin-runtime-load 请求载荷：请求宿主加载 Host 插件实例（Phase A 宿主返回能力错误）。 */
+/** plugin-runtime-load 请求载荷：请求宿主加载 Host 插件实例（宿主返回能力错误）。 */
 export const pluginRuntimeLoadPayloadSchema = z.object({
   pluginId: z.string().min(1),
 });
@@ -518,7 +518,7 @@ export type PluginContributionQueryPayload = z.infer<
   typeof pluginContributionQueryPayloadSchema
 >;
 
-/** plugin-contribution-query 响应载荷：已装配贡献点摘要（Phase A 宿主返回能力错误）。 */
+/** plugin-contribution-query 响应载荷：已装配贡献点摘要（宿主返回能力错误）。 */
 export const pluginContributionQueryResponseSchema = z.object({
   points: z.array(
     z.object({

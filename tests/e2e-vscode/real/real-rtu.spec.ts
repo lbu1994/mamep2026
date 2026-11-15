@@ -47,9 +47,9 @@ function rtuConfig(): { port: string; baudRate: number; slaveAddress: number } {
 
 /**
  * 等待承载共享 UI 的 webview 内容 frame 出现。
- * VSCode 1.134 webview 为两层：容器 frame（vscode-webview://.../index.html）内嵌
- * 内容 frame（vscode-webview://.../fake.html，承载 #root/.ant-app 共享 UI）。
- * 按 url 前缀会误匹配容器 frame，须定位含 UI 的内容 frame（2026-08-25 实测）。
+ * VSCode 1.134 webview 为两层：容器 frame（vscode-webview://。/index.html）内嵌
+ * 内容 frame（vscode-webview://。/fake.html，承载 #root/.ant-app 共享 UI）。
+ * 按 url 前缀会误匹配容器 frame，须定位含 UI 的内容 frame（实测）。
  */
 async function waitForWebviewFrame(page: Page): Promise<Frame> {
   const deadline = Date.now() + 30_000;
@@ -73,7 +73,7 @@ async function waitForWebviewFrame(page: Page): Promise<Frame> {
 }
 
 /**
- * VSCode webview 是否处于移动布局（视口 < 1024px，ADR-050 Phase 3）。
+ * VSCode webview 是否处于移动布局（视口 < 1024px）。
  *
  * VS Code 面板为窄窗口（实测两侧栏同时展开时编辑区 < 1024px），共享 UI 因此走移动分支：
  * 底部面板 → 底部抽屉（Header「Open panel」入口）、工具栏次要控件 → 「更多」面板。
@@ -122,7 +122,7 @@ async function openCommLog(frame: Frame): Promise<void> {
 }
 
 /**
- * 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致，ADR-014）。
+ * 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。
  *
  * 移动布局：地址进制收在工具栏「更多」面板内 —— 先展开、点选后收起（浮层会遮挡表格右侧
  * 的 Read/Write 按钮）。桌面布局：直接点击工具栏内 Segmented。
@@ -158,8 +158,8 @@ async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
   // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
-  // 短路——real e2e 曾致地址提交被跳过）。改 fill("")+pressSequentially 逐字符输入
-  // （真实键盘事件，onChange 必然触发），toHaveValue 确认受控值同步后再 Enter。
+  // 短路）。使用 fill("")+pressSequentially 逐字符输入（真实键盘事件，onChange 必然触发），
+  // toHaveValue 确认受控值同步后再 Enter。
   await input.fill("");
   await input.pressSequentially(addressHex, { delay: 10 });
   await expect(input).toHaveValue(addressHex);
@@ -192,14 +192,14 @@ async function writeRow(frame: Frame, valueHex: string): Promise<void> {
 }
 
 /**
- * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时已改为 50ms
- * （2026-09-06），对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
- * 2026-09-16 增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
- * 改为「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
- * 2026-09-17 两处修正：
+ * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时为 50ms
+ * 对 com0com 虚拟串口偏紧，测试连接显式设为 100ms（应用默认维持 50ms）。
+ *  增补长档位后键入 "100" 会同时匹配 "100 ms" 与 "1000 ms"，Enter 落点不保证 →
+ * 使用「键入收窄列表（antd 下拉为虚拟列表）+ 精确点选 <值> ms」。
+ *  两处修正：
  * 1. **下拉必须用 `frame` 作用域定位**（不是 `frame.page()`）——VSCode 是「窗口 → 容器 iframe →
  *    内容 iframe」两层嵌套，页面级定位器只在顶层文档查找，永远命中不到 webview 内的下拉
- *    （2026-09-16 改成精确点选时引入，浏览器 / Electron 无嵌套故一直绿，VSCode 一直超时）。
+ *    （改成精确点选时引入，浏览器 / Electron 无嵌套故一直绿，VSCode 一直超时）。
  * 2. 收窄方式用**直接 fill 搜索框**（元素级事件），不依赖窗口 / iframe 键盘焦点。
  */
 async function setRtuTimeoutSelect(
@@ -233,7 +233,7 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     if (msg.type() !== "error") return;
     // VS Code 自身基础设施（扩展市场查询 / 网络资源加载）的报错与 webview 应用无关，
     // 且为网络环境性 flaky，不纳入「无 console 错误」断言；只统计来自共享 UI webview
-    // （vscode-webview://）的 console 错误（2026-08-26 real e2e 修复）。
+    // （vscode-webview://）的 console 错误。
     const sourceUrl = msg.location()?.url ?? "";
     if (!sourceUrl.startsWith("vscode-webview://")) return;
     consoleErrors.push(`CONSOLE: ${msg.text()}`);
@@ -257,7 +257,7 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     await modal.waitFor({ timeout: 30_000 });
 
     // 打开串口下拉（serial-enumerate RPC 枚举真实端口）→ 选择配置指定串口。
-    // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除，ADR-034）。
+    // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除）。
     const rtu = rtuConfig();
     await modal
       .locator(".ant-form-item")
@@ -410,10 +410,10 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
     // 从站对 0x0700 的延迟响应（2500ms）落在主站超时窗口（requestTimeoutMs 50ms ×
     // retryCount+1 共 2 次 ≈ 100ms）之后才到达；若此时立即发起新读，RTU 无 Transaction ID
-    // 会把迟到的 0x0700 响应当作新读的响应（真实串口时序竞态，曾致读 0x0000 返回 0x0700
-    // 的值 0000）。两次重试（attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
+    // 会把迟到的 0x0700 响应当作新读的响应，污染 0x0000 的新读。两次重试
+    // （attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
     // 后 ~2500ms 到达（~2500 / ~2550ms）。等两帧迟到响应都在无活动请求时（pendingExchange
-    // 为空）到达并被丢弃，再读回正常区（2026-09-06：默认超时改 50ms，等待 3000ms 覆盖）。
+    // 为空）到达并被丢弃，再读回正常区（默认超时改 50ms，等待 3000ms 覆盖）。
     await frame.waitForTimeout(3000);
     await setRowAddress(frame, "0000");
     await readRow(frame);
@@ -444,7 +444,7 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     const list = frame.locator(".comm-log .ant-listy-holder");
     // Listy 虚拟列表默认停在底部（最新帧可见）；最早帧（写门控异常 01 90 03）可能被
     // 挤出视口（延迟响应的迟到帧也会占用视口）。滚动到顶部让最早帧渲染后断言，再滚回
-    // 底部断言最新帧（2026-08-26 real e2e 修复）。
+    // 底部断言最新帧。
     await list.evaluate((el) => {
       el.scrollTop = 0;
     });
@@ -482,7 +482,7 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
 
   await test.step("断开连接 → Offline，重连 → Online（稳定性）", async () => {
     await frame.getByRole("button", { name: /Disconnect/i }).click();
-    // Header 连接按钮已整合（2026-09-06），断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定。
+    // Header 连接按钮已整合，断开后显示 Connect 态、无 "Offline" 文本；以 data-conn-state 判定。
     await expect(
       frame.locator(
         ".connection-cluster__button[data-conn-state='disconnected']",
@@ -496,7 +496,7 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     const modal = frame.locator(".ant-modal-container:visible");
     await modal.waitFor({ timeout: 10_000 });
     const rtu = rtuConfig();
-    // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除，ADR-034）。
+    // 按 Port Form.Item 限定定位端口下拉（连接对象配置分组已移除）。
     await modal
       .locator(".ant-form-item")
       .filter({ hasText: "Port" })

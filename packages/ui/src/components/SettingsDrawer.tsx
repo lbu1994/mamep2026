@@ -1,18 +1,17 @@
 /**
- * Settings 抽屉（2026-09-12：容器由 Modal 改为右侧 Drawer，侧滑展开）。
+ * Settings 抽屉（右侧 Drawer，侧滑展开）。
  *
- * 由来：2026-09-11 构建产物代码分割时自 MamepApp 抽出为独立组件（`React.lazy` 按需加载），
- * 本轮仅替换外层容器，**内容与行为零改动**：
+ * 构建产物代码分割时自 MamepApp 抽出为独立组件（`React.lazy` 按需加载）：
  * - 主题明暗（`settings.themeLight/Dark`）；
- * - 主题色预设下拉（ADR-047/048：内置默认蓝 + 各启用插件注册色）；
+ * - 主题色预设下拉（内置默认蓝 + 各启用插件注册色）；
  * - 界面语言（随工作区偏好持久化）；
- * - 重置工作区（ADR-049，Popconfirm 二次确认）；
- * - 工作区导入/导出入口（ADR-033，WorkspaceFileActions）；
- * - 插件 settings 贡献分区（ADR-039，声明式标题占位）。
+ * - 重置工作区（Popconfirm 二次确认）；
+ * - 工作区导入/导出入口（WorkspaceFileActions）；
+ * - 插件 settings 贡献分区（声明式标题占位）。
  *
- * 2026-09-12 插件管理并入：抽屉体内改为 `Tabs`（`General` / `Plugins`），删除独立
- * Plugin Manager 弹窗入口。`Plugins` 页签 = 插件管理区块（`PluginManagerSection`，
- * ADR-038/044/045）+ 插件 settings 贡献分区；`General` 为上述既有设置项，内容与顺序不变。
+ *  抽屉体使用 `Tabs`（`General` / `Plugins`），
+ * `Plugins` 页签 = 插件管理区块（`PluginManagerSection`）+ 插件 settings 贡献分区；
+ * `General` 为上述设置项。
  *
  * 组件自读 store（`settingsModalOpen` 等），仅需 `host` 读取插件贡献与重置工作区；
  * 主题装配链（基础主题 + 所选预设 merge）仍由 MamepApp 负责，不影响 ConfigProvider。
@@ -54,7 +53,7 @@ import type { SettingsContribution } from "../plugin/plugin-registries";
 import { PluginManagerSection } from "./PluginManagerSection";
 import { WorkspaceFileActions } from "./WorkspaceFileActions";
 
-/** 主题色选项 label：色块 + 名称（ADR-047）。 */
+/** 主题色选项 label：色块 + 名称。 */
 function themeColorOptionLabel(title: string, color: string): ReactNode {
   return (
     <Space size={4}>
@@ -82,13 +81,13 @@ export function SettingsDrawer({
   const setOpen = useAppStore((s) => s.setSettingsModalOpen);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
-  // 所选主题色预设（ADR-047）：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`。
+  // 所选主题色预设：null=内置 Ant Design 默认蓝；插件色=`<pluginId>:<colorId>`。
   const themePrimary = useAppStore((s) => s.themePrimary);
   const setThemePrimary = useAppStore((s) => s.setThemePrimary);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const setWorkspace = useAppStore((s) => s.setWorkspace);
   const appendMessage = useAppStore((s) => s.appendMessage);
-  // 插件主题贡献（ADR-047）：仅需选项列表（是否应用由 MamepApp 装配；禁用/卸载后选项消失）。
+  // 插件主题贡献：仅需选项列表（是否应用由 MamepApp 装配；禁用/卸载后选项消失）。
   const themeContributions = usePluginContributions<ThemeContribution>(
     host,
     "theme",
@@ -97,7 +96,7 @@ export function SettingsDrawer({
     () => buildThemeColorOptions(themeContributions),
     [themeContributions],
   );
-  // settings 贡献消费方（ADR-039）：设置分区（声明式标题占位）。
+  // settings 贡献消费方：设置分区（声明式标题占位）。
   const settingsContributions = usePluginContributions<SettingsContribution>(
     host,
     "settings",
@@ -207,8 +206,8 @@ export function SettingsDrawer({
     </Space>
   );
 
-  // 插件页签（2026-09-12 入口整合）：插件管理区块（安装/启停/卸载/恢复）
-  // + 插件 settings 贡献分区（ADR-039）。
+  // 插件页签（入口整合）：插件管理区块（安装/启停/卸载/恢复）
+  // + 插件 settings 贡献分区。
   const pluginsTab = (
     <Space orientation="vertical" style={{ width: "100%" }}>
       <PluginManagerSection />

@@ -12,11 +12,11 @@ import { buildWebCsp } from "./src/csp.ts";
 // 使用 `--mode electron`（pnpm dev:electron / pnpm build:electron）时才接入 Electron 主进程。
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const DIST_ELECTRON = path.join(ROOT, "dist-electron");
-/** Electron 渲染器独立产物目录：与浏览器构建（base /）分开，避免互相覆盖（ADR-016）。 */
+/** Electron 渲染器独立产物目录：与浏览器构建（base /）分开，避免互相覆盖。 */
 const RENDERER_DIST = path.resolve(ROOT, "apps/web/dist-electron");
-/** VSCode Webview 渲染器独立产物目录（VSCode 端骨架，2026-08-23）：与浏览器/Electron 构建分开。 */
+/** VSCode Webview 渲染器独立产物目录（VSCode 端骨架）：与浏览器/Electron 构建分开。 */
 const RENDERER_DIST_VSCODE = path.resolve(ROOT, "apps/web/dist-vscode");
-/** Android（Capacitor）渲染器独立产物目录（ADR-050）：Capacitor 的 webDir 指向它。 */
+/** Android（Capacitor）渲染器独立产物目录：Capacitor 的 webDir 指向它。 */
 const RENDERER_DIST_ANDROID = path.resolve(ROOT, "apps/web/dist-android");
 
 /**
@@ -40,7 +40,7 @@ function injectCspMeta(): Plugin {
 }
 
 /**
- * 代码分割（2026-09-11 ToDoList「构建产物代码分割」）：四端渲染器共用本文件，一次生效
+ * 代码分割（ToDoList「构建产物代码分割」）：四端渲染器共用本文件，一次生效
  * （浏览器 `dist/`、Electron `dist-electron/`、VSCode `dist-vscode/`、Android `dist-android/`）。
  *
  * **做法与结论：不自定义分包规则，用 rolldown 默认的 `codeSplitting`。**
@@ -62,7 +62,7 @@ function injectCspMeta(): Plugin {
  * 因此：任何分包调整都必须用**产物级**手段验证（`pnpm build:electron` + Electron 启动看
  * 是否挂载 / `pnpm test:e2e:electron`、`pnpm test:e2e:vscode`），不能只看构建体积。
  *
- * 平台宿主懒加载（2026-09-13）：`src/App.tsx` 只负责「探测平台 → 交由 `host-assembly.ts`」，
+ * 平台宿主懒加载：`src/App.tsx` 只负责「探测平台 → 交由 `host-assembly.ts`」，
  * 后者按平台**动态 `import()`** 平台宿主（`src/host-factories/{electron,vscode,android}.ts`；
  * 浏览器分支静态返回 `createBrowserHost`）。实测（浏览器构建）：入口 384.54 → 7.78 kB，
  * 首屏（入口 + `modulepreload`）1663.21 → 1630.45 kB（−2.0%）/ gzip −0.8%，
@@ -74,7 +74,7 @@ export default defineConfig(({ mode }) => {
   const isElectron = mode === "electron";
   // VSCode Webview 模式：产物独立目录（apps/web/dist-vscode），base "./" 供 asWebviewUri 相对解析。
   const isVscode = mode === "vscode";
-  // Android（Capacitor）模式（ADR-050）：产物独立目录（apps/web/dist-android），base "./" 供 WebViewAssetLoader 加载。
+  // Android（Capacitor）模式：产物独立目录（apps/web/dist-android），base "./" 供 WebViewAssetLoader 加载。
   const isAndroid = mode === "android";
   const isPlatformBuild = isElectron || isVscode || isAndroid;
   // 应用版本号取自根 package.json（三端共用版本），经 __APP_VERSION__ 注入，dev/build 均生效。
