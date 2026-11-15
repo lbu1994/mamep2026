@@ -1,7 +1,0 @@
-interface:
-  display_name: "Mamep Plan Feature"
-  short_description: "Plan Mamep2026 feature work through approval gates"
-  default_prompt: "Use $plan-feature to plan a new Mamep2026 feature."
-
-policy:
-  allow_implicit_invocation: false

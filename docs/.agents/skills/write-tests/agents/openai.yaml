@@ -1,7 +1,0 @@
-interface:
-  display_name: "Mamep Write Tests"
-  short_description: "Generate Vitest coverage for Mamep2026 code changes"
-  default_prompt: "Use $write-tests to add Vitest coverage for this Mamep2026 change."
-
-policy:
-  allow_implicit_invocation: false

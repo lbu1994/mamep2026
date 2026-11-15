@@ -1,7 +1,0 @@
-interface:
-  display_name: "Mamep Fix Bug"
-  short_description: "Diagnose and fix a Mamep2026 bug with regression coverage"
-  default_prompt: "Use $fix-bug to diagnose and fix a Mamep2026 bug."
-
-policy:
-  allow_implicit_invocation: false
