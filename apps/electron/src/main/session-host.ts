@@ -2,13 +2,13 @@
  * Electron 主进程侧 TCP 会话宿主（docs/TECH_DESIGN.md §5.1.2、§6.2、§28.3）。
  * 组合 NodeTcpPlatformHost（仅 TCP 打开，packages/platform-node/tcp）+ TcpSessionHost
  * （会话/调度/轮询/追踪编排，packages/application）。Electron 的 Modbus TCP 会话
- * 承载在主进程（§6.2 main 职责、§28.3 通信在主进程执行），Renderer 经 HostMessage v1
+ * 承载在主进程（§6.2 main 职责、§28.3 通信在主进程执行），Renderer 经 HostMessage v2
  * RPC 远程代理；RTU 仍在 Renderer（Web Serial，ADR-017），不经过本类。
  *
  * 注意：平台宿主用「仅 TCP」的 NodeTcpPlatformHost（`@mamep2026/platform-node/tcp`）
  * 而非 NodePlatformHost——后者会静态引入 serialport 原生绑定，被打进主进程 ESM bundle
  * 会在初始化时抛 `__dirname is not defined`（2026-08-23 修复）。
- * 会话事件经 events 回调外抛，由 main.ts 转换为 HostMessage v1 event 推送 Renderer。
+ * 会话事件经 events 回调外抛，由 main.ts 转换为 HostMessage v2 event 推送 Renderer。
  */
 import { TcpSessionHost, type SessionHostEvents } from "@mamep2026/application";
 import type {
@@ -29,7 +29,7 @@ import type {
 
 export interface ElectronSessionHostOptions {
   platform: NodeTcpPlatformHost;
-  /** 会话事件（由 main.ts 转换为 HostMessage v1 event 推送 Renderer）。 */
+  /** 会话事件（由 main.ts 转换为 HostMessage v2 event 推送 Renderer）。 */
   events: SessionHostEvents;
   /**
    * 地址变换解析（2026-09-02 插件外部化；2026-09-12 ADR-055）：由宿主侧插件运行时
@@ -110,6 +110,7 @@ export class ElectronSessionHost {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;

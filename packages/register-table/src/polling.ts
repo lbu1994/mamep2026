@@ -9,6 +9,7 @@
  */
 import type {
   AddressTransform,
+  PollResultContext,
   RegisterRow,
   RegisterSheet,
   RequestRoute,
@@ -19,6 +20,8 @@ import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 
 export interface PollingTarget {
   key: string;
+  /** 行所属表；结果回写时用于拒绝切表/重绑后的旧响应。 */
+  sheetId: string;
   address: number;
   /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
   quantity?: number;
@@ -55,6 +58,7 @@ export function buildPollingTargets(
       if (!sent.ok) continue;
       targets.push({
         key: row.rowId,
+        sheetId: sheet.sheetId,
         address: sent.value,
         // 多寄存器行（ADR-030）：一次 FC03 轮询全部连续寄存器。
         quantity: row.registerCount,
@@ -75,14 +79,45 @@ export function pollResultAddressMatches(
   address: number,
   resolve?: (transformId: string) => AddressTransform | null,
 ): boolean {
-  // 全表读取结果（address = 0）不参与轮询 generation 校验。
-  if (address === 0) return true;
   const rowAddress = row.addressValue?.value;
   if (rowAddress === undefined) return false;
   const transform = sheetTransform(sheet, resolve);
   const sent = applyAddressTransform(rowAddress, transform);
   if (!sent.ok) return false;
   return address === sent.value;
+}
+
+/**
+ * 校验结果仍指向当前工作区中同一个表的同一行。
+ *
+ * route 必须等于该表当前配置（Unit ID + 协议）；sheetId 防止行重绑到其他表后
+ * 仍按全局 rowId 回写。resolveProtocol 缺省时只校验 Unit ID，生产装配必须提供。
+ */
+export function pollResultTargetMatches(
+  sheets: readonly RegisterSheet[],
+  event: Pick<PollResultContext, "key" | "sheetId" | "address" | "route">,
+  options?: {
+    resolveAddressTransform?: (id: string) => AddressTransform | null;
+    resolveProtocol?: (sheetType: string) => string;
+  },
+): boolean {
+  const sheet = sheets.find((candidate) => candidate.sheetId === event.sheetId);
+  if (sheet === undefined) return false;
+  const row = sheet.rows.find((candidate) => candidate.rowId === event.key);
+  if (row === undefined) return false;
+  if (event.route.unitAddress !== sheet.slaveAddress) return false;
+  if (
+    options?.resolveProtocol !== undefined &&
+    event.route.protocol !== options.resolveProtocol(sheet.type)
+  ) {
+    return false;
+  }
+  return pollResultAddressMatches(
+    row,
+    sheet,
+    event.address,
+    options?.resolveAddressTransform,
+  );
 }
 
 /**
@@ -94,18 +129,18 @@ export function pollResultAddressMatches(
  */
 export function applyPollResult(
   sheets: readonly RegisterSheet[],
-  key: string,
-  address: number,
+  event: Pick<PollResultContext, "key" | "sheetId" | "address" | "route">,
   raw: number | number[],
   options?: {
     resolveAddressTransform?: (id: string) => AddressTransform | null;
+    resolveProtocol?: (sheetType: string) => string;
   },
 ): RegisterRow | null {
-  const resolve = options?.resolveAddressTransform;
+  if (!pollResultTargetMatches(sheets, event, options)) return null;
   for (const sheet of sheets) {
-    const row = sheet.rows.find((r) => r.rowId === key);
+    if (sheet.sheetId !== event.sheetId) continue;
+    const row = sheet.rows.find((candidate) => candidate.rowId === event.key);
     if (row === undefined) continue;
-    if (!pollResultAddressMatches(row, sheet, address, resolve)) return null;
     // 多寄存器行（ADR-030）：一次请求读回 values[]，按组合类型格式化。
     if (Array.isArray(raw)) {
       const applied = applyReadValuesToRow(row, raw);

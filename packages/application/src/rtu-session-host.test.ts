@@ -251,20 +251,26 @@ describe("RtuSessionHost 全表读取", () => {
     h.device.setRegister(1, 0x1111);
     h.device.setRegister(2, 0x2222);
     const handle = h.host.readAllRows([
-      { key: "a", address: 1 },
-      { key: "b", address: 2 },
+      { key: "a", sheetId: "sheet-a", address: 1 },
+      { key: "b", sheetId: "sheet-a", address: 2 },
     ]);
     const summary = await handle.promise;
     expect(summary.ok).toBe(true);
     expect(h.events.onPollResult).toHaveBeenCalledWith(
-      "a",
-      0,
-      expect.objectContaining({ ok: true }),
+      expect.objectContaining({
+        key: "a",
+        sheetId: "sheet-a",
+        address: 1,
+        result: expect.objectContaining({ ok: true }),
+      }),
     );
     expect(h.events.onPollResult).toHaveBeenCalledWith(
-      "b",
-      0,
-      expect.objectContaining({ ok: true }),
+      expect.objectContaining({
+        key: "b",
+        sheetId: "sheet-a",
+        address: 2,
+        result: expect.objectContaining({ ok: true }),
+      }),
     );
   });
 
@@ -272,7 +278,10 @@ describe("RtuSessionHost 全表读取", () => {
     const h = createHarness();
     await connect(h);
     h.device.setRegister(1, 0x1111);
-    const handle = h.host.readAllRows([{ key: "a", address: 1 }], "batch-xyz");
+    const handle = h.host.readAllRows(
+      [{ key: "a", sheetId: "sheet-a", address: 1 }],
+      "batch-xyz",
+    );
     const summary = await handle.promise;
     expect(summary.ok).toBe(true);
     if (summary.ok) expect(summary.value.batchId).toBe("batch-xyz");
@@ -284,9 +293,9 @@ describe("RtuSessionHost 全表读取", () => {
     h.device.setRegister(1, 0x1111);
     const handle = h.host.readAllRows(
       [
-        { key: "a", address: 1 },
-        { key: "b", address: 2 },
-        { key: "c", address: 3 },
+        { key: "a", sheetId: "sheet-a", address: 1 },
+        { key: "b", sheetId: "sheet-a", address: 2 },
+        { key: "c", sheetId: "sheet-a", address: 3 },
       ],
       "batch-cancel-1",
     );
@@ -304,7 +313,10 @@ describe("RtuSessionHost 全表读取", () => {
     const h = createHarness();
     await connect(h);
     h.device.setRegister(1, 0x1111);
-    const handle = h.host.readAllRows([{ key: "a", address: 1 }], "batch-done");
+    const handle = h.host.readAllRows(
+      [{ key: "a", sheetId: "sheet-a", address: 1 }],
+      "batch-done",
+    );
     await handle.promise;
     // 完成后登记已注销：不抛错、无副作用。
     expect(() => h.host.cancelBatch("batch-done")).not.toThrow();
@@ -317,14 +329,19 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
     const h = createHarness();
     await connect(h);
     h.device.setRegister(0x2000, 0xabcd);
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x2000 },
+    ]);
     h.host.startPolling();
     h.clock.advance(100);
     await flushMicrotasks();
     expect(h.events.onPollResult).toHaveBeenCalledWith(
-      "row-a",
-      0x2000,
-      expect.objectContaining({ ok: true, value: 0xabcd }),
+      expect.objectContaining({
+        key: "row-a",
+        sheetId: "sheet-a",
+        address: 0x2000,
+        result: expect.objectContaining({ ok: true, value: 0xabcd }),
+      }),
     );
     h.host.stopPolling();
   });
@@ -335,11 +352,13 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
     h.host.updatePollingTargets([
       {
         key: "compatible",
+        sheetId: "sheet-compatible",
         address: 0x1000,
         route: { unitAddress: 1, protocol: "rtu" },
       },
       {
         key: "codec",
+        sheetId: "sheet-codec",
         address: 0x2000,
         route: { unitAddress: 2, protocol: "plugin-codec" },
       },
@@ -353,11 +372,13 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
     h.host.updatePollingTargets([
       {
         key: "compatible",
+        sheetId: "sheet-compatible",
         address: 0x1000,
         route: { unitAddress: 1, protocol: "rtu" },
       },
       {
         key: "codec",
+        sheetId: "sheet-codec",
         address: 0x2000,
         route: { unitAddress: 2, protocol: "plugin-codec" },
       },
@@ -380,7 +401,7 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
     const h = createHarness();
     await connect(h);
     const handle = h.host.readAllRows(
-      [{ key: "a", address: 0x1000 }],
+      [{ key: "a", sheetId: "sheet-a", address: 0x1000 }],
       "batch-mismatch",
       { unitAddress: 2, protocol: "plugin-codec" },
     );
@@ -411,7 +432,9 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
     const row = makeRow(0x2000, "1234");
     // 写入行 rowId 与轮询 key 一致，才能被 defer 暂缓。
     (row as unknown as { rowId: string }).rowId = "row-a";
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x2000 },
+    ]);
     h.host.startPolling();
     // 先消费一轮正常轮询结果。
     h.clock.advance(100);
@@ -475,7 +498,9 @@ describe("RtuSessionHost 设备拔出策略", () => {
   it("传输错误 → interrupted：停止轮询/追踪并上报消息", async () => {
     const h = createHarness();
     await connect(h);
-    h.host.updatePollingTargets([{ key: "row-a", address: 1 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 1 },
+    ]);
     h.host.startPolling();
     h.device.setRegister(1, 0x0001);
 

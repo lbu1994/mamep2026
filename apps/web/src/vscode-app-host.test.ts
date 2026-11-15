@@ -577,19 +577,25 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const { bridge, emit } = createFakeBridge();
     const host = makeHost(bridge);
     const results: Array<[string, number, number]> = [];
-    host.subscribePollResult((key, _address, result) => {
-      if (result.ok)
+    host.subscribePollResult((event) => {
+      if (event.result.ok)
         results.push([
-          key,
-          _address,
-          Array.isArray(result.value) ? (result.value[0] ?? 0) : result.value,
+          event.key,
+          event.address,
+          Array.isArray(event.result.value)
+            ? (event.result.value[0] ?? 0)
+            : event.result.value,
         ]);
     });
     emit({
       kind: "poll-result",
       payload: {
         key: "row-a",
+        sheetId: "sheet-a",
         address: 1,
+        route: { unitAddress: 1, protocol: "rtu" },
+        requestGeneration: 1,
+        connectionGeneration: 1,
         result: { ok: true, value: 0xabcd },
       },
     });
@@ -648,7 +654,9 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
   it("readAllRows 单次往返：携带渲染端 batchId，cancel 经 session-batch-cancel 转发（ADR-025）", async () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
-    const handle = host.readAllRows([{ key: "row-a", address: 1 }]);
+    const handle = host.readAllRows([
+      { key: "row-a", sheetId: "sheet-a", address: 1 },
+    ]);
     const summary = await handle.promise;
     expect(summary.ok).toBe(true);
     if (summary.ok) expect(summary.value.successCount).toBe(1);
@@ -657,7 +665,9 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const call = (bridge.sessionBatchRead as ReturnType<typeof vi.fn>).mock
       .calls[0];
     expect(call?.[0]).toMatch(/^batch-/);
-    expect(call?.[1]).toEqual([{ key: "row-a", address: 1 }]);
+    expect(call?.[1]).toEqual([
+      { key: "row-a", sheetId: "sheet-a", address: 1 },
+    ]);
 
     // cancel 经 session-batch-cancel RPC 转发同一 batchId（幂等、异常安全）。
     const batchId = call?.[0];
@@ -675,10 +685,13 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     });
     host.traceStop("row-a");
     expect(bridge.sessionTraceStop).toHaveBeenCalledWith("row-a");
-    host.updatePollingTargets([{ key: "row-a", address: 1 }]);
+    host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 1 },
+    ]);
     expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalledWith([
       {
         key: "row-a",
+        sheetId: "sheet-a",
         address: 1,
         route: { unitAddress: 1, protocol: "rtu" },
       },

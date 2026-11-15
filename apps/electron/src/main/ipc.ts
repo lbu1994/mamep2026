@@ -72,6 +72,7 @@ export interface ElectronSessionLike {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;
@@ -319,6 +320,7 @@ export async function handleRequest(
         const handle = deps.session.readAllRows(
           rows.map((r) => ({
             key: r.key,
+            sheetId: r.sheetId,
             address: r.address,
             ...(r.quantity !== undefined ? { quantity: r.quantity } : {}),
           })),
@@ -341,6 +343,7 @@ export async function handleRequest(
         deps.session.updatePollingTargets(
           message.payload.rows.map((row) => ({
             key: row.key,
+            sheetId: row.sheetId,
             address: row.address,
             route: row.route,
             ...(row.quantity !== undefined ? { quantity: row.quantity } : {}),

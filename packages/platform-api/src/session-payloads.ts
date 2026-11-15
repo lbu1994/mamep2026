@@ -1,5 +1,5 @@
 /**
- * RTU 会话 RPC 载荷（HostMessage v1，VSCode 端接线，docs/TECH_DESIGN.md §22/§23）。
+ * RTU 会话 RPC 载荷（HostMessage v2，VSCode 端接线，docs/TECH_DESIGN.md §22/§23）。
  *
  * 跨边界传输的领域对象用「可序列化投影」：Zod schema 产出纯 JSON 载荷类型，
  * 配合 toXxxPayload / xxxFromPayload 在边界往返。品牌化 ID（ConnectionProfileId /
@@ -245,6 +245,8 @@ export type SessionWriteRowPayload = z.infer<
 
 export const batchReadRowPayloadSchema = z.object({
   key: z.string(),
+  /** 行所属表；结果事件用于拒绝切表/重绑后的旧响应。 */
+  sheetId: z.string(),
   /** null 表示地址为空或非法，将被跳过。 */
   address: z.number().nullable(),
   /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
@@ -415,7 +417,7 @@ export function toAppMessagePayload(
 }
 
 // ---- 插件存储（plugin-store-load / plugin-store-save，2026-08-30，ADR-038；v2 2026-08-31，ADR-039）----
-// 已安装插件（manifest + 启用状态）为应用级资产，三端经 HostMessage v1 往返：
+// 已安装插件（manifest + 启用状态）为应用级资产，三端经 HostMessage v2 往返：
 // 浏览器直连 IndexedDB（不跨边界）；Electron 主进程 userData plugins.json；
 // VSCode Extension Host globalState。manifest 投影与 @mamep2026/plugin-api 的
 // PluginManifest v2 结构一致（结构收窄，非蒙混），由消费层做 FromPayload 重建。

@@ -2,13 +2,20 @@
  * 全表读取协调器（docs/TECH_DESIGN.md §14、docs/AGENTS.md §15）。
  * 一次性批量读取：快照、跳过非法行、单行失败继续、可取消尚未执行的任务、输出汇总。
  */
-import { ok, type RequestRoute, type Result } from "@mamep2026/domain";
+import {
+  ok,
+  type PollResultContext,
+  type RequestRoute,
+  type Result,
+} from "@mamep2026/domain";
 import { createCancellationToken } from "./cancellation";
 import type { Clock } from "./clock";
 import type { CommunicationSession } from "./session";
 
 export interface BatchReadRow {
   key: string;
+  /** 行所属表；结果事件据此校验页面绑定。 */
+  sheetId: string;
   /** null 表示地址为空或非法，将被跳过。 */
   address: number | null;
   /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
@@ -34,8 +41,7 @@ export interface BatchReadHandle {
 }
 
 export type BatchRowResultListener = (
-  key: string,
-  result: Result<number | number[]>,
+  event: PollResultContext & { result: Result<number | number[]> },
 ) => void;
 
 export class BatchReadCoordinator {
@@ -53,6 +59,7 @@ export class BatchReadCoordinator {
     onRowResult?: BatchRowResultListener,
     batchId?: string,
     route?: RequestRoute,
+    requestGeneration = 0,
   ): BatchReadHandle {
     // 显式 batchId 用于远程路径（渲染端生成随请求传入，ADR-025），保证汇总 batchId
     // 与请求关联一致；本地路径缺省时内部自增生成。
@@ -113,7 +120,14 @@ export class BatchReadCoordinator {
                 route: resolvedRoute,
               });
         void request.then((result) => {
-          onRowResult?.(row.key, result);
+          onRowResult?.({
+            key: row.key,
+            sheetId: row.sheetId,
+            address: row.address ?? 0,
+            route: { ...resolvedRoute },
+            requestGeneration,
+            result,
+          });
           if (result.ok) successCount += 1;
           else if (result.error.code === "CANCELLED") cancelledCount += 1;
           else failureCount += 1;

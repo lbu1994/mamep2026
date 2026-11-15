@@ -14,6 +14,7 @@
 import type {
   AddressTransform,
   PlatformCapabilities,
+  PollResultEvent,
   ReadVerifySettings,
   RegisterRow,
   RequestRoute,
@@ -137,7 +138,7 @@ export class AndroidAppHost implements AppHost {
     (message: ApplicationMessage) => void
   >();
   private readonly pollResultListeners = new Set<
-    (key: string, address: number, result: Result<number | number[]>) => void
+    (event: PollResultEvent) => void
   >();
   private readonly traceListeners = new Set<
     (sample: TraceSampleEvent) => void
@@ -188,9 +189,8 @@ export class AndroidAppHost implements AppHost {
           this.tcpConnectionState = state;
           for (const listener of this.connectionListeners) listener(state);
         },
-        onPollResult: (key, address, result) => {
-          for (const listener of this.pollResultListeners)
-            listener(key, address, result);
+        onPollResult: (pollResult) => {
+          for (const listener of this.pollResultListeners) listener(pollResult);
         },
         onTraceSample: (sample) => {
           for (const listener of this.traceListeners) listener(sample);
@@ -214,10 +214,9 @@ export class AndroidAppHost implements AppHost {
     this.inner.subscribeMessage((message) => {
       for (const listener of this.messageListeners) listener(message);
     });
-    this.inner.subscribePollResult((key, address, result) => {
+    this.inner.subscribePollResult((pollResult) => {
       if (this.activeProtocol === "tcp") return;
-      for (const listener of this.pollResultListeners)
-        listener(key, address, result);
+      for (const listener of this.pollResultListeners) listener(pollResult);
     });
     this.inner.subscribeTraceSample((sample) => {
       if (this.activeProtocol === "tcp") return;
@@ -523,6 +522,7 @@ export class AndroidAppHost implements AppHost {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;
@@ -551,13 +551,7 @@ export class AndroidAppHost implements AppHost {
     this.inner.stopPolling();
   }
 
-  subscribePollResult(
-    listener: (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void,
-  ): () => void {
+  subscribePollResult(listener: (event: PollResultEvent) => void): () => void {
     this.pollResultListeners.add(listener);
     return () => {
       this.pollResultListeners.delete(listener);

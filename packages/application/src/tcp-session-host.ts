@@ -204,6 +204,7 @@ export class TcpSessionHost {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;

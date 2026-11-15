@@ -2,7 +2,7 @@
  * VSCode Webview Renderer Host（docs/TECH_DESIGN.md §5.1.6、§6.3、§22.2）。
  * 实现共享 UI 的 AppHost 契约。VSCode RTU 接线（2026-08-23）：通信在 Extension Host 执行
  * （TECH_DESIGN §28.3），本类作为「远程会话代理」——connect/读/写/批量/轮询/Trace 全部
- * 经 HostMessage v1 类型化 RPC（window.mamepHost，VscodeHostApi）委托 Extension Host；
+ * 经 HostMessage v2 类型化 RPC（window.mamepHost，VscodeHostApi）委托 Extension Host；
  * 工作区持久化（IndexedDB）复用 BrowserAppHost 路径；剪贴板与颜色主题走 VSCode 桥。
  * 能力矩阵 vscodeCapabilities 如实声明（modbusRtu:true、serialPorts:"enumerated"）。
  */
@@ -18,6 +18,7 @@ import type {
 import type {
   BrowserCompatibility,
   PlatformCapabilities,
+  PollResultEvent,
   ReadVerifySettings,
   RegisterRow,
   RequestRoute,
@@ -42,13 +43,13 @@ import {
   type AppMessagePayload,
   type ColorThemeKind,
   type CommLogEventPayload,
-  type HostResultPayload,
   type MamepHostEvent,
   type OpenTextFileResponse,
   type PluginContributionQueryResponse,
   type PluginRpcPayload,
   type PluginRuntimeLoadPayload,
   type PluginRuntimeUnloadPayload,
+  type PollResultEventPayload,
   type SaveTextFileResponse,
   type SerialDeviceHandle,
   type SerialPortOption,
@@ -155,7 +156,7 @@ export class VscodeAppHost implements AppHost {
     (message: ApplicationMessage) => void
   >();
   private readonly pollResultListeners = new Set<
-    (key: string, address: number, result: Result<number | number[]>) => void
+    (event: PollResultEvent) => void
   >();
   private readonly traceListeners = new Set<
     (sample: TraceSampleEvent) => void
@@ -219,14 +220,17 @@ export class VscodeAppHost implements AppHost {
         break;
       }
       case "poll-result": {
-        const { key, address, result } = event.payload as {
-          key: string;
-          address: number;
-          result: HostResultPayload;
+        const payload = event.payload as PollResultEventPayload;
+        const pollResult: PollResultEvent = {
+          key: payload.key,
+          sheetId: payload.sheetId,
+          address: payload.address,
+          route: payload.route,
+          requestGeneration: payload.requestGeneration,
+          connectionGeneration: payload.connectionGeneration,
+          result: fromResultPayload(payload.result),
         };
-        const pollResult = fromResultPayload(result);
-        for (const listener of this.pollResultListeners)
-          listener(key, address, pollResult);
+        for (const listener of this.pollResultListeners) listener(pollResult);
         break;
       }
       case "trace-sample": {
@@ -567,6 +571,7 @@ export class VscodeAppHost implements AppHost {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;
@@ -616,13 +621,7 @@ export class VscodeAppHost implements AppHost {
     return () => this.connectionListeners.delete(listener);
   }
 
-  subscribePollResult(
-    listener: (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void,
-  ): () => void {
+  subscribePollResult(listener: (event: PollResultEvent) => void): () => void {
     this.pollResultListeners.add(listener);
     return () => this.pollResultListeners.delete(listener);
   }

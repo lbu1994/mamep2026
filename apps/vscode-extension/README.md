@@ -44,7 +44,7 @@ pnpm dist:vscode    # 打包 VSIX
 
 ## 开发
 
-- 架构：共享 UI 在 `apps/web`（Vite + React + antd v6），Extension Host 在 `apps/vscode-extension/src`，跨边界走版本化安全 IPC（HostMessage v1）
+- 架构：共享 UI 在 `apps/web`（Vite + React + antd v6），Extension Host 在 `apps/vscode-extension/src`，跨边界走版本化安全 IPC（HostMessage v2）
 - 测试：`pnpm test:e2e:vscode`（真实 VS Code 集成测试）、`pnpm test:e2e:vscode:real`（真实串口/TCP 从站，需 com0com 环境）
 - 扩展宿主调试探针：`MAMEP_FAKE_SERIAL=1` / `MAMEP_FAKE_TCP=1` / `MAMEP_FAKE_DIALOG=1`（仅非生产模式生效，供 e2e 使用）
 

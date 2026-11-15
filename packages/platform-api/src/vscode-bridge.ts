@@ -3,10 +3,10 @@
  * 在 Webview 中设置 window.mamepHost（VscodeHostApi）：经注入的 VsCodeApi.postMessage
  * 与扩展宿主通信——request 由宿主 handleVscodeInvoke 校验并返回 response/error；
  * 宿主推送 event 经 targetWindow "message" 事件投递。
- * 复用本包 HostMessage v1 契约（Envelope + Zod parseHostMessage + fromErrorPayload）。
+ * 复用本包 HostMessage v2 契约（Envelope + Zod parseHostMessage + fromErrorPayload）。
  * 只暴露白名单方法，不暴露任意原始能力。
  *
- * 本模块只依赖 HostMessage v1 契约与注入的 vsCodeApi，不依赖 vscode 模块，可被三端复用：
+ * 本模块只依赖 HostMessage v2 契约与注入的 vsCodeApi，不依赖 vscode 模块，可被三端复用：
  * - 生产（扩展 Webview 主 frame）：api = acquireVsCodeApi()（apps/vscode-extension/src/webview/vscode-bridge.ts）；
  * - dev（MAMEP_DEV_URL，webview 主 frame 以 iframe 加载 Vite dev server）：iframe 内应用侧
  *   用 window.parent.postMessage 构造的 api 创建同一桥（apps/web/src/vscode-dev-bridge.ts），

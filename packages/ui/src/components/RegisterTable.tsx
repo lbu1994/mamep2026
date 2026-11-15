@@ -1517,6 +1517,7 @@ export const RegisterTable = memo(function RegisterTable({
     const handle = host.readAllRows(
       rows.map((row) => ({
         key: row.rowId,
+        sheetId,
         address: row.addressValue?.value ?? null,
         // 多寄存器范围行（ADR-030）：一次 FC03 批量读取全部连续寄存器。
         ...(row.registerCount > 1 ? { quantity: row.registerCount } : {}),

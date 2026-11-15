@@ -126,7 +126,7 @@ function ensureHostPlugins(): HostPluginRuntime {
   return hostPlugins;
 }
 
-/** 主进程会话事件 → 推送渲染进程（HostMessage v1 event Envelope；无窗口时静默丢弃）。 */
+/** 主进程会话事件 → 推送渲染进程（HostMessage v2 event Envelope；无窗口时静默丢弃）。 */
 function postSessionEvent(event: HostEventMessage): void {
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(MAMEP_IPC_EVENT_CHANNEL, event);
@@ -159,13 +159,21 @@ function ensureSessionHost(): ElectronSessionHost {
             kind: "connection-state",
             payload: { state },
           }),
-        onPollResult: (key, address, result) =>
+        onPollResult: (pollResult) =>
           postSessionEvent({
             protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
             type: "event",
             messageId: nextEventId(),
             kind: "poll-result",
-            payload: { key, address, result: toResultPayload(result) },
+            payload: {
+              key: pollResult.key,
+              sheetId: pollResult.sheetId,
+              address: pollResult.address,
+              route: pollResult.route,
+              requestGeneration: pollResult.requestGeneration,
+              connectionGeneration: pollResult.connectionGeneration,
+              result: toResultPayload(pollResult.result),
+            },
           }),
         onTraceSample: (sample) =>
           postSessionEvent({

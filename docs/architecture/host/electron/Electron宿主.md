@@ -9,7 +9,7 @@ Electron 已迁移到 `apps/electron/`，主进程 `src/main/main.ts`、preload 
 Electron 同时存在两条通信路径：
 
 - RTU：Renderer Web Serial 直接承载共享会话，Main 仅参与有限的串口授权协调；
-- TCP：Main 使用 `NodeTcpTransport` 和共享 `SessionHostCore`，Renderer 经 Preload 的 HostMessage v1 远程调用。
+- TCP：Main 使用 `NodeTcpTransport` 和共享 `SessionHostCore`，Renderer 经 Preload 的 HostMessage v2 远程调用。
 
 `ElectronAppHost` 根据活动协议路由：
 

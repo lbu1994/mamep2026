@@ -4,6 +4,7 @@
  */
 import type {
   PlatformCapabilities,
+  PollResultEvent,
   ReadVerifySettings,
   RegisterRow,
   RequestRoute,
@@ -215,7 +216,7 @@ export class BrowserAppHost implements AppHost {
   >();
   private readonly saveListeners = new Set<(status: SaveStatus) => void>();
   private readonly pollResultListeners = new Set<
-    (key: string, address: number, result: Result<number | number[]>) => void
+    (event: PollResultEvent) => void
   >();
   private readonly traceListeners = new Set<
     (sample: TraceSampleEvent) => void
@@ -307,9 +308,8 @@ export class BrowserAppHost implements AppHost {
           // 设备拔出（interrupted）策略由 RtuSessionHost 内部处理（停止轮询/追踪 + 消息）。
           for (const listener of this.connectionListeners) listener(state);
         },
-        onPollResult: (key, address, result) => {
-          for (const listener of this.pollResultListeners)
-            listener(key, address, result);
+        onPollResult: (event) => {
+          for (const listener of this.pollResultListeners) listener(event);
         },
         onTraceSample: (sample) => {
           for (const listener of this.traceListeners) listener(sample);
@@ -910,6 +910,7 @@ export class BrowserAppHost implements AppHost {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;
@@ -926,13 +927,7 @@ export class BrowserAppHost implements AppHost {
     this.rtu.stopPolling();
   }
 
-  subscribePollResult(
-    listener: (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void,
-  ): () => void {
+  subscribePollResult(listener: (event: PollResultEvent) => void): () => void {
     this.pollResultListeners.add(listener);
     return () => this.pollResultListeners.delete(listener);
   }

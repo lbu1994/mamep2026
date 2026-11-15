@@ -39,9 +39,13 @@ import type {
   CommunicationLogEntry,
 } from "@mamep2026/logging";
 import type { MamepHostApi, VscodeHostApi } from "@mamep2026/platform-api";
-import { applyPollResult } from "@mamep2026/register-table";
+import {
+  applyPollResult,
+  pollResultTargetMatches,
+} from "@mamep2026/register-table";
 import type { SaveStatus } from "@mamep2026/workspace";
 import type { AppHost, HostStatus } from "@mamep2026/ui";
+import { requestRouteForSheet } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
 import { createBrowserHost } from "./host-factories/browser";
 import type { AppPlatformName } from "./platform-detect";
@@ -196,10 +200,9 @@ function wireHost(
   // 过渡（避免一帧默认蓝），就绪后以注册表为准。**fail-open**：失败也置位，否则陈旧种子会长期生效。
   // 该 promise 同时是启动就绪门的一半（见末尾）。
   const markPluginsReady = (): void => sinks.setPluginsReady(true);
-  const pluginsSettled = host.startPlugins().then(
-    markPluginsReady,
-    markPluginsReady,
-  );
+  const pluginsSettled = host
+    .startPlugins()
+    .then(markPluginsReady, markPluginsReady);
   // 数据类型解析器注入 store，单元格解析/读取格式化/CSV 白名单经它转发。
   sinks.setDataTypeResolver(context.dataTypeResolver);
   sinks.setHost(host);
@@ -210,21 +213,41 @@ function wireHost(
   host.subscribeMessage((message) => sinks.appendMessage(message));
   host.subscribeSaveStatus((status) => sinks.setSaveStatus(status));
   host.subscribeConnectionState((state) => sinks.setConnectionState(state));
-  host.subscribePollResult((key, address, result) => {
+  host.subscribePollResult((pollResult) => {
+    const sheets = sinks.getWorkspaceSheets();
+    const sheet = sheets.find(
+      (candidate) => candidate.sheetId === pollResult.sheetId,
+    );
+    if (sheet === undefined) return;
+    const currentRoute = requestRouteForSheet(host, sheet);
+    if (
+      currentRoute.unitAddress !== pollResult.route.unitAddress ||
+      currentRoute.protocol !== pollResult.route.protocol
+    ) {
+      return;
+    }
+    if (
+      !pollResultTargetMatches(sheets, pollResult, {
+        resolveAddressTransform: context.resolveAddressTransform,
+        resolveProtocol: () => currentRoute.protocol,
+      })
+    ) {
+      return;
+    }
     // 轮询/全表读取逐行结果 → 三态状态点：成功清失败/编辑完成态（不产生成功点）；
     // 失败幂等写失败态（同因子返回原引用，设备掉线时 store 零更新）。
-    sinks.recordPollResult(key as RowId, result);
-    if (!result.ok) return;
+    sinks.recordPollResult(pollResult.key as RowId, pollResult.result);
+    if (!pollResult.result.ok) return;
     // 应用层纯函数完成 generation 校验与按 Type 格式化（§17）；地址变换按各行所属 sheet
     // 应用（ADR-042 表级 Address Adjust；2026-09-02 插件外部化：变换经插件注册表解析）。
     const updated = applyPollResult(
-      sinks.getWorkspaceSheets(),
-      key,
-      address,
-      result.value,
+      sheets,
+      pollResult,
+      pollResult.result.value,
       { resolveAddressTransform: context.resolveAddressTransform },
     );
-    if (updated !== null) sinks.updateRow(key as RowId, () => updated);
+    if (updated !== null)
+      sinks.updateRow(pollResult.key as RowId, () => updated);
   });
 
   // 关闭/页面隐藏前 flush（ADR-049 崩溃后状态恢复）：把待写快照落盘，减少 debounce 窗口内

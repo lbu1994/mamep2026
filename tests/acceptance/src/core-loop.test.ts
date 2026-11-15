@@ -121,9 +121,9 @@ describe("acceptance: browser RTU core loop", () => {
     const coordinator = new BatchReadCoordinator(session, clock);
 
     const handle = coordinator.readAll([
-      { key: "a", address: 0x0001 },
-      { key: "blank", address: null },
-      { key: "b", address: 0x0002 },
+      { key: "a", sheetId: "sheet-a", address: 0x0001 },
+      { key: "blank", sheetId: "sheet-a", address: null },
+      { key: "b", sheetId: "sheet-a", address: 0x0002 },
     ]);
     const result = await handle.promise;
     await flush();
@@ -155,16 +155,17 @@ describe("acceptance: browser RTU core loop", () => {
     });
     // 轮询结果可为单值或数组（ADR-030 多寄存器）；本用例仅单寄存器目标。
     const results: Array<{ address: number; value: number | number[] }> = [];
-    polling.onResult((_key, address, result) => {
-      if (result.ok) results.push({ address, value: result.value });
+    polling.onResult((event) => {
+      if (event.result.ok)
+        results.push({ address: event.address, value: event.result.value });
     });
-    polling.setTargets([{ key: "r1", address: 0x0001 }]);
+    polling.setTargets([{ key: "r1", sheetId: "sheet-a", address: 0x0001 }]);
     polling.start();
 
     // 推进若干轮后改地址。
     clock.advance(200);
     await flush();
-    polling.setTargets([{ key: "r1", address: 0x0002 }]);
+    polling.setTargets([{ key: "r1", sheetId: "sheet-a", address: 0x0002 }]);
     // 推进时间覆盖轮询 tick 与请求间的 Rx Delay 间隔。
     clock.advance(200);
     await flush();

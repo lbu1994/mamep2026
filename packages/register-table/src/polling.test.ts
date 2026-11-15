@@ -54,6 +54,15 @@ function makeSheet(
   };
 }
 
+function resultFor(sheet: RegisterSheet, row: RegisterRow, address: number) {
+  return {
+    key: row.rowId,
+    sheetId: sheet.sheetId,
+    address,
+    route: { unitAddress: sheet.slaveAddress, protocol: "rtu" },
+  };
+}
+
 /** 表级启用内置 Address Adjust（ADR-042）。 */
 function adjustOn(): AddressTransformConfig {
   return { transformId: "builtin.address-adjust", enabled: true };
@@ -88,10 +97,12 @@ describe("buildPollingTargets", () => {
     const off = makeRow(0x0002);
     const noAddr = RegisterTableService.createRow();
     noAddr.pollingEnabled = true;
-    const targets = buildPollingTargets([makeSheet("s", [on, off, noAddr])]);
+    const sheet = makeSheet("s", [on, off, noAddr]);
+    const targets = buildPollingTargets([sheet]);
     expect(targets).toEqual([
       {
         key: on.rowId,
+        sheetId: sheet.sheetId,
         address: 0x0001,
         quantity: 1,
         route: { unitAddress: 1, protocol: "rtu" },
@@ -102,13 +113,14 @@ describe("buildPollingTargets", () => {
   it("applies the table Address Adjust offset when enabled", () => {
     const row = makeRow(0x0003);
     row.pollingEnabled = true;
-    const targets = buildPollingTargets(
-      [makeSheet("s", [row], { addressTransform: adjustOn() })],
-      { resolveAddressTransform: resolveBuiltin },
-    );
+    const sheet = makeSheet("s", [row], { addressTransform: adjustOn() });
+    const targets = buildPollingTargets([sheet], {
+      resolveAddressTransform: resolveBuiltin,
+    });
     expect(targets).toEqual([
       {
         key: row.rowId,
+        sheetId: sheet.sheetId,
         address: 0x0002,
         quantity: 1,
         route: { unitAddress: 1, protocol: "rtu" },
@@ -132,22 +144,22 @@ describe("buildPollingTargets", () => {
     onRow.pollingEnabled = true;
     const offRow = makeRow(0x0005);
     offRow.pollingEnabled = true;
-    const targets = buildPollingTargets(
-      [
-        makeSheet("a", [onRow], { addressTransform: adjustOn() }),
-        makeSheet("b", [offRow]),
-      ],
-      { resolveAddressTransform: resolveBuiltin },
-    );
+    const sheetA = makeSheet("a", [onRow], { addressTransform: adjustOn() });
+    const sheetB = makeSheet("b", [offRow]);
+    const targets = buildPollingTargets([sheetA, sheetB], {
+      resolveAddressTransform: resolveBuiltin,
+    });
     expect(targets).toEqual([
       {
         key: onRow.rowId,
+        sheetId: sheetA.sheetId,
         address: 0x0002,
         quantity: 1,
         route: { unitAddress: 1, protocol: "rtu" },
       },
       {
         key: offRow.rowId,
+        sheetId: sheetB.sheetId,
         address: 0x0005,
         quantity: 1,
         route: { unitAddress: 1, protocol: "rtu" },
@@ -174,12 +186,14 @@ describe("buildPollingTargets", () => {
     ).toEqual([
       {
         key: rtuRow.rowId,
+        sheetId: rtuSheet.sheetId,
         address: 0x0001,
         quantity: 1,
         route: { unitAddress: 3, protocol: "rtu" },
       },
       {
         key: codecRow.rowId,
+        sheetId: codecSheet.sheetId,
         address: 0x0002,
         quantity: 1,
         route: { unitAddress: 7, protocol: "plugin-codec" },
@@ -192,10 +206,10 @@ describe("applyPollResult", () => {
   it("formats by data type and updates registerValues", () => {
     const row = makeRow(0x0001, "hex");
     row.pollingEnabled = true;
+    const sheet = makeSheet("s", [row]);
     const updated = applyPollResult(
-      [makeSheet("s", [row])],
-      row.rowId,
-      0x0001,
+      [sheet],
+      resultFor(sheet, row, 0x0001),
       0x00ab,
     );
     expect(updated).not.toBeNull();
@@ -204,30 +218,88 @@ describe("applyPollResult", () => {
   });
 
   it("returns null when the row is missing", () => {
-    expect(applyPollResult([makeSheet("s", [])], "missing", 1, 1)).toBe(null);
+    const sheet = makeSheet("s", []);
+    expect(
+      applyPollResult(
+        [sheet],
+        {
+          key: "missing",
+          sheetId: sheet.sheetId,
+          address: 1,
+          route: { unitAddress: 1, protocol: "rtu" },
+        },
+        1,
+      ),
+    ).toBe(null);
   });
 
   it("returns null on a stale address (generation mismatch)", () => {
     const row = makeRow(0x0001);
     row.pollingEnabled = true;
-    const result = applyPollResult(
-      [makeSheet("s", [row])],
-      row.rowId,
-      0x0002,
-      1,
-    );
+    const sheet = makeSheet("s", [row]);
+    const result = applyPollResult([sheet], resultFor(sheet, row, 0x0002), 1);
     expect(result).toBeNull();
   });
 
-  it("bypasses the generation check for batch results (address 0)", () => {
+  it("rejects a same-address result from an old Unit ID", () => {
+    const row = makeRow(0x0001);
+    const sheet = makeSheet("s", [row]);
+    sheet.slaveAddress = 2;
+    expect(
+      applyPollResult(
+        [sheet],
+        {
+          ...resultFor(sheet, row, 0x0001),
+          route: { unitAddress: 1, protocol: "rtu" },
+        },
+        0x1111,
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects a same-address result from an old protocol", () => {
+    const row = makeRow(0x0001);
+    const sheet = makeSheet("s", [row]);
+    expect(
+      applyPollResult(
+        [sheet],
+        {
+          ...resultFor(sheet, row, 0x0001),
+          route: { unitAddress: 1, protocol: "plugin-codec" },
+        },
+        0x1111,
+        { resolveProtocol: () => "rtu" },
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects a result when the row was rebound to another sheet", () => {
+    const row = makeRow(0x0001);
+    const sheet = makeSheet("new-sheet", [row]);
+    expect(
+      applyPollResult(
+        [sheet],
+        {
+          ...resultFor(sheet, row, 0x0001),
+          sheetId: "old-sheet" as never,
+        },
+        0x1111,
+      ),
+    ).toBeNull();
+  });
+
+  it("applies batch results by their real address (address 0 is not a wildcard)", () => {
     const row = makeRow(0x0001, "unsigned");
+    const sheet = makeSheet("s", [row]);
     const result = applyPollResult(
-      [makeSheet("s", [row])],
-      row.rowId,
-      0,
+      [sheet],
+      resultFor(sheet, row, 0x0001),
       0x0102,
     );
     expect(result?.cellText).toBe("258");
+    expect(
+      applyPollResult([sheet], resultFor(sheet, row, 0), 0x0102),
+    ).toBeNull();
   });
 
   it("validates the polling address when the table Address Adjust is enabled", () => {
@@ -245,21 +317,21 @@ describe("applyPollResult", () => {
   it("returns the same row reference when the device value is unchanged (polling perf)", () => {
     const row = makeRow(0x0001, "hex");
     row.pollingEnabled = true;
+    const sheet = makeSheet("s", [row]);
     // 首轮轮询建立 registerValues 与 cellText（结果对象将写回 store）。
     const first = applyPollResult(
-      [makeSheet("s", [row])],
-      row.rowId,
-      0x0001,
+      [sheet],
+      resultFor(sheet, row, 0x0001),
       0x00ab,
     );
     expect(first?.cellText).toBe("00AB");
     expect(first?.registerValues?.[0]?.value).toBe(0x00ab);
     // 模拟首轮结果已写回 store：后续轮询以 first 为行对象。
     // 相同值再次轮询：返回原行引用，调用方（updateRow）据此短路，不产生状态变更。
+    const updatedSheet = makeSheet("s", [first as RegisterRow]);
     const second = applyPollResult(
-      [makeSheet("s", [first as RegisterRow])],
-      first?.rowId ?? row.rowId,
-      0x0001,
+      [updatedSheet],
+      resultFor(updatedSheet, first as RegisterRow, 0x0001),
       0x00ab,
     );
     expect(second).toBe(first);
@@ -268,19 +340,19 @@ describe("applyPollResult", () => {
   it("re-formats when the data type changed even if the value is unchanged", () => {
     const row = makeRow(0x0001, "hex");
     row.pollingEnabled = true;
+    const sheet = makeSheet("s", [row]);
     const first = applyPollResult(
-      [makeSheet("s", [row])],
-      row.rowId,
-      0x0001,
+      [sheet],
+      resultFor(sheet, row, 0x0001),
       0x00ab,
     );
     if (first === null) throw new Error("first poll failed");
     // 用户切换 dataType（setRowDataType 不重格式化 cellText）：cellText 仍是旧格式。
     const changed = { ...first, dataType: "unsigned" as const };
+    const changedSheet = makeSheet("s", [changed]);
     const result = applyPollResult(
-      [makeSheet("s", [changed])],
-      changed.rowId,
-      0x0001,
+      [changedSheet],
+      resultFor(changedSheet, changed, 0x0001),
       0x00ab,
     );
     expect(result).not.toBe(changed);

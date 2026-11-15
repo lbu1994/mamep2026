@@ -48,7 +48,7 @@ USB 串口支持设备枚举、连接时请求权限、参数透传和 detach �
 不自动重连。原生入站数据先按空闲窗口聚合成较完整的帧片段，再以 base64 通过桥
 传递；读线程和权限请求必须由关闭路径释放。
 
-桥契约采用与 HostMessage v1 相同的安全姿态：版本化信封 + Zod 校验 + 方法白名单（`packages/platform-android/src/bridge-contract.ts`）。
+桥契约采用与 HostMessage v2 相同的安全姿态：版本化信封 + Zod 校验 + 方法白名单（`packages/platform-android/src/bridge-contract.ts`）。
 
 超时从 `transport.write()` resolve 后开始计时，Capacitor 桥的往返延迟也计入预算。
 Android composition root 因而使用 300 ms / 2 次的本平台默认值，不修改全局

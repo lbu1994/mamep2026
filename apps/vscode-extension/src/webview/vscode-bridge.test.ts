@@ -23,7 +23,7 @@ function createHarness() {
   return { posted, bridge, dispatch };
 }
 
-describe("createVscodeBridge（HostMessage v1 编解码）", () => {
+describe("createVscodeBridge（HostMessage v2 编解码）", () => {
   it("get-capabilities 发送 request Envelope 并按 messageId 关联响应", async () => {
     const { posted, bridge, dispatch } = createHarness();
     const promise = bridge.getCapabilities();

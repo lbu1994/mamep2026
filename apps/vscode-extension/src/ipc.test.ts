@@ -728,14 +728,14 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
     const result = await handleVscodeInvoke(
       request("session-batch-read", {
         batchId: "batch-abc",
-        rows: [{ key: "a", address: 1 }],
+        rows: [{ key: "a", sheetId: "sheet-a", address: 1 }],
         route: { unitAddress: 1, protocol: "rtu" },
       }),
       makeDeps({ session }),
     );
     expect(result.type).toBe("response");
     expect(session.readAllRows).toHaveBeenCalledWith(
-      [{ key: "a", address: 1 }],
+      [{ key: "a", sheetId: "sheet-a", address: 1 }],
       "batch-abc",
       { unitAddress: 1, protocol: "rtu" },
     );

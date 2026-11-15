@@ -2,7 +2,7 @@
  * VSCode 端骨架 e2e（真实 VSCode + 扩展，生产构建路径）：
  * 1) 激活 → 命令 mamep2026.openMainPanel 打开主面板；
  * 2) Webview 生产 HTML：asWebviewUri 资源 + bridge 注入 + CSP style-src + 不含 dev server；
- * 3) Webview 内 bridge 启动后向上发送 get-color-theme request（HostMessage v1 类型化 RPC
+ * 3) Webview 内 bridge 启动后向上发送 get-color-theme request（HostMessage v2 类型化 RPC
  *    上行，VscodeAppHost 初始化主题的真实路径）——扩展宿主 handleVscodeInvoke 已接
  *    onDidReceiveMessage 并响应（响应/错误路径由 apps/vscode-extension/src/ipc.test.ts 覆盖）。
  * 运行：pnpm test:e2e:vscode（自动先 build:vscode）。
@@ -12,14 +12,14 @@ import * as vscode from "vscode";
 import * as fs from "node:fs/promises";
 
 const VIEW_TYPE = "mamep2026.mainPanel";
-// HostMessage v1 协议版本字面量（本测试包为 CJS/node10 解析，无法 import 共享包 TS 源码）。
-const HOST_MESSAGE_PROTOCOL_VERSION = 1 as const;
+// HostMessage v2 协议版本字面量（本测试包为 CJS/node10 解析，无法 import 共享包 TS 源码）。
+const HOST_MESSAGE_PROTOCOL_VERSION = 2 as const;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** HostMessage v1 request Envelope（debug:rpc 真实路径校验用）。 */
+/** HostMessage v2 request Envelope（debug:rpc 真实路径校验用）。 */
 function hostRequest(
   kind: string,
   payload: Record<string, unknown> = {},

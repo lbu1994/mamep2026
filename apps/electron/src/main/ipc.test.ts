@@ -477,14 +477,14 @@ describe("主进程 TCP 会话 kind（2026-08-23 两端 TCP 接线）", () => {
     const result = await handleRequest(
       request("session-batch-read", {
         batchId: "batch-abc",
-        rows: [{ key: "a", address: 1 }],
+        rows: [{ key: "a", sheetId: "sheet-a", address: 1 }],
         route: { unitAddress: 1, protocol: "tcp" },
       }),
       makeDeps({ session }),
     );
     expect(result.type).toBe("response");
     expect(session.readAllRows).toHaveBeenCalledWith(
-      [{ key: "a", address: 1 }],
+      [{ key: "a", sheetId: "sheet-a", address: 1 }],
       "batch-abc",
       { unitAddress: 1, protocol: "tcp" },
     );

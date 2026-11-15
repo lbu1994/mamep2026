@@ -10,8 +10,13 @@
  * - visibilitychange：隐藏时挂起后台并 flush，abort 时退订并释放。
  */
 import { describe, expect, it, vi } from "vitest";
-import { createEmptyWorkspace } from "@mamep2026/domain";
-import type { Result } from "@mamep2026/domain";
+import {
+  createEmptyWorkspace,
+  createMamepError,
+  RegisterAddress,
+} from "@mamep2026/domain";
+import type { PollResultEvent, RegisterSheet } from "@mamep2026/domain";
+import { RegisterTableService } from "@mamep2026/register-table";
 import type { AppHost, HostStatus } from "@mamep2026/ui";
 import {
   startAppHost,
@@ -22,11 +27,7 @@ import {
 } from "./host-assembly";
 import { createPlatformHostContext } from "./platform-context";
 
-type PollResultListener = (
-  key: string,
-  address: number,
-  result: Result<number | number[]>,
-) => void;
+type PollResultListener = (event: PollResultEvent) => void;
 
 /**
  * 最小 host 测试替身：只实现装配编排实际调用的成员（`asHost` 一次断言补齐 `AppHost`
@@ -102,6 +103,28 @@ function makeDeps(overrides: Partial<HostAssemblyDeps> = {}): HostAssemblyDeps {
     bridge: undefined,
     documentRef: noopDocument,
     ...overrides,
+  };
+}
+
+function makeSheetWithRow(slaveAddress: number): RegisterSheet {
+  const row = RegisterTableService.createRow();
+  const address = RegisterAddress.create(1);
+  if (address.ok) row.addressValue = address.value;
+  return {
+    sheetId: "sheet-a" as never,
+    name: "Sheet A",
+    type: "holding-register",
+    order: 0,
+    open: true,
+    slaveAddress,
+    rows: [row],
+    registerRadix: "dec",
+    columnWidths: {},
+    columnOrder: null,
+    writeVerify: { mode: "off", delayMs: null },
+    addressTransform: null,
+    createdAt: 0,
+    updatedAt: 0,
   };
 }
 
@@ -271,7 +294,7 @@ describe("startAppHost", () => {
     expect(deps.sinks.setConnectionModalOpen).not.toHaveBeenCalled();
   });
 
-  it("轮询结果接线：成功结果写状态点并按当前表快照应用（空工作区不写行）", async () => {
+  it("轮询结果接线：空工作区找不到绑定目标时不写状态或行", async () => {
     const { host, pollResultListeners } = makeFakeHost();
     const deps = makeDeps({
       loadHostFactory: async () => () => asHost(host),
@@ -280,15 +303,57 @@ describe("startAppHost", () => {
     await startAppHost(deps, new AbortController().signal);
     const listener = pollResultListeners[0];
     expect(listener).toBeDefined();
-    listener?.("row-1", 0, { ok: true, value: 7 });
-
-    expect(deps.sinks.recordPollResult).toHaveBeenCalledWith("row-1", {
-      ok: true,
-      value: 7,
+    listener?.({
+      key: "row-1",
+      sheetId: "sheet-1",
+      address: 0,
+      route: { unitAddress: 1, protocol: "rtu" },
+      requestGeneration: 1,
+      connectionGeneration: 1,
+      result: { ok: true, value: 7 },
     });
+
+    expect(deps.sinks.recordPollResult).not.toHaveBeenCalled();
     expect(deps.sinks.getWorkspaceSheets).toHaveBeenCalledTimes(1);
     // 空工作区无匹配行 → applyPollResult 返回 null → 不更新行。
     expect(deps.sinks.updateRow).not.toHaveBeenCalled();
+  });
+
+  it("旧 Unit ID 的迟到失败结果不写当前行状态", async () => {
+    const { host, pollResultListeners } = makeFakeHost();
+    const sinks = makeSinks();
+    const sheet = makeSheetWithRow(2);
+    const row = sheet.rows[0];
+    if (row === undefined) throw new Error("expected row");
+    vi.mocked(sinks.getWorkspaceSheets).mockReturnValue([sheet]);
+    const deps = makeDeps({
+      sinks,
+      loadHostFactory: async () => () => asHost(host),
+    });
+
+    await startAppHost(deps, new AbortController().signal);
+    const listener = pollResultListeners[0];
+    expect(listener).toBeDefined();
+    listener?.({
+      key: row.rowId,
+      sheetId: sheet.sheetId,
+      address: 1,
+      route: { unitAddress: 1, protocol: "rtu" },
+      requestGeneration: 3,
+      connectionGeneration: 1,
+      result: {
+        ok: false,
+        error: createMamepError({
+          code: "REQUEST_TIMEOUT",
+          category: "timeout",
+          userMessageKey: "errors.requestTimeout",
+          technicalMessage: "late timeout",
+        }),
+      },
+    });
+
+    expect(sinks.recordPollResult).not.toHaveBeenCalled();
+    expect(sinks.updateRow).not.toHaveBeenCalled();
   });
 
   it("工厂加载失败：提示 hostLoadFailed + 失败态，且不接线不抛", async () => {

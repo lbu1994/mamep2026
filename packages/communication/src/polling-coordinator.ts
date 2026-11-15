@@ -4,12 +4,18 @@
  * - 每个轮询行最多一个正在执行的任务，任务未完成时跳过本轮（不积压）并记录 skipped tick；
  * - 不提供全部行持续轮询（ALL Polling）：只有传入的 targets 会被轮询。
  */
-import type { RequestRoute, Result } from "@mamep2026/domain";
+import type {
+  PollResultContext,
+  RequestRoute,
+  Result,
+} from "@mamep2026/domain";
 import type { Clock, TimeoutHandle } from "./clock";
 import type { CommunicationSession } from "./session";
 
 export interface PollingTarget {
   key: string;
+  /** 行所属表；用于结果路由和页面绑定校验。 */
+  sheetId: string;
   address: number;
   /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器；>1 时一次 FC03 读全部。 */
   quantity?: number;
@@ -21,17 +27,29 @@ export interface PollingCoordinatorOptions {
   getIntervalMs: () => number;
 }
 
+export type PollingResultEvent = PollResultContext & {
+  result: Result<number | number[]>;
+};
+
+interface ActivePollingTarget extends PollingTarget {
+  route: RequestRoute;
+  requestGeneration: number;
+}
+
 export class PollingCoordinator {
-  private targets: Array<PollingTarget & { route: RequestRoute }> = [];
+  private targets: ActivePollingTarget[] = [];
+  private nextRequestGeneration = 0;
+  private readonly targetFingerprints = new Map<
+    string,
+    { fingerprint: string; generation: number }
+  >();
   private readonly inFlight = new Set<string>();
   private readonly skippedTicks = new Map<string, number>();
   /** 暂缓的轮询 key（写入+回读期间，§18.3）：tick 时与 inFlight 同语义跳过。 */
   private readonly deferred = new Set<string>();
   private timer: TimeoutHandle | null = null;
   private runningFlag = false;
-  private readonly listeners = new Set<
-    (key: string, address: number, result: Result<number | number[]>) => void
-  >();
+  private readonly listeners = new Set<(event: PollingResultEvent) => void>();
   private readonly session: CommunicationSession;
   private readonly clock: Clock;
   private readonly options: PollingCoordinatorOptions;
@@ -54,24 +72,40 @@ export class PollingCoordinator {
     return this.skippedTicks.get(key) ?? 0;
   }
 
-  onResult(
-    listener: (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void,
-  ): () => void {
+  onResult(listener: (event: PollingResultEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
   setTargets(targets: PollingTarget[]): void {
-    this.targets = targets.map((target) => ({
-      ...target,
-      route: target.route
+    const nextTargets = targets.map((target): ActivePollingTarget => {
+      const route = target.route
         ? { ...target.route }
-        : this.session.getCurrentRoute(),
-    }));
+        : this.session.getCurrentRoute();
+      const fingerprint = JSON.stringify([
+        target.sheetId,
+        target.address,
+        target.quantity ?? 1,
+        route.unitAddress,
+        route.protocol,
+      ]);
+      const previous = this.targetFingerprints.get(target.key);
+      const requestGeneration =
+        previous?.fingerprint === fingerprint
+          ? previous.generation
+          : ++this.nextRequestGeneration;
+      this.targetFingerprints.set(target.key, {
+        fingerprint,
+        generation: requestGeneration,
+      });
+      return { ...target, route, requestGeneration };
+    });
+
+    const activeKeys = new Set(nextTargets.map((target) => target.key));
+    for (const key of this.targetFingerprints.keys()) {
+      if (!activeKeys.has(key)) this.targetFingerprints.delete(key);
+    }
+    this.targets = nextTargets;
   }
 
   /** 暂缓指定 key 的轮询（写入+回读期间，§18.3）；已暂缓为幂等 no-op。 */
@@ -91,9 +125,20 @@ export class PollingCoordinator {
   }
 
   stop(): void {
+    const wasRunning = this.runningFlag;
     this.runningFlag = false;
     this.timer?.cancel();
     this.timer = null;
+    // 已发出的请求仍可能返回；停止轮询时推进目标代次，确保它们不再回写。
+    if (wasRunning) {
+      for (const target of this.targets) {
+        target.requestGeneration = ++this.nextRequestGeneration;
+        const tracked = this.targetFingerprints.get(target.key);
+        if (tracked !== undefined) {
+          tracked.generation = target.requestGeneration;
+        }
+      }
+    }
   }
 
   private scheduleNext(): void {
@@ -114,8 +159,14 @@ export class PollingCoordinator {
         continue;
       }
       this.inFlight.add(target.key);
-      // 捕获请求时的地址快照：上层据此丢弃旧地址的迟到结果（generation 失效）。
-      const requestedAddress = target.address;
+      // 请求创建时固化完整身份；返回后与当前目标逐项比较，避免迟到结果串路由。
+      const requestContext = {
+        key: target.key,
+        sheetId: target.sheetId,
+        address: target.address,
+        route: { ...target.route },
+        requestGeneration: target.requestGeneration,
+      } satisfies PollResultContext;
       const quantity = target.quantity ?? 1;
       // 多寄存器行（ADR-030）：一次 FC03 读全部，结果携带 values[]。
       const request =
@@ -132,8 +183,17 @@ export class PollingCoordinator {
             });
       void request.then((result) => {
         this.inFlight.delete(target.key);
+        const current = this.targets.find(
+          (candidate) => candidate.key === requestContext.key,
+        );
+        if (
+          current === undefined ||
+          current.requestGeneration !== requestContext.requestGeneration
+        ) {
+          return;
+        }
         for (const listener of this.listeners)
-          listener(target.key, requestedAddress, result);
+          listener({ ...requestContext, result });
       });
     }
     this.scheduleNext();

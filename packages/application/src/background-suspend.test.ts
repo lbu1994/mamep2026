@@ -68,7 +68,9 @@ describe("SessionHostCore 后台挂起/恢复（ADR-050 Phase 3）", () => {
     const h = createHarness();
     await connect(h);
     h.device.setRegister(0x2000, 0x1234);
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x2000 },
+    ]);
     h.clock.advance(100);
     await flushMicrotasks();
     expect(h.events.onPollResult).toHaveBeenCalled();
@@ -86,7 +88,9 @@ describe("SessionHostCore 后台挂起/恢复（ADR-050 Phase 3）", () => {
     const h = createHarness();
     await connect(h);
     h.device.setRegister(0x2000, 0xabcd);
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x2000 },
+    ]);
     h.host.pauseBackground();
 
     h.host.resumeBackground();
@@ -94,9 +98,12 @@ describe("SessionHostCore 后台挂起/恢复（ADR-050 Phase 3）", () => {
     h.clock.advance(100);
     await flushMicrotasks();
     expect(h.events.onPollResult).toHaveBeenCalledWith(
-      "row-a",
-      0x2000,
-      expect.objectContaining({ ok: true, value: 0xabcd }),
+      expect.objectContaining({
+        key: "row-a",
+        sheetId: "sheet-a",
+        address: 0x2000,
+        result: expect.objectContaining({ ok: true, value: 0xabcd }),
+      }),
     );
   });
 
@@ -124,7 +131,9 @@ describe("SessionHostCore 后台挂起/恢复（ADR-050 Phase 3）", () => {
   it("幂等：重复挂起/重复恢复无副作用", async () => {
     const h = createHarness();
     await connect(h);
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x2000 },
+    ]);
 
     h.host.pauseBackground();
     h.host.pauseBackground();
@@ -139,7 +148,9 @@ describe("SessionHostCore 后台挂起/恢复（ADR-050 Phase 3）", () => {
     const h = createHarness();
     await connect(h);
     h.host.pauseBackground();
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x2000 },
+    ]);
 
     h.clock.advance(300);
     await flushMicrotasks();
@@ -153,7 +164,9 @@ describe("SessionHostCore 后台挂起/恢复（ADR-050 Phase 3）", () => {
 
   it("离线（未连接）时恢复不启动轮询，也不报错", async () => {
     const h = createHarness();
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x2000 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x2000 },
+    ]);
     h.host.pauseBackground();
     h.host.resumeBackground();
 

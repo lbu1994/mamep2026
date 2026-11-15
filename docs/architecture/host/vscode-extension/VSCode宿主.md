@@ -2,7 +2,7 @@
 
 ## 1. apps/vscode-extension
 
-扩展位于 `apps/vscode-extension/`，命令 `mamep2026.openMainPanel` 打开单实例 Webview。Extension Host 承载 RTU、TCP、工作区、插件和颜色主题桥；Webview 只承载共享 UI，经 HostMessage v1 与宿主通信。能力矩阵如实声明当前 RTU/TCP 与串口枚举能力，UI 按能力隐藏或禁用入口。
+扩展位于 `apps/vscode-extension/`，命令 `mamep2026.openMainPanel` 打开单实例 Webview。Extension Host 承载 RTU、TCP、工作区、插件和颜色主题桥；Webview 只承载共享 UI，经 HostMessage v2 与宿主通信。能力矩阵如实声明当前 RTU/TCP 与串口枚举能力，UI 按能力隐藏或禁用入口。
 
 ### 工程结构与加载模式
 
@@ -17,7 +17,7 @@
 
 ### Webview RPC 与生命周期
 
-Extension Host 与 Webview 复用平台包中的 HostMessage v1：版本、request/response/event/error、唯一 messageId、Zod payload 和 kind 白名单。错误使用可序列化 `MamepError` 投影，不允许 Webview 传任意方法名。
+Extension Host 与 Webview 复用平台包中的 HostMessage v2：版本、request/response/event/error、唯一 messageId、Zod payload 和 kind 白名单。错误使用可序列化 `MamepError` 投影，不允许 Webview 传任意方法名。
 
 ### RTU 与 TCP 会话
 
@@ -28,7 +28,7 @@ Extension Host 使用：
 - `NodePlatformHost` 打开 Node Serial 或 Node TCP Transport；
 - 共享 `SessionHostCore` 承载连接状态、调度、轮询、Trace、批量读取、写后回读、地址变换和设备拔出策略；
 - `RtuSessionHost`/`TcpSessionHost` 作为协议装配层，避免为 RTU 和 TCP 复制应用编排；
-- HostMessage v1 的会话 request/event 与宿主连接状态桥接。
+- HostMessage v2 的会话 request/event 与宿主连接状态桥接。
 
 会话 request 至少包括串口枚举、连接、断开、状态查询、地址/Unit ID 更新、单行读写、批量读取与取消、轮询目标和启停、Trace 启停、表级地址变换同步。事件复用连接状态、通信日志、轮询结果、Trace 样本和应用消息。每个 kind 进入白名单、Zod 校验和穷尽性分发，不在 Webview 暴露任意方法名。
 

@@ -7,7 +7,7 @@
  * code.visualstudio.com/api/extension-guides/webview）：
  *   - iframe 内应用（apps/web/src/vscode-dev-bridge.ts）把 window.parent.postMessage 封装
  *     成 VsCodeApi，复用 platform-api 的 createVscodeBridge 设置 window.mamepHost
- *     （HostMessage v1 类型化 RPC）→ App.tsx 装配 VscodeAppHost，串口枚举走
+ *     （HostMessage v2 类型化 RPC）→ App.tsx 装配 VscodeAppHost，串口枚举走
  *     serial-enumerate RPC（Extension Host 真实串口列表，antd Select 下拉）；
  *   - 本主 frame 中继脚本转发：iframe → acquireVsCodeApi().postMessage → 扩展宿主；
  *     宿主 response/event（HostMessage Envelope）→ iframe.contentWindow.postMessage。
@@ -83,7 +83,7 @@ export function getDevHtml({ devUrl }: DevHtmlOptions): string {
           "*"
         );
       }
-      /** HostMessage v1 Envelope 判定（请求/响应/事件都带 protocolVersion + type）。 */
+      /** HostMessage v2 Envelope 判定（请求/响应/事件都带 protocolVersion + type）。 */
       function isHostEnvelope(data) {
         return (
           data !== null &&

@@ -28,7 +28,7 @@ Electron 串口获取机制如下：
 2. **主进程拦截选择**：`requestPort()` 触发 session 的 `select-serial-port` 事件，主进程 `event.preventDefault()` 后默认「延迟选择」——把 `portList`（含 `portId`/`portName`/`displayName`）经 `serial-ports-available` 事件转发给渲染进程，挂起 callback 等待用户选择；设置 `selectPort` 策略则自动选择（测试/无人值守）。
 3. **权限放行**：`setPermissionCheckHandler` / `setDevicePermissionHandler` 仅对本应用 origin 放行 `serial`。**origin 必须归一化（`normalizeOrigin`）**：dev 下 `details.securityOrigin` 报告为 `http://localhost:5173/`（尾斜杠），而 allowlist 由 `new URL().origin` 生成（无斜杠），精确匹配会失败 → 设备被拒 → `requestPort` reject `NotFoundError: No port selected by the user`（"刷不出来串口"的根因）。`normalizeOrigin` 对 http(s) 用 `new URL(origin).origin` 归一化，`file://` 原样保留（URL API 会把它归一化成 `"null"`）。
 4. **下拉框展示**：渲染进程 `ElectronAppHost` 把事件转成的 `SerialPortOption[]`（label 优先级 `portName → displayName → portId`）喂给 antd Select；空列表显示 "No serial ports found" + 刷新按钮。
-5. **回传选择**：用户选中 → `select-serial-port` invoke（HostMessage v1，payload `{portId}`，空串 = 取消）→ 主进程 `resolvePendingSelection` 调用挂起 callback → `requestPort()` settle → 渲染进程拿到 `SerialPort` 构建 `WebSerialHandle`；用户取消 → callback("") → `requestPort` reject `NotFoundError` → 视为 ok(null)。
+5. **回传选择**：用户选中 → `select-serial-port` invoke（HostMessage v2，payload `{portId}`，空串 = 取消）→ 主进程 `resolvePendingSelection` 调用挂起 callback → `requestPort()` settle → 渲染进程拿到 `SerialPort` 构建 `WebSerialHandle`；用户取消 → callback("") → `requestPort` reject `NotFoundError` → 视为 ok(null)。
 6. **幂等/清理**：重枚举前先取消旧挂起会话（`cancelPendingPicker`，调 `selectSerialPort("")` 并吞掉 rejection），避免多个 `requestPort` 同时挂起。
 
 > fake `navigator.serial` 的 e2e 无法覆盖真实权限和用户手势路径；串口权限类问题必须通过真机验证。

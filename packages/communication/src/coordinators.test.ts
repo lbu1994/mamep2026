@@ -27,8 +27,8 @@ describe("BatchReadCoordinator", () => {
     const coordinator = new BatchReadCoordinator(session, clock);
     const handle = coordinator.readAll(
       [
-        { key: "a", address: 0x0001 },
-        { key: "b", address: 0x0002 },
+        { key: "a", sheetId: "sheet-a", address: 0x0001 },
+        { key: "b", sheetId: "sheet-a", address: 0x0002 },
       ],
       undefined,
       "batch-route",
@@ -57,10 +57,10 @@ describe("BatchReadCoordinator", () => {
     const coordinator = new BatchReadCoordinator(session, clock);
 
     const handle = coordinator.readAll([
-      { key: "a", address: 0x0001 },
-      { key: "b", address: 0x0002 },
-      { key: "blank", address: null },
-      { key: "c", address: 0x0003 },
+      { key: "a", sheetId: "sheet-a", address: 0x0001 },
+      { key: "b", sheetId: "sheet-a", address: 0x0002 },
+      { key: "blank", sheetId: "sheet-a", address: null },
+      { key: "c", sheetId: "sheet-a", address: 0x0003 },
     ]);
 
     // 单并发：逐帧模拟响应，避免后续响应被误判为迟到帧。
@@ -94,8 +94,8 @@ describe("BatchReadCoordinator", () => {
     const coordinator = new BatchReadCoordinator(session, clock);
 
     const handle = coordinator.readAll([
-      { key: "a", address: 0x0001 },
-      { key: "b", address: 0x0002 },
+      { key: "a", sheetId: "sheet-a", address: 0x0001 },
+      { key: "b", sheetId: "sheet-a", address: 0x0002 },
     ]);
 
     await advanceUntil(clock, () => transport.sentFrames.length === 1);
@@ -124,7 +124,7 @@ describe("BatchReadCoordinator", () => {
     const coordinator = new BatchReadCoordinator(session, clock);
 
     const handle = coordinator.readAll(
-      [{ key: "a", address: 0x0001 }],
+      [{ key: "a", sheetId: "sheet-a", address: 0x0001 }],
       undefined,
       "batch-xyz",
     );
@@ -148,9 +148,9 @@ describe("BatchReadCoordinator", () => {
     const coordinator = new BatchReadCoordinator(session, clock);
 
     const handle = coordinator.readAll([
-      { key: "a", address: 0x0001 },
-      { key: "b", address: 0x0002 },
-      { key: "c", address: 0x0003 },
+      { key: "a", sheetId: "sheet-a", address: 0x0001 },
+      { key: "b", sheetId: "sheet-a", address: 0x0002 },
+      { key: "c", sheetId: "sheet-a", address: 0x0003 },
     ]);
     // 第一行已发送（在飞）；其余排队未发送。
     await advanceUntil(clock, () => transport.sentFrames.length === 1);
@@ -165,6 +165,46 @@ describe("BatchReadCoordinator", () => {
       expect(result.value.successCount).toBe(1);
       expect(result.value.cancelledCount).toBe(2);
     }
+  });
+
+  it("reports each row with its real address, sheet and captured route", async () => {
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const session = new CommunicationSession({
+      transport,
+      clock,
+      config: createDefaultRtuProfile(),
+    });
+    await session.connect();
+    const coordinator = new BatchReadCoordinator(session, clock);
+    const events: Array<{
+      key: string;
+      sheetId: string;
+      address: number;
+      requestGeneration: number;
+    }> = [];
+    const handle = coordinator.readAll(
+      [{ key: "a", sheetId: "sheet-a", address: 0x002a }],
+      (event) => events.push(event),
+      "batch-context",
+      { unitAddress: 3, protocol: "rtu" },
+      17,
+    );
+
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(readResponse(3, 0x1234));
+    await handle.promise;
+
+    expect(events).toEqual([
+      {
+        key: "a",
+        sheetId: "sheet-a",
+        address: 0x002a,
+        route: { unitAddress: 3, protocol: "rtu" },
+        requestGeneration: 17,
+        result: { ok: true, value: 0x1234 },
+      },
+    ]);
   });
 });
 

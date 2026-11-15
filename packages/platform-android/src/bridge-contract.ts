@@ -1,7 +1,7 @@
 /**
  * Android 桥契约（ADR-050 §5、§6）。
  *
- * 与 HostMessage v1（packages/platform-api）同安全姿态：**版本化方法白名单 + 入参/回包 Zod 校验**。
+ * 与 HostMessage v2（packages/platform-api）同安全姿态：**版本化方法白名单 + 入参/回包 Zod 校验**。
  * 原生侧只做「打开 / 写字节 / 来字节 / 关闭」，绝不理解 Modbus 语义；字节以 base64 字符串传递
  * （Capacitor `JSObject` 为 JSON 语义，不支持 ArrayBuffer）。
  *

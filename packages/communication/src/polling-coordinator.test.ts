@@ -39,18 +39,18 @@ describe("PollingCoordinator", () => {
       getIntervalMs: () => 50,
     });
     coordinator.setTargets([
-      { key: "a", address: 0x0001 },
-      { key: "b", address: 0x0002 },
+      { key: "a", sheetId: "sheet-a", address: 0x0001 },
+      { key: "b", sheetId: "sheet-a", address: 0x0002 },
     ]);
 
     const results: Array<{ key: string; value: number }> = [];
-    coordinator.onResult((key, _address, result) => {
-      if (result.ok)
+    coordinator.onResult((event) => {
+      if (event.result.ok)
         results.push({
-          key,
-          value: Array.isArray(result.value)
-            ? (result.value[0] ?? 0)
-            : result.value,
+          key: event.key,
+          value: Array.isArray(event.result.value)
+            ? (event.result.value[0] ?? 0)
+            : event.result.value,
         });
     });
 
@@ -77,12 +77,14 @@ describe("PollingCoordinator", () => {
     const coordinator = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
     });
-    coordinator.setTargets([{ key: "a", address: 0x0001 }]);
+    coordinator.setTargets([{ key: "a", sheetId: "sheet-a", address: 0x0001 }]);
     const results: number[] = [];
-    coordinator.onResult((_key, _address, result) => {
-      if (result.ok)
+    coordinator.onResult((event) => {
+      if (event.result.ok)
         results.push(
-          Array.isArray(result.value) ? (result.value[0] ?? 0) : result.value,
+          Array.isArray(event.result.value)
+            ? (event.result.value[0] ?? 0)
+            : event.result.value,
         );
     });
 
@@ -105,7 +107,7 @@ describe("PollingCoordinator", () => {
     const coordinator = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
     });
-    coordinator.setTargets([{ key: "a", address: 0x0001 }]);
+    coordinator.setTargets([{ key: "a", sheetId: "sheet-a", address: 0x0001 }]);
     coordinator.start();
     await advanceUntil(clock, () => transport.sentFrames.length === 1);
     coordinator.stop();
@@ -115,6 +117,34 @@ describe("PollingCoordinator", () => {
     expect(transport.sentFrames.length).toBe(countAtStop);
   });
 
+  it("does not publish a response that arrives after stop()", async () => {
+    const { clock, transport, session } = setup();
+    await connect(session);
+    const coordinator = new PollingCoordinator(session, clock, {
+      getIntervalMs: () => 50,
+    });
+    const results: number[] = [];
+    coordinator.onResult((event) => {
+      if (event.result.ok) {
+        results.push(
+          Array.isArray(event.result.value)
+            ? (event.result.value[0] ?? 0)
+            : event.result.value,
+        );
+      }
+    });
+    coordinator.setTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x0001 },
+    ]);
+    coordinator.start();
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+
+    coordinator.stop();
+    transport.simulateData(readResponse(1, 0x1111));
+    await Promise.resolve();
+    expect(results).toEqual([]);
+  });
+
   it("stops polling for removed targets", async () => {
     const { clock, transport, session } = setup();
     await connect(session);
@@ -122,8 +152,8 @@ describe("PollingCoordinator", () => {
       getIntervalMs: () => 50,
     });
     coordinator.setTargets([
-      { key: "a", address: 0x0001 },
-      { key: "b", address: 0x0002 },
+      { key: "a", sheetId: "sheet-a", address: 0x0001 },
+      { key: "b", sheetId: "sheet-a", address: 0x0002 },
     ]);
     coordinator.start();
     await advanceUntil(clock, () => transport.sentFrames.length === 1);
@@ -131,7 +161,7 @@ describe("PollingCoordinator", () => {
     await advanceUntil(clock, () => transport.sentFrames.length === 2);
     transport.simulateData(readResponse(1, 2));
 
-    coordinator.setTargets([{ key: "a", address: 0x0001 }]);
+    coordinator.setTargets([{ key: "a", sheetId: "sheet-a", address: 0x0001 }]);
     // 清空已发送计数，后续只应轮询 a。
     transport.sentFrames = [];
     await advanceUntil(clock, () => transport.sentFrames.length === 1);
@@ -148,12 +178,14 @@ describe("PollingCoordinator", () => {
     const coordinator = new PollingCoordinator(session, clock, {
       getIntervalMs: () => 50,
     });
-    coordinator.setTargets([{ key: "a", address: 0x0001 }]);
+    coordinator.setTargets([{ key: "a", sheetId: "sheet-a", address: 0x0001 }]);
     const results: number[] = [];
-    coordinator.onResult((_key, _address, result) => {
-      if (result.ok)
+    coordinator.onResult((event) => {
+      if (event.result.ok)
         results.push(
-          Array.isArray(result.value) ? (result.value[0] ?? 0) : result.value,
+          Array.isArray(event.result.value)
+            ? (event.result.value[0] ?? 0)
+            : event.result.value,
         );
     });
 
@@ -181,5 +213,42 @@ describe("PollingCoordinator", () => {
     await advanceUntil(clock, () => results.length === 2);
     coordinator.stop();
     expect(results).toEqual([1, 2]);
+  });
+
+  it("drops an in-flight result after Unit ID or sheet binding changes", async () => {
+    const { clock, transport, session } = setup();
+    await connect(session);
+    const coordinator = new PollingCoordinator(session, clock, {
+      getIntervalMs: () => 50,
+    });
+    const results: string[] = [];
+    coordinator.onResult((event) => results.push(event.sheetId));
+    coordinator.setTargets([
+      {
+        key: "row-a",
+        sheetId: "sheet-a",
+        address: 0x0001,
+        route: { unitAddress: 1, protocol: "rtu" },
+      },
+    ]);
+
+    coordinator.start();
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+
+    // 旧请求仍在飞时把同一 row key 重绑到另一表/Unit ID。
+    coordinator.setTargets([
+      {
+        key: "row-a",
+        sheetId: "sheet-b",
+        address: 0x0001,
+        route: { unitAddress: 2, protocol: "rtu" },
+      },
+    ]);
+    coordinator.stop();
+
+    // Unit ID 1 的合法旧响应此时才到达；不得进入结果事件流。
+    transport.simulateData(readResponse(1, 0x1111));
+    await Promise.resolve();
+    expect(results).toEqual([]);
   });
 });

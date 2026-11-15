@@ -6,6 +6,7 @@ import type {
   BrowserCompatibility,
   FlowControl,
   PlatformCapabilities,
+  PollResultEvent,
   ReadVerifySettings,
   RegisterRow,
   RequestRoute,
@@ -212,6 +213,7 @@ export interface AppHost {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;
@@ -219,13 +221,7 @@ export interface AppHost {
   ): void;
   startPolling(): void;
   stopPolling(): void;
-  subscribePollResult(
-    listener: (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void,
-  ): () => void;
+  subscribePollResult(listener: (event: PollResultEvent) => void): () => void;
 
   traceStart(
     key: string,

@@ -2,7 +2,7 @@
  * VSCode 扩展宿主 RPC 处理核心（可测纯函数，docs/TECH_DESIGN.md §22.2、§22.4、docs/AGENTS.md §23）。
  * 与 vscode 运行时解耦：外部能力经 IpcDeps 注入，便于单测校验/分发/拒绝路径
  * （未知 kind、非法 payload、debug 探针生产禁用等）。
- * 复用 packages/platform-api 的 HostMessage v1 契约：Envelope + Zod 校验 + kind 白名单，
+ * 复用 packages/platform-api 的 HostMessage v2 契约：Envelope + Zod 校验 + kind 白名单，
  * 不允许任意方法名调用；响应引用原 messageId；结构化错误投影。
  */
 import { createMamepError, ok, type Result } from "@mamep2026/domain";
@@ -102,6 +102,7 @@ export interface VscodeSessionLike {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;
@@ -366,6 +367,7 @@ export async function handleVscodeRequest(
         const handle = deps.session.readAllRows(
           rows.map((r) => ({
             key: r.key,
+            sheetId: r.sheetId,
             address: r.address,
             ...(r.quantity !== undefined ? { quantity: r.quantity } : {}),
           })),
@@ -388,6 +390,7 @@ export async function handleVscodeRequest(
         deps.session.updatePollingTargets(
           message.payload.rows.map((row) => ({
             key: row.key,
+            sheetId: row.sheetId,
             address: row.address,
             route: row.route,
             ...(row.quantity !== undefined ? { quantity: row.quantity } : {}),

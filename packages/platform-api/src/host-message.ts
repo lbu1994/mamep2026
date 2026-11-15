@@ -1,5 +1,5 @@
 /**
- * 跨边界 Host 消息协议 v1（docs/TECH_DESIGN.md §22.2、docs/AGENTS.md §23）。
+ * 跨边界 Host 消息协议 v2（docs/TECH_DESIGN.md §22.2、docs/AGENTS.md §23）。
  * Electron（及后续 VSCode Webview）的跨边界消息必须使用版本化 Envelope：
  * protocolVersion / messageId / type / kind / payload；payload 用 Zod 校验，
  * 未知 kind 被拒绝，不允许任意方法名调用。消息协议版本独立于应用/插件/工作区版本。
@@ -45,7 +45,7 @@ import {
 } from "./session-payloads";
 
 /** 消息协议版本：与 appVersion / 插件 apiVersion / 工作区 schemaVersion 相互独立。 */
-export const HOST_MESSAGE_PROTOCOL_VERSION = 1 as const;
+export const HOST_MESSAGE_PROTOCOL_VERSION = 2 as const;
 
 /** Electron IPC 频道：invoke（request/response/error）与 event 分开。 */
 export const MAMEP_IPC_INVOKE_CHANNEL = "mamep:invoke";
@@ -204,6 +204,20 @@ export const hostResultPayloadSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(false), error: hostErrorPayloadSchema }),
 ]);
 export type HostResultPayload = z.infer<typeof hostResultPayloadSchema>;
+
+/** 逐行通信结果载荷：必须携带完整绑定身份，不能再靠 key/address 猜归属。 */
+export const pollResultEventPayloadSchema = z.object({
+  key: z.string(),
+  sheetId: z.string(),
+  address: z.number().int().min(0).max(0xffff),
+  route: requestRoutePayloadSchema,
+  requestGeneration: z.number().int().nonnegative(),
+  connectionGeneration: z.number().int().nonnegative(),
+  result: hostResultPayloadSchema,
+});
+export type PollResultEventPayload = z.infer<
+  typeof pollResultEventPayloadSchema
+>;
 
 export function toResultPayload(
   result: Result<number | number[]>,
@@ -413,6 +427,7 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
       rows: z.array(
         z.object({
           key: z.string(),
+          sheetId: z.string(),
           address: z.number(),
           /** 覆盖的连续寄存器数（ADR-030）：缺省/1=单寄存器。 */
           quantity: z.number().int().min(1).optional(),
@@ -591,11 +606,7 @@ export const hostEventSchema = z.discriminatedUnion("kind", [
     type: z.literal("event"),
     messageId: messageIdSchema,
     kind: z.literal("poll-result"),
-    payload: z.object({
-      key: z.string(),
-      address: z.number(),
-      result: hostResultPayloadSchema,
-    }),
+    payload: pollResultEventPayloadSchema,
   }),
   z.object({
     protocolVersion: protocolVersionSchema,
@@ -833,7 +844,7 @@ export interface VscodeHostApi extends Omit<
   /** 开发/测试探针：扩展宿主内部状态（生产构建返回 fail）。 */
   getDebugState(): Promise<Result<VscodeHostDebugState | null>>;
 
-  // ---- VSCode RTU 接线（2026-08-23）：远程会话 RPC（HostMessage v1）----
+  // ---- VSCode RTU 接线（2026-08-23）：远程会话 RPC（HostMessage v2）----
 
   /** 枚举系统串口（serial-enumerate；VSCode 无浏览器授权手势约束，直接返回列表）。 */
   enumerateSerialPorts(): Promise<Result<SerialPortOption[]>>;
@@ -899,7 +910,7 @@ export interface VscodeHostApi extends Omit<
  * Electron 能力矩阵（ADR-017 扩展，2026-08-21；2026-08-23 TCP 接线；2026-08-30 文件持久化）：
  * MVP 串口仍经 Web Serial API（Renderer navigator.serial，serialPorts:"enumerated" 下拉选择）；
  * Modbus TCP 已接线——会话承载在主进程（Node TCP Adapter + TcpSessionHost），
- * Renderer 经 HostMessage v1 远程代理（modbusTcp:true）；文件持久化已落地（ADR-036）——
+ * Renderer 经 HostMessage v2 远程代理（modbusTcp:true）；文件持久化已落地（ADR-036）——
  * 主进程应用数据目录版本化 JSON，Renderer 经 workspace-load/save/clear 薄桥（filesystem:"full"）。
  */
 export const electronCapabilities: PlatformCapabilities = Object.freeze({

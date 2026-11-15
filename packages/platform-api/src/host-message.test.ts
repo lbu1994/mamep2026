@@ -19,7 +19,7 @@ import { pluginStoreDataResponseSchema } from "./session-payloads";
 import { pluginContributionQueryResponseSchema } from "./session-payloads";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 
-describe("host-message protocol v1", () => {
+describe("host-message protocol v2", () => {
   it("accepts a valid get-capabilities request", () => {
     const result = parseHostMessage({
       protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
@@ -379,11 +379,30 @@ describe("host-message RTU session kinds（VSCode 接线，2026-08-23）", () =>
       kind: "poll-result",
       payload: {
         key: "row-a",
+        sheetId: "sheet-a",
         address: 1,
+        route: { unitAddress: 1, protocol: "rtu" },
+        requestGeneration: 7,
+        connectionGeneration: 2,
         result: { ok: true, value: 1234 },
       },
     });
     expect(result.ok).toBe(true);
+  });
+
+  it("rejects a poll-result without binding identity", () => {
+    const result = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "evt-poll-legacy",
+      kind: "poll-result",
+      payload: {
+        key: "row-a",
+        address: 1,
+        result: { ok: true, value: 1234 },
+      },
+    });
+    expect(result.ok).toBe(false);
   });
 
   it("accepts a valid app-message event", () => {

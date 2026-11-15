@@ -73,7 +73,7 @@ describe("installVscodeDevBridge（dev iframe → VscodeAppHost 桥）", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          protocolVersion: 1,
+          protocolVersion: 2,
           type: "response",
           messageId: envelope.messageId,
           kind: "get-capabilities",
@@ -166,7 +166,7 @@ describe("installVscodeDevThemeRelay（dev iframe 主题颜色中继，ADR-027�
 
     window.dispatchEvent(
       new MessageEvent("message", {
-        data: { protocolVersion: 1, type: "event", kind: "comm-log" },
+        data: { protocolVersion: 2, type: "event", kind: "comm-log" },
       }),
     );
     window.dispatchEvent(

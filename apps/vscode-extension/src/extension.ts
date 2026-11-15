@@ -5,7 +5,7 @@
  * - 生产模式：打包进扩展的本地静态资源（dist/media/，由 scripts/build-vscode.mjs 产出）
  *   经 webview.asWebviewUri() 加载（构建期 CSP meta：style-src 'unsafe-inline'）；
  * - dev 模式：MAMEP_DEV_URL 覆盖为 iframe 指向 Vite dev server（与浏览器/Electron 同页面）；
- * - 类型化 RPC：Webview ↔ Extension Host 复用 packages/platform-api HostMessage v1
+ * - 类型化 RPC：Webview ↔ Extension Host 复用 packages/platform-api HostMessage v2
  *   （Envelope + Zod 校验 + kind 白名单，handleVscodeInvoke 校验一切输入，不允许任意方法名调用）；
  * - 颜色主题：activeColorTheme 变化经 color-theme-changed 事件推送 Webview；
  * - 资源释放：onDidReceiveMessage / 主题订阅 / panel dispose 全部随 context.subscriptions 管理。
@@ -71,7 +71,7 @@ let eventSeq = 0;
  */
 const sessionStats = { requestFrames: 0, responseFrames: 0 };
 
-/** 构造 HostMessage v1 event Envelope（payload 形状由 kind 契约保证，边界一次收窄）。 */
+/** 构造 HostMessage v2 event Envelope（payload 形状由 kind 契约保证，边界一次收窄）。 */
 function hostEventMessage(
   kind: HostEventMessage["kind"],
   payload: unknown,
@@ -124,12 +124,16 @@ function createSessionHost(
       },
       onStateChange: (state) =>
         postEvent(hostEventMessage("connection-state", { state })),
-      onPollResult: (key, address, result) =>
+      onPollResult: (pollResult) =>
         postEvent(
           hostEventMessage("poll-result", {
-            key,
-            address,
-            result: toResultPayload(result),
+            key: pollResult.key,
+            sheetId: pollResult.sheetId,
+            address: pollResult.address,
+            route: pollResult.route,
+            requestGeneration: pollResult.requestGeneration,
+            connectionGeneration: pollResult.connectionGeneration,
+            result: toResultPayload(pollResult.result),
           }),
         ),
       onTraceSample: (sample) =>
@@ -319,7 +323,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // 仅扩展宿主进程内代码可调用命令（Webview 无法调用），暴露面板引用无安全风险；
     // 真正敏感的状态探针（debug:get-state RPC）仍由 isDev 门控。
     vscode.commands.registerCommand("mamep2026.debug:getPanel", () => panel),
-    // dev/e2e：经真实 HostMessage v1 RPC 路径（schema 校验 → ipc 分发 → 会话 → 串口）
+    // dev/e2e：经真实 HostMessage v2 RPC 路径（schema 校验 → ipc 分发 → 会话 → 串口）
     // 驱动 RTU 闭环（tests/e2e-vscode/run.test.ts）。生产构建禁用；返回 response/error Envelope。
     vscode.commands.registerCommand(
       "mamep2026.debug:rpc",
@@ -416,7 +420,7 @@ function setupPanel(p: vscode.WebviewPanel, deps: IpcDeps): void {
   ];
 }
 
-/** 推送 color-theme-changed 事件（HostMessage v1 event Envelope）。 */
+/** 推送 color-theme-changed 事件（HostMessage v2 event Envelope）。 */
 function postThemeEvent(p: vscode.WebviewPanel, theme: ColorThemeKind): void {
   const event: HostEventMessage = {
     protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,

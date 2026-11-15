@@ -3,10 +3,10 @@
  *
  * 组合 NodePlatformHost（串口枚举/打开，packages/platform-node）+ RtuSessionHost
  * （会话/调度/轮询/追踪编排，packages/application）。通信在 Extension Host 执行
- * （TECH_DESIGN §28.3），Renderer 经 HostMessage v1 RPC 访问本类。
+ * （TECH_DESIGN §28.3），Renderer 经 HostMessage v2 RPC 访问本类。
  *
  * 会话事件（通信日志/连接状态/轮询结果/追踪样本/应用消息）经 events 回调外抛，
- * 由装配方（extension.ts）转换为 HostMessage v1 event 推送 Webview。
+ * 由装配方（extension.ts）转换为 HostMessage v2 event 推送 Webview。
  * 本类为领域导向（输入输出为 domain/communication 对象），payload 转换由 ipc.ts 承担。
  */
 import {
@@ -36,7 +36,7 @@ import { ok } from "@mamep2026/domain";
 
 export interface VscodeSessionHostOptions {
   platform: NodePlatformHost;
-  /** 会话事件（由装配方转换为 HostMessage v1 event 推送 Webview）。 */
+  /** 会话事件（由装配方转换为 HostMessage v2 event 推送 Webview）。 */
   events: RtuSessionHostEvents;
   /** codec 注册表（ADR-043 E-6；ADR-055 起由宿主侧插件运行时提供）：插件/基础表 codec 会话经它解析。 */
   codecRegistry?: CodecRegistry;
@@ -202,6 +202,7 @@ export class VscodeSessionHost {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;

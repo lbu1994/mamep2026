@@ -23,6 +23,7 @@ import { createMamepError, defaultConfig, fail, ok } from "@mamep2026/domain";
 import type {
   BrowserCompatibility,
   PlatformCapabilities,
+  PollResultEvent,
   ReadVerifySettings,
   RegisterRow,
   RequestRoute,
@@ -44,7 +45,6 @@ import {
   toTcpConnectionProfilePayload,
   type AppMessagePayload,
   type CommLogEventPayload,
-  type HostResultPayload,
   type MamepHostApi,
   type MamepHostEvent,
   type OpenTextFileResponse,
@@ -52,6 +52,7 @@ import {
   type PluginRpcPayload,
   type PluginRuntimeLoadPayload,
   type PluginRuntimeUnloadPayload,
+  type PollResultEventPayload,
   type SaveTextFileResponse,
   type SerialDeviceHandle,
   type SerialPortOption,
@@ -143,7 +144,7 @@ export class ElectronAppHost implements AppHost {
     (message: ApplicationMessage) => void
   >();
   private readonly pollResultListeners = new Set<
-    (key: string, address: number, result: Result<number | number[]>) => void
+    (event: PollResultEvent) => void
   >();
   private readonly traceListeners = new Set<
     (sample: TraceSampleEvent) => void
@@ -180,9 +181,8 @@ export class ElectronAppHost implements AppHost {
     this.inner.subscribeMessage((message) => {
       for (const listener of this.messageListeners) listener(message);
     });
-    this.inner.subscribePollResult((key, address, result) => {
-      for (const listener of this.pollResultListeners)
-        listener(key, address, result);
+    this.inner.subscribePollResult((pollResult) => {
+      for (const listener of this.pollResultListeners) listener(pollResult);
     });
     this.inner.subscribeTraceSample((sample) => {
       for (const listener of this.traceListeners) listener(sample);
@@ -219,14 +219,17 @@ export class ElectronAppHost implements AppHost {
         break;
       }
       case "poll-result": {
-        const { key, address, result } = event.payload as {
-          key: string;
-          address: number;
-          result: HostResultPayload;
+        const payload = event.payload as PollResultEventPayload;
+        const pollResult: PollResultEvent = {
+          key: payload.key,
+          sheetId: payload.sheetId,
+          address: payload.address,
+          route: payload.route,
+          requestGeneration: payload.requestGeneration,
+          connectionGeneration: payload.connectionGeneration,
+          result: fromResultPayload(payload.result),
         };
-        const pollResult = fromResultPayload(result);
-        for (const listener of this.pollResultListeners)
-          listener(key, address, pollResult);
+        for (const listener of this.pollResultListeners) listener(pollResult);
         break;
       }
       case "trace-sample": {
@@ -607,6 +610,7 @@ export class ElectronAppHost implements AppHost {
         batchId,
         rows.map((r) => ({
           key: r.key,
+          sheetId: r.sheetId,
           address: r.address,
           ...(r.quantity !== undefined && r.quantity > 1
             ? { quantity: r.quantity }
@@ -634,6 +638,7 @@ export class ElectronAppHost implements AppHost {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;
@@ -668,13 +673,7 @@ export class ElectronAppHost implements AppHost {
     this.inner.stopPolling();
   }
 
-  subscribePollResult(
-    listener: (
-      key: string,
-      address: number,
-      result: Result<number | number[]>,
-    ) => void,
-  ): () => void {
+  subscribePollResult(listener: (event: PollResultEvent) => void): () => void {
     this.pollResultListeners.add(listener);
     return () => {
       this.pollResultListeners.delete(listener);

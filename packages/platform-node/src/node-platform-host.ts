@@ -121,7 +121,7 @@ export class NodePlatformHost implements PlatformHost {
 
   /**
    * 原型语义：枚举后返回列表中的第一个端口（无端口返回 null）。
-   * 正式接线由各端 UI picker（HostMessage v1 select-serial-port）承担。
+   * 正式接线由各端 UI picker（HostMessage v2 select-serial-port）承担。
    */
   async requestSerialPort(): Promise<Result<SerialDeviceHandle | null>> {
     const result = await this.enumerateSerialPorts();

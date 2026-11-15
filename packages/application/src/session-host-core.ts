@@ -9,7 +9,7 @@
  * 职责边界：
  * - 打开/关闭会话、单行读/写、全表读取、WP 轮询、TM 追踪；
  * - 设备拔出（interrupted）策略：停止轮询与追踪并上报消息（§16.2.5）；
- * - 所有事件经 events 回调外抛，由宿主分发到本地订阅者或经 HostMessage v1 推送；
+ * - 所有事件经 events 回调外抛，由宿主分发到本地订阅者或经 HostMessage v2 推送；
  * - 不感知串口库/协议细节：传输与会话由协议专用宿主打开/构建后注入。
  */
 import type {
@@ -34,6 +34,7 @@ import {
   ok,
   type AddressTransform,
   type AddressTransformConfig,
+  type PollResultEvent,
   type ReadVerifySettings,
   type RegisterRow,
   type RequestRoute,
@@ -46,11 +47,7 @@ import { RegisterTableService } from "@mamep2026/register-table";
 export interface SessionHostEvents {
   onLog(event: CommunicationLogEvent): void;
   onStateChange(state: ConnectionState): void;
-  onPollResult(
-    key: string,
-    address: number,
-    result: Result<number | number[]>,
-  ): void;
+  onPollResult(event: PollResultEvent): void;
   onTraceSample(sample: TraceSample): void;
   onMessage(message: ApplicationMessage): void;
 }
@@ -87,10 +84,15 @@ export class SessionHostCore {
   private portLabel: string | null = null;
   private pollingTargets: Array<{
     key: string;
+    sheetId: string;
     address: number;
     quantity?: number;
     route?: RequestRoute;
   }> = [];
+  /** 连接代次：断线/重连前的在途结果不得进入新连接。 */
+  private connectionGeneration = 0;
+  /** 批量读取请求代次：跨调用单调递增，供结果身份诊断与上层过滤。 */
+  private batchRequestGeneration = 0;
   /** 不兼容轮询提示去重：当前协议或跳过协议集合变化时才再次上报。 */
   private skippedProtocolNotice: string | null = null;
   /** 后台挂起标志（移动端生命周期）：挂起期间不启动轮询/追踪，回前台按原配置恢复。 */
@@ -140,6 +142,8 @@ export class SessionHostCore {
     session: CommunicationSession,
     portLabel: string | null,
   ): Promise<Result<void>> {
+    // 先推进连接代次：旧会话在途请求即使稍后返回，也不得进入新连接的事件流。
+    const connectionGeneration = ++this.connectionGeneration;
     // 停止旧连接的轮询与追踪。
     this.stopPolling();
     this.trace?.stopAll();
@@ -159,9 +163,10 @@ export class SessionHostCore {
     this.polling = new PollingCoordinator(session, this.clock, {
       getIntervalMs: () => this.getPollingIntervalMs(),
     });
-    this.polling.onResult((key, address, result) =>
-      this.events.onPollResult(key, address, result),
-    );
+    this.polling.onResult((event) => {
+      if (connectionGeneration !== this.connectionGeneration) return;
+      this.events.onPollResult({ ...event, connectionGeneration });
+    });
     this.trace = new TraceCoordinator(session, this.clock);
     this.trace.onSample((sample) => this.events.onTraceSample(sample));
 
@@ -186,6 +191,7 @@ export class SessionHostCore {
   }
 
   async disconnect(): Promise<Result<void>> {
+    this.connectionGeneration += 1;
     this.stopPolling();
     this.trace?.stopAll();
     const result = await this.session?.disconnect();
@@ -335,14 +341,17 @@ export class SessionHostCore {
       };
     }
     const coordinator = new BatchReadCoordinator(this.session, this.clock);
+    const connectionGeneration = this.connectionGeneration;
+    const requestGeneration = ++this.batchRequestGeneration;
     const handle = coordinator.readAll(
       rows,
-      (key, result) => {
-        // 与 BrowserAppHost 既有行为一致：批量读取结果经轮询结果通道上报（address 0）。
-        this.events.onPollResult(key, 0, result);
+      (event) => {
+        if (connectionGeneration !== this.connectionGeneration) return;
+        this.events.onPollResult({ ...event, connectionGeneration });
       },
       batchId,
       route,
+      requestGeneration,
     );
     if (batchId !== undefined) {
       // 远程路径（ADR-025）：登记活动批任务，promise 落定后注销，供 cancelBatch 关联取消。
@@ -363,6 +372,7 @@ export class SessionHostCore {
   updatePollingTargets(
     rows: Array<{
       key: string;
+      sheetId: string;
       address: number;
       quantity?: number;
       route?: RequestRoute;

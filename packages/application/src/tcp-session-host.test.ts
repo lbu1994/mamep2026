@@ -194,7 +194,9 @@ describe("TcpSessionHost 读/写", () => {
     const h = createHarness(0);
     await connect(h);
     // 开启轮询与追踪。
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x0001 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x0001 },
+    ]);
     h.host.startPolling();
     h.host.traceStart("row-a", 0x0001, 500);
     // 模拟连接中断。
@@ -267,7 +269,9 @@ describe("TcpSessionHost 自动重连（ReconnectCoordinator 集成）", () => {
   it("interrupted 后自动重连成功：状态序列 + 轮询恢复 + 无失败消息", async () => {
     const h = createReconnectHarness();
     const first = await connectReconnect(h);
-    h.host.updatePollingTargets([{ key: "row-a", address: 0x0001 }]);
+    h.host.updatePollingTargets([
+      { key: "row-a", sheetId: "sheet-a", address: 0x0001 },
+    ]);
     h.host.startPolling();
 
     // 对端断开 → interrupted → 自动进入 reconnect-waiting。

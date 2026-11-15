@@ -4,7 +4,7 @@
  * 原子保存流程（§19.4）：序列化 → 写临时文件 → 写入完成 → 尽可能同步刷新（fsync）→
  * 当前文件改为备份 → 临时文件原子替换为正式文件；单份 .bak 轮转（与浏览器
  * IndexedDBWorkspaceRepository 的单备份语义一致）。损坏时尝试从备份恢复（自愈写回）。
- * 路径与权限由主进程控制，Renderer 不直接触碰文件系统；跨边界经 HostMessage v1
+ * 路径与权限由主进程控制，Renderer 不直接触碰文件系统；跨边界经 HostMessage v2
  * workspace-load / workspace-save / workspace-clear（content 传序列化 JSON 字符串）。
  */
 import { createEmptyWorkspace, createMamepError } from "@mamep2026/domain";

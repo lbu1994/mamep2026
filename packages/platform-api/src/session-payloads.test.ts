@@ -1,5 +1,5 @@
 /**
- * RTU 会话 RPC 载荷往返测试（session-payloads，HostMessage v1）。
+ * RTU 会话 RPC 载荷往返测试（session-payloads，HostMessage v2）。
  * 覆盖：RtuConnectionProfile / RegisterRow / CommunicationLogEvent / ApplicationMessage
  * 的 toPayload → fromPayload 往返不丢失字段（含品牌化 ID、RegisterAddress/RawRegisterValue 类对象、bytes↔hex）。
  */
