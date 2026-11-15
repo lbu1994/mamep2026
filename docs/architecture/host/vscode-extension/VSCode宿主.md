@@ -40,6 +40,12 @@ Extension Host 使用：
 4. Webview 暂存端口标识并发送 `session-connect`；
 5. Extension Host 使用不可变 RTU profile 快照打开 Transport。
 
+`session-connect` 可携带可选 `protocol`。Extension Host 将协议 ID 和宿主
+`CodecRegistry` 一起传给 RTU 会话；基础表、插件 codec 与 Webview 的能力声明
+必须走同一注册表。未知协议返回 `CODEC_NOT_FOUND`，不能静默回退为 FC03。
+协议字段只需在非默认 RTU 路径出现，但 payload Schema、IPC 穷尽分发和 AppHost
+透传必须保持同一条链路。
+
 VSCode 不经过浏览器授权手势，也不调用 Electron 的 `select-serial-port` 授权 kind。TCP 连接使用 `session-tcp-connect` 和 TCP profile；主机、端口和初始 Unit ID 随工作区 profile 恢复，但恢复后仍保持离线。
 
 RTU Slave Address 与 TCP Unit ID 都按表保存。活动表切换时，Webview 按当前协议调用对应会话方法，后续读、写、轮询和 Trace 使用更新后的地址；连接 profile 中的值只作为连接初始值。

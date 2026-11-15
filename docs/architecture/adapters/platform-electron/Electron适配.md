@@ -38,11 +38,12 @@ Windows 下若目标文件已存在导致重命名失败，只允许在显式处
 - 主文件与备份坚持单份轮转，每次保存覆盖旧 `.bak`，无需额外定时清理；
 - `reset/clear` 删除主文件和备份；显式导出或导入通过仓储端口完成，不绕开校验。
 
-Electron 与 Renderer 使用三个专用请求 kind：
+Electron 与 Renderer 使用专用工作区请求 kind：
 
-- `workspace-load`：返回序列化工作区和可选恢复元数据；
+- `workspace-load`：返回序列化工作区和可选 `recoveryInfo`；
 - `workspace-save`：接收完整序列化内容，主进程先校验再原子落盘；
-- `workspace-clear`：删除主文件与备份。
+- `workspace-clear`：删除主文件与备份；
+- `workspace-create-backup`：把当前主文件轮转为最近一份有效备份。
 
 输入经过 HostMessage 白名单和 Zod 校验。持久化错误使用 `persistence` category、稳定的
 `PERSISTENCE_LOAD_FAILED` / `PERSISTENCE_WRITE_FAILED` / `PERSISTENCE_CLEAR_FAILED` 代码，
