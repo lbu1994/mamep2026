@@ -1,6 +1,6 @@
 # Android 传输适配
 
-## 1. Capacitor 传输适配（Android，ADR-050）
+## 1. Capacitor 传输适配（Android）
 
 Android 端不使用 Node 串口/TCP 库，而是经 Capacitor 原生插件提供字节流。
 

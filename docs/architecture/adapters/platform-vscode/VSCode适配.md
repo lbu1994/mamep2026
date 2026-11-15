@@ -21,7 +21,7 @@ workspaceState/globalState 保存：
 - 备注；
 - 非敏感配置。
 
-是否默认创建工作区文件由后续产品决策决定。技术上需要支持两种 Repository 实现。
+Repository 实现必须同时支持 VSCode Storage 与工作区文件两种后端。
 
 
 ## 2. VSCode Webview RPC

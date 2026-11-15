@@ -31,9 +31,9 @@ Electron TCP 会话在 Main，VSCode TCP 会话在 Extension Host；两端共用
 但各自负责进程生命周期、消息桥、原生依赖安装和打包。
 
 
-## 2. Modbus TCP 原型
+## 2. Modbus TCP 接入要求
 
-验证：
+必须覆盖：
 
 - Electron 和 VSCode 中建立 TCP 连接；
 - 主机名和 IP 地址解析；
@@ -47,9 +47,9 @@ Electron TCP 会话在 Main，VSCode TCP 会话在 Extension Host；两端共用
 - 自动重连期间主动取消；
 - Electron 和 VSCode 是否能够复用同一 Node TCP Adapter。
 
-## 3. 验证结论与错误边界
+## 3. 错误边界与平台限制
 
-已验证：
+当前覆盖：
 
 - 注入式 Fake Socket 覆盖打开、关闭、读写、未打开写入、重复打开、连接拒绝、被动关闭、事件退订和监听器压力；
 - Node `net` 本地回环覆盖真实字节收发、`0x00/0xFF`、分片重组、服务端断开和关闭重连；
@@ -66,7 +66,7 @@ Electron TCP 会话在 Main，VSCode TCP 会话在 Extension Host；两端共用
 
 TCP 连接失败可重试；端口占用属于权限/资源冲突，不应无限重试。自动重连、超时和请求重试由 Application 层策略决定，Adapter 只报告连接状态和结构化错误。
 
-仍需目标环境验证：
+目标环境限制：
 
 - 真实设备、IPv6 网络和大报文；
 - 长时间轮询与内存稳定性；

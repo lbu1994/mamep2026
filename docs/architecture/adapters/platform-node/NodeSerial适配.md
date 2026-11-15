@@ -2,14 +2,13 @@
 
 ## 1. Node Serial Adapter
 
-> 实现状态（2026-08-23，ADR-020）：Node 串口原型已通过并产出选型 ADR——`packages/platform-node`
-> 落地 `NodeSerialTransport` + `NodePlatformHost` + 错误映射 + 能力描述 + 注入式 `SerialPortLike` 隔离面
+> 实现边界：`packages/platform-node` 提供 `NodeSerialTransport`、`NodePlatformHost`、
+> 错误映射、能力描述和注入式 `SerialPortLike` 隔离面。
 >
-> - Fake 测试与 com0com COM4↔COM5 虚拟串口闭环全绿，详见本文 §4；
-> - VSCode 已使用 Node Serial Adapter；
-> - Electron 当前仍使用 Web Serial API，后续版本再替换为本适配器（ADR-017）。
+> - VSCode 使用 Node Serial Adapter；
+> - Electron RTU 使用 Renderer Web Serial Adapter。
 
-Electron（后续版本替换 Web Serial）和 VSCode 共用 Node Serial Adapter。
+`packages/platform-node` 的 Node Serial Adapter 供 VSCode 使用；Electron RTU 使用 Web Serial Adapter。
 
 ## 2. 选型与封装边界
 
@@ -54,16 +53,9 @@ COM10 以上不得通过手工拼接不完整路径实现。应直接使用成�
 Windows、macOS 和 Linux 下均把端口路径视为不透明字符串，不在领域层解析其命名格式。
 
 
-## 3. Node 串口原型
+## 3. Node Serial 接入与验证
 
-> 适用范围（ADR-017）：本原型服务于后续版本 Node 串口库替换阶段（Electron 替换 Web Serial、VSCode 自始使用），进入该阶段前完成。Electron MVP 串口走 Web Serial（§34.2 原型已覆盖浏览器路径，Electron 复用）。
-
-> 实现状态（2026-08-23，ADR-020）：本原型已完成并入选型 ADR-020（serialport@13）。
-> Layer 1 Fake 57 用例、Layer 2 com0com COM4/COM5 7 用例
-> 全绿；Electron/VSCode 独立探针就绪（`pnpm prototype:electron`、`pnpm probe:vscode:serial`）；
-> macOS/Linux 平台、真实设备、打包后原生模块加载等为接线验证项，见 ADR-020 后续复审条件。
-
-目标：验证 Electron 主进程与 VSCode Extension Host 通过统一 Node Serial Adapter 实现 Modbus RTU 通信的可行性，重点确认跨平台串口枚举、原生模块兼容、资源释放及异常处理能力。
+Node Serial Adapter 通过统一 `TransportPort` 为宿主提供 Modbus RTU 字节传输，重点保证跨平台串口枚举、原生模块兼容、资源释放及异常处理能力。
 
 ### 3.1 串口库验证
 
@@ -372,9 +364,9 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 
 每次连接创建新的 connectionId。旧连接产生的迟到事件不得影响新连接。
 
-### 3.13 Electron 原型
+### 3.13 Electron 接入边界
 
-在 Electron 中验证：
+Electron 使用 Node Serial Adapter 时必须满足：
 
 - 串口逻辑只运行于 Main Process 或受控后台进程；
 - Renderer 不直接导入串口库；
@@ -391,7 +383,7 @@ Node Serial Adapter 只负责传递字节数据，不负责：
 - macOS 签名或权限设置不会阻止串口使用；
 - Linux 打包后能够访问系统串口。
 
-Electron 原型还应验证：
+Electron 宿主还必须满足：
 
 - nodeIntegration 关闭；
 - contextIsolation 开启；
@@ -399,9 +391,9 @@ Electron 原型还应验证：
 - Renderer 无法传入任意模块名或任意系统命令；
 - 串口错误经过 Main Process 映射后再发送到 UI。
 
-### 3.14 VSCode 原型
+### 3.14 VSCode 接入要求
 
-在 VSCode Extension Host 中验证：
+VSCode Extension Host 必须满足：
 
 - 扩展能够成功加载串口原生模块；
 - 端口枚举可以执行；
@@ -447,7 +439,7 @@ Electron 原型还应验证：
 
 ### 3.16 串口错误映射
 
-原型需要建立底层错误到统一错误模型的映射，至少覆盖：
+底层错误必须映射到统一错误模型，至少覆盖：
 
 - 端口不存在；
 - 端口已占用；
@@ -508,7 +500,7 @@ Node Serial Adapter 应提供串口能力描述，包括：
 
 ### 3.19 测试方式
 
-Node 串口原型采用三层测试。
+Node Serial Adapter 采用三层测试。
 
 #### 第一层：Fake Adapter 测试
 
@@ -556,14 +548,13 @@ Node 串口原型采用三层测试。
 - 长时间轮询；
 - Electron 和 VSCode。
 
-### 3.20 原型输出物
+### 3.20 实现输出物
 
-原型完成后应产出：
+Node Serial Adapter 应产出：
 
-- 串口库选型 ADR；
 - Node Serial Adapter 接口；
-- Electron 串口最小原型；
-- VSCode 串口最小原型；
+- Electron 串口接入包；
+- VSCode 串口接入包；
 - 各平台支持参数矩阵；
 - 原生模块构建矩阵；
 - 串口错误映射表；
@@ -572,11 +563,11 @@ Node 串口原型采用三层测试。
 - 已知限制清单；
 - 是否可以进入正式实现的结论。
 
-原型代码如果不满足正式架构边界，不应直接复制进入生产代码。
+未满足上述架构边界的实现不得进入生产代码。
 
 ### 3.21 通过标准
 
-Node 串口原型满足以下条件后，才可进入正式实现：
+Node Serial Adapter 必须满足：
 
 1. Electron 和 VSCode 均能枚举、打开、读写和关闭串口；
 2. macOS 和 Linux 的目标端口路径能够正常处理；
@@ -593,12 +584,11 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 13. Node Serial Adapter 不包含 Modbus 业务逻辑；
 14. Electron 和 VSCode 能够复用相同的端口抽象和主要测试；
 15. 真实 Modbus RTU 设备可以完成 03 读取和 0x10 写入；
-16. 长时间轮询不存在阻断性稳定问题；
-17. 原型结论和已知限制已记录到 ADR 或技术文档。
+16. 长时间轮询不存在阻断性稳定问题。
 
-## 4. 验证状态与平台限制
+## 4. 平台限制与验证边界
 
-已验证：
+当前覆盖：
 
 - Layer 1 注入式 Fake Serial Port：57 用例；
 - Layer 2 Windows com0com COM4↔COM5：7 用例，覆盖真实枚举、9600/8N1、FC03/FC10、端口占用、关闭重连和原始字节双向透传；
@@ -607,7 +597,7 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 - 端口占用、权限不足、设备拔出、参数不支持等错误可映射为结构化错误；
 - 100 轮连接、收发、关闭、重开无监听器累积；
 - VSCode Extension Host 已通过真实宿主接线；
-- Electron 独立探针能够验证宿主侧加载，生产 Electron 串口仍走 Renderer Web Serial。
+- Electron 串口走 Renderer Web Serial。
 
 主要错误映射：
 
@@ -628,7 +618,7 @@ Node 串口原型满足以下条件后，才可进入正式实现：
 - 校验：none/even/odd；
 - 流控：OFF、RTS/CTS、XON/XOFF 的类型面已实现。
 
-仍需目标环境验证：
+目标环境限制：
 
 - macOS/Linux 的实际端口枚举和真实设备；
 - 真实 USB 转串口设备的插拔、占用和长时间稳定性；
