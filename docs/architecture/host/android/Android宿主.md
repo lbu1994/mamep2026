@@ -87,6 +87,18 @@ Android 新建或回填连接 profile 时使用该平台的 300 ms 请求超时�
 - 设备安装辅助应优先使用非流式安装，兼容 OEM 对流式安装的静默拒绝；
 - Android 真机 e2e 使用独立命令，不并入无设备环境可运行的全量套件。
 
+生产 Capacitor WebView 从 `https://localhost` 加载 `--mode android` 产物，必须
+验证动态 import 的相对 chunk 路径、React 挂载和懒覆盖层按需加载。启动即打开的
+Connection Settings 必须保持首屏路径；Help、Settings、Trace Window 和工作区导入
+等覆盖层在首次打开时才加载。工作区导入在文件通道尚未实现时必须给出能力提示且
+不加载不可达 chunk。Android 的 chunk 体积验证使用实际字节读取，不能依赖可能返回
+0 的 Resource Timing body size。
+
+无线调试通过 `MAMEP_ANDROID_ADB_TARGET` 连接，并在建链后固定
+`ANDROID_SERIAL`。设备可能同时暴露 IP 连接和 mDNS 别名两个 transport；配对端口
+与连接端口也不同。需要前台焦点断言的用例应先唤醒屏幕并关闭锁屏，使用系统窗口
+焦点而不是 CDP 下的 `document.visibilityState` 判断前后台。
+
 桥接延迟只占默认请求超时的很小部分，因此帧解析仍保留在共享 JS 层；若未来实测不足，仍只能替换 Transport 适配，不得改变上层协议和会话契约。
 
 ---
