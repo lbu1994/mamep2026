@@ -1,7 +1,7 @@
 # Mamep2026 开发环境与测试指南
 
 > 本文件收录常用命令、环境排障与测试基础设施说明。
-> 开发流程、强制约束与代理完成标准以根 `AGENTS.md` 和 `docs/AGENTS.md` 为准。
+> 开发流程、强制约束与代理完成标准以根 `AGENTS.md` 为准。
 
 ## 常用命令
 
@@ -19,7 +19,7 @@
 - `pnpm lint` — ESLint（全仓）
 - `pnpm typecheck` — turbo 全包类型检查（各包 `tsc --noEmit`）
 - `pnpm test` — turbo 全包 vitest（各包单测）
-- `pnpm test:all` — 一条命令跑完全量测试，顺序固定：三端真实端口 e2e（浏览器 `web:real` 最先，其次 `electron:real`、`vscode:real`）→ `pnpm test`（单测）→ `test:acceptance` → 三端 mock e2e（`e2e:web` / `e2e:electron` / `e2e:vscode`）→ `test:serial:virtual` → `pnpm lint` → `pnpm typecheck`（**不含 `test:e2e:android`**：需真机硬件，另行手动执行）。real 环节缺环境 SKIP 不失败（`e2e-real.mjs` 退出码 0）；fail-fast（任一环节失败即中断并返回非 0）；浏览器 real 首次需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）。**运行本命令前不得先运行任何其他指令（如启动服务器、启动从站等）**——前置环境由 `e2e-real.mjs` 统一编排（预检/启停从站/设置 `MAMEP_REAL`）；环境已有手动启动的进程时须先清理（详见 docs/AGENTS.md §27）
+- `pnpm test:all` — 一条命令跑完全量测试，顺序固定：三端真实端口 e2e（浏览器 `web:real` 最先，其次 `electron:real`、`vscode:real`）→ `pnpm test`（单测）→ `test:acceptance` → 三端 mock e2e（`e2e:web` / `e2e:electron` / `e2e:vscode`）→ `test:serial:virtual` → `pnpm lint` → `pnpm typecheck`（**不含 `test:e2e:android`**：需真机硬件，另行手动执行）。real 环节缺环境 SKIP 不失败（`e2e-real.mjs` 退出码 0）；fail-fast（任一环节失败即中断并返回非 0）；浏览器 real 首次需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）。**运行本命令前不得先运行任何其他指令（如启动服务器、启动从站等）**——前置环境由 `e2e-real.mjs` 统一编排（预检/启停从站/设置 `MAMEP_REAL`）；环境已有手动启动的进程时须先清理（按根 `AGENTS.md` 的测试与验证要求）。
 - `pnpm test:acceptance` / `pnpm test:e2e:web` / `pnpm test:e2e:electron` / `pnpm test:e2e:vscode` 单独跑对应测试包（e2e:electron 自动先 `build:electron`；e2e:vscode 自动先 `build:vscode`）
 - `pnpm test:e2e:real` / `pnpm test:e2e:web:real` / `pnpm test:e2e:electron:real` / `pnpm test:e2e:vscode:real` — 三端「真实端口」e2e（com0com COM4↔COM5 + 真实 RTU/TCP 从站）：`scripts/e2e-real.mjs` 统一编排（预检 → 启停从站 → 设 `MAMEP_REAL=1` → 跑对应端 `test:real`）；缺环境 SKIP 不失败；浏览器端启动时需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）。VSCode real 需先 `pnpm build:vscode`（runner 已处理）
 - `pnpm format` / `pnpm format:check` — Prettier
@@ -60,7 +60,7 @@
 
 ## 测试约定与测试基础设施
 
-- **测试执行时机由用户决定**：不要求每次变更后都跑测试（尤其耗时较长的 e2e / acceptance）；用户未要求时 AI 不得擅自长时间跑测试，也不得谎报已执行。用户要求测试先行时遵循 TDD / ATDD；要求执行某类测试时按 [docs/AGENTS.md](AGENTS.md) §27 的覆盖要求准备用例。
+- **测试执行时机由用户决定**：不要求每次变更后都跑测试（尤其耗时较长的 e2e / acceptance）；用户未要求时 AI 不得擅自长时间跑测试，也不得谎报已执行。用户要求测试先行时遵循 TDD / ATDD；要求执行某类测试时按 [AGENTS.md](../AGENTS.md) 的测试与验证要求准备用例。
 - Android 真机 e2e 为独立命令 `pnpm test:e2e:android`（需真机 + USB 调试 + 解锁屏幕；无设备即失败不静默跳过），**不进 `pnpm test:all`**（依赖硬件，由用户决定执行时机）。`pnpm build:android` 需 JDK ≤24（脚本自动探测）。
 - 包内单测用 vitest（每包 `pnpm test`）；调度测试用 Virtual Clock + FakeTransport（packages/test-kit）。
 - Electron 侧单测：`apps/electron`（IPC 校验/分发 + Preload 白名单桥 + Web Serial 权限模块 `serial-permissions.ts`）、`apps/web`（ElectronAppHost 复用浏览器路径：能力翻转、选口/取消、FC03/FC10 闭环、工作区委托）；E2E 在 `tests/e2e-electron/`（Playwright + Electron，`pnpm test:e2e:electron` 自动先 `build:electron` 再启动生产构建窗口断言：preload 白名单桥、能力矩阵、debug 探针、剪贴板、Renderer 安全边界、串口授权 + RTU 读写闭环（fake `navigator.serial` 注入）、无 console 错误、关窗退出）。

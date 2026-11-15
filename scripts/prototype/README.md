@@ -1,6 +1,6 @@
-# Node 串口原型 — Electron / VSCode 探针（TECH_DESIGN §34.3.14 / §34.3.15）
+# Node Serial ABI 探针（Electron / VSCode）
 
-独立探针：**不动生产代码**，能力矩阵不翻转（翻转计划记录于 ADR-020 的后续复审条件）。
+独立探针用于验证宿主侧原生串口绑定，**不修改生产代码**，也不改变能力矩阵。
 前置：com0com 虚拟串口对 **COM4↔COM5** 已配置（只读写、禁止配置/提权）；`pnpm install` 已执行。
 
 ## Electron 探针（Electron Main 进程）
@@ -32,7 +32,7 @@ Error: The module '...\bindings.node' was compiled against a different Node.js v
    # 验证完 Node 侧测试前，务必重建回 Node ABI：
    npx electron-rebuild -f -w serialport --version 0   # 或重装：pnpm rebuild serialport
    ```
-2. 若不改造本机串口测试环境，把「Electron 内原生模块 ABI 加载」作为接线阶段的验证项（见 ADR-020）。
+2. 若不改造本机串口测试环境，应在独立环境中验证「Electron 内原生模块 ABI 加载」。
 
 > ⚠️ 重建会改变 `node_modules` 中绑定文件的 ABI。重建为 Electron 后，`pnpm test:serial:virtual`
 > 与 `packages/platform-node` 的 Node 侧测试会因 ABI 不匹配失败——**验证完必须重建回 Node ABI**。
@@ -53,8 +53,7 @@ pnpm probe:vscode:serial
 > VSCode 探针将 serialport 声明在 `tests/e2e-vscode` 的 devDependencies（仅测试用），
 > 不改变 `apps/vscode-extension` 生产依赖。
 
-## 打包后原生模块加载（§34.3.1 / §34.3.14 / §34.3.15）
+## 打包后原生模块加载
 
 当前 `scripts/package-electron.mjs` 组装 staging 时排除全部 node_modules，打包产物不含原生模块。
-「打包后原生模块可加载」验证需改组装脚本（把 serialport 及其原生绑定拷入 staging），
-属接线/打包阶段事项，记录于 ADR-020 后续复审条件，本原型不实施。
+需要验证「打包后原生模块可加载」时，必须把 serialport 及其原生绑定加入 staging，并按目标宿主 ABI 构建和验证。

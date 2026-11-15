@@ -50,7 +50,7 @@ pnpm dist:vscode    # 打包 VSIX
 
 ## 已知限制
 
-- `readAllRows`（全表读取）的取消已落地（2026-08-25，ADR-025）：远程批任务经 `session-batch-cancel` 取消宿主侧批任务，UI 提供取消入口；`BatchReadHandle` 接口契约一致，取消语义与本地路径一致
+- `readAllRows`（全表读取）支持取消：远程批任务经 `session-batch-cancel` 取消宿主侧任务，UI 提供取消入口；`BatchReadHandle` 契约与本地路径一致
 - TCP 会话内 Unit ID 不支持动态修改（工具栏从站地址对 TCP 无效，宿主已守卫）
 - 扩展当前仅打包不发布（VSIX 由 `pnpm dist:vscode` 本地生成）
 

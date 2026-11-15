@@ -1,8 +1,8 @@
-# 连接对象配置文件（测试/验证基建，ADR-023 / ADR-034）
+# 连接对象配置文件（测试/验证基建）
 
-`config/connections.json` 定义 **Mamep2026 测试/验证脚本连接真实设备**（真实 COM 口 / 真实 Modbus TCP 端口）所需的连接对象，供真实端口 e2e（ADR-024）与探针脚本消费，消除代码中散落的硬编码（COM4/COM5/127.0.0.1:1502 等）。
+`config/connections.json` 定义 **Mamep2026 测试/验证脚本连接真实设备**（真实 COM 口 / 真实 Modbus TCP 端口）所需的连接对象，供真实端口 e2e 与探针脚本消费，避免在代码中散落连接参数。
 
-> **应用侧说明（2026-08-29，ADR-034）**：应用 UI 的「Load from Config File」已整体移除，本文件**仅供测试/验证脚本消费**；应用内连接对象的导入由 **Settings → 工作区导入**（ADR-033）承担（工作区 JSON 含 `connectionProfiles`，导入后 Connection Settings 以 `connectionProfiles[0]` 预填表单）。
+> **应用侧说明**：本文件**仅供测试/验证脚本消费**；应用内连接对象通过 **Settings → 工作区导入**进入工作区（工作区 JSON 含 `connectionProfiles`，导入后 Connection Settings 以 `connectionProfiles[0]` 预填表单）。
 
 ## 格式
 
@@ -39,27 +39,23 @@
       "connectTimeoutMs": 5000, // 连接超时，默认 5000
       "requestTimeoutMs": 50, // 单次请求响应超时，默认 50
       "retryCount": 1, // 重试次数 0~10，默认 1
-      "autoReconnect": false, // 自动重连（P1，UI 灰显），默认 false
+      "autoReconnect": false, // 自动重连配置，默认 false；当前 UI 不开放修改
     },
   ],
 }
 ```
 
 - 省略的字段按默认值回填（见上表）；字段语义与 `packages/domain` 的 `RtuConnectionProfile`/`TcpConnectionProfile` 对齐（脚本侧 raw JSON 解析，不引入 Zod）。
-- `slaveAddress` 是该连接对象的默认从站地址；`port` 是配置文件特有字段（区别于 `connectionProfiles` 持久化——持久化不含串口名，ADR-017 边界不变）。
+- `slaveAddress` 是该连接对象的默认从站地址；`port` 是配置文件特有字段；`connectionProfiles` 持久化不包含串口名。
 
 ## 消费方（仅测试/验证脚本）
 
 1. **`scripts/e2e-real.mjs`**：经 `scripts/lib/connection-config.mjs` 的 `findConnection()` 读取
    `rtu-com4-master` / `tcp-local-slave` 主站连接参数与 TCP 端口（预检与门控）。
-2. **`scripts/prototype/electron-serial-probe.mjs`**：主站连接参数（COM4/9600/8N1），不再硬编码。
-3. **三端真实端口 e2e（ADR-024）**：各端 `tests/e2e-*/tests-real|real` spec 直接 `readFileSync`
+2. **`scripts/prototype/electron-serial-probe.mjs`**：主站连接参数（COM4/9600/8N1）。
+3. **三端真实端口 e2e**：各端 `tests/e2e-*/tests-real|real` spec 直接 `readFileSync`
    读取本文件（`rtu-com4-master` / `tcp-local-slave`，测试参数不硬编码）；`modbus-tcp-slave.mjs`
-   默认 host/port/unitId 也取自本文件的 `tcp-local-slave`（从站端口 COM5 属从站自身配置，ADR-023 决策 7）。
-
-> 应用侧（2026-08-29，ADR-034）：Connection Settings 的「Load from Config File」及 `connection-config-load`
-> kind / 三端 `config-loader.ts` / 浏览器 `?connectionConfig=` URL 已整体移除；应用内连接对象的导入由
-> Settings → 工作区导入（ADR-033）承担。
+   默认 host/port/unitId 也取自本文件的 `tcp-local-slave`；从站端口 COM5 属于从站自身配置。
 
 ## MOCK/FAKE 边界（明确）
 
@@ -74,4 +70,4 @@
 1. com0com 配置 COM4↔COM5 虚拟串口对（只读写、禁止配置/提权）。
 2. 启动从站：`node scripts/modbus-slave/modbus-rtu-slave.mjs`（默认挂 COM5，9600/8N1/从站地址 1，行为与 MockTransport 一致）。
 3. TCP：`node scripts/modbus-slave/modbus-tcp-slave.mjs`（默认 127.0.0.1:1502，host/port/unitId 取自本文件 `tcp-local-slave`）。
-4. 自动化：`pnpm test:e2e:real`（及三端 `test:e2e:*:real`）经 `scripts/e2e-real.mjs` 预检并自动拉起上述从站后跑三端真实端口 e2e（ADR-024）。
+4. 自动化：`pnpm test:e2e:real`（及三端 `test:e2e:*:real`）经 `scripts/e2e-real.mjs` 预检并自动拉起上述从站后跑三端真实端口 e2e。

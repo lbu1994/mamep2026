@@ -7,7 +7,7 @@
 - 插件 ID：`example-theme`
 - 贡献点：`theme`（唯一）
 - 性质：纯清单、**无 runtime**、`source:"installed"`
-- 安装方式：**不随包一次性安装**，需在 Plugin Manager 手动安装（见下文）
+- 安装方式：**手动安装**（Settings → Plugins → Install Plugin）
 
 ---
 
@@ -17,7 +17,7 @@
 
 - 若你只是想**给使用本软件的人一个主题色插件**：直接把 `manifest.json` 交给对方，让对方在 **Settings → Plugins** 里安装即可。
 - 若你想**在这个仓库里维护/验证该插件**（参与 `pnpm test` / `pnpm typecheck` / `pnpm lint`）：才需要 `src/`、`package.json`、`tsconfig.json`。
-- 若你想**从零理解插件体系**（不依赖本仓库细节、纯概念）：看 [docs/插件开发入门指南.md](../../docs/插件开发入门指南.md)。
+- 若你想**从零理解插件体系**（不依赖本仓库细节、纯概念）：看 [插件开发入门指南](../插件开发入门指南.md)。
 
 ## 文件用途一览
 
@@ -34,7 +34,7 @@
 ## 纯数据 vs 可执行插件
 
 - **纯数据插件（本例子，主题色）**：整个插件 = 一份 `manifest.json`（或带类型的 TS 导出）。无 `entry`、无 runtime、不执行任何代码。
-- **可执行插件**（如 `yaskawa-memobus-67h-010dh-010eh`、`custom-function-code`、`address-adjust`）：除 manifest 外还有可在隔离线程执行的 `entry`（Web Worker / `worker_threads`）；安装时选**同进程执行**（用户显式授权）才能贡献 `codec`/`dataType`/`addressTransform` 等同步纯函数，隔离线程则不可贡献这些同步面（ADR-044 / ADR-054）。本插件**不需要**任何这些。
+- **可执行插件**（如 `yaskawa-memobus-67h-010dh-010eh`、`custom-function-code`、`address-adjust`）：除 manifest 外还有可在隔离线程执行的 `entry`（Web Worker / `worker_threads`）；安装时选**同进程执行**（用户显式授权）才能贡献 `codec`/`dataType`/`addressTransform` 等同步纯函数，隔离线程不能提供这些同步能力。本插件**不需要**任何这些。
 
 ## 最小可交付清单
 
@@ -52,16 +52,16 @@
 
 ### 范围边界（哪些事本插件**不做**）
 
-- **不自动应用**：插件只把颜色注册为**可选预设**，用户不主动选就不会生效（ADR-047）。
-- **不做任意取色**：只提供预设色，不提供取色器（已从核心移除，ADR-047）。
+- **不自动应用**：插件只把颜色注册为**可选预设**，用户不主动选就不会生效。
+- **不做任意取色**：只提供预设色，不提供取色器。
 - **不提供运行时 / 不执行脚本**：本示例无 `runtime`、无 `entry`，仅声明式贡献。
-- **不做对比度校验**：插件色按注册值直接应用，无运行时 AA 白字守卫（D6 移除）。
-- **不做颜色残留缓存**：插件被禁用/卸载后，已持久化选中的该色回退默认蓝（ADR-047 已知限制）。
+- **不做对比度校验**：插件色按注册值直接应用，不提供运行时 AA 白字守卫。
+- **不做颜色残留缓存**：插件被禁用/卸载后，已持久化选中的该色回退默认蓝。
 - **不修改核心 / 不使用 `any`**：只经 `theme` 贡献点提交声明式数据。
 
 ### 支持的多语言
 
-主题色显示名由**插件自带** `title` 字段提供（方案 A，2026-09-03）：
+主题色显示名由**插件自带** `title` 字段提供：
 `title["en-US"]` 必填；`title["zh-CN"]` 可选。缺失的语言由消费方**回退英文**
 （`title["en-US"]`），再回退应用 i18n 的 `titleKey`。
 
@@ -118,7 +118,7 @@ export const exampleThemeManifest: PluginManifest = {
         {
           id: "indigo",
           titleKey: "plugins.exampleThemeColor", // 作为回退标识（应用 i18n）
-          title: { "en-US": "Indigo", "zh-CN": "靛蓝" }, // 插件自带翻译（方案 A）
+          title: { "en-US": "Indigo", "zh-CN": "靛蓝" }, // 插件自带翻译
           colorPrimary: "#4f46e5", // 仅需单一明亮主色；暗色/链接色由 antd 算法派生
         },
       ],
@@ -127,7 +127,7 @@ export const exampleThemeManifest: PluginManifest = {
 };
 ```
 
-> 提醒：`platform.web` 必须为 `true`（Plugin Manager 安装时会做平台预检）；`permissions`
+> 提醒：`platform.web` 必须为 `true`（Settings → Plugins 安装时会做平台预检）；`permissions`
 > 需含 `"theme"`。
 
 ### 步骤 3：导出注册函数（供测试/示例）
@@ -150,7 +150,7 @@ export function registerExampleThemePlugin(registry: PluginRegistry) {
 ### 步骤 6：手动安装（本示例不随包，需手动装）
 
 1. 启动 `pnpm dev`，打开网页端。
-2. 打开 **Plugin Manager**。
+2. 打开 **Settings → Plugins**。
 3. 点击 **Install Plugin** → 选择本包 `manifest.json`。
 4. 在安全确认弹窗中确认（来源/版本/权限/平台）。
 5. 打开 **Settings → 主题色**，下拉框中出现「Indigo / 靛蓝」选项。
@@ -188,7 +188,7 @@ theme: {
 ### 本体侧装配链（消费方）
 
 ```
-base = themeConfig ?? buildTheme(dark)   // themeConfig：VSCode 完整主题（ADR-027）
+base = themeConfig ?? buildTheme(dark)   // themeConfig：VSCode 完整主题
 用户所选预设（workspace.preferences.themePrimary，持久化）
   → mergeThemeConfig(base, { token: { colorPrimary, colorLink: colorPrimary } })
   → 暗色下 CSS 变量（--mamep-brand-primary / --mamep-focus-ring）取 deriveAppliedPrimary(seed, dark)
@@ -199,7 +199,7 @@ base = themeConfig ?? buildTheme(dark)   // themeConfig：VSCode 完整主题（
 - 预设 ID 格式：`` `${pluginId}:${colorId}` ``（本例 `example-theme:indigo`）。
 - `workspace.preferences.themePrimary`：`null` = 内置默认蓝；插件色 = 完整预设 ID。
 
-### 显示名解析顺序（方案 A）
+### 显示名解析顺序
 
 `title[当前语言] → title["en-US"] → t(titleKey) → titleKey`
 

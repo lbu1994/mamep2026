@@ -1,21 +1,20 @@
 # Mamep2026 Android 客户端（Capacitor 容器）
 
-第四平台的容器工程（ADR-050）：**同一份共享 UI** 跑在 Android WebView 里，平台差异只体现在
+Android 客户端使用 Capacitor 容器承载**同一份共享 UI**；平台差异只体现在
 `packages/platform-android`（TS 适配层）与 `android/app/src/main/java/.../MamepTransportPlugin.kt`（原生通信插件）。
 
 - 页面来源：`apps/web` 的 `--mode android` 产物（`apps/web/dist-android/`，Capacitor `webDir` 指向它）
 - 应用标识：`appId = com.mamep2026.app`、`appName = Mamep2026`
 - 页面 URL：`https://localhost/`（Capacitor `androidScheme: "https"` → 安全上下文）
-- **版本号**：`versionName` / `versionCode` 由 `android/app/build.gradle` 从**仓库根 `package.json`** 读取
-  （ADR-050 决策 7；`versionCode = major*10000 + minor*100 + patch`，如 `0.4.2` → `402`），
-  不再使用 Capacitor 模板的占位值 `1.0`。改版本只需改根 `package.json`。
+- **版本号**：`versionName` / `versionCode` 由 `android/app/build.gradle` 从**仓库根 `package.json`** 读取；
+  `versionCode = major*10000 + minor*100 + patch`，如 `0.4.2` → `402`。改版本只需改根 `package.json`。
 - **启动图标**：由 `scripts/generate-icons.mjs` 从 `build/AppIcon.svg` 生成（全白底 + 黑色线条；
   legacy 白底方形/圆形 + 自适应图标透明底前景，背景色 `res/values/ic_launcher_background.xml` = `#FFFFFF`）。
   `pnpm build:android` 会自动同步生成，**不要手改 mipmap PNG**（改图形请改源 SVG）。
-- Phase 1 能力：**Modbus TCP**（原生 socket）；Phase 2 能力：**USB-RS485 串口**（USB Host + `usb-serial-for-android`）；
-  Phase 3：**移动布局与生命周期**（抽屉布局 / 工具栏「更多」面板 / 硬件返回键 / 前后台挂起 / KeepAwake）
+- 支持 **Modbus TCP**（原生 socket）与 **USB-RS485 串口**（USB Host + `usb-serial-for-android`）；
+- 提供移动布局与生命周期能力（抽屉布局 / 工具栏「更多」面板 / 硬件返回键 / 前后台挂起 / 屏幕常亮）。
 
-## 移动布局与生命周期（Phase 3）
+## 移动布局与生命周期
 
 - 依赖：`@capacitor/app ^8.1.1`（**MIT**，npm 可直达，非 JitPack）——用于硬件返回键、前后台状态、`minimizeApp`。
   **注意：新增后必须重新 `pnpm build:android`（内含 `cap sync`）**，否则原生工程里没有该插件，返回键仍是系统默认。
@@ -26,7 +25,7 @@
 - 屏幕常亮：存在持续轮询/追踪时置 `FLAG_KEEP_SCREEN_ON`（自研零依赖，不用 KeepAwake 插件）。
 - 触摸：行高 44dp、工具栏次要控件收进「更多」面板、长按行菜单（依赖 WebView `contextmenu` + 抑制系统长按选择）。
 
-## USB 串口（Phase 2）
+## USB 串口
 
 - 依赖：`com.github.mik3y:usb-serial-for-android:3.11.0`（**MIT**），**仅在 JitPack 发布** →
   `android/build.gradle` 的 `allprojects.repositories` 已加 `maven { url 'https://jitpack.io' }`；版本在 `variables.gradle`
@@ -38,18 +37,18 @@
 - 读回聚合：原生侧按 **10ms 空闲窗口**合并为一帧后投递（避免分片事件风暴，远小于 300ms 超时预算）。
 - 参数：`baudRate / dataBits / stopBits / parity / flowControl` 直接透传；驱动不支持所请求流控时
   **按参数不支持如实报错**（不静默忽略）。
-- 拔线：发 `closed(USB_DETACHED)` → 会话置 failed + 提示；**不做 USB 自动重连**（自动重连仅 TCP，ADR-035）。
+- 拔线：发 `closed(USB_DETACHED)` → 会话置 failed + 提示；**不做 USB 自动重连**，自动重连仅适用于 TCP。
 - 未插设备时枚举为空列表（UI 显示空态，不是错误）。
 
-## 插件（Phase 5，ADR-056）
+## 插件
 
-插件**一律手动安装**（不随包分发，ADR-054），入口在 **Settings → Plugins → Install Plugin**：
+插件**一律手动安装**，入口在 **Settings → Plugins → Install Plugin**：
 
 | 项       | Android 实现                                                                                                                                                                                                                                                                                 |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 安装入口 | `pluginInstall: "upload"`：隐藏 `<input type="file">` + 客户端读文件文本（Capacitor `BridgeWebChromeClient.onShowFileChooser` 走系统文件选择器，**不需要 Capacitor Filesystem**）。点击 Install 会拉起系统选择器——这是原生 Activity，e2e 无法驱动，故用例改为 `setInputFiles` 直投隐藏 input |
 | 文件过滤 | `accept=".json,.mjs,.js"`（**仅扩展名**：部分 ROM 按 MIME 过滤会把 `.mjs` 判为 `application/octet-stream` 而不可选）                                                                                                                                                                         |
-| 执行能力 | `executablePlugins` 由**运行时探测**决定（`probePluginExecutionSupport()` 实测「Blob Worker + Worker 内 blob entry 动态 import」），静态值为 **fail-closed 基线 `false`**。本机（WebView 151）实测可用 → `true`                                                                              |
+| 执行能力 | `executablePlugins` 由**运行时探测**决定（`probePluginExecutionSupport()` 检测「Blob Worker + Worker 内 blob entry 动态 import」），静态值为 **fail-closed 基线 `false`**；探测通过时为 `true`                                                                                                  |
 | 执行模式 | 与桌面端一致：默认**隔离线程**；「Same process」需在安装确认框中显式授权（同步能力 codec / dataType / tableType 需要它）                                                                                                                                                                     |
 | 持久化   | IndexedDB（与工作区共用库 `mamep2026` → `kv` → 键 `plugins`），reload / 重启后按存储重建执行面                                                                                                                                                                                               |
 
@@ -62,7 +61,7 @@
 pnpm build:android        # web 产物 → cap sync → gradlew assembleDebug
 # 产物：apps/android/android/app/build/outputs/apk/debug/app-debug.apk
 
-pnpm build:android:release   # 发布产物：assembleRelease + bundleRelease → APK + AAB（ADR-056）
+pnpm build:android:release   # 发布产物：assembleRelease + bundleRelease → APK + AAB
 # 产物：.../outputs/apk/release/app-release.apk（有签名材料）/ app-release-unsigned.apk（无）
 #       .../outputs/bundle/release/app-release.aab
 ```
@@ -70,7 +69,7 @@ pnpm build:android:release   # 发布产物：assembleRelease + bundleRelease �
 脚本 `scripts/build-android.mjs` 会依次探测可用 JDK（`JAVA_HOME` → Android Studio JBR（仅当 ≤24）→
 `%LOCALAPPDATA%\MamepJdk\jdk-21`），都不可用时给出明确指引。
 
-### 发布打包与签名（ADR-056）
+### 发布打包与签名
 
 构建脚本**不接收也不打印任何口令**；签名材料按下面二选一提供，两者都没有时 release 产出
 **未签名** APK（`app-release-unsigned.apk` 并打印提示）——**不会静默复用 debug key 冒充发布签名**：
@@ -103,8 +102,6 @@ keytool -genkeypair -keystore C:/keys/mamep-release.jks -alias mamep \
 
 - 版本号来自根 `package.json`（`versionName` = 其 version，`versionCode` = major*10000+minor*100+patch）。
 - AAB 用于上架（由 Play 生成签名 APK）；`--aab-only` 只产 AAB。
-- 本机发布用的临时验证（ADR-056 实施时做过）用**临时密钥库 + 本地随机口令、验证后即删**，不留任何密钥文件。
-
 ### JDK 约束（必读）
 
 Capacitor 8 模板固定 **Gradle 8.14.3 + AGP 8.13.0**，最高只支持 **Java 24**。
@@ -133,11 +130,11 @@ adb shell am start -n com.mamep2026.app/.MainActivity
 | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 屏幕解锁 + **不熄屏**（USB 调试：`adb shell svc power stayon true`；**无线调试见下方专节**） | 设备休眠时 OEM（vivo 等）无法弹出安装确认框 → `INSTALL_FAILED_ABORTED`；**休眠还会冻结 WebView** → CDP 上的定位/点击会永久挂起（表象像「卡住」，实为等待到用例超时）                                                                                                                                                                           |
 | 允许「USB 安装」/ 首次安装时在手机上点确认                                                   | 同上                                                                                                                                                                                                                                                                                                                                           |
-| 宿主机可达（`adb reverse` 由用例负责）                                                       | TCP 用例把宿主回环端口反向转发给设备，真实字节往返经原生 socket。**无线调试下 `adb reverse` 同样可用**（2026-09-13 实测）                                                                                                                                                                                                                      |
+| 宿主机可达（`adb reverse` 由用例负责）                                                       | TCP 用例把宿主回环端口反向转发给设备，真实字节往返经原生 socket。**无线调试下 `adb reverse` 同样可用**                                                                                                                                                                                                                                           |
 | **USB-RS485 闭环用例额外前置**                                                               | ① USB 转接器插在**手机**上（OTG）；另一端接 PC 侧从站（或另一只 USB-TTL，TX↔RX 交叉 + 共地）；② PC 侧先启动 RTU 从站：`pnpm slave`（端口/波特率取 `config/connections.json`）；③ 显式开启：设 `MAMEP_ANDROID_USB_SERIAL=1`；④ 首次连接需在手机上确认 USB 授权（用例等待最长 30s）。**无硬件时该用例自动跳过**，`rtu-ui.spec.ts` 无需硬件即可跑 |
 | **vivo/iQOO：安装被静默拒绝**                                                                | `adb install -r` 可能报 `INSTALL_FAILED_ABORTED: User rejected permissions` 而**手机无任何弹窗**——这是 ROM 拒绝**流式安装**。`helpers/adb.ts` 已优先用 `adb install -r --no-streaming`（push 安装）并在失败时回退；若两者都失败，检查开发者选项的「USB 安装」开关                                                                              |
 
-### 无线调试（2026-09-13 实测可用）
+### 无线调试
 
 Android 11+ 的「无线调试」是**两个不同的随机端口**，且都需要先配对：
 
@@ -196,5 +193,5 @@ apps/android/
       └─ MamepTransportPlugin.kt   # openTcp / write / close + data/closed/error 事件（只做字节搬运）
 ```
 
-> 原生插件**不放**独立 npm 包（Phase 1 决策）：避开 pnpm 符号链接 + Capacitor 插件自动发现的摩擦；
+> 原生插件**不放**独立 npm 包，避免 pnpm 符号链接与 Capacitor 插件自动发现之间的问题；
 > 将来需要跨 app 复用或发布时再抽为独立插件包。
