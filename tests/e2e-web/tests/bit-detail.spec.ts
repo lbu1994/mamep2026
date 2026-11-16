@@ -140,6 +140,14 @@ test("单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）", asy
   // 中间位为 0。
   await expectBit(bitRows(page).nth(1), 14, "0");
 
+  // 位开关不得撑高行：桌面行高固定 29px，开关内容高度不超过位行内容区 24px，
+  // 触摸设备的 padding 由负 margin 抵消，不能改变行布局。
+  await expect(bit15.locator("td").first()).toHaveCSS("height", "29px");
+  const toggleHeight = await bit15
+    .getByLabel("Toggle bit 15")
+    .evaluate((element) => element.getBoundingClientRect().height);
+  expect(toggleHeight).toBeLessThanOrEqual(24);
+
   // 位行 Data 只有开关、没有输入框（交互简化）。
   await expect(bitRows(page).locator(".register-table__bit-value")).toHaveCount(
     16,
@@ -149,6 +157,34 @@ test("单寄存器 binary 行展开为 16 行位明细（bit15 → bit0）", asy
   ).toHaveCount(0);
 
   expect(errors).toEqual([]);
+});
+
+test("触摸指针宽屏下位开关不撑高位行", async ({ browser }) => {
+  const context = await browser.newContext({
+    hasTouch: true,
+    viewport: { width: 1600, height: 900 },
+  });
+  const page = await context.newPage();
+  try {
+    await openApp(page);
+    const first = parentRow(page, 0);
+    await setBinaryType(page, first);
+    await setAddress(first, "0");
+    await first.locator('button[aria-label="Expand row"]').click();
+    const bit15 = bitRows(page).nth(0);
+    await expect(bit15).toBeVisible();
+
+    expect(
+      await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
+    ).toBe(true);
+    await expect(bit15.locator("td").first()).toHaveCSS("height", "29px");
+    const toggleHeight = await bit15
+      .getByLabel("Toggle bit 15")
+      .evaluate((element) => element.getBoundingClientRect().height);
+    expect(toggleHeight).toBeLessThanOrEqual(24);
+  } finally {
+    await context.close();
+  }
 });
 
 test("点击切换位值同步父行当前值（不写设备、不进入编辑态）", async ({

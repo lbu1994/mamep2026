@@ -924,10 +924,17 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  height: 24px;
+  max-height: 24px;
 }
 
 .register-table__bit-toggle {
   flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 20px;
+  min-height: 20px;
+  line-height: 20px;
 }
 
 /* 选择器保留 2 个类，稳压 antd 的 `.ant-switch`（1 类）。 */
@@ -951,9 +958,35 @@ body {
 
 @media (pointer: coarse) {
   .register-table__bit-toggle {
-    padding: 8px 0;
-    box-sizing: content-box;
+    position: relative;
   }
+
+  /* 仅扩大透明命中区，不改变开关轨道高度（padding 会把轨道背景一起撑大）。 */
+  .register-table__bit-toggle::after {
+    position: absolute;
+    inset: -4px 0;
+    content: "";
+  }
+}
+
+@media (pointer: coarse) and (max-width: 1023px) {
+  /* 移动端行高 44px，可在不跨入相邻行的前提下扩大到 36px 命中区。 */
+  .register-table__bit-toggle::after {
+    inset: -8px 0;
+  }
+}
+
+/* 位行固定高度：仅给 td 设置 height 是最小值，开关/伪元素仍可把行撑高。
+   位行内容盒统一固定为 24px，配合主题 cellPaddingBlockSM=2px 与 1px 底边框
+   得到桌面 29px；移动端由 mobile.css 将 td 覆盖为 44px。 */
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  > tr.register-table__row--bit
+  > td {
+  height: 29px;
+  padding-block: 2px;
+  line-height: 24px;
 }
 
 /* 表头单元格水平居中（统一视觉规范：寄存器表 / 追踪窗等全部 antd Table）。
