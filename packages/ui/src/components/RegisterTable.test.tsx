@@ -476,16 +476,19 @@ describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
     });
   });
 
-  it("默认渲染 ON（立即回读）；切换「ON 200 ms」更新本表 writeVerify", async () => {
+  it("默认渲染 OFF（不回读）；切换「ON 200 ms」更新本表 writeVerify", async () => {
     const sid = sheetId();
     expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
-      mode: "immediate",
+      mode: "off",
       delayMs: null,
     });
     render(<RegisterTable sheetId={sid} />);
     // aria-label 来自 i18n table.writeVerify。
     const verifySelect = screen.getByLabelText("Write verification");
     expect(verifySelect).toBeTruthy();
+    expect(
+      verifySelect.closest(".table-toolbar__verify")?.textContent,
+    ).toContain("OFF");
     // 打开下拉，选择「ON 200 ms」。
     fireEvent.mouseDown(verifySelect);
     await waitFor(() => {
@@ -537,11 +540,11 @@ describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
           ?.writeVerify,
       ).toEqual({ mode: "delayed", delayMs: 200 });
     });
-    // 第二张表仍为默认 immediate。
+    // 第二张表仍为默认 OFF。
     expect(
       useAppStore.getState().workspace.sheets.find((s) => s.sheetId === second)
         ?.writeVerify,
-    ).toEqual({ mode: "immediate", delayMs: null });
+    ).toEqual({ mode: "off", delayMs: null });
   });
 });
 

@@ -32,6 +32,7 @@ import {
   waitForWebviewSocket,
   CDP_PORT,
 } from "../helpers/adb";
+import { setWriteVerify } from "../helpers/app";
 
 /** 组 MBAP 帧（tid / proto=0 / length / unit + pdu），无 CRC。 */
 function buildTcpFrame(tid: number, unitId: number, pdu: Uint8Array): Buffer {
@@ -257,6 +258,10 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
     .getByRole("button", { name: "Disconnect" });
   await expect(disconnectButton).toBeVisible({ timeout: 20_000 });
 
+  // 新表默认 OFF；本用例显式 ON，以覆盖写后回读一致性。
+  await expect(page.locator(".table-toolbar__verify")).toContainText("OFF");
+  await setWriteVerify(page, "ON");
+
   // 首行填地址 0（默认表行地址为空），并在宿主侧预置寄存器 0 = 0x00AB。
   await setRowAddress(page, "0");
   slave.registers.set(0, 0x00ab);
@@ -273,8 +278,9 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
   await expect
     .poll(() => slave.registers.get(0), { timeout: 20_000 })
     .toBe(0x12ab);
-  // 写后回读默认 ON：回读一致后单元格显示写入值。
+  // 写后回读显式 ON：回读一致后单元格显示写入值。
   await expect(dataInput).toHaveText("12AB", { timeout: 20_000 });
+  await setWriteVerify(page, "OFF");
 
   // 断开：回到未连接状态（头部 Disconnect 按钮消失）。
   await disconnectButton.evaluate((element) =>

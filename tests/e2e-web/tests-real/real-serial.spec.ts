@@ -436,10 +436,12 @@ test("通信日志：请求/响应/异常帧字节", async () => {
   await expect(list).toContainText("01 03 02 04 D2", { timeout: 5000 });
 });
 
-test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成功，但 Data 列显示回读值 0000", async () => {
+test("写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 显示回读值 0000", async () => {
   // 写忽略区（0x0900–0x090f）：写入返回正常成功帧，但**不实际写入**——回读仍为旧值 0。
-  // Verify=ON（immediate，本表默认）：写入后立即 FC03 回读 → 值不一致（写 1234 / 读 0000）
+  // 新表默认 OFF；本用例显式 ON（immediate）：写入后立即 FC03 回读 → 值不一致（写 1234 / 读 0000）
   // → 失败点（红点），且 Data 列被回读值覆盖（§15.1），显示 0000 而非写入的 1234。
+  await expect(page.locator(".table-toolbar__verify")).toContainText("OFF");
+  await setWriteVerify(page, "ON");
   await setRowAddress(page, "0900");
   await writeRow(page, "1234");
   // 写入成功但回读不一致 → 失败态（红点）。
@@ -456,11 +458,12 @@ test("写后回读 Verify=ON（默认）：写忽略区 0x0900 写入回执成�
   await expect(page.getByLabel("Data").first()).toHaveText("0000", {
     timeout: CONNECTED_TIMEOUT,
   });
+  await setWriteVerify(page, "OFF");
 });
 
-test("写后回读 Verify=OFF：写忽略区 0x0900 写入后 Data 保持写入值 1234（不回读）", async () => {
-  // Verify=OFF：写入成功即成功态（绿点），不回读；Data 保持用户输入值 1234。
-  await setWriteVerify(page, "OFF");
+test("写后回读 Verify=OFF（默认）：写忽略区 0x0900 写入后 Data 保持写入值 1234", async () => {
+  // 新表默认 OFF：写入成功即成功态（绿点），不回读；Data 保持用户输入值 1234。
+  await expect(page.locator(".table-toolbar__verify")).toContainText("OFF");
   await setRowAddress(page, "0900");
   await writeRow(page, "1234");
   await expect(
@@ -474,8 +477,6 @@ test("写后回读 Verify=OFF：写忽略区 0x0900 写入后 Data 保持写入�
   await expect(page.getByLabel("Data").first()).toHaveText("0000", {
     timeout: CONNECTED_TIMEOUT,
   });
-  // 恢复默认 ON（后续测试按默认行为执行）。
-  await setWriteVerify(page, "ON");
 });
 
 test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Type=String → Data 显示字符串", async () => {

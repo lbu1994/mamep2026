@@ -1472,11 +1472,11 @@ export const RegisterTable = memo(function RegisterTable({
       defaultConfig.registerTable.slaveAddress,
   );
   const setSheetSlaveAddress = useAppStore((s) => s.setSheetSlaveAddress);
-  // 本表写后回读配置（每表独立）：默认立即回读。
+  // 本表写后回读配置（每表独立）：默认关闭。
   const writeVerifyValue = useAppStore((s) =>
     writeVerifyToValue(
       s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.writeVerify ?? {
-        mode: "immediate" as const,
+        mode: "off" as const,
         delayMs: null,
       },
     ),

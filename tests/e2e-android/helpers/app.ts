@@ -132,6 +132,37 @@ export async function writeRow(page: Page, valueHex: string): Promise<void> {
     .evaluate((element) => (element as HTMLElement).click());
 }
 
+/** 切换当前表的写后回读配置；移动布局会自动展开/收起工具栏「更多」面板。 */
+export async function setWriteVerify(
+  page: Page,
+  optionText: string,
+): Promise<void> {
+  const moreButton = page.getByRole("button", {
+    name: "More toolbar actions",
+  });
+  const morePanel = page.locator(".table-toolbar__more");
+  const mobile = await moreButton.isVisible();
+  if (mobile) {
+    await moreButton.click();
+    await expect(morePanel).toBeVisible({ timeout: 5000 });
+  }
+
+  const verify = page.locator(".table-toolbar__verify");
+  await verify.getByLabel("Write verification").click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: new RegExp(`^${optionText}$`) })
+    .first()
+    .click();
+  await expect(verify).toContainText(optionText, { timeout: 5000 });
+
+  if (mobile) {
+    await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
+    await moreButton.click();
+    await expect(morePanel).toBeHidden({ timeout: 5000 });
+  }
+}
+
 /** 会话设置弹窗（启动时自动打开）。 */
 export function connectionModal(page: Page) {
   return page.locator(".ant-modal-container");

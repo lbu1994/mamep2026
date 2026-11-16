@@ -469,10 +469,10 @@ describe("setSheetRegisterRadix", () => {
 });
 
 describe("setSheetWriteVerify（2026-08-26）", () => {
-  it("默认 immediate（ON，写入后立即回读）；setSheetWriteVerify 只改目标表", () => {
+  it("默认 OFF（不回读）；setSheetWriteVerify 只改目标表", () => {
     const first = firstSheetId();
     expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
-      mode: "immediate",
+      mode: "off",
       delayMs: null,
     });
     useAppStore.getState().addSheet(); // Sheet 2
@@ -489,7 +489,7 @@ describe("setSheetWriteVerify（2026-08-26）", () => {
       delayMs: 200,
     });
     expect(after.find((s) => s.sheetId === second)?.writeVerify).toEqual({
-      mode: "immediate",
+      mode: "off",
       delayMs: null,
     });
   });
@@ -1662,7 +1662,7 @@ describe("commitCellText（Data 单元格提交校验）", () => {
       });
       store.undo();
       expect(useAppStore.getState().workspace.sheets[0]?.writeVerify).toEqual({
-        mode: "immediate",
+        mode: "off",
         delayMs: null,
       });
       store.undo();

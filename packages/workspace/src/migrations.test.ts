@@ -143,13 +143,13 @@ describe("migrations v1→v2（写后回读配置下放到每表）", () => {
     expect(sheets[0]?.writeVerify).toEqual({ mode: "delayed", delayMs: 500 });
   });
 
-  it("v1 数据：无全局 readVerifySettings 时各表补默认立即回读", () => {
+  it("v1 数据：无全局 readVerifySettings 时各表补默认关闭", () => {
     const migrated = migrateData(toV1Data(), migrations);
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
     const sheets = migrated.value.sheets as Array<Record<string, unknown>>;
     expect(sheets[0]?.writeVerify).toEqual({
-      mode: "immediate",
+      mode: "off",
       delayMs: null,
     });
   });

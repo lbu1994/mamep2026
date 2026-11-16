@@ -103,7 +103,7 @@ export async function writeRowById(
   if (row === undefined) return;
   // 本表写后回读配置（每表独立）。
   const writeVerify = sheet?.writeVerify ?? {
-    mode: "immediate" as const,
+    mode: "off" as const,
     delayMs: null,
   };
   const result = await host.writeRow(

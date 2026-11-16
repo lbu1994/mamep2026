@@ -223,7 +223,7 @@ describe("snapshotSheet / applySheetSnapshot", () => {
     const restored = applySheetSnapshot(edited, before);
     expect(restored.registerRadix).toBe("dec");
     expect(restored.slaveAddress).toBe(1);
-    expect(restored.writeVerify).toEqual({ mode: "immediate", delayMs: null });
+    expect(restored.writeVerify).toEqual({ mode: "off", delayMs: null });
     expect(restored.name).toBe("S");
   });
 

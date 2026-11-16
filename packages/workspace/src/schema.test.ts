@@ -333,7 +333,7 @@ describe("workspace schema round-trip", () => {
     expect(parsed.value.sheets[0]?.registerRadix).toBe("hex");
   });
 
-  it("defaults sheet writeVerify to immediate for legacy data without the field", () => {
+  it("defaults sheet writeVerify to off for legacy data without the field", () => {
     const legacy = JSON.parse(serializeWorkspace(createEmptyWorkspace()));
     // 模拟老版本数据：sheet 无 writeVerify 字段。
     for (const sheet of legacy.sheets) {
@@ -343,7 +343,7 @@ describe("workspace schema round-trip", () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.value.sheets[0]?.writeVerify).toEqual({
-      mode: "immediate",
+      mode: "off",
       delayMs: null,
     });
   });

@@ -4,7 +4,7 @@
  *
  * v1→v2（写后回读配置下放到每表）：
  * - 把 workspace 全局 readVerifySettings 迁移到各 sheet.writeVerify（旧全局值优先；
- *   无全局值时补默认立即回读）；
+ *   无全局值时补默认关闭）；
  * - 删除全局 readVerifySettings 字段；
  * - schemaVersion 升为 2。
  *
@@ -60,7 +60,7 @@ export interface Migration {
   migrate(data: Record<string, unknown>): Record<string, unknown>;
 }
 
-const DEFAULT_WRITE_VERIFY = { mode: "immediate", delayMs: null };
+const DEFAULT_WRITE_VERIFY = { mode: "off", delayMs: null };
 
 const migrationV1ToV2: Migration = {
   fromVersion: 1,

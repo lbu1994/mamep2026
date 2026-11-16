@@ -100,13 +100,13 @@ const sheetSchema = z.object({
     .max(255)
     .default(
       1,
-    ) /** 写后回读配置（每表独立，随工作区持久化）；老数据由 v1→v2 迁移补齐，缺省再补默认立即回读 */,
+    ) /** 写后回读配置（每表独立，随工作区持久化）；老数据由 v1→v2 迁移补齐，缺省再补默认关闭 */,
   writeVerify: z
     .object({
       mode: z.enum(["off", "immediate", "delayed"]),
       delayMs: z.number().nullable(),
     })
-    .default({ mode: "immediate", delayMs: null }),
+    .default({ mode: "off", delayMs: null }),
   /** 表级地址变换配置（每表独立，随工作区持久化）；老数据由 v5→v6 迁移补齐，缺省再补 null */
   addressTransform: z
     .object({

@@ -202,6 +202,21 @@ async function writeRow(frame: Frame, valueHex: string): Promise<void> {
     .evaluate((el) => (el as HTMLElement).click());
 }
 
+/** 显式切换当前表的写后回读配置。 */
+async function setWriteVerify(
+  frame: Frame,
+  optionText: string,
+): Promise<void> {
+  const verify = frame.locator(".table-toolbar__verify");
+  await verify.getByLabel("Write verification").click();
+  await frame
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: new RegExp(`^${optionText}$`) })
+    .first()
+    .click();
+  await expect(verify).toContainText(optionText, { timeout: 5000 });
+}
+
 test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
   workbox,
   evaluateInVSCode,
@@ -428,10 +443,12 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await closeBottomPanel(frame);
   });
 
-  await test.step("写后回读 Verify=ON（默认）：写忽略区 0x0900 → Data 显示回读值 0000", async () => {
+  await test.step("写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 → Data 显示回读值 0000", async () => {
     // 写忽略区（0x0900–0x090f）：写入返回正常成功帧但不落盘——回读仍为旧值 0。
-    // Verify=ON（本表默认）：写入后立即 FC03 回读 → 值不一致 → 失败点（红点），
+    // 新表默认 OFF；本用例显式 ON，写入后立即 FC03 回读 → 值不一致 → 失败点（红点），
     // Data 列被回读值覆盖（§15.1）显示 0000 而非写入的 1234。
+    await expect(frame.locator(".table-toolbar__verify")).toContainText("OFF");
+    await setWriteVerify(frame, "ON");
     await setRowAddress(frame, "0900");
     await writeRow(frame, "1234");
     await expect(
@@ -445,6 +462,7 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await expect(frame.getByLabel("Data").first()).toHaveText("0000", {
       timeout: CONNECTED_TIMEOUT,
     });
+    await setWriteVerify(frame, "OFF");
   });
 
   await test.step("断开连接 → Offline，重连 → Online（稳定性）", async () => {

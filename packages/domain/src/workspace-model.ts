@@ -310,7 +310,7 @@ export interface RegisterSheet {
   columnWidths: Record<string, number>;
   /** 各列拖拽后的排列顺序（每表独立，随工作区持久化；null=未拖拽过，使用默认顺序） */
   columnOrder: string[] | null;
-  /** 写后回读配置（每表独立，随工作区持久化）：默认立即回读（immediate）。 */
+  /** 写后回读配置（每表独立，随工作区持久化）：默认关闭（off）。 */
   writeVerify: ReadVerifySettings;
   /**
    * 表级地址变换配置（插件，每表独立，随工作区持久化）：
@@ -535,8 +535,8 @@ export function createRegisterSheet(
     slaveAddress: defaultConfig.registerTable.slaveAddress,
     columnWidths: {},
     columnOrder: null,
-    // 写后回读默认 ON（写入后立即回读）。
-    writeVerify: { mode: "immediate", delayMs: null },
+    // 写后回读默认 OFF（写入成功即结束，不回读）。
+    writeVerify: { mode: "off", delayMs: null },
     // 表级地址变换默认关闭：不调整。
     addressTransform: null,
     createdAt: now,

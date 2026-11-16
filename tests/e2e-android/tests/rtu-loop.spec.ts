@@ -22,6 +22,7 @@ import {
   readRow,
   selectRtuProtocol,
   setRowAddress,
+  setWriteVerify,
   writeRow,
   type AppSession,
 } from "../helpers/app";
@@ -68,15 +69,20 @@ test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）�
     page.locator(".ant-layout-footer, .bottom-panel").first(),
   ).toBeVisible();
 
+  // 新表默认 OFF；本用例显式 ON，以覆盖写后回读一致性。
+  await expect(page.locator(".table-toolbar__verify")).toContainText("OFF");
+  await setWriteVerify(page, "ON");
+
   // FC03：首行读回 4 位 HEX（真实从站返回值）。
   await setRowAddress(page, "0");
   await readRow(page);
   const dataInput = page.getByLabel("Data", { exact: true }).first();
   await expect(dataInput).toHaveText(/^[0-9A-F]{4}$/, { timeout: 30_000 });
 
-  // FC10 + 写后回读（默认 ON）：写入 1234 后回读一致。
+  // FC10 + 写后回读（显式 ON）：写入 1234 后回读一致。
   await writeRow(page, "1234");
   await expect(dataInput).toHaveText("1234", { timeout: 30_000 });
+  await setWriteVerify(page, "OFF");
 
   await disconnectButton.evaluate((element) =>
     (element as HTMLElement).click(),
