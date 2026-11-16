@@ -110,9 +110,10 @@ describe("createEmptyWorkspace 初始表", () => {
     }
   });
 
-  it("默认展开态侧边栏宽度为 DEFAULT_SIDEBAR_WIDTH（2026-09-08）", () => {
+  it("默认展开态侧栏宽度与底部面板高度使用设计初始值", () => {
     const workspace = createEmptyWorkspace();
     expect(workspace.panelLayout.sidebarWidth).toBe(DEFAULT_SIDEBAR_WIDTH);
+    expect(workspace.panelLayout.bottomPanelHeight).toBe(200);
   });
 });
 

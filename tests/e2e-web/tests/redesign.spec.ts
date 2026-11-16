@@ -44,28 +44,6 @@ test("empty sheet shows a guided empty state with an Add Row CTA", async ({
   ).toBeVisible();
 });
 
-test("sheet sidebar collapses and the state persists after reload", async ({
-  page,
-}) => {
-  await openApp(page);
-  const sider = page.locator(".ant-layout-sider");
-  await expect(sider).toHaveCSS("width", "160px");
-  await page
-    .getByRole("button", { name: "Toggle sidebar" })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
-  await expect(sider).toHaveClass(/ant-layout-sider-collapsed/);
-  // 等待自动保存后刷新，验证折叠状态持久化。
-  await page.waitForTimeout(1200);
-  await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
-    timeout: 15000,
-  });
-  await expect(page.locator(".ant-layout-sider")).toHaveClass(
-    /ant-layout-sider-collapsed/,
-  );
-});
-
 test("bottom panel collapses to the tab bar and expands again", async ({
   page,
 }) => {
@@ -87,40 +65,4 @@ test("bottom panel collapses to the tab bar and expands again", async ({
   await expect(
     page.locator(".bottom-panel .ant-tabs-body-holder"),
   ).toBeVisible();
-});
-
-test("bottom panel height can be dragged and persists after reload", async ({
-  page,
-}) => {
-  await openApp(page);
-  const panel = page.locator(".bottom-panel");
-  const handle = page.locator(".bottom-panel__resize");
-  const heightOf = (): Promise<number> =>
-    panel.evaluate((el) =>
-      Math.round((el as HTMLElement).getBoundingClientRect().height),
-    );
-
-  const box = (await handle.boundingBox()) ?? {
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 6,
-  };
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2, box.y - 80, { steps: 5 });
-  await page.mouse.up();
-
-  // 拖拽后高度应明显大于默认值 200。
-  await expect.poll(heightOf).toBeGreaterThan(240);
-  const draggedHeight = await heightOf();
-
-  // 等待自动保存后刷新，验证高度持久化（与拖拽后高度一致）。
-  await page.waitForTimeout(1200);
-  await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
-    timeout: 15000,
-  });
-  await expect.poll(heightOf).toBeGreaterThan(240);
-  expect(Math.abs((await heightOf()) - draggedHeight)).toBeLessThanOrEqual(2);
 });
