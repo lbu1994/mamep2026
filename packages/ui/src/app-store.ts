@@ -96,14 +96,30 @@ import { applyLanguage } from "./i18n";
 export type BufferSizeOption =
   "continue" | "100" | "500" | "1000" | "1500" | "2000" | "3000";
 
+const TRACE_CONTINUE_CAPACITY = 10000;
+
+export interface TraceWindowSample {
+  no: number;
+  value: string;
+  rawValue: number;
+  dataType: DataType;
+}
+
+export interface TraceAverageStats {
+  sampleCount: number;
+  firstNo: number;
+  lastNo: number;
+}
+
 export interface TraceWindowModel {
   rowId: string;
   bufferSize: BufferSizeOption;
   /** Speed 滑块 0..100（Quick -> Slow）。 */
   speed: number;
   playing: boolean;
-  samples: Array<{ no: number; value: string }>;
+  samples: TraceWindowSample[];
   average: string | null;
+  averageStats: TraceAverageStats | null;
 }
 
 /** 工作区导入预览摘要（PRD §8.3 P1）：确认导入前展示给用户。 */
@@ -357,11 +373,12 @@ export interface AppStoreState {
   setTracePlaying: (rowId: RowId, playing: boolean) => void;
   setTraceBufferSize: (rowId: RowId, bufferSize: BufferSizeOption) => void;
   setTraceSpeed: (rowId: RowId, speed: number) => void;
-  appendTraceSample: (
+  appendTraceSample: (rowId: RowId, sample: TraceWindowSample) => void;
+  setTraceAverage: (
     rowId: RowId,
-    sample: { no: number; value: string },
+    average: string | null,
+    stats?: TraceAverageStats | null,
   ) => void;
-  setTraceAverage: (rowId: RowId, average: string | null) => void;
 
   appendMessage: (message: ApplicationMessage) => void;
   appendCommLog: (entry: CommunicationLogEntry) => void;
@@ -1870,11 +1887,13 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         [rowId]: {
           rowId,
           bufferSize: "continue",
-          speed: 60,
+          // 修正后左侧为 Quick：40 仍对应旧默认的 860ms 采样间隔。
+          speed: 40,
           // 打开窗口不自动开始采样，等待用户手动点击 Play。
           playing: false,
           samples: [],
           average: null,
+          averageStats: null,
         },
       },
     })),
@@ -1919,10 +1938,24 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     set((state) => {
       const current = state.traceWindows[rowId];
       if (current === undefined) return state;
+      const capacity =
+        bufferSize === "continue"
+          ? TRACE_CONTINUE_CAPACITY
+          : Number(bufferSize);
       return {
         traceWindows: {
           ...state.traceWindows,
-          [rowId]: { ...current, bufferSize },
+          [rowId]: {
+            ...current,
+            bufferSize,
+            samples:
+              current.samples.length > capacity
+                ? current.samples.slice(current.samples.length - capacity)
+                : current.samples,
+            // 统计范围已改变，旧平均值不得继续显示。
+            average: null,
+            averageStats: null,
+          },
         },
       };
     }),
@@ -1940,7 +1973,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       if (current === undefined) return state;
       const samples = [...current.samples, sample];
       const cap =
-        current.bufferSize === "continue" ? 10000 : Number(current.bufferSize);
+        current.bufferSize === "continue"
+          ? TRACE_CONTINUE_CAPACITY
+          : Number(current.bufferSize);
       return {
         traceWindows: {
           ...state.traceWindows,
@@ -1954,14 +1989,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
       };
     }),
-  setTraceAverage: (rowId, average) =>
+  setTraceAverage: (rowId, average, stats = null) =>
     set((state) => {
       const current = state.traceWindows[rowId];
       if (current === undefined) return state;
       return {
         traceWindows: {
           ...state.traceWindows,
-          [rowId]: { ...current, average },
+          [rowId]: { ...current, average, averageStats: stats },
         },
       };
     }),

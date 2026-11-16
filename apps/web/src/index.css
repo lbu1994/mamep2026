@@ -1484,6 +1484,7 @@ body {
    以容器底色与上方数据表形成分区 */
 .trace-window__average-box {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--mamep-spacing-sm);
   padding: 4px var(--mamep-spacing-sm);
@@ -1502,6 +1503,13 @@ body {
   font-size: 20px;
   font-weight: 600;
   line-height: 28px;
+  text-align: right;
+}
+
+.trace-window__average-range {
+  flex-basis: 100%;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
   text-align: right;
 }
 

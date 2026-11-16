@@ -104,6 +104,37 @@ export function formatRawValue(raw: number, type: DataType): string {
   }
 }
 
+/**
+ * 按 Type 把原始寄存器值解释为可参与统计的数值。
+ * HEX/Binary 的展示文本不是十进制值，因此统计必须从原始值直接转换；
+ * String 与未知插件类型没有通用数值语义，返回 null，不得伪造平均值。
+ */
+export function interpretRawValueAsNumber(
+  raw: number,
+  type: DataType,
+): number | null {
+  if (!Number.isFinite(raw) || !isBuiltinDataType(type) || type === "string") {
+    return null;
+  }
+
+  switch (type) {
+    case "hex":
+    case "binary":
+    case "unsigned":
+      return raw;
+    case "bool":
+      return raw === 0 ? 0 : 1;
+    case "signed":
+      return raw >= 0x8000 ? raw - 0x10000 : raw;
+    default: {
+      const digits = SCALE_DIGITS[type];
+      if (digits === undefined) return null;
+      const signedValue = isSigned(type) && raw >= 0x8000 ? raw - 0x10000 : raw;
+      return signedValue / 10 ** digits;
+    }
+  }
+}
+
 function formatScaled(raw: number, type: DataType): string {
   const digits = SCALE_DIGITS[type] ?? 0;
   const scale = 10 ** digits;

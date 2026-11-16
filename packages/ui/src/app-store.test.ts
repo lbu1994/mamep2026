@@ -1886,6 +1886,52 @@ describe("traceWindows（TM 追踪窗口）", () => {
     expect(model).toBeDefined();
     expect(model?.playing).toBe(false);
     expect(model?.samples).toEqual([]);
+    expect(model?.averageStats).toBeNull();
+  });
+
+  it("Trace 样本保存原始值和采样时 Type", () => {
+    const row = addFirstRowForTrace();
+    useAppStore.getState().openTraceWindow(row.rowId);
+    useAppStore.getState().appendTraceSample(row.rowId, {
+      no: 1,
+      value: "12.3",
+      rawValue: 123,
+      dataType: "unsigned-0.1",
+    });
+    expect(useAppStore.getState().traceWindows[row.rowId]?.samples).toEqual([
+      {
+        no: 1,
+        value: "12.3",
+        rawValue: 123,
+        dataType: "unsigned-0.1",
+      },
+    ]);
+  });
+
+  it("缩小 Buffer Size 时立即截断并清除旧统计结果", () => {
+    const row = addFirstRowForTrace();
+    useAppStore.getState().openTraceWindow(row.rowId);
+    for (let no = 1; no <= 101; no += 1) {
+      useAppStore.getState().appendTraceSample(row.rowId, {
+        no,
+        value: String(no),
+        rawValue: no,
+        dataType: "unsigned",
+      });
+    }
+    useAppStore.getState().setTraceAverage(row.rowId, "51", {
+      sampleCount: 101,
+      firstNo: 1,
+      lastNo: 101,
+    });
+
+    useAppStore.getState().setTraceBufferSize(row.rowId, "100");
+    const model = useAppStore.getState().traceWindows[row.rowId];
+    expect(model?.samples).toHaveLength(100);
+    expect(model?.samples[0]?.no).toBe(2);
+    expect(model?.samples.at(-1)?.no).toBe(101);
+    expect(model?.average).toBeNull();
+    expect(model?.averageStats).toBeNull();
   });
 
   it("closeTraceWindow 删除窗口并复位对应行 traceEnabled", () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatRawValue,
   groupBinaryBits,
+  interpretRawValueAsNumber,
   isScaled,
   isSigned,
   parseCellText,
@@ -30,6 +31,26 @@ function expectParseFailMessageKey(
   expect(result.ok, `type=${type} text=${text}`).toBe(false);
   if (!result.ok) expect(result.error.userMessageKey).toBe(key);
 }
+
+describe("interpretRawValueAsNumber", () => {
+  it.each([
+    ["hex", 0x0010, 16],
+    ["binary", 0b101, 5],
+    ["unsigned", 65535, 65535],
+    ["signed", 0xffff, -1],
+    ["signed", 0x7fff, 32767],
+    ["bool", 0xffff, 1],
+    ["unsigned-0.1", 123, 12.3],
+    ["signed-0.001", 0xffff, -0.001],
+  ] as const)("interprets %s raw %d as %d", (type, raw, expected) => {
+    expect(interpretRawValueAsNumber(raw, type)).toBe(expected);
+  });
+
+  it("returns null for String and unknown plugin types", () => {
+    expect(interpretRawValueAsNumber(0x4142, "string")).toBeNull();
+    expect(interpretRawValueAsNumber(123, "example.plugin-numeric")).toBeNull();
+  });
+});
 
 describe("data error userMessageKey（i18n 断链回归）", () => {
   it("hex 非法字符映射 errors.dataInvalidNumber", () => {

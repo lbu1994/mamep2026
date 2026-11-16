@@ -491,6 +491,8 @@ export function MamepApp(): React.ReactNode {
       appendTraceSample(sample.key as never, {
         no: sample.sequence,
         value: formatRawValue(sample.rawValue, row.dataType),
+        rawValue: sample.rawValue,
+        dataType: row.dataType,
       });
     });
   }, [host, appendTraceSample]);

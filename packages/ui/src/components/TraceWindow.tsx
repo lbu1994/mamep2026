@@ -18,24 +18,18 @@ import {
   PauseOutlined,
   PlayCircleOutlined,
 } from "@ant-design/icons";
+import { useShallow } from "zustand/react/shallow";
 import type { ColumnsType } from "antd/es/table";
 import type { RegisterRow, RowId } from "@mamep2026/domain";
 import { useAppStore, type BufferSizeOption } from "../app-store";
 import { requestRouteForSheet } from "../request-route";
+import { computeTraceAverage } from "../trace-statistics";
+import { traceSpeedToInterval } from "../trace-speed";
 
-const TRACE_SPEED_MIN = 100;
-const TRACE_SPEED_MAX = 2000;
 const TRACE_WINDOW_WIDTH = 360;
 const TRACE_WINDOW_TOP = 80;
 const TRACE_WINDOW_RIGHT_MARGIN = 24;
 const DRAG_MIN_MOVE_PX = 3;
-
-function speedToInterval(speed: number): number {
-  // speed 高 = Quick（间隔小）。
-  return Math.round(
-    TRACE_SPEED_MAX - (speed / 100) * (TRACE_SPEED_MAX - TRACE_SPEED_MIN),
-  );
-}
 
 interface TraceWindowProps {
   rowId: RowId;
@@ -47,14 +41,16 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   const row = useAppStore((s) =>
     s.workspace.sheets.flatMap((sh) => sh.rows).find((r) => r.rowId === rowId),
   );
-  const sheetRoute = useAppStore((s) => {
-    const sheet = s.workspace.sheets.find((candidate) =>
-      candidate.rows.some((candidateRow) => candidateRow.rowId === rowId),
-    );
-    return sheet === undefined
-      ? null
-      : { type: sheet.type, slaveAddress: sheet.slaveAddress };
-  });
+  const sheetRoute = useAppStore(
+    useShallow((s) => {
+      const sheet = s.workspace.sheets.find((candidate) =>
+        candidate.rows.some((candidateRow) => candidateRow.rowId === rowId),
+      );
+      return sheet === undefined
+        ? null
+        : { type: sheet.type, slaveAddress: sheet.slaveAddress };
+    }),
+  );
   const windowModel = useAppStore((s) => s.traceWindows[rowId]);
   const closeTraceWindow = useAppStore((s) => s.closeTraceWindow);
   const setTracePlaying = useAppStore((s) => s.setTracePlaying);
@@ -75,7 +71,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
       host.traceStart(
         rowId,
         address,
-        speedToInterval(windowModel.speed),
+        traceSpeedToInterval(windowModel.speed),
         row.registerCount,
         requestRouteForSheet(host, sheetRoute),
       );
@@ -169,21 +165,16 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
 
   const stopAndAverage = (): void => {
     setTracePlaying(rowId, false);
-    const samples = windowModel.samples;
-    if (samples.length === 0) {
-      setTraceAverage(rowId, null);
+    const average = computeTraceAverage(windowModel.samples);
+    if (average === null) {
+      setTraceAverage(rowId, null, null);
       return;
     }
-    // 平均值基于原始值的展示文本无法直接求和：以 No./Data 为展示，平均按数值解析。
-    const values = samples
-      .map((s) => Number.parseFloat(s.value))
-      .filter((v) => Number.isFinite(v));
-    if (values.length === 0) {
-      setTraceAverage(rowId, null);
-      return;
-    }
-    const average = values.reduce((sum, v) => sum + v, 0) / values.length;
-    setTraceAverage(rowId, String(Math.round(average * 10000) / 10000));
+    setTraceAverage(rowId, String(Math.round(average.value * 10000) / 10000), {
+      sampleCount: average.sampleCount,
+      firstNo: average.firstNo,
+      lastNo: average.lastNo,
+    });
   };
 
   const saveTrace = (): void => {
@@ -194,6 +185,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
       type: row.dataType,
       samples: windowModel.samples,
       average: windowModel.average,
+      averageStats: windowModel.averageStats,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json",
@@ -393,6 +385,15 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
             value={windowModel.average ?? ""}
             readOnly
           />
+          {windowModel.averageStats !== null && (
+            <Typography.Text className="trace-window__average-range">
+              {t("trace.averageRange", {
+                count: windowModel.averageStats.sampleCount,
+                first: windowModel.averageStats.firstNo,
+                last: windowModel.averageStats.lastNo,
+              })}
+            </Typography.Text>
+          )}
         </div>
       </Flex>
     </Card>
