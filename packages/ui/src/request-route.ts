@@ -1,5 +1,5 @@
 import type { RegisterSheet, RequestRoute } from "@mamep2026/domain";
-import type { AppHost } from "./host";
+import type { HostIdentity, PluginHost } from "./host";
 import {
   protocolForSheetType,
   type TableTypeContribution,
@@ -7,7 +7,7 @@ import {
 
 /** 从表自身配置解析设备请求路由；不得使用当前活动表或稍后可变的会话字段。 */
 export function requestRouteForSheet(
-  host: AppHost,
+  host: HostIdentity & PluginHost,
   sheet: Pick<RegisterSheet, "type" | "slaveAddress">,
 ): RequestRoute {
   const tableTypes =
@@ -25,7 +25,7 @@ export function requestRouteForSheet(
 
 /** 为批量构建轮询目标提供表类型 → 协议解析器。 */
 export function requestProtocolResolver(
-  host: AppHost,
+  host: HostIdentity & PluginHost,
 ): (sheetType: string) => string {
   const tableTypes =
     host.pluginRegistry?.getContributions<TableTypeContribution>("tableType") ??

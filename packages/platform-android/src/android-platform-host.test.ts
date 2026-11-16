@@ -31,6 +31,10 @@ describe("androidCapabilities（如实声明，docs/AGENTS.md §8.4）", () => {
     expect(androidCapabilities.hostPlugins).toBe(false);
     // WebView 文件选择器可用。
     expect(androidCapabilities.pluginInstall).toBe("upload");
+    expect(androidCapabilities.clipboard).toBe(true);
+    expect(androidCapabilities.backgroundLifecycle).toBe(true);
+    expect(androidCapabilities.keepAwake).toBe(true);
+    expect(androidCapabilities.hardwareBack).toBe(true);
     expect(androidCapabilities.logExport).toBe("unsupported");
     expect(androidCapabilities.workspaceImport).toBe("unsupported");
     expect(androidCapabilities.workspaceExport).toBe("unsupported");

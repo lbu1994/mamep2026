@@ -34,4 +34,11 @@ describe("browserCapabilities", () => {
   it("installs plugins via client-side file pick", () => {
     expect(caps.pluginInstall).toBe("upload");
   });
+
+  it("declares clipboard and lifecycle capabilities explicitly", () => {
+    expect(caps.clipboard).toBe(true);
+    expect(caps.backgroundLifecycle).toBe(true);
+    expect(caps.keepAwake).toBe(false);
+    expect(caps.hardwareBack).toBe(false);
+  });
 });

@@ -12,10 +12,12 @@ import type {
   TcpConnectionProfile,
 } from "@mamep2026/domain";
 import type { SerialDeviceHandle } from "@mamep2026/platform-api";
-import type { AppHost } from "./host";
+import type { CommunicationHost, HostIdentity } from "./host";
 
 /** 串口能力被阻断（无 Web Serial + 非 enumerated + 非 mock）：不能直连，应回退弹窗。 */
-export function isSerialBlocked(host: AppHost): boolean {
+export function isSerialBlocked(
+  host: HostIdentity & CommunicationHost,
+): boolean {
   const supportsSerial = host.supportsWebSerial();
   const serialPorts = host.capabilities.serialPorts;
   return !host.isMockMode && !supportsSerial && serialPorts !== "enumerated";
@@ -27,7 +29,7 @@ export function isSerialBlocked(host: AppHost): boolean {
  * - RTU：mock 模式可无端口直连；否则需会话内已选串口且串口能力未被阻断。
  */
 export function canDirectConnect(
-  host: AppHost,
+  host: HostIdentity & CommunicationHost,
   profile: RtuConnectionProfile | TcpConnectionProfile,
   selectedSerialHandle: SerialDeviceHandle | null,
 ): boolean {
@@ -48,7 +50,7 @@ export function canDirectConnect(
  * @param opts.handle 会话内已选串口句柄（RTU 用；mock 或 TCP 忽略）
  */
 export async function runConnect(
-  host: AppHost,
+  host: CommunicationHost,
   opts: {
     protocol: "rtu" | "tcp";
     profile: RtuConnectionProfile | TcpConnectionProfile;

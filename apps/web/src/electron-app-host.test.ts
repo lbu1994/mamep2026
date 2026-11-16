@@ -57,6 +57,7 @@ function createFakeBridge(): {
         modbusTcp: true,
         serialPorts: "enumerated",
         filesystem: "limited",
+        clipboard: true,
         nodePlugins: false,
         webPlugins: true,
         logExport: "save-dialog",
@@ -65,6 +66,9 @@ function createFakeBridge(): {
         pluginInstall: "file",
         executablePlugins: true,
         hostPlugins: true,
+        backgroundLifecycle: false,
+        keepAwake: false,
+        hardwareBack: false,
         protocolExtensions: ["yaskawa-memobus-67h-010dh-010eh"],
         tableTypes: [
           "holding-register",

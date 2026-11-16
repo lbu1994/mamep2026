@@ -75,7 +75,20 @@ import {
 } from "@mamep2026/platform-web";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { useAppStore } from "@mamep2026/ui";
-import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
+import type {
+  ClipboardHost,
+  CommProperties,
+  CommunicationHost,
+  FileHost,
+  HostIdentity,
+  LoggingHost,
+  PlatformLifecycleHost,
+  PluginHost,
+  PollingHost,
+  TraceHost,
+  TraceSampleEvent,
+  WorkspaceHost,
+} from "@mamep2026/ui";
 import { BrowserAppHost, deriveCapabilities } from "./AppHost";
 import { BridgePluginStore } from "./bridge-plugin-store";
 
@@ -115,7 +128,19 @@ function portLabelOf(ports: SerialPortOption[], portId: string): string {
   return ports.find((p) => p.portId === portId)?.label ?? portId;
 }
 
-export class VscodeAppHost implements AppHost {
+export class VscodeAppHost
+  implements
+    HostIdentity,
+    WorkspaceHost,
+    CommunicationHost,
+    PollingHost,
+    TraceHost,
+    LoggingHost,
+    ClipboardHost,
+    FileHost,
+    PluginHost,
+    PlatformLifecycleHost
+{
   /** 能力矩阵派生：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
   get capabilities(): PlatformCapabilities {
     return deriveCapabilities(vscodeCapabilities, this.pluginRegistry);

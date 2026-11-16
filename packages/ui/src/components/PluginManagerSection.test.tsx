@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { PluginRegistry, type PluginManifest } from "@mamep2026/plugin-api";
 import type { OpenTextFileResponse } from "@mamep2026/platform-api";
-import type { Result } from "@mamep2026/domain";
+import { browserCapabilities, type Result } from "@mamep2026/domain";
 import type { AppHost } from "../host";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
@@ -33,35 +33,23 @@ const manifestJson: PluginManifest = {
 };
 
 const browserCaps = {
-  modbusRtu: true,
-  modbusTcp: false,
-  serialPorts: "browser-picker",
-  filesystem: "limited",
-  nodePlugins: false,
-  webPlugins: true,
-  logExport: "download",
-  workspaceImport: "upload",
-  workspaceExport: "download",
-  pluginInstall: "upload",
+  ...browserCapabilities,
   executablePlugins: false,
-  hostPlugins: false,
   protocolExtensions: [],
   tableTypes: ["holding-register"],
 } as const;
 
 const desktopCaps = {
-  modbusRtu: true,
+  ...browserCapabilities,
   modbusTcp: true,
   serialPorts: "enumerated",
   filesystem: "full",
-  nodePlugins: false,
-  webPlugins: true,
   logExport: "save-dialog",
   workspaceImport: "file",
   workspaceExport: "save-dialog",
   pluginInstall: "file",
   executablePlugins: false,
-  hostPlugins: false,
+  backgroundLifecycle: false,
   protocolExtensions: [],
   tableTypes: ["holding-register"],
 } as const;
@@ -446,6 +434,7 @@ describe("PluginManagerSection", () => {
           modbusTcp: false,
           serialPorts: "unsupported",
           filesystem: "unsupported",
+          clipboard: false,
           nodePlugins: false,
           webPlugins: false,
           logExport: "unsupported",
@@ -454,6 +443,9 @@ describe("PluginManagerSection", () => {
           pluginInstall: "unsupported",
           executablePlugins: false,
           hostPlugins: false,
+          backgroundLifecycle: false,
+          keepAwake: false,
+          hardwareBack: false,
           protocolExtensions: [],
           tableTypes: ["holding-register"],
         },

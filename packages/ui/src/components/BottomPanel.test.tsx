@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
+import { browserCapabilities } from "@mamep2026/domain";
 import type {
   ApplicationMessage,
   CommunicationLogEntry,
@@ -98,14 +99,14 @@ describe("BottomPanel activeBottomTab 失效指向兜底（2026-09-17）", () =>
     renderPanel();
 
     // 不出现空内容区：活动页签回到 Messages。
-    expect(
-      screen.getByRole("tab", { selected: true }).textContent,
-    ).toContain("Messages");
+    expect(screen.getByRole("tab", { selected: true }).textContent).toContain(
+      "Messages",
+    );
     // 纠正写回持久化（不残留无效值）。
     await waitFor(() => {
-      expect(
-        useAppStore.getState().workspace.panelLayout.activeBottomTab,
-      ).toBe("messages");
+      expect(useAppStore.getState().workspace.panelLayout.activeBottomTab).toBe(
+        "messages",
+      );
     });
   });
 
@@ -122,9 +123,9 @@ describe("BottomPanel activeBottomTab 失效指向兜底（2026-09-17）", () =>
 
     renderPanel();
 
-    expect(
-      screen.getByRole("tab", { selected: true }).textContent,
-    ).toContain("Comm Properties");
+    expect(screen.getByRole("tab", { selected: true }).textContent).toContain(
+      "Comm Properties",
+    );
     expect(useAppStore.getState().workspace.panelLayout.activeBottomTab).toBe(
       "properties",
     );
@@ -284,6 +285,7 @@ describe("BottomPanel comm log", () => {
       .mockResolvedValue({ ok: true, value: undefined });
     useAppStore.setState({
       host: {
+        capabilities: browserCapabilities,
         copyTextToClipboard,
         getCommProperties: () => null,
       } as unknown as AppHost,
@@ -303,6 +305,28 @@ describe("BottomPanel comm log", () => {
     await waitFor(() => {
       expect(screen.getByText("Copied")).toBeTruthy();
     });
+  });
+
+  it("clipboard capability=false does not call the clipboard port", async () => {
+    const copyTextToClipboard = vi.fn();
+    useAppStore.setState({
+      host: {
+        capabilities: { ...browserCapabilities, clipboard: false },
+        copyTextToClipboard,
+        getCommProperties: () => null,
+      } as unknown as AppHost,
+      commLog: [commEntry()],
+    });
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /Copy/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("System clipboard is not available."),
+      ).toBeTruthy();
+    });
+    expect(copyTextToClipboard).not.toHaveBeenCalled();
   });
 
   it("clear button empties the comm log", () => {

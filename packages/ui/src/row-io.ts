@@ -17,7 +17,7 @@ import {
   applyReadValuesToRow,
 } from "@mamep2026/register-table";
 import { useAppStore } from "./app-store";
-import type { AppHost } from "./host";
+import type { CommunicationHost, HostIdentity, PluginHost } from "./host";
 import { requestRouteForSheet } from "./request-route";
 import type { ApplyManualResultOptions } from "./row-result";
 
@@ -47,7 +47,7 @@ function findSheetAndRow(
  * 读取失败不改变 Data 单元格内容（§17/§25），失败原因经状态点 Tooltip 展示。
  */
 export async function readRowById(
-  host: AppHost,
+  host: HostIdentity & CommunicationHost & PluginHost,
   rowId: RowId,
   deps: Pick<RowIoDeps, "updateRow" | "recordManualResult">,
 ): Promise<void> {
@@ -91,7 +91,7 @@ function applyReadBackValue(
  * 回读失败不改写入成功结论（§18.2），提示回读失败原因。
  */
 export async function writeRowById(
-  host: AppHost,
+  host: HostIdentity & CommunicationHost & PluginHost,
   sheetId: SheetId,
   rowId: RowId,
   deps: Pick<RowIoDeps, "updateRow" | "recordManualResult" | "appendMessage">,

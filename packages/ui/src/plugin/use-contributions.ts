@@ -5,11 +5,11 @@
  */
 import { useSyncExternalStore } from "react";
 import type { Contribution, ContributionPointId } from "@mamep2026/plugin-api";
-import type { AppHost } from "../host";
+import type { PluginHost } from "../host";
 
 /** 响应式读取某贡献点的有效贡献：host 为空返回空数组。 */
 export function usePluginContributions<T>(
-  host: AppHost | null,
+  host: PluginHost | null,
   pointId: ContributionPointId,
 ): Contribution<T>[] {
   const registry = host?.pluginRegistry ?? null;

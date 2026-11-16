@@ -10,7 +10,7 @@
  * 右键菜单（Dropdown 弹层）在 jsdom 无法渲染弹层，其交互与提交/同步行为由 Playwright
  * e2e（tests/e2e-web/tests/sidebar-menu.spec.ts）覆盖。本文件保留页签头（双击）用例。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createEmptyWorkspace } from "@mamep2026/domain";
@@ -149,6 +149,48 @@ describe("Sheet 名重命名编辑态隔离", () => {
         .length,
     ).toBe(0);
     expect(sidebarItemName("Sheet 1")).toBeTruthy();
+  });
+});
+
+describe("平台生命周期能力门控", () => {
+  it("keepAwake=false 时不调用可选 KeepAwake 桥", () => {
+    const setKeepScreenOn = vi.fn();
+    const { host } = makeHost({ keepAwake: false }, { setKeepScreenOn });
+    useAppStore.setState({ host });
+
+    render(<MamepApp />);
+
+    expect(setKeepScreenOn).not.toHaveBeenCalled();
+  });
+
+  it("keepAwake=true 时由能力矩阵放行 KeepAwake 桥", () => {
+    const setKeepScreenOn = vi.fn();
+    const { host } = makeHost({ keepAwake: true }, { setKeepScreenOn });
+    useAppStore.setState({ host });
+
+    render(<MamepApp />);
+
+    expect(setKeepScreenOn).toHaveBeenCalledWith(false);
+  });
+
+  it("hardwareBack=false 时不订阅硬件返回键", () => {
+    const onHardwareBack = vi.fn(() => () => undefined);
+    const { host } = makeHost({ hardwareBack: false }, { onHardwareBack });
+    useAppStore.setState({ host });
+
+    render(<MamepApp />);
+
+    expect(onHardwareBack).not.toHaveBeenCalled();
+  });
+
+  it("hardwareBack=true 时由能力矩阵放行返回键订阅", () => {
+    const onHardwareBack = vi.fn(() => () => undefined);
+    const { host } = makeHost({ hardwareBack: true }, { onHardwareBack });
+    useAppStore.setState({ host });
+
+    render(<MamepApp />);
+
+    expect(onHardwareBack).toHaveBeenCalledTimes(1);
   });
 });
 

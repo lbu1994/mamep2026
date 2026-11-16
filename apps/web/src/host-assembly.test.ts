@@ -11,6 +11,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import {
+  browserCapabilities,
   createEmptyWorkspace,
   createMamepError,
   RegisterAddress,
@@ -33,9 +34,15 @@ type PollResultListener = (event: PollResultEvent) => void;
  * 最小 host 测试替身：只实现装配编排实际调用的成员（`asHost` 一次断言补齐 `AppHost`
  * 接口——仅测试替身如此，生产代码不得绕过类型）。
  */
-function makeFakeHost(options: { isMockMode?: boolean } = {}) {
+function makeFakeHost(
+  options: { isMockMode?: boolean; backgroundLifecycle?: boolean } = {},
+) {
   const pollResultListeners: PollResultListener[] = [];
   const host = {
+    capabilities: {
+      ...browserCapabilities,
+      backgroundLifecycle: options.backgroundLifecycle ?? true,
+    },
     isMockMode: options.isMockMode ?? false,
     startPlugins: vi.fn(async () => undefined),
     subscribeCommLog: vi.fn(() => () => undefined),
@@ -498,5 +505,35 @@ describe("startAppHost", () => {
     controller.abort();
     expect(listeners.size).toBe(0);
     expect(host.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("backgroundLifecycle=false：页面隐藏只 flush，不调用本地会话生命周期桥", async () => {
+    const { host } = makeFakeHost({ backgroundLifecycle: false });
+    const listeners = new Set<() => void>();
+    const doc: VisibilityDocument = {
+      visibilityState: "visible",
+      addEventListener: (_type, listener) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_type, listener) => {
+        listeners.delete(listener);
+      },
+    };
+    const deps = makeDeps({
+      loadHostFactory: vi.fn(async () => () => asHost(host)),
+      documentRef: doc,
+    });
+    const controller = new AbortController();
+
+    await startAppHost(deps, controller.signal);
+    Object.defineProperty(doc, "visibilityState", {
+      value: "hidden",
+      configurable: true,
+    });
+    for (const listener of listeners) listener();
+
+    expect(host.setBackgroundSuspended).not.toHaveBeenCalled();
+    expect(host.flush).toHaveBeenCalledTimes(1);
+    controller.abort();
   });
 });

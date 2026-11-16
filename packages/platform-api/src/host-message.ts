@@ -918,6 +918,7 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   serialPorts: "enumerated",
   // 文件持久化：主进程应用数据目录版本化 JSON（filesystem: "full"）。
   filesystem: "full",
+  clipboard: true,
   nodePlugins: false,
   webPlugins: true,
   logExport: "save-dialog",
@@ -931,6 +932,10 @@ export const electronCapabilities: PlatformCapabilities = Object.freeze({
   // → hostPlugins: true。
   executablePlugins: true,
   hostPlugins: true,
+  // 通信会话在 Main；Renderer 页面生命周期不驱动远程轮询暂停/恢复。
+  backgroundLifecycle: false,
+  keepAwake: false,
+  hardwareBack: false,
   // 协议扩展/表类型：仅列**核心**能力（基础表 codec）；插件贡献（安川 / 自定义
   // 功能码等，用户手动安装）由 Renderer 侧 Host 读取注册表后经 deriveCapabilities 叠加。
   protocolExtensions: [
@@ -951,6 +956,7 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   modbusTcp: true,
   serialPorts: "enumerated",
   filesystem: "unsupported",
+  clipboard: true,
   nodePlugins: false,
   webPlugins: true,
   logExport: "save-dialog",
@@ -964,6 +970,10 @@ export const vscodeCapabilities: PlatformCapabilities = Object.freeze({
   // → hostPlugins: true。
   executablePlugins: true,
   hostPlugins: true,
+  // 通信会话在 Extension Host；Webview 页面生命周期不驱动远程轮询暂停/恢复。
+  backgroundLifecycle: false,
+  keepAwake: false,
+  hardwareBack: false,
   // 协议扩展/表类型：仅列**核心**能力（基础表 codec）；插件贡献由 Renderer 侧 Host
   // 读取注册表后经 deriveCapabilities 叠加，宿主侧 codec 由 HostPluginRuntime 按插件存储注册。
   protocolExtensions: [

@@ -78,7 +78,20 @@ import type {
 } from "@mamep2026/plugin-api";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { AutoSaveCoordinator } from "@mamep2026/workspace";
-import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
+import type {
+  ClipboardHost,
+  CommProperties,
+  CommunicationHost,
+  FileHost,
+  HostIdentity,
+  LoggingHost,
+  PlatformLifecycleHost,
+  PluginHost,
+  PollingHost,
+  TraceHost,
+  TraceSampleEvent,
+  WorkspaceHost,
+} from "@mamep2026/ui";
 import {
   createMockScenarioRows,
   detectBrowserCompatibility,
@@ -163,7 +176,19 @@ export function deriveCapabilities(
   };
 }
 
-export class BrowserAppHost implements AppHost {
+export class BrowserAppHost
+  implements
+    HostIdentity,
+    WorkspaceHost,
+    CommunicationHost,
+    PollingHost,
+    TraceHost,
+    LoggingHost,
+    ClipboardHost,
+    FileHost,
+    PluginHost,
+    PlatformLifecycleHost
+{
   /** 基础能力：协议扩展 / 表类型由 `get capabilities()` 叠加插件贡献派生。 */
   private readonly baseCapabilities: PlatformCapabilities;
   /**

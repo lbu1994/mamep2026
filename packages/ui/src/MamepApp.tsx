@@ -78,6 +78,7 @@ import { closeTopOverlay, useOverlayClose } from "./overlay-close";
 import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
 import { canDirectConnect, runConnect } from "./connection-actions";
+import { hasPlatformCapability } from "./host-contracts";
 import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { AppStartupPlaceholder } from "./components/AppStartupPlaceholder";
@@ -458,20 +459,32 @@ export function MamepApp(): React.ReactNode {
   }, [host, activeSheetAddressTransform, connectionState]);
 
   // 屏幕常亮（KeepAwake）：只要存在持续轮询或追踪就保持屏幕不休眠。
-  // 仅 Android 实现（其余平台不实现该方法 → 可选链空操作）；值变化时才调用（幂等）。
+  // 先经能力矩阵门控，再调用生命周期桥；值变化时才调用（幂等）。
   const hasContinuousWork = useAppStore((s) =>
     s.workspace.sheets.some((sheet) =>
       sheet.rows.some((row) => row.pollingEnabled || row.traceEnabled),
     ),
   );
   useEffect(() => {
-    host?.setKeepScreenOn?.(hasContinuousWork);
+    if (
+      host === null ||
+      !hasPlatformCapability(host.capabilities, "keepAwake")
+    ) {
+      return;
+    }
+    host.setKeepScreenOn?.(hasContinuousWork);
   }, [host, hasContinuousWork]);
 
   // 硬件返回键（Android）：先关最上层覆盖层（移动端抽屉等，经 overlay-close 栈），
-  // 无覆盖层时不消费 → 宿主兑底最小化应用（不退出进程）。浏览器/桌面无此能力 → 返回 null。
+  // 无覆盖层时不消费 → 宿主兜底最小化应用（不退出进程）。
   useEffect(() => {
-    const unsubscribe = host?.onHardwareBack?.(() => closeTopOverlay()) ?? null;
+    if (
+      host === null ||
+      !hasPlatformCapability(host.capabilities, "hardwareBack")
+    ) {
+      return;
+    }
+    const unsubscribe = host.onHardwareBack?.(() => closeTopOverlay()) ?? null;
     return () => {
       unsubscribe?.();
     };

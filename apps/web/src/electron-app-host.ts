@@ -73,7 +73,20 @@ import {
   type WebSerialHandle,
 } from "@mamep2026/platform-web";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
-import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
+import type {
+  ClipboardHost,
+  CommProperties,
+  CommunicationHost,
+  FileHost,
+  HostIdentity,
+  LoggingHost,
+  PlatformLifecycleHost,
+  PluginHost,
+  PollingHost,
+  TraceHost,
+  TraceSampleEvent,
+  WorkspaceHost,
+} from "@mamep2026/ui";
 import { BrowserAppHost, deriveCapabilities } from "./AppHost";
 import { BridgePluginStore } from "./bridge-plugin-store";
 import { FileWorkspaceRepository } from "./file-workspace-repository";
@@ -94,7 +107,19 @@ export interface ElectronAppHostOptions {
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
 }
 
-export class ElectronAppHost implements AppHost {
+export class ElectronAppHost
+  implements
+    HostIdentity,
+    WorkspaceHost,
+    CommunicationHost,
+    PollingHost,
+    TraceHost,
+    LoggingHost,
+    ClipboardHost,
+    FileHost,
+    PluginHost,
+    PlatformLifecycleHost
+{
   /** 能力矩阵派生：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */
   get capabilities(): PlatformCapabilities {
     return deriveCapabilities(electronCapabilities, this.pluginRegistry);

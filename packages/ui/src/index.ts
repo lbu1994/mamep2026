@@ -6,7 +6,23 @@ export {
   type HostStatus,
   type TraceWindowModel,
 } from "./app-store";
-export type { AppHost, CommProperties, TraceSampleEvent } from "./host";
+export {
+  hasPlatformCapability,
+  type AppHost,
+  type BooleanPlatformCapability,
+  type ClipboardHost,
+  type CommProperties,
+  type CommunicationHost,
+  type FileHost,
+  type HostIdentity,
+  type LoggingHost,
+  type PlatformLifecycleHost,
+  type PluginHost,
+  type PollingHost,
+  type TraceHost,
+  type TraceSampleEvent,
+  type WorkspaceHost,
+} from "./host";
 export { requestProtocolResolver, requestRouteForSheet } from "./request-route";
 export {
   applyLanguage,

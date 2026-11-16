@@ -57,7 +57,20 @@ import type {
   PluginSyncRegistries,
 } from "@mamep2026/plugin-api";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
-import type { AppHost, CommProperties, TraceSampleEvent } from "@mamep2026/ui";
+import type {
+  ClipboardHost,
+  CommProperties,
+  CommunicationHost,
+  FileHost,
+  HostIdentity,
+  LoggingHost,
+  PlatformLifecycleHost,
+  PluginHost,
+  PollingHost,
+  TraceHost,
+  TraceSampleEvent,
+  WorkspaceHost,
+} from "@mamep2026/ui";
 import {
   AndroidPlatformHost,
   androidCapabilities,
@@ -97,7 +110,19 @@ export interface AndroidAppHostOptions {
   capabilities?: PlatformCapabilities | undefined;
 }
 
-export class AndroidAppHost implements AppHost {
+export class AndroidAppHost
+  implements
+    HostIdentity,
+    WorkspaceHost,
+    CommunicationHost,
+    PollingHost,
+    TraceHost,
+    LoggingHost,
+    ClipboardHost,
+    FileHost,
+    PluginHost,
+    PlatformLifecycleHost
+{
   /** 基础能力：装配期由 composition root 注入（含运行时探测结果）。 */
   private readonly baseCapabilities: PlatformCapabilities;
   /** 能力矩阵派生：基础能力 + 已启用插件贡献的协议扩展 / 表类型。 */

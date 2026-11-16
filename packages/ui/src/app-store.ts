@@ -87,6 +87,7 @@ import {
   type RowSuccessKind,
 } from "./row-result";
 import type { AppHost } from "./host";
+import { hasPlatformCapability } from "./host-contracts";
 import {
   persistedSettingsSchema,
   type PersistedConnectionSettings,
@@ -1318,7 +1319,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const payload = copyRowsToClipboard(sheet, state.selectedRowIds);
     set({ clipboardPayload: payload, clipboardSourceSheetType: sheet.type });
     const host = state.host;
-    if (host !== null) {
+    if (
+      host !== null &&
+      hasPlatformCapability(host.capabilities, "clipboard")
+    ) {
       void host
         .copyTextToClipboard(encodeClipboardCsv(payload))
         .then((result) => {
@@ -1361,7 +1365,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
     }
     const host = state.host;
-    if (host !== null) {
+    if (
+      host !== null &&
+      hasPlatformCapability(host.capabilities, "clipboard")
+    ) {
       void host
         .copyTextToClipboard(encodeClipboardCsv(payload))
         .then((result) => {
@@ -1401,7 +1408,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     let issues: ClipboardIssue[] = [];
     const host = state.host;
     // 系统剪贴板为优先来源；读取失败/无内容时回退到应用内剪贴板。
-    if (host !== null) {
+    if (
+      host !== null &&
+      hasPlatformCapability(host.capabilities, "clipboard")
+    ) {
       const readResult = await host.readTextFromClipboard();
       if (readResult.ok && readResult.value !== null) {
         const decoded = decodeClipboardCsv(

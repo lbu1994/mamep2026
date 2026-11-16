@@ -4,7 +4,7 @@
  * getVersion 会崩）；browserCompatibility 默认 null（桌面语义），组件兼容性测试可覆盖。
  */
 import { vi } from "vitest";
-import { createEmptyWorkspace } from "@mamep2026/domain";
+import { browserCapabilities, createEmptyWorkspace } from "@mamep2026/domain";
 import type {
   BrowserCompatibility,
   PlatformCapabilities,
@@ -34,6 +34,8 @@ export function makeHost(
     supportsWebSerial?: () => boolean;
     browserCompatibility?: BrowserCompatibility | null;
     platform?: AppHost["platform"];
+    setKeepScreenOn?: AppHost["setKeepScreenOn"];
+    onHardwareBack?: AppHost["onHardwareBack"];
   } = {},
 ): { host: AppHost; connectTcp: ReturnType<typeof vi.fn> } {
   const connectTcp = vi.fn(async (): Promise<Result<void>> => ({
@@ -42,18 +44,14 @@ export function makeHost(
   }));
   const host: AppHost = {
     capabilities: {
-      modbusRtu: true,
+      ...browserCapabilities,
       modbusTcp: true,
       serialPorts: "enumerated",
       filesystem: "unsupported",
-      nodePlugins: false,
-      webPlugins: true,
       logExport: "save-dialog",
       workspaceImport: "upload",
       workspaceExport: "download",
-      pluginInstall: "upload",
       executablePlugins: false,
-      hostPlugins: false,
       protocolExtensions: [],
       tableTypes: ["holding-register"],
       ...caps,
@@ -78,6 +76,12 @@ export function makeHost(
     getWorkspaceRecoveryInfo: vi.fn(() => null),
     getSaveStatus: vi.fn(() => "saved" as const),
     subscribeSaveStatus: vi.fn(() => () => undefined),
+    ...(overrides.setKeepScreenOn !== undefined
+      ? { setKeepScreenOn: overrides.setKeepScreenOn }
+      : {}),
+    ...(overrides.onHardwareBack !== undefined
+      ? { onHardwareBack: overrides.onHardwareBack }
+      : {}),
     supportsWebSerial: overrides.supportsWebSerial ?? vi.fn(() => false),
     browserCompatibility: overrides.browserCompatibility ?? null,
     enumerateSerialPorts: vi.fn(async () => ({

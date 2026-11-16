@@ -22,6 +22,8 @@ export interface PlatformCapabilities {
   readonly modbusTcp: boolean;
   readonly serialPorts: SerialPortCapability;
   readonly filesystem: FilesystemCapability;
+  /** 系统剪贴板 API 是否装配；运行时权限失败仍由调用结果表达。 */
+  readonly clipboard: boolean;
   readonly nodePlugins: boolean;
   readonly webPlugins: boolean;
   readonly logExport: LogExportCapability;
@@ -33,6 +35,12 @@ export interface PlatformCapabilities {
   readonly executablePlugins: boolean;
   /** Host 插件（Node 主进程 / Extension Host 执行）；浏览器与 Android 为 false。 */
   readonly hostPlugins: boolean;
+  /** 应用前后台生命周期桥（轮询/Trace 暂停与恢复）。 */
+  readonly backgroundLifecycle: boolean;
+  /** 持续通信期间保持屏幕常亮。 */
+  readonly keepAwake: boolean;
+  /** 硬件返回键订阅（移动端）。 */
+  readonly hardwareBack: boolean;
   /** 已注册协议扩展 ID（如 ["yaskawa-memobus"]）。 */
   readonly protocolExtensions: readonly string[];
   /** 已注册表类型 ID（含核心 "holding-register"）。 */
@@ -52,6 +60,7 @@ export const browserCapabilities: PlatformCapabilities = Object.freeze({
   modbusTcp: false,
   serialPorts: "browser-picker",
   filesystem: "limited",
+  clipboard: true,
   nodePlugins: false,
   webPlugins: true,
   logExport: "download",
@@ -60,6 +69,9 @@ export const browserCapabilities: PlatformCapabilities = Object.freeze({
   pluginInstall: "upload",
   executablePlugins: true,
   hostPlugins: false,
+  backgroundLifecycle: true,
+  keepAwake: false,
+  hardwareBack: false,
   // 协议扩展 / 表类型：仅列核心能力；插件贡献由 Host 经 deriveCapabilities 叠加。
   protocolExtensions: [
     // 基础表 codec：coil/discrete-input/input-register，RTU 承载（核心能力）。

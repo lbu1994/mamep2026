@@ -43,7 +43,7 @@ import {
 } from "@mamep2026/register-table";
 import type { SaveStatus } from "@mamep2026/workspace";
 import type { AppHost, HostStatus } from "@mamep2026/ui";
-import { requestRouteForSheet } from "@mamep2026/ui";
+import { hasPlatformCapability, requestRouteForSheet } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
 import { createBrowserHost } from "./host-factories/browser";
 import type { AppPlatformName } from "./platform-detect";
@@ -257,9 +257,11 @@ function wireHost(
   const doc = deps.documentRef ?? document;
   const onVisibilityChange = (): void => {
     const hidden = doc.visibilityState === "hidden";
-    // 后台暂停轮询/追踪（移动端生命周期）：配置保留在会话宿主内，回前台按原
-    // 配置恢复。非 Android 平台同样受益（切标签页/最小化时不再空转总线）。
-    host.setBackgroundSuspended?.(hidden);
+    // 后台暂停轮询/追踪：配置保留在会话宿主内，回前台按原配置恢复。
+    // 是否由页面生命周期驱动本地会话必须由能力矩阵明确声明。
+    if (hasPlatformCapability(host.capabilities, "backgroundLifecycle")) {
+      host.setBackgroundSuspended?.(hidden);
+    }
     if (hidden) {
       void host.flush();
     }

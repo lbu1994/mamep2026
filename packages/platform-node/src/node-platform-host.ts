@@ -50,6 +50,7 @@ export const nodeHostCapabilities: PlatformCapabilities = Object.freeze({
   modbusTcp: true,
   serialPorts: "enumerated",
   filesystem: "unsupported",
+  clipboard: false,
   nodePlugins: false,
   webPlugins: false,
   logExport: "unsupported",
@@ -58,6 +59,9 @@ export const nodeHostCapabilities: PlatformCapabilities = Object.freeze({
   pluginInstall: "unsupported",
   executablePlugins: false,
   hostPlugins: true,
+  backgroundLifecycle: false,
+  keepAwake: false,
+  hardwareBack: false,
   protocolExtensions: [],
   tableTypes: ["holding-register"],
 });

@@ -7,7 +7,7 @@
  * 本模块仅保留平台侧通用执行前置（连接检查 + 消息提示）与代理调用。
  */
 import type { ApplicationMessage } from "@mamep2026/logging";
-import type { AppHost } from "./host";
+import type { CommunicationHost, PluginHost } from "./host";
 
 export interface PluginToolbarActionDeps {
   appendMessage: (message: ApplicationMessage) => void;
@@ -18,7 +18,7 @@ export interface PluginToolbarActionDeps {
  * 前置：已连接（否则提示）；确认流程由 UI 层按贡献点 confirmKey 处理（此处不重复）。
  */
 export async function runPluginToolbarAction(
-  host: AppHost,
+  host: CommunicationHost & PluginHost,
   pluginId: string,
   actionId: string,
   deps: PluginToolbarActionDeps,

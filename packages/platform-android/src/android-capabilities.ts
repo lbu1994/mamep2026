@@ -24,6 +24,7 @@ export const androidCapabilities: PlatformCapabilities = Object.freeze({
   serialPorts: "enumerated",
   // WebView 原生支持 IndexedDB（与浏览器端同路径）。
   filesystem: "limited",
+  clipboard: true,
   nodePlugins: false,
   webPlugins: true,
   // 当前 Android 文件导出/导入能力尚不支持。
@@ -36,6 +37,10 @@ export const androidCapabilities: PlatformCapabilities = Object.freeze({
   // 见文件头：由探针覆盖（fail-closed 基线）。
   executablePlugins: false,
   hostPlugins: false,
+  // Capacitor App 生命周期桥：前后台暂停/恢复、KeepAwake 与硬件返回键。
+  backgroundLifecycle: true,
+  keepAwake: true,
+  hardwareBack: true,
   // 与共享 UI 同源（同一份 web 产物）：此处仅列**核心**协议扩展/表类型；插件贡献
   // （安川 / 自定义功能码等）由 Host 读取注册表后经 deriveCapabilities 叠加。
   protocolExtensions: [

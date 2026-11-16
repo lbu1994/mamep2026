@@ -8,7 +8,7 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
-import { createEmptyWorkspace } from "@mamep2026/domain";
+import { browserCapabilities, createEmptyWorkspace } from "@mamep2026/domain";
 import { PluginRegistry } from "@mamep2026/plugin-api";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
@@ -37,18 +37,14 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
   });
   const host: AppHost = {
     capabilities: {
-      modbusRtu: true,
+      ...browserCapabilities,
       modbusTcp: true,
       serialPorts: "enumerated",
       filesystem: "unsupported",
-      nodePlugins: false,
-      webPlugins: true,
       logExport: "save-dialog",
       workspaceImport: "upload",
       workspaceExport: "download",
-      pluginInstall: "upload",
       executablePlugins: false,
-      hostPlugins: false,
       protocolExtensions: [],
       tableTypes: ["holding-register"],
       ...caps,

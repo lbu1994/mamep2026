@@ -42,6 +42,7 @@ import {
 } from "@mamep2026/logging";
 import { useAppStore } from "../app-store";
 import { STATE_DOT_COLOR } from "../connection-state";
+import { hasPlatformCapability } from "../host-contracts";
 import { isNearBottom } from "../log-scroll";
 import { usePluginContributions } from "../plugin/use-contributions";
 import { PluginPanels, type PanelContribution } from "./plugin-contributions";
@@ -223,6 +224,10 @@ export function BottomPanel({
 
   const handleCopy = async (): Promise<void> => {
     if (host === null || commLog.length === 0) return;
+    if (!hasPlatformCapability(host.capabilities, "clipboard")) {
+      message.error(t("errors.clipboardUnavailable"));
+      return;
+    }
     const text = commLog
       .map((entry) => {
         const direction =
