@@ -711,12 +711,12 @@ export const zh: TranslationResources = {
     selectOddRows: "选择奇数行",
     selectEvenRows: "选择偶数行",
     readAll: "读取全表",
-    hex: "HEX",
+    hex: "十六进制",
     unsigned: "无符号十进制",
     signed: "有符号十进制",
     binary: "二进制",
     string: "字符串",
-    bool: "BOOL",
+    bool: "布尔值",
     readOnlyTable: "该表为只读（离散输入 / 输入寄存器）",
     // 核心表类型标题（侧边栏分组/新建表）： 起明确读/写属性。
     tableType: {
