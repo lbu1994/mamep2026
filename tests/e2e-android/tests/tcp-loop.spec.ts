@@ -32,6 +32,7 @@ import {
   waitForWebviewSocket,
   CDP_PORT,
 } from "../helpers/adb";
+import { expectNoConsoleErrors } from "../console-guard";
 import { setWriteVerify } from "../helpers/app";
 
 /** 组 MBAP 帧（tid / proto=0 / length / unit + pdu），无 CRC。 */
@@ -217,6 +218,7 @@ test.afterAll(async () => {
   removeAllReverses();
   forceStopApp();
   await slave?.close();
+  expectNoConsoleErrors(consoleErrors);
 });
 
 test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写后回读）→ 断开", async () => {
@@ -287,10 +289,4 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
     (element as HTMLElement).click(),
   );
   await expect(disconnectButton).toBeHidden({ timeout: 20_000 });
-});
-
-test("全程无 console 错误", () => {
-  // Capacitor debug 构建会把每次插件调用以 log 形式打进 console（非 error），
-  // 这里只断言 error/pageerror，与三端 e2e 口径一致。
-  expect(consoleErrors).toEqual([]);
 });

@@ -19,6 +19,7 @@ import * as net from "node:net";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { clearWorkspaceFile } from "../clear-workspace-file";
+import { expectNoConsoleErrors } from "../no-console-guard";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests/）。 */
@@ -182,6 +183,7 @@ test.afterAll(async () => {
   } catch {
     // 已关闭。
   }
+  expectNoConsoleErrors(consoleErrors);
 });
 
 /**
@@ -289,8 +291,4 @@ test("服务器离线：重连尝试失败，不回到 Online", async () => {
     { timeout: 5000 },
   );
   await expect(page.locator(".ant-layout-header")).not.toContainText("Online");
-});
-
-test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {
-  expect(consoleErrors).toEqual([]);
 });

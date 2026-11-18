@@ -9,7 +9,8 @@
  * - 全程无 console 错误。
  * 注意：隐藏文件输入框随 Settings 弹窗挂载（在弹窗体内），导入前必须先打开 Settings。
  */
-import { expect, test, type Download, type Page } from "@playwright/test";
+import type { Download, Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
@@ -180,39 +181,6 @@ test("坏文件（非法 JSON）报错且不破坏当前工作区", async ({ pag
   await expect(page.getByText("Import failed.")).toBeVisible();
   await closeSettings(page);
   await expect(row(page, 0).getByLabel("Name")).toHaveText("KeepMe");
-});
-
-test("导入导出交互无 console 错误", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
-  page.on("console", (message) => {
-    if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
-  });
-
-  await openApp(page);
-  await setName(page, 0, "NoConsole");
-  const settings = await openSettings(page);
-
-  // 导出。
-  const downloadPromise = page.waitForEvent("download");
-  await settings.getByRole("button", { name: "Export Workspace" }).click();
-  const download = await downloadPromise;
-  const exported = await readDownload(download);
-
-  // 导入 → 预览 → 确认。
-  await importWorkspaceFile(page, "roundtrip.json", exported);
-  await confirmImport(page);
-  await closeSettings(page);
-  await expect(row(page, 0).getByLabel("Name")).toHaveText("NoConsole", {
-    timeout: 5000,
-  });
-
-  // 坏文件路径（重新打开 Settings 使隐藏输入可用）。
-  await openSettings(page);
-  await importWorkspaceFile(page, "bad.json", "bad");
-  await expect(page.getByText("Import failed.")).toBeVisible();
-
-  expect(errors).toEqual([]);
 });
 
 test("导入含 connectionProfiles 的工作区：Connection Settings 恢复连接参数（替代原 Import JSON 路径）", async ({

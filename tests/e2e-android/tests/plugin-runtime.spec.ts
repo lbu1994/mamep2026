@@ -25,6 +25,7 @@ import {
   openAppSession,
   type AppSession,
 } from "../helpers/app";
+import { expectNoConsoleErrors } from "../console-guard";
 import { pluginArtifact, readPluginStore } from "../helpers/plugins";
 
 /** 可执行插件（单文件 entry：codec + dataType 同步贡献）。 */
@@ -40,7 +41,9 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  const consoleErrors = session?.consoleErrors ?? [];
   await session?.close();
+  expectNoConsoleErrors(consoleErrors);
 });
 
 /** 等待应用就绪（reload 之后；启动自动弹出的 Connection Settings 一并收掉）。 */
@@ -341,8 +344,4 @@ test("same-process 可执行插件贡献在真机生效（表列表出现插件�
   // 贡献回收：分组节点从 DOM 消失（表列表已渲染过，可直接断言）。
   await expect(pluginContribution(page)).toHaveCount(0);
   expect(await storedPlugin(CUSTOM_FC_PLUGIN)).toBeUndefined();
-});
-
-test("全程无 console 错误（能力探测 / 安装入口 / 插件执行）", () => {
-  expect(session.consoleErrors).toEqual([]);
 });

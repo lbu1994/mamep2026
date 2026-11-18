@@ -16,6 +16,7 @@ import {
 import { createRequire } from "node:module";
 import path from "node:path";
 import { clearWorkspaceFile } from "../clear-workspace-file";
+import { expectNoConsoleErrors } from "../no-console-guard";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests/）。 */
@@ -196,6 +197,7 @@ test.afterAll(async () => {
   } catch {
     // 已关闭。
   }
+  expectNoConsoleErrors(consoleErrors);
 });
 
 test("取消/无可用端口：下拉框空态、无端口标签、无错误", async () => {
@@ -394,8 +396,4 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
       }),
     )
     .toEqual([0xaaaa, 0xbbbb]);
-});
-
-test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {
-  expect(consoleErrors).toEqual([]);
 });

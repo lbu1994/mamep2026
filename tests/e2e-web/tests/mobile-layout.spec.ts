@@ -5,7 +5,8 @@
  * 移动端不渲染 Splitter 的侧栏/底部面板面板、表格横向滚动 + 固定前两列 + 行高 44。
  * 桌面（≥1024）行为由既有用例（1600×900 视口）守住，本文件不重复。
  */
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { installExecutablePlugin } from "./helpers/manual-plugins";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
@@ -140,35 +141,4 @@ test("移动工具栏：次要控件收进「更多」面板，主操作仍在�
   const radix = panel.locator(".table-toolbar__radix");
   await radix.locator(".ant-segmented-item", { hasText: "HEX" }).click();
   await expect(radix.locator(".ant-segmented-item-selected")).toHaveText("HEX");
-});
-
-test("移动布局无 console 错误", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
-  });
-  page.on("pageerror", (error) => errors.push(String(error)));
-
-  await openMobileApp(page);
-  await page.getByRole("button", { name: "Open table list" }).click();
-  await expect(
-    page.locator(".ant-drawer:has(.mamep-mobile-drawer--sidebar)"),
-  ).toHaveClass(/ant-drawer-open/);
-  await page.keyboard.press("Escape");
-  await expect(
-    page.locator(".ant-drawer:has(.mamep-mobile-drawer--sidebar)"),
-  ).not.toHaveClass(/ant-drawer-open/);
-  await page.getByRole("button", { name: "Open panel" }).click();
-  await expect(
-    page.locator(".ant-drawer:has(.mamep-mobile-drawer--panel)"),
-  ).toHaveClass(/ant-drawer-open/);
-  await page.keyboard.press("Escape");
-  // 工具栏「更多」面板也纳入无 console 错误检查（Popover + 控件重排）。
-  await page
-    .locator(".table-toolbar")
-    .getByRole("button", { name: "More toolbar actions" })
-    .click();
-  await expect(page.locator(".table-toolbar__more")).toBeVisible();
-
-  expect(errors).toEqual([]);
 });

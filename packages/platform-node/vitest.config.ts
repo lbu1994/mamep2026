@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 /**
  * platform-node 测试配置：
@@ -9,5 +9,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     fileParallelism: false,
+    exclude: [
+      ...configDefaults.exclude,
+      "src/virtual-serial.integration.test.ts",
+      "src/virtual-serial-loopback.test.ts",
+    ],
   },
 });

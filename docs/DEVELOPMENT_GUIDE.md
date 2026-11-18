@@ -18,8 +18,8 @@
   **不进 `test:all`**；会先 `pnpm build:plugins` 再构建安装 debug APK）
 - `pnpm lint` — ESLint（全仓）
 - `pnpm typecheck` — turbo 全包类型检查（各包 `tsc --noEmit`）
-- `pnpm test` — turbo 全包 vitest（各包单测）
-- `pnpm test:all` — 一条命令跑完全量测试，顺序固定：三端真实端口 e2e（浏览器 `web:real` 最先，其次 `electron:real`、`vscode:real`）→ `pnpm test`（单测）→ `test:acceptance` → 三端 mock e2e（`e2e:web` / `e2e:electron` / `e2e:vscode`）→ `test:serial:virtual` → `pnpm lint` → `pnpm typecheck`（**不含 `test:e2e:android`**：需真机硬件，另行手动执行）。real 环节缺环境 SKIP 不失败（`e2e-real.mjs` 退出码 0）；fail-fast（任一环节失败即中断并返回非 0）；浏览器 real 首次需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）。**运行本命令前不得先运行任何其他指令（如启动服务器、启动从站等）**——前置环境由 `e2e-real.mjs` 统一编排（预检/启停从站/设置 `MAMEP_REAL`）；环境已有手动启动的进程时须先清理（按根 `AGENTS.md` 的测试与验证要求）。
+- `pnpm test` — turbo 全包 vitest（各包单测）；排除验收包和四个 E2E 包，验收测试只由 `pnpm test:acceptance` 执行一次
+- `pnpm test:all` — 一条命令跑完全量测试，顺序固定：三端真实端口 e2e（浏览器 `web:real` 最先，其次 `electron:real`、`vscode:real`）→ `pnpm test`（单测）→ `test:acceptance` → 三端 mock e2e（`e2e:web` / `e2e:electron` / `e2e:vscode`）→ `test:serial:virtual` → `pnpm lint` → `pnpm typecheck`（**不含 `test:e2e:android`**：需真机硬件，另行手动执行）。每个测试入口互斥：验收用例只运行一次，虚拟串口文件从普通 `platform-node` 单测中排除并只由专项配置运行。real 环节缺环境 SKIP 不失败（`e2e-real.mjs` 退出码 0）；fail-fast（任一环节失败即中断并返回非 0）；浏览器 real 首次需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）。**运行本命令前不得先运行任何其他指令（如启动服务器、启动从站等）**——前置环境由 `e2e-real.mjs` 统一编排（预检/启停从站/设置 `MAMEP_REAL`）；环境已有手动启动的进程时须先清理（按根 `AGENTS.md` 的测试与验证要求）。
 - `pnpm test:acceptance` / `pnpm test:e2e:web` / `pnpm test:e2e:electron` / `pnpm test:e2e:vscode` 单独跑对应测试包（e2e:electron 自动先 `build:electron`；e2e:vscode 自动先 `build:vscode`）
 - `pnpm test:e2e:real` / `pnpm test:e2e:web:real` / `pnpm test:e2e:electron:real` / `pnpm test:e2e:vscode:real` — 三端「真实端口」e2e（com0com COM4↔COM5 + 真实 RTU/TCP 从站）：`scripts/e2e-real.mjs` 统一编排（预检 → 启停从站 → 设 `MAMEP_REAL=1` → 跑对应端 `test:real`）；缺环境 SKIP 不失败；浏览器端启动时需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）。VSCode real 需先 `pnpm build:vscode`（runner 已处理）
 - `pnpm format` / `pnpm format:check` — Prettier

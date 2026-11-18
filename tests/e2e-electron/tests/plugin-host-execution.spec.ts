@@ -28,6 +28,7 @@ import { createRequire } from "node:module";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { expectNoConsoleErrors } from "../no-console-guard";
 
 const require = createRequire(import.meta.url);
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -85,6 +86,7 @@ test.afterAll(async () => {
   } catch {
     // 已关闭。
   }
+  expectNoConsoleErrors(consoleErrors);
   await rm(userDataDir, { recursive: true, force: true });
 });
 
@@ -200,8 +202,4 @@ test("卸载 → plugins.json 清空（宿主侧插件随之注销）", async ()
       { timeout: 10000 },
     )
     .toBe(0);
-});
-
-test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {
-  expect(consoleErrors).toEqual([]);
 });

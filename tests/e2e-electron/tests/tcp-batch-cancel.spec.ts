@@ -18,6 +18,7 @@ import * as net from "node:net";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { clearWorkspaceFile } from "../clear-workspace-file";
+import { expectNoConsoleErrors } from "../no-console-guard";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests/）。 */
@@ -160,6 +161,7 @@ test.afterAll(async () => {
   } catch {
     // 已关闭。
   }
+  expectNoConsoleErrors(consoleErrors);
 });
 
 test("TCP 全表读取取消：Read All → 取消 → 汇总 cancelledCount > 0 + 无 console 错误", async () => {
@@ -209,8 +211,4 @@ test("TCP 全表读取取消：Read All → 取消 → 汇总 cancelledCount > 0
   );
   const cancelledCount = Number(summaryText?.[1] ?? 0);
   expect(cancelledCount).toBeGreaterThan(0);
-});
-
-test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {
-  expect(consoleErrors).toEqual([]);
 });

@@ -20,6 +20,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import os from "node:os";
 import { readFile, writeFile } from "node:fs/promises";
+import { expectNoConsoleErrors } from "../no-console-guard";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests/）。 */
@@ -68,6 +69,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app.close();
+  expectNoConsoleErrors(consoleErrors);
 });
 
 /** 在渲染进程内调用白名单桥方法（函数无法跨 evaluate 克隆，须在页面内执行）。 */
@@ -219,8 +221,4 @@ test("导出→导入内容 roundtrip（序列化内容经两端口往返不丢�
   };
   expect(read.ok).toBe(true);
   expect(read.value?.content).toBe(content);
-});
-
-test("无 console 错误", async () => {
-  expect(consoleErrors).toEqual([]);
 });

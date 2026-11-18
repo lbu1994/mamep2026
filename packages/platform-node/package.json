@@ -11,6 +11,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "test:virtual-serial": "vitest run --config vitest.virtual-serial.config.ts",
     "lint": "eslint ."
   },
   "dependencies": {

@@ -26,6 +26,7 @@ import {
   writeRow,
   type AppSession,
 } from "../helpers/app";
+import { expectNoConsoleErrors } from "../console-guard";
 
 const enabled = process.env.MAMEP_ANDROID_USB_SERIAL === "1";
 
@@ -41,7 +42,9 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  const consoleErrors = session?.consoleErrors ?? [];
   await session?.close();
+  expectNoConsoleErrors(consoleErrors);
 });
 
 test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）→ 断开", async () => {
@@ -88,8 +91,4 @@ test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）�
     (element as HTMLElement).click(),
   );
   await expect(disconnectButton).toBeHidden({ timeout: 20_000 });
-});
-
-test("全程无 console 错误", () => {
-  expect(session.consoleErrors).toEqual([]);
 });

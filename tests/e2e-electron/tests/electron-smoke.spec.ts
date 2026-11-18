@@ -13,6 +13,7 @@ import {
 } from "@playwright/test";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { expectNoConsoleErrors } from "../no-console-guard";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests/）。 */
@@ -67,6 +68,7 @@ test.afterAll(async () => {
   } catch {
     // 已在「关闭窗口干净退出」用例中关闭。
   }
+  expectNoConsoleErrors(consoleErrors);
 });
 
 test("窗口加载同一套共享 UI 且 preload 白名单桥存在", async () => {
@@ -184,10 +186,6 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
   // 不暴露通用 ipcRenderer / 任意方法调用。
   expect(keys).not.toContain("ipcRenderer");
   expect(keys).not.toContain("invoke");
-});
-
-test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {
-  expect(consoleErrors).toEqual([]);
 });
 
 test("关闭窗口后应用干净退出（window-all-closed -> quit）", async () => {

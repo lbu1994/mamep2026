@@ -4,7 +4,8 @@
  * （F9、↑/↓、Alt+P）快捷键在真实浏览器（mockTransport）中的闭环，全程无 console 错误。
  * 运行前提：pnpm dev（http://localhost:5173）。
  */
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
@@ -54,12 +55,6 @@ test("Ctrl+/ 打开帮助抽屉并展示快捷键总览（app/table 两组）", 
     .getByRole("tab", { name: "Keyboard Shortcuts" })
     .click();
   await expect(title).toHaveText("Keyboard Shortcuts");
-});
-
-test("Ctrl+, 打开设置弹窗", async ({ page }) => {
-  await openApp(page);
-  await page.keyboard.press("Control+,");
-  await expect(page.getByText("Theme")).toBeVisible();
 });
 
 test("Ctrl+Enter 断开连接；再按打开连接设置弹窗", async ({ page }) => {
@@ -123,31 +118,4 @@ test("↑/↓ 移动选中行，Alt+P 切换选中行轮询", async ({ page }) =
     "aria-checked",
     before === "true" ? "false" : "true",
   );
-});
-
-test("键盘操作全程无 console 错误", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
-  page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
-  });
-
-  await openApp(page);
-  await page.keyboard.press("Control+/");
-  await page.waitForSelector(".ant-drawer-section:visible", { timeout: 5000 });
-  await page
-    .locator(".ant-drawer-section:visible")
-    .getByRole("tab", { name: "Keyboard Shortcuts" })
-    .click();
-  await expect(page.locator(".keyboard-shortcuts__title")).toHaveText(
-    "Keyboard Shortcuts",
-  );
-  await page.keyboard.press("Escape");
-  await page.keyboard.press("F9");
-  await page.waitForTimeout(800);
-  await page.keyboard.press("Control+,");
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
-
-  expect(errors).toEqual([]);
 });

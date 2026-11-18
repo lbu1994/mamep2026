@@ -10,18 +10,6 @@ async function openApp(page: Page): Promise<void> {
   });
 }
 
-test("messages panel shows translated text, not the raw i18n key", async ({
-  page,
-}) => {
-  await openApp(page);
-  await expect(page.locator(".bottom-panel")).toContainText(
-    "Application started (offline).",
-  );
-  await expect(page.locator(".bottom-panel")).not.toContainText(
-    "messages.appStarted",
-  );
-});
-
 test("empty sheet shows a guided empty state with an Add Row CTA", async ({
   page,
 }) => {

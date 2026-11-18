@@ -17,6 +17,7 @@ import {
   serialPortSelect,
   type AppSession,
 } from "../helpers/app";
+import { expectNoConsoleErrors } from "../console-guard";
 
 let session: AppSession;
 
@@ -25,7 +26,9 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  const consoleErrors = session?.consoleErrors ?? [];
   await session?.close();
+  expectNoConsoleErrors(consoleErrors);
 });
 
 test("USB 串口能力已声明：协议分组出现、RTU 表单完整、串口下拉可用", async () => {
@@ -81,10 +84,4 @@ test("未选端口直接 CONNECT 不会崩（能力错误以提示呈现）", as
   // 仍停在弹窗（未连接成功），页面未崩溃、表格仍在。
   await expect(connectionModal(page)).toBeVisible();
   await expect(page.locator(".register-table-tabs")).toBeVisible();
-});
-
-test("全程无 console 错误", () => {
-  // Capacitor debug 构建会把每次插件调用以 log 形式打进 console（非 error），
-  // 这里只断言 error/pageerror，与三端 e2e 口径一致。
-  expect(session.consoleErrors).toEqual([]);
 });

@@ -34,6 +34,7 @@ import {
   closeIsolatedElectron,
   launchIsolatedElectron,
 } from "../launch-isolated-electron";
+import { expectNoConsoleErrors } from "../no-console-guard";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests-real/）。 */
@@ -357,6 +358,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await closeIsolatedElectron(app, userDataDir);
+  expectNoConsoleErrors(consoleErrors);
 });
 
 test("RTU 自动选择 COM4（来自 config/connections.json）+ 连接 Online", async () => {
@@ -393,7 +395,7 @@ test("RTU 自动选择 COM4（来自 config/connections.json）+ 连接 Online",
   await setRadixHex(page);
 });
 
-test("FC03 读正常区 0x0000 → 0x04D2（从站初始值 1234）", async () => {
+test("RTU：FC03 读正常区 0x0000 → 0x04D2（从站初始值 1234）", async () => {
   await setRowAddress(page, "0000");
   await readRow(page);
   await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
@@ -401,7 +403,7 @@ test("FC03 读正常区 0x0000 → 0x04D2（从站初始值 1234）", async () =
   });
 });
 
-test("FC0x10 写正常区 0x0001=0x12AB + 读回验证", async () => {
+test("RTU：FC0x10 写正常区 0x0001=0x12AB + 读回验证", async () => {
   await setRowAddress(page, "0001");
   await writeRow(page, "12AB");
   await expect(
@@ -413,7 +415,7 @@ test("FC0x10 写正常区 0x0001=0x12AB + 读回验证", async () => {
   });
 });
 
-test("写值门控 0x0400：写 0x8000 被拒（异常 0x03），写 0x1234 成功", async () => {
+test("RTU：写值门控 0x0400：写 0x8000 被拒（异常 0x03），写 0x1234 成功", async () => {
   await setRowAddress(page, "0400");
   await writeRow(page, "8000");
   await expect(
@@ -432,7 +434,7 @@ test("写值门控 0x0400：写 0x8000 被拒（异常 0x03），写 0x1234 成�
   });
 });
 
-test("异常区：只读 0x0100 写 / 只写 0x0200 读 / 不存在 0x0300 读 / 不支持功能 0x0500 读", async () => {
+test("RTU：异常区：只读 0x0100 写 / 只写 0x0200 读 / 不存在 0x0300 读 / 不支持功能 0x0500 读", async () => {
   await setRowAddress(page, "0100");
   await writeRow(page, "0001");
   await expect(
@@ -458,7 +460,7 @@ test("异常区：只读 0x0100 写 / 只写 0x0200 读 / 不存在 0x0300 读 /
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 });
 
-test("no-response 0x0600：读超时错误，且不破坏后续请求", async () => {
+test("RTU：no-response 0x0600：读超时错误，且不破坏后续请求", async () => {
   await setRowAddress(page, "0600");
   await readRow(page);
   await expect(
@@ -477,7 +479,7 @@ test("no-response 0x0600：读超时错误，且不破坏后续请求", async ()
   });
 });
 
-test("边界：地址 0 与最大地址 0xFFFF（规则外回退正常）", async () => {
+test("RTU：边界：地址 0 与最大地址 0xFFFF（规则外回退正常）", async () => {
   await setRowAddress(page, "0000");
   await readRow(page);
   await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
@@ -498,7 +500,7 @@ test("边界：地址 0 与最大地址 0xFFFF（规则外回退正常）", asyn
   });
 });
 
-test("扩展：分片响应 0x0800 读写成功（半包/粘包组帧健壮性）", async () => {
+test("RTU：扩展：分片响应 0x0800 读写成功（半包/粘包组帧健壮性）", async () => {
   await setRowAddress(page, "0800");
   await writeRow(page, "1234");
   await expect(
@@ -510,7 +512,7 @@ test("扩展：分片响应 0x0800 读写成功（半包/粘包组帧健壮性�
   });
 });
 
-test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", async () => {
+test("RTU：扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", async () => {
   await setRowAddress(page, "0700");
   await readRow(page);
   await expect(
@@ -530,7 +532,7 @@ test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", 
   });
 });
 
-test("通信日志：请求/响应/异常帧字节", async () => {
+test("RTU：通信日志：请求/响应/异常帧字节", async () => {
   // Listy 虚拟列表只渲染视口内的行：共享 app 下历史帧已被滚动挤出，
   // 清空后在测试内重建目标帧（写值门控异常 0x03、只读区异常 0x02、读 0x0000）。
   await page.getByRole("tab", { name: "Comm Log" }).click();
@@ -563,7 +565,7 @@ test("通信日志：请求/响应/异常帧字节", async () => {
   await expect(list).toContainText("01 03 02 04 D2", { timeout: 5000 });
 });
 
-test("写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 显示回读值 0000", async () => {
+test("RTU：写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 显示回读值 0000", async () => {
   // 写忽略区（0x0900–0x090f）：写入返回正常成功帧但不落盘——回读仍为旧值 0。
   // 新表默认 OFF；本用例显式 ON，写入后立即 FC03 回读 → 值不一致 → 失败点（红点），
   // Data 列被回读值覆盖（§15.1）显示 0000 而非写入的 1234。
@@ -738,11 +740,4 @@ test("断开连接 → Offline，可重连 → Online（稳定性）", async () 
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: CONNECTED_TIMEOUT,
   });
-});
-
-test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {
-  expect(
-    consoleErrors,
-    `console/page errors: ${consoleErrors.join(" | ")}`,
-  ).toEqual([]);
 });
