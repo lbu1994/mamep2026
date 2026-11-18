@@ -132,9 +132,11 @@ test("VSCode 主题完整适配（UI 级）：跟随 + 实时切换 + 面板重�
     if (!sourceUrl.startsWith("vscode-webview://")) return;
     consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
-  workbox.on("pageerror", (err) =>
-    consoleErrors.push(`PAGEERROR: ${String(err)}`),
-  );
+  workbox.on("pageerror", (err) => {
+    const stack = err.stack ?? "";
+    if (!stack.includes("vscode-webview://")) return;
+    consoleErrors.push(`PAGEERROR: ${String(err)}\n${stack}`);
+  });
   await workbox.setViewportSize({ width: 1600, height: 900 });
 
   await evaluateInVSCode((vscode) =>

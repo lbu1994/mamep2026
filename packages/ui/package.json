@@ -17,6 +17,7 @@
     "@dnd-kit/modifiers": "catalog:",
     "@dnd-kit/sortable": "catalog:",
     "@dnd-kit/utilities": "catalog:",
+    "@hookform/resolvers": "catalog:",
     "@mamep2026/communication": "workspace:*",
     "@mamep2026/data-conversion": "workspace:*",
     "@mamep2026/domain": "workspace:*",
@@ -29,8 +30,9 @@
     "antd": "catalog:",
     "i18next": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:",
+    "react-hook-form": "catalog:",
     "react-i18next": "catalog:",
+    "zod": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {

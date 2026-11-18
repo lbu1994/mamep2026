@@ -53,6 +53,19 @@ function makeFakeHost(
       pollResultListeners.push(listener);
       return () => undefined;
     }),
+    getCommProperties: vi.fn(() => ({
+      protocol: "rtu" as const,
+      portLabel: null,
+      unitId: null,
+      baudRate: 9600,
+      dataBits: 8,
+      stopBits: 1,
+      parity: "none",
+      flowControl: "off" as const,
+      timeoutMs: 1000,
+      retryCount: 1,
+      connectionState: "disconnected" as const,
+    })),
     loadWorkspace: vi.fn(async () => ({
       ok: true as const,
       value: createEmptyWorkspace(),

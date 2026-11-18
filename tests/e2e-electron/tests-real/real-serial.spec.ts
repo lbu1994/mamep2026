@@ -19,7 +19,6 @@
  * 自定义功能码分组。
  */
 import {
-  _electron,
   expect,
   test,
   type ElectronApplication,
@@ -31,6 +30,10 @@ import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { clearWorkspaceFile } from "../clear-workspace-file";
+import {
+  closeIsolatedElectron,
+  launchIsolatedElectron,
+} from "../launch-isolated-electron";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests-real/）。 */
@@ -102,6 +105,7 @@ function rtuConfig(): { port: string; baudRate: number; slaveAddress: number } {
 
 let app: ElectronApplication;
 let page: Page;
+let userDataDir: string | undefined;
 const consoleErrors: string[] = [];
 
 /** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
@@ -313,11 +317,14 @@ async function installCustomFunctionCodePlugin(): Promise<void> {
 }
 
 test.beforeAll(async () => {
-  app = await _electron.launch({
+  const launched = await launchIsolatedElectron({
     executablePath: require("electron"),
-    args: ["dist-electron/main.js"],
+    mainEntry: "dist-electron/main.js",
     cwd: REPO_ROOT,
   });
+  app = launched.app;
+  userDataDir = launched.userDataDir;
+  const isolatedUserDataDir = launched.userDataDir;
   page = await app.firstWindow();
   page.on("console", (msg) => {
     if (msg.type() === "error") consoleErrors.push(`CONSOLE: ${msg.text()}`);
@@ -338,11 +345,8 @@ test.beforeAll(async () => {
   await clearWorkspaceFile(app);
   // 插件存储同理：删掉 plugins.json(.bak)，保证本 spec 从「未安装任何插件」基线
   // 开始（否则上次运行安装的插件会让侧边栏多出分组、重复安装而注册失败）。
-  const userDataDir = await app.evaluate(async ({ app: electronApp }) =>
-    electronApp.getPath("userData"),
-  );
-  await rm(path.join(userDataDir, "plugins.json"), { force: true });
-  await rm(path.join(userDataDir, "plugins.json.bak"), { force: true });
+  await rm(path.join(isolatedUserDataDir, "plugins.json"), { force: true });
+  await rm(path.join(isolatedUserDataDir, "plugins.json.bak"), { force: true });
   await page.reload();
   await page.waitForLoadState("domcontentloaded");
   // 非 mock 启动自动弹出 Connection Settings。
@@ -352,11 +356,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  try {
-    await app.close();
-  } catch {
-    // 已关闭。
-  }
+  await closeIsolatedElectron(app, userDataDir);
 });
 
 test("RTU 自动选择 COM4（来自 config/connections.json）+ 连接 Online", async () => {
@@ -567,9 +567,9 @@ test("写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 显示
   // 写忽略区（0x0900–0x090f）：写入返回正常成功帧但不落盘——回读仍为旧值 0。
   // 新表默认 OFF；本用例显式 ON，写入后立即 FC03 回读 → 值不一致 → 失败点（红点），
   // Data 列被回读值覆盖（§15.1）显示 0000 而非写入的 1234。
-  await expect(activeTable(page).locator(".table-toolbar__verify")).toContainText(
-    "OFF",
-  );
+  await expect(
+    activeTable(page).locator(".table-toolbar__verify"),
+  ).toContainText("OFF");
   await setWriteVerify(page, "ON");
   await setRowAddress(page, "0900");
   await writeRow(page, "1234");

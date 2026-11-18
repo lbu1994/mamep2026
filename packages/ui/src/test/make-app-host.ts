@@ -11,7 +11,7 @@ import type {
   Result,
 } from "@mamep2026/domain";
 import { PluginRegistry } from "@mamep2026/plugin-api";
-import type { AppHost } from "../host";
+import type { AppHost, CommProperties } from "../host";
 
 /** 插件入口加载失败的结构化错误（默认桩：测试不实际安装插件）。 */
 function pluginEntryUnavailable() {
@@ -95,7 +95,19 @@ export function makeHost(
     dispose: vi.fn(async () => undefined),
     getConnectionState: vi.fn(() => "disconnected" as const),
     getSession: vi.fn(() => null),
-    getCommProperties: vi.fn(),
+    getCommProperties: vi.fn((): CommProperties => ({
+      protocol: "rtu" as const,
+      portLabel: null,
+      unitId: null,
+      baudRate: 9600,
+      dataBits: 8,
+      stopBits: 1,
+      parity: "none",
+      flowControl: "off",
+      timeoutMs: 1000,
+      retryCount: 1,
+      connectionState: "disconnected" as const,
+    })),
     setSlaveAddress: vi.fn(),
     setAddressTransform: vi.fn(),
     subscribeConnectionState: vi.fn(() => () => undefined),

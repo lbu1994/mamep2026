@@ -19,7 +19,6 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "@mamep2026/application": "workspace:*",
-    "@mamep2026/address-adjust": "workspace:*",
     "@mamep2026/communication": "workspace:*",
     "@mamep2026/data-conversion": "workspace:*",
     "@mamep2026/domain": "workspace:*",
@@ -31,9 +30,7 @@
     "@mamep2026/register-table": "workspace:*",
     "@mamep2026/ui": "workspace:*",
     "@mamep2026/ui-theme": "workspace:*",
-    "@mamep2026/workspace": "workspace:*",
-    "@mamep2026/yaskawa-memobus-67h-010dh-010eh": "workspace:*",
-    "@mamep2026/custom-function-code": "workspace:*"
+    "@mamep2026/workspace": "workspace:*"
   },
   "devDependencies": {
     "@mamep2026/test-kit": "workspace:*",

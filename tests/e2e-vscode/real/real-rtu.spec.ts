@@ -192,10 +192,16 @@ async function writeRow(frame: Frame, valueHex: string): Promise<void> {
 }
 
 /** 显式切换当前表的写后回读配置。 */
-async function setWriteVerify(
-  frame: Frame,
-  optionText: string,
-): Promise<void> {
+async function setWriteVerify(frame: Frame, optionText: string): Promise<void> {
+  const mobile = await isMobileLayout(frame);
+  const moreButton = frame.getByRole("button", {
+    name: "More toolbar actions",
+  });
+  const morePanel = frame.locator(".table-toolbar__more");
+  if (mobile) {
+    await moreButton.click();
+    await expect(morePanel).toBeVisible({ timeout: 5000 });
+  }
   const verify = frame.locator(".table-toolbar__verify");
   await verify.getByLabel("Write verification").click();
   await frame
@@ -204,6 +210,10 @@ async function setWriteVerify(
     .first()
     .click();
   await expect(verify).toContainText(optionText, { timeout: 5000 });
+  if (mobile) {
+    await moreButton.click();
+    await expect(morePanel).toBeHidden({ timeout: 5000 });
+  }
 }
 
 /**
@@ -253,9 +263,11 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     if (!sourceUrl.startsWith("vscode-webview://")) return;
     consoleErrors.push(`CONSOLE: ${msg.text()}`);
   });
-  workbox.on("pageerror", (err) =>
-    consoleErrors.push(`PAGEERROR: ${String(err)}`),
-  );
+  workbox.on("pageerror", (err) => {
+    const stack = err.stack ?? "";
+    if (!stack.includes("vscode-webview://")) return;
+    consoleErrors.push(`PAGEERROR: ${String(err)}\n${stack}`);
+  });
 
   // 桌面布局（避免窄窗口响应式分支）。
   await workbox.setViewportSize({ width: 1600, height: 900 });

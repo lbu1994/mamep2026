@@ -14,7 +14,6 @@
  * 超时 → 边界 → 扩展（分片/延迟）→ 通信日志 → 断开/重连 → 无 console 错误。
  */
 import {
-  _electron,
   expect,
   test,
   type ElectronApplication,
@@ -25,6 +24,10 @@ import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { clearWorkspaceFile } from "../clear-workspace-file";
+import {
+  closeIsolatedElectron,
+  launchIsolatedElectron,
+} from "../launch-isolated-electron";
 
 const require = createRequire(import.meta.url);
 /** 仓库根目录（本文件位于 tests/e2e-electron/tests-real/）。 */
@@ -56,6 +59,7 @@ function tcpConfig(): { host: string; port: number; unitId: number } {
 
 let app: ElectronApplication;
 let page: Page;
+let userDataDir: string | undefined;
 const consoleErrors: string[] = [];
 
 /** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
@@ -137,11 +141,13 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
 }
 
 test.beforeAll(async () => {
-  app = await _electron.launch({
+  const launched = await launchIsolatedElectron({
     executablePath: require("electron"),
-    args: ["dist-electron/main.js"],
+    mainEntry: "dist-electron/main.js",
     cwd: REPO_ROOT,
   });
+  app = launched.app;
+  userDataDir = launched.userDataDir;
   page = await app.firstWindow();
   page.on("console", (msg) => {
     if (msg.type() === "error") consoleErrors.push(`CONSOLE: ${msg.text()}`);
@@ -167,11 +173,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  try {
-    await app.close();
-  } catch {
-    // 已关闭。
-  }
+  await closeIsolatedElectron(app, userDataDir);
 });
 
 test("TCP 连接：按 config tcp-local-slave 填 host/port/unitId → Connect → Online", async () => {

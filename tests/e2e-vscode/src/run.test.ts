@@ -14,6 +14,12 @@ import * as fs from "node:fs/promises";
 const VIEW_TYPE = "mamep2026.mainPanel";
 // HostMessage v2 协议版本字面量（本测试包为 CJS/node10 解析，无法 import 共享包 TS 源码）。
 const HOST_MESSAGE_PROTOCOL_VERSION = 2 as const;
+const RTU_ROUTE = { unitAddress: 1, protocol: "rtu" };
+const TCP_ROUTE = { unitAddress: 0, protocol: "tcp" };
+const BASIC_COIL_ROUTE = {
+  unitAddress: 1,
+  protocol: "modbus-basic-tables:coil",
+};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -143,11 +149,12 @@ async function runRtuLoop(): Promise<void> {
   // 3. session-write-row：地址 1 写 0x1234（FC0x10）。
   const write = await rpcEnvelope("session-write-row", {
     row: registerRow(1, "1234"),
+    route: RTU_ROUTE,
   });
   assert.strictEqual(
     write.type,
     "response",
-    "session-write-row should succeed",
+    `session-write-row should succeed: ${JSON.stringify(write)}`,
   );
   assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
   // 一次写入 = 恰好一次发送 + 一次收到（从站只收到一次）。
@@ -166,6 +173,7 @@ async function runRtuLoop(): Promise<void> {
   // 4. session-read-row：地址 1 读回 0x1234（FC03）。
   const read = await rpcEnvelope("session-read-row", {
     row: registerRow(1, ""),
+    route: RTU_ROUTE,
   });
   assert.strictEqual(read.type, "response", "session-read-row should succeed");
   assert.strictEqual(
@@ -235,6 +243,7 @@ async function runBasicTableLoop(): Promise<void> {
   const write = await rpcEnvelope("session-write-row", {
     row: registerRow(1, "1"),
     writeVerify: { mode: "off", delayMs: null },
+    route: BASIC_COIL_ROUTE,
   });
   assert.strictEqual(
     write.type,
@@ -257,6 +266,7 @@ async function runBasicTableLoop(): Promise<void> {
   // 3. session-read-row：地址 1 读回 1（FC01 位解包）。
   const read = await rpcEnvelope("session-read-row", {
     row: registerRow(1, ""),
+    route: BASIC_COIL_ROUTE,
   });
   assert.strictEqual(
     read.type,
@@ -323,6 +333,7 @@ async function runTcpLoop(): Promise<void> {
   // 2. session-write-row：地址 1 写 0x1234（FC0x10）。
   const write = await rpcEnvelope("session-write-row", {
     row: registerRow(1, "1234"),
+    route: TCP_ROUTE,
   });
   assert.strictEqual(
     write.type,
@@ -334,6 +345,7 @@ async function runTcpLoop(): Promise<void> {
   // 3. session-read-row：地址 1 读回 0x1234（FC03）。
   const read = await rpcEnvelope("session-read-row", {
     row: registerRow(1, ""),
+    route: TCP_ROUTE,
   });
   assert.strictEqual(
     read.type,
@@ -389,8 +401,10 @@ async function runUnitIdLoop(): Promise<void> {
   );
 
   // 3. 写 + 读回：Unit ID 修改后读写闭环不破坏。
+  const unitAdjustedRoute = { unitAddress: 9, protocol: "tcp" };
   const write = await rpcEnvelope("session-write-row", {
     row: registerRow(0x0009, "5A5A"),
+    route: unitAdjustedRoute,
   });
   assert.strictEqual(
     write.type,
@@ -400,6 +414,7 @@ async function runUnitIdLoop(): Promise<void> {
   assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
   const read = await rpcEnvelope("session-read-row", {
     row: registerRow(0x0009, ""),
+    route: unitAdjustedRoute,
   });
   assert.strictEqual(
     read.type,
@@ -442,9 +457,14 @@ async function runBatchCancelLoop(): Promise<void> {
   const batchId = "e2e-batch-cancel-1";
   const rows = Array.from({ length: 20 }, (_, i) => ({
     key: `row-${i}`,
+    sheetId: "sheet-1",
     address: 0x0100 + i,
   }));
-  const batchPromise = rpcEnvelope("session-batch-read", { batchId, rows });
+  const batchPromise = rpcEnvelope("session-batch-read", {
+    batchId,
+    rows,
+    route: TCP_ROUTE,
+  });
 
   // 3. 给批任务启动时间，随后取消（取消在批任务进行中到达）。
   await sleep(80);
@@ -460,7 +480,7 @@ async function runBatchCancelLoop(): Promise<void> {
   assert.strictEqual(
     batch.type,
     "response",
-    "session-batch-read should return summary",
+    `session-batch-read should return summary: ${JSON.stringify(batch)}`,
   );
   const summary = (batch.payload as { summary: { cancelledCount: number } })
     .summary;
@@ -620,6 +640,7 @@ async function runRangeMultiLoop(): Promise<void> {
   // 多值写（registerCount 2）：一次 FC0x10 写 0x0000/0x0001 = 0xAAAA/0xBBBB。
   const write = await rpcEnvelope("session-write-row", {
     row: registerRow(0x0000, "AAAA BBBB", 2),
+    route: RTU_ROUTE,
   });
   assert.strictEqual(write.type, "response", "session-write-row");
   assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
@@ -627,6 +648,7 @@ async function runRangeMultiLoop(): Promise<void> {
   // 多值读（registerCount 2）：一次 FC03 返回 [0xAAAA, 0xBBBB]。
   const read = await rpcEnvelope("session-read-row", {
     row: registerRow(0x0000, "", 2),
+    route: RTU_ROUTE,
   });
   assert.strictEqual(read.type, "response", "session-read-row");
   assert.deepStrictEqual(
@@ -638,6 +660,7 @@ async function runRangeMultiLoop(): Promise<void> {
   // 单读单值不回归：读 0x0000 返回单值 0xAAAA。
   const single = await rpcEnvelope("session-read-row", {
     row: registerRow(0x0000, "", 1),
+    route: RTU_ROUTE,
   });
   assert.strictEqual(single.type, "response");
   assert.strictEqual(single.payload, 0xaaaa);
@@ -714,6 +737,7 @@ async function runReconnectLoop(): Promise<void> {
   // 5. 重连后的新会话读写仍可用。
   const write = await rpcEnvelope("session-write-row", {
     row: registerRow(0x0001, "0A0B"),
+    route: TCP_ROUTE,
   });
   assert.strictEqual(
     write.type,
@@ -723,6 +747,7 @@ async function runReconnectLoop(): Promise<void> {
   assert.deepStrictEqual(write.payload, { kind: "write-succeeded-no-verify" });
   const read = await rpcEnvelope("session-read-row", {
     row: registerRow(0x0001, ""),
+    route: TCP_ROUTE,
   });
   assert.strictEqual(
     read.type,
@@ -773,6 +798,7 @@ async function runPluginHostLoop(): Promise<void> {
   const readAt = async (address: number): Promise<unknown> => {
     const read = await rpcEnvelope("session-read-row", {
       row: registerRow(address, ""),
+      route: RTU_ROUTE,
     });
     assert.strictEqual(read.type, "response", `session-read-row(${address})`);
     return read.payload;
@@ -780,6 +806,7 @@ async function runPluginHostLoop(): Promise<void> {
   const writeAt = async (address: number, value: string): Promise<void> => {
     const write = await rpcEnvelope("session-write-row", {
       row: registerRow(address, value),
+      route: RTU_ROUTE,
     });
     assert.strictEqual(write.type, "response", `session-write-row(${address})`);
   };
