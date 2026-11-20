@@ -1,23 +1,20 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Alert,
-  Badge,
-  Button,
-  Col,
-  Divider,
-  Flex,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Row,
-  Segmented,
-  Select,
-  Switch,
-  Tag,
-  Typography,
-} from "antd";
+import Alert from "antd/es/alert";
+import Badge from "antd/es/badge";
+import Button from "antd/es/button";
+import Col from "antd/es/col";
+import Divider from "antd/es/divider";
+import Flex from "antd/es/flex";
+import Input from "antd/es/input";
+import InputNumber from "antd/es/input-number";
+import Modal from "antd/es/modal";
+import Row from "antd/es/row";
+import Segmented from "antd/es/segmented";
+import Select from "antd/es/select";
+import Switch from "antd/es/switch";
+import Tag from "antd/es/tag";
+import Typography from "antd/es/typography";
 import {
   ApiOutlined,
   CloseOutlined,
@@ -70,6 +67,45 @@ const STATE_BADGE_STATUS: Record<
   interrupted: "warning",
   failed: "error",
 };
+
+/** 表单字段容器：连接设置在懒加载 chunk 内使用原生布局，避免把 antd Form/校验器带入共享包。 */
+function ConnectionField({
+  label,
+  hint,
+  compact = false,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  compact?: boolean;
+  children: ReactNode;
+}): React.ReactNode {
+  return (
+    <div
+      className="ant-form-item connection-settings__field"
+      style={{ marginBottom: compact ? 12 : 24 }}
+    >
+      <div
+        title={hint}
+        style={{
+          color: "var(--ant-color-text-heading)",
+          marginBottom: 8,
+        }}
+      >
+        {label}
+        {hint !== undefined ? (
+          <span
+            aria-hidden="true"
+            style={{ cursor: "help", marginInlineStart: 4 }}
+          >
+            ?
+          </span>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export function ConnectionSettingsModal(): React.ReactNode {
   const { t } = useTranslation();
@@ -309,16 +345,13 @@ export function ConnectionSettingsModal(): React.ReactNode {
           {t("connection.unsupportedWebSerialHint")}
         </Typography.Paragraph>
       ) : null}
-      <Form layout="vertical" size="small">
+      <div>
         <Controller
           name="protocol"
           control={control}
           render={({ field }) =>
             showProtocolSwitcher ? (
-              <Form.Item
-                label={t("connection.protocol")}
-                style={{ marginBottom: 12 }}
-              >
+              <ConnectionField label={t("connection.protocol")} compact>
                 <Segmented
                   block
                   value={field.value}
@@ -342,7 +375,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                       : []),
                   ]}
                 />
-              </Form.Item>
+              </ConnectionField>
             ) : (
               // 浏览器仅支持 RTU：隐藏「协议」分组，但保留隐藏 input 注册字段（保持 protocol 值稳定）。
               <input type="hidden" {...field} />
@@ -360,7 +393,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
             </Divider>
             <Row gutter={16}>
               <Col span={12}>
-                <Form.Item label={t("connection.port")}>
+                <ConnectionField label={t("connection.port")}>
                   {isMock ? (
                     <Tag>{t("connection.portMock")}</Tag>
                   ) : isEnumerated ? (
@@ -421,12 +454,12 @@ export function ConnectionSettingsModal(): React.ReactNode {
                       ) : null}
                     </Flex>
                   )}
-                </Form.Item>
+                </ConnectionField>
                 <Controller
                   name="baudRate"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.baudRate")}>
+                    <ConnectionField label={t("connection.baudRate")}>
                       <Select
                         style={{ width: "100%" }}
                         value={field.value}
@@ -435,14 +468,14 @@ export function ConnectionSettingsModal(): React.ReactNode {
                           1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200,
                         ].map((v) => ({ value: v, label: String(v) }))}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
                 <Controller
                   name="dataBits"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.dataBits")}>
+                    <ConnectionField label={t("connection.dataBits")}>
                       <Select
                         style={{ width: "100%" }}
                         value={field.value}
@@ -452,7 +485,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                           label: `${v} BIT`,
                         }))}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -461,7 +494,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="stopBits"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.stopBits")}>
+                    <ConnectionField label={t("connection.stopBits")}>
                       <Select
                         style={{ width: "100%" }}
                         value={field.value}
@@ -471,14 +504,14 @@ export function ConnectionSettingsModal(): React.ReactNode {
                           label: `${v} BIT`,
                         }))}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
                 <Controller
                   name="parity"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.parity")}>
+                    <ConnectionField label={t("connection.parity")}>
                       <Select
                         style={{ width: "100%" }}
                         value={field.value}
@@ -489,14 +522,14 @@ export function ConnectionSettingsModal(): React.ReactNode {
                           { value: "odd", label: t("connection.parityOdd") },
                         ]}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
                 <Controller
                   name="flowControl"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.flowControl")}>
+                    <ConnectionField label={t("connection.flowControl")}>
                       <Select
                         style={{ width: "100%" }}
                         value={field.value}
@@ -509,7 +542,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                           },
                         ]}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -527,7 +560,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="rtuTimeout"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.timeout")}>
+                    <ConnectionField label={t("connection.timeout")}>
                       <Select
                         style={{ width: "100%" }}
                         showSearch
@@ -539,7 +572,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                           label: `${v} ms`,
                         }))}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -548,7 +581,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="retry"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.retry")}>
+                    <ConnectionField label={t("connection.retry")}>
                       <InputNumber
                         style={{ width: "100%" }}
                         min={0}
@@ -556,7 +589,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                         value={field.value}
                         onChange={(v) => field.onChange(v ?? 1)}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -578,13 +611,13 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="host"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.host")}>
+                    <ConnectionField label={t("connection.host")}>
                       <Input
                         placeholder="192.168.1.10"
                         value={field.value}
                         onChange={(e) => field.onChange(e.target.value)}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -593,7 +626,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="port"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.portTcp")}>
+                    <ConnectionField label={t("connection.portTcp")}>
                       <InputNumber
                         style={{ width: "100%" }}
                         min={1}
@@ -601,7 +634,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                         value={field.value}
                         onChange={(v) => field.onChange(v ?? 502)}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -610,9 +643,9 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="unitId"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item
+                    <ConnectionField
                       label={t("connection.unitId")}
-                      tooltip={t("connection.unitIdHint")}
+                      hint={t("connection.unitIdHint")}
                     >
                       <InputNumber
                         style={{ width: "100%" }}
@@ -621,7 +654,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                         value={field.value}
                         onChange={(v) => field.onChange(v ?? 0)}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -630,7 +663,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="tcpTimeout"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.timeout")}>
+                    <ConnectionField label={t("connection.timeout")}>
                       <InputNumber
                         style={{ width: "100%" }}
                         min={50}
@@ -638,7 +671,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                         value={field.value}
                         onChange={(v) => field.onChange(v ?? 50)}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -647,7 +680,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="retry"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item label={t("connection.retry")}>
+                    <ConnectionField label={t("connection.retry")}>
                       <InputNumber
                         style={{ width: "100%" }}
                         min={0}
@@ -655,7 +688,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                         value={field.value}
                         onChange={(v) => field.onChange(v ?? 1)}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -664,16 +697,16 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="autoReconnect"
                   control={control}
                   render={({ field }) => (
-                    <Form.Item
+                    <ConnectionField
                       label={t("connection.autoReconnect")}
-                      tooltip={t("connection.autoReconnectHint")}
+                      hint={t("connection.autoReconnectHint")}
                     >
                       {/* 自动重连：PRD §8.3 P1（落地，有限次数 + 指数退避）。 */}
                       <Switch
                         checked={field.value}
                         onChange={(checked) => field.onChange(checked)}
                       />
-                    </Form.Item>
+                    </ConnectionField>
                   )}
                 />
               </Col>
@@ -696,7 +729,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
             style={{ marginTop: 8 }}
           />
         ) : null}
-      </Form>
+      </div>
     </Modal>
   );
 }

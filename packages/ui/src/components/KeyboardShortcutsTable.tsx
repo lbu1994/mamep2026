@@ -5,7 +5,8 @@
  * 优先用 antd Table 既有能力（size="small"、pagination={false}）。
  */
 import { useTranslation } from "react-i18next";
-import { Table, Typography } from "antd";
+import Table from "antd/es/table";
+import Typography from "antd/es/typography";
 import type { ColumnsType } from "antd/es/table";
 import { ALL_SHORTCUTS, shortcutI18nKey } from "../keyboard/shortcuts";
 import { ShortcutKey } from "./ShortcutKey";

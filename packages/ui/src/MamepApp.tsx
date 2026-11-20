@@ -9,24 +9,22 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
-import type { MenuProps } from "antd";
-import {
-  App as AntApp,
-  Avatar,
-  Button,
-  ConfigProvider,
-  Divider,
-  Drawer,
-  Dropdown,
-  Empty,
-  Layout,
-  Menu,
-  Modal,
-  Splitter,
-  Tabs,
-  Tooltip,
-  Typography,
-} from "antd";
+import type { MenuProps } from "antd/es/menu";
+import { App as AntApp } from "antd";
+import Avatar from "antd/es/avatar";
+import Button from "antd/es/button";
+import ConfigProvider from "antd/es/config-provider";
+import Divider from "antd/es/divider";
+import Drawer from "antd/es/drawer";
+import Dropdown from "antd/es/dropdown";
+import Empty from "antd/es/empty";
+import Layout from "antd/es/layout";
+import Menu from "antd/es/menu";
+import Modal from "antd/es/modal";
+import Splitter from "antd/es/splitter";
+import Tabs from "antd/es/tabs";
+import Tooltip from "antd/es/tooltip";
+import Typography from "antd/es/typography";
 import { AppIcon } from "./assets/AppIcon";
 import { usePluginContributions } from "./plugin/use-contributions";
 import {
@@ -82,9 +80,6 @@ import { hasPlatformCapability } from "./host-contracts";
 import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { AppStartupPlaceholder } from "./components/AppStartupPlaceholder";
-import { BrowserCompatibilityBanner } from "./components/BrowserCompatibilityBanner";
-import { ConnectionSettingsModal } from "./components/ConnectionSettingsModal";
-import { RecoveryBanner } from "./components/RecoveryBanner";
 import type { DocumentationContribution } from "./components/documentation-markdown";
 import { RegisterTable } from "./components/RegisterTable";
 import { SheetNameEditor } from "./components/SheetNameEditor";
@@ -103,10 +98,14 @@ import { useOpenedOnce } from "./opened-once";
  * Settings 使用右侧 Drawer（`SettingsDrawer`），仍为懒加载 + `useOpenedOnce` 门控，
  * store 字段名（`settingsModalOpen`）保持不变。插件管理位于 Settings 的「Plugins」页签。
  *
- * `ConnectionSettingsModal` **保持静态导入**：非 mock（浏览器/Electron/VSCode）启动后
- * 工作区加载完成即自动打开，属首屏路径——懒加载只会多一次异步跳变（实测会让「启动弹窗」
- * 晚于 e2e 的等待窗口出现）。
+ * `ConnectionSettingsModal` 在宿主、工作区与插件就绪后才会自动打开，因此不阻塞启动
+ * 骨架和首屏外壳。它为首次打开单独懒加载，且不能与其它懒组件共用 Suspense。
  */
+const ConnectionSettingsModal = lazy(() =>
+  import("./components/ConnectionSettingsModal").then((m) => ({
+    default: m.ConnectionSettingsModal,
+  })),
+);
 const HelpDrawer = lazy(() =>
   import("./components/HelpDrawer").then((m) => ({ default: m.HelpDrawer })),
 );
@@ -121,6 +120,16 @@ const TraceWindow = lazy(() =>
 const SettingsDrawer = lazy(() =>
   import("./components/SettingsDrawer").then((m) => ({
     default: m.SettingsDrawer,
+  })),
+);
+const BrowserCompatibilityBanner = lazy(() =>
+  import("./components/BrowserCompatibilityBanner").then((m) => ({
+    default: m.BrowserCompatibilityBanner,
+  })),
+);
+const RecoveryBanner = lazy(() =>
+  import("./components/RecoveryBanner").then((m) => ({
+    default: m.RecoveryBanner,
   })),
 );
 
@@ -341,7 +350,20 @@ export function MamepApp(): React.ReactNode {
   const setHelpOpen = useAppStore((s) => s.setHelpModalOpen);
   // 懒加载弹窗/抽屉的挂载门控（代码分割）：首次打开才挂载该组件（chunk 按需
   // 下载），此后常驻以保留 antd 关闭动画。弹窗自身的开合仍由其内部读 store 的 open 控制。
-  // （ConnectionSettingsModal 例外：启动即自动打开、属首屏路径，故静态导入、不门控。）
+  // 连接设置弹窗只在宿主就绪后自动打开，启动阶段不加载表单依赖。
+  const connectionModalOpen = useAppStore((s) => s.connectionModalOpen);
+  const connectionModalMounted = useOpenedOnce(connectionModalOpen);
+  const compatibilityBannerOpen =
+    host?.browserCompatibility !== null &&
+    host?.browserCompatibility !== undefined &&
+    !host.isMockMode &&
+    !host.browserCompatibility.usable;
+  const compatibilityBannerMounted = useOpenedOnce(compatibilityBannerOpen);
+  const recoveryBannerOpen =
+    workspaceRecovery !== null &&
+    workspaceRecovery.recovered &&
+    workspaceRecovery.source !== "none";
+  const recoveryBannerMounted = useOpenedOnce(recoveryBannerOpen);
   const workspaceImportOpen = useAppStore(
     (s) => s.workspaceImportDraft !== null,
   );
@@ -1059,12 +1081,20 @@ export function MamepApp(): React.ReactNode {
             <Splitter.Panel>
               <div className="mamep-body">
                 {/* 浏览器兼容性提示（PRD §8.3 / §15.7）：不支持 Web Serial / 非安全上下文时展示 */}
-                <BrowserCompatibilityBanner
-                  compatibility={host?.browserCompatibility ?? null}
-                  isMock={host?.isMockMode ?? false}
-                />
+                {compatibilityBannerMounted && (
+                  <Suspense fallback={null}>
+                    <BrowserCompatibilityBanner
+                      compatibility={host?.browserCompatibility ?? null}
+                      isMock={host?.isMockMode ?? false}
+                    />
+                  </Suspense>
+                )}
                 {/* 工作区恢复提示：从备份恢复 / 恢复失败重建为空时展示 */}
-                <RecoveryBanner recovery={workspaceRecovery} />
+                {recoveryBannerMounted && (
+                  <Suspense fallback={null}>
+                    <RecoveryBanner recovery={workspaceRecovery} />
+                  </Suspense>
+                )}
                 <Splitter
                   orientation="vertical"
                   style={{ flex: 1, minHeight: 0 }}
@@ -1183,7 +1213,11 @@ export function MamepApp(): React.ReactNode {
           </Splitter>
         </Layout>
 
-        <ConnectionSettingsModal />
+        {connectionModalMounted && (
+          <Suspense fallback={null}>
+            <ConnectionSettingsModal />
+          </Suspense>
+        )}
         {workspaceImportMounted && (
           <Suspense fallback={null}>
             <WorkspaceImportModal />

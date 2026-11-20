@@ -4,7 +4,11 @@
  * 确认后经 store.applyWorkspaceImport 替换当前工作区（清空撤销栈、触发自动保存）。
  * 组件保持薄：文件读取/解析/错误提示在 MamepApp 入口处理。
  */
-import { App as AntApp, Descriptions, Modal, Space, Typography } from "antd";
+import { App as AntApp } from "antd";
+import Descriptions from "antd/es/descriptions";
+import Modal from "antd/es/modal";
+import Space from "antd/es/space";
+import Typography from "antd/es/typography";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../app-store";
 

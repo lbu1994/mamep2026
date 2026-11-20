@@ -43,10 +43,10 @@ function injectCspMeta(): Plugin {
  * 代码分割（ToDoList「构建产物代码分割」）：四端渲染器共用本文件，一次生效
  * （浏览器 `dist/`、Electron `dist-electron/`、VSCode `dist-vscode/`、Android `dist-android/`）。
  *
- * **做法与结论：不自定义分包规则，用 rolldown 默认的 `codeSplitting`。**
- * 配合 `MamepApp` 的 `React.lazy` 懒加载，rolldown 会按「动态入口可达性」自动把产物切成
- * 31 个 chunk：入口 192 kB、最大 472 kB（四端构建均无 Vite `> 500 kB` 告警），
- * 且与懒加载配套（弹窗/抽屉各自的 chunk 独立交付）。
+ * **做法与结论：应用/antd 使用 rolldown 默认的 `codeSplitting`，仅将完整 `react-dom`
+ * 包作为一个不拆分内部的独立 chunk。** 该分组不设置 `maxSize`，不按目录或单包内部模块
+ * 切分，避免破坏类初始化顺序。配合懒加载与纯包 `sideEffects: false`，当前浏览器生产
+ * 基线为：首屏 25 个请求、原始 1.38 MB、gzip 约 441.1 kB，最大 chunk 约 237.8 kB。
  *
  * ⚠️ 已实测的弯路（不得重走）：
  * - 自定义 `groups`（`react` / `antd` / `vendor` **加 `maxSize: 400 * 1024`**）会把
@@ -61,13 +61,13 @@ function injectCspMeta(): Plugin {
  *
  * 因此：任何分包调整都必须用**产物级**手段验证（`pnpm build:electron` + Electron 启动看
  * 是否挂载 / `pnpm test:e2e:electron`、`pnpm test:e2e:vscode`），不能只看构建体积。
+ * `scripts/verify-web-bundle-budget.mjs` 已接入四端 Web 构建脚本，强制执行
+ * 单 chunk ≤ 400 KiB、首屏 gzip ≤ 450 KiB。
  *
- * 平台宿主懒加载：`src/App.tsx` 只负责「探测平台 → 交由 `host-assembly.ts`」，
- * 后者按平台**动态 `import()`** 平台宿主（`src/host-factories/{electron,vscode,android}.ts`；
- * 浏览器分支静态返回 `createBrowserHost`）。实测（浏览器构建）：入口 384.54 → 7.78 kB，
- * 首屏（入口 + `modulepreload`）1663.21 → 1630.45 kB（−2.0%）/ gzip −0.8%，
- * `@capacitor/core` 从「首屏预加载」变为「仅 Android 按需」。注意口径：**入口 chunk 变小
- * 不等于首屏变小**（应用代码会重分入共享 chunk），评估首屏必须算「入口 + modulepreload 合计」。
+ * 平台宿主懒加载：`src/App.tsx` 只负责先渲染启动骨架，再动态加载共享组合根
+ * `host-assembly.ts` / `platform-context.ts`；宿主工厂继续按平台动态加载，浏览器共用宿主
+ * 不再进入首屏。注意口径：**入口 chunk 变小不等于首屏变小**（应用代码会重分入共享
+ * chunk），评估首屏必须算「HTML + 入口 + modulepreload + CSS」。
  */
 
 export default defineConfig(({ mode }) => {
@@ -103,6 +103,18 @@ export default defineConfig(({ mode }) => {
         ? {}
         : { outDir: rendererOutDir, emptyOutDir: true }),
       // 代码分割：不自定义 `codeSplitting.groups`（原因与实测踩坑见文件头注释）。
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: "react-dom",
+                test: /node_modules[\\/]react-dom[\\/]/,
+              },
+            ],
+          },
+        },
+      },
     },
     plugins: [
       react(),

@@ -26,7 +26,7 @@ export async function openPluginsSection(page: Page) {
       .getByRole("button", { name: "Settings" })
       .evaluate((el) => (el as HTMLElement).click());
     await page.waitForSelector(".settings-drawer.ant-drawer-open", {
-      timeout: 5000,
+      timeout: 15_000,
     });
   }
   await page

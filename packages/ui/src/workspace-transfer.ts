@@ -14,12 +14,17 @@ import { useRef } from "react";
 import { App as AntApp } from "antd";
 import { useTranslation } from "react-i18next";
 import type { Workspace } from "@mamep2026/domain";
-import {
-  parseWorkspace,
-  serializeWorkspace,
-  workspaceExportFileName,
-} from "@mamep2026/workspace";
 import { useAppStore, type WorkspaceImportPreview } from "./app-store";
+
+let workspaceTransferModule:
+  Promise<typeof import("@mamep2026/workspace")> | undefined;
+
+function loadWorkspaceTransferModule(): Promise<
+  typeof import("@mamep2026/workspace")
+> {
+  workspaceTransferModule ??= import("@mamep2026/workspace");
+  return workspaceTransferModule;
+}
 
 export interface WorkspaceTransfer {
   handleExportWorkspace: () => void;
@@ -44,7 +49,7 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
     schemaVersion: workspace.schemaVersion,
   });
 
-  const handleImportedText = (text: string): void => {
+  const handleImportedText = async (text: string): Promise<void> => {
     let data: unknown;
     try {
       // parseWorkspace 期望已解析的对象（与仓储加载路径一致，indexeddb-repository 先 JSON.parse）。
@@ -62,6 +67,23 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
       });
       return;
     }
+    const workspaceModule = await loadWorkspaceTransferModule().catch(
+      () => null,
+    );
+    if (workspaceModule === null) {
+      void message.open({
+        type: "error",
+        content: t("workspace.importFailed"),
+      });
+      appendMessage({
+        timestamp: Date.now(),
+        level: "error",
+        messageKey: "workspace.importFailed",
+        detail: "workspace module load failed",
+      });
+      return;
+    }
+    const { parseWorkspace } = workspaceModule;
     const parsed = parseWorkspace(data);
     if (!parsed.ok) {
       void message.open({
@@ -98,7 +120,7 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
                 content: t("workspace.importCancelled"),
               });
             } else {
-              handleImportedText(result.value.content);
+              void handleImportedText(result.value.content);
             }
           } else {
             void message.open({
@@ -138,41 +160,51 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
       });
       return;
     }
-    // 导出使用当前最新工作区（点击时读取，不订阅以避免行数据更新触发级联重渲染）。
-    const workspace = useAppStore.getState().workspace;
-    const content = serializeWorkspace(workspace);
-    void host
-      .saveTextFile({
-        suggestedName: workspaceExportFileName(workspace.name),
-        content,
-        mimeType: "application/json",
+    void loadWorkspaceTransferModule()
+      .then(({ serializeWorkspace, workspaceExportFileName }) => {
+        // 导出使用当前最新工作区（点击时读取，不订阅以避免行数据更新触发级联重渲染）。
+        const workspace = useAppStore.getState().workspace;
+        const content = serializeWorkspace(workspace);
+        void host
+          .saveTextFile({
+            suggestedName: workspaceExportFileName(workspace.name),
+            content,
+            mimeType: "application/json",
+          })
+          .then((result) => {
+            if (result.ok) {
+              if (result.value.saved) {
+                void message.open({
+                  type: "success",
+                  content: t("workspace.exportSuccess"),
+                });
+              } else {
+                void message.open({
+                  type: "info",
+                  content: t("workspace.exportCancelled"),
+                });
+              }
+              return;
+            }
+            void message.open({
+              type: "error",
+              content: t("workspace.exportFailed"),
+            });
+            appendMessage({
+              timestamp: Date.now(),
+              level: "error",
+              messageKey:
+                result.error.userMessageKey ?? "workspace.exportFailed",
+              params: { detail: result.error.code },
+              detail: result.error.code,
+            });
+          });
       })
-      .then((result) => {
-        if (result.ok) {
-          if (result.value.saved) {
-            void message.open({
-              type: "success",
-              content: t("workspace.exportSuccess"),
-            });
-          } else {
-            void message.open({
-              type: "info",
-              content: t("workspace.exportCancelled"),
-            });
-          }
-        } else {
-          void message.open({
-            type: "error",
-            content: t("workspace.exportFailed"),
-          });
-          appendMessage({
-            timestamp: Date.now(),
-            level: "error",
-            messageKey: result.error.userMessageKey ?? "workspace.exportFailed",
-            params: { detail: result.error.code },
-            detail: result.error.code,
-          });
-        }
+      .catch(() => {
+        void message.open({
+          type: "error",
+          content: t("workspace.exportFailed"),
+        });
       });
   };
 
@@ -186,7 +218,7 @@ export function useWorkspaceTransfer(): WorkspaceTransfer {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
-        handleImportedText(reader.result);
+        void handleImportedText(reader.result);
       }
     };
     reader.onerror = () => {

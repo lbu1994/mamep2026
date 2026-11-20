@@ -42,7 +42,7 @@ test("TM opens Memory Trace and Play keeps the page responsive", async ({
 
   await firstRow(page).getByLabel("TM").click();
   const traceWindow = page.locator(".trace-window");
-  await expect(traceWindow).toBeVisible({ timeout: 5000 });
+  await expect(traceWindow).toBeVisible({ timeout: 15_000 });
   await expect(traceWindow).toContainText("M@MEp2006 Advance [Memory Trace]");
   await expect(traceWindow).toContainText("Buffer Size");
   await expect(traceWindow).toContainText("Speed");

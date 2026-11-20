@@ -6,7 +6,7 @@
  * （react-refresh only-export-components 约束）。
  */
 import type { Contribution } from "@mamep2026/plugin-api";
-import { Typography } from "antd";
+import Typography from "antd/es/typography";
 import type { ReactNode } from "react";
 import {
   renderMarkdown,

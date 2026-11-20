@@ -5,7 +5,9 @@
  * （Ctrl+Shift+S 导出 / Ctrl+Alt+O 导入）共用同一套序列化/解析/落盘/提示。
  * 组件保持薄：序列化/解析在 packages/workspace；替换工作区在 store.applyWorkspaceImport。
  */
-import { Button, Space, Tooltip } from "antd";
+import Button from "antd/es/button";
+import Space from "antd/es/space";
+import Tooltip from "antd/es/tooltip";
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceTransfer } from "../workspace-transfer";

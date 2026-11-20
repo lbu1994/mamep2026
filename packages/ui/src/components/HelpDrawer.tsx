@@ -9,7 +9,8 @@
  * 独立成文件（react-refresh only-export-components），由 MamepApp 装配。
  */
 import { useTranslation } from "react-i18next";
-import { Drawer, Tabs, type TabsProps } from "antd";
+import Drawer from "antd/es/drawer";
+import Tabs, { type TabsProps } from "antd/es/tabs";
 import type { ReactNode } from "react";
 import type { Contribution } from "@mamep2026/plugin-api";
 import { KeyboardShortcutsTable } from "./KeyboardShortcutsTable";

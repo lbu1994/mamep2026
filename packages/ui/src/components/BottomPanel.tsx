@@ -7,21 +7,19 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  App,
-  Badge,
-  Button,
-  Descriptions,
-  Input,
-  Listy,
-  Switch,
-  Tabs,
-  Tag,
-  theme,
-  Tooltip,
-  Typography,
-} from "antd";
-import type { ListyRef } from "antd";
+import { App as AntApp } from "antd";
+import Badge from "antd/es/badge";
+import Button from "antd/es/button";
+import Descriptions from "antd/es/descriptions";
+import Input from "antd/es/input";
+import Listy from "antd/es/listy";
+import type { ListyRef } from "antd/es/listy";
+import Switch from "antd/es/switch";
+import Tabs from "antd/es/tabs";
+import Tag from "antd/es/tag";
+import Tooltip from "antd/es/tooltip";
+import Typography from "antd/es/typography";
+import { theme } from "antd";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -97,7 +95,7 @@ export function BottomPanel({
   variant = "docked",
 }: BottomPanelProps = {}): React.ReactNode {
   const { t, i18n } = useTranslation();
-  const { message, modal } = App.useApp();
+  const { message, modal } = AntApp.useApp();
   const { token } = theme.useToken();
   // 与 antd Listy 内部 itemHeight 同公式（listy 源码：fontHeight + itemPaddingBlock*2，
   // fontHeight = round(lineHeight * fontSizeMD)，默认 fontSizeMD === fontSize），

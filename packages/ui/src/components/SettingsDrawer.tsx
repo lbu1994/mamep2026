@@ -29,17 +29,15 @@
  */
 import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Button,
-  Divider,
-  Drawer,
-  Popconfirm,
-  Segmented,
-  Select,
-  Space,
-  Tabs,
-  Typography,
-} from "antd";
+import Button from "antd/es/button";
+import Divider from "antd/es/divider";
+import Drawer from "antd/es/drawer";
+import Popconfirm from "antd/es/popconfirm";
+import Segmented from "antd/es/segmented";
+import Select from "antd/es/select";
+import Space from "antd/es/space";
+import Tabs from "antd/es/tabs";
+import Typography from "antd/es/typography";
 import type { AppHost } from "../host";
 import { useAppStore } from "../app-store";
 import { usePluginContributions } from "../plugin/use-contributions";

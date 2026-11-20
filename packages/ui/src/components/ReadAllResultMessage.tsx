@@ -7,7 +7,10 @@
  * 与底部面板既有的 batchSummary 消息并存（后者保留不动）。
  */
 import { useTranslation } from "react-i18next";
-import { Flex, Tag, Typography, theme } from "antd";
+import Flex from "antd/es/flex";
+import Tag from "antd/es/tag";
+import Typography from "antd/es/typography";
+import { theme } from "antd";
 import { CheckCircleFilled, ExclamationCircleFilled } from "@ant-design/icons";
 import type { BatchReadSummary } from "@mamep2026/communication";
 

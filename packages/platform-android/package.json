@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./detect-android": "./src/detect-android.ts",
     "./capacitor": "./src/capacitor-bridge.ts",
     "./capacitor-app": "./src/capacitor-app.ts",
     "./testing": "./src/testing/fake-transport-bridge.ts"

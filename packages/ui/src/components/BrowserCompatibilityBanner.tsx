@@ -1,4 +1,4 @@
-import { Alert } from "antd";
+import Alert from "antd/es/alert";
 import { useTranslation } from "react-i18next";
 import type { BrowserCompatibility } from "@mamep2026/domain";
 

@@ -1,7 +1,9 @@
 import {
   createContext,
   forwardRef,
+  lazy,
   memo,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -11,23 +13,25 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
-import {
-  App,
-  Button,
-  Checkbox,
-  Dropdown,
-  Empty,
-  Flex,
-  Input,
-  InputNumber,
-  Popover,
-  Segmented,
-  Select,
-  Switch,
-  Table,
-  Tooltip,
-} from "antd";
-import type { InputRef } from "antd";
+import { App as AntApp } from "antd";
+import Button from "antd/es/button";
+import Checkbox from "antd/es/checkbox";
+import Dropdown from "antd/es/dropdown";
+import Empty from "antd/es/empty";
+import Flex from "antd/es/flex";
+import Input from "antd/es/input";
+import type { InputRef } from "antd/es/input";
+import InputNumber from "antd/es/input-number";
+import Popover from "antd/es/popover";
+import Segmented from "antd/es/segmented";
+import type {
+  BaseOptionType,
+  DefaultOptionType,
+  SelectProps,
+} from "antd/es/select";
+import Switch from "antd/es/switch";
+import Table from "antd/es/table";
+import Tooltip from "antd/es/tooltip";
 import {
   ColumnWidthOutlined,
   HolderOutlined,
@@ -118,6 +122,37 @@ import { matchesShortcut, tableShortcut } from "../keyboard/shortcuts";
 import { readRowById, writeRowById } from "../row-io";
 import { requestRouteForSheet } from "../request-route";
 import { runPluginToolbarAction } from "../plugin-toolbar-actions";
+
+/** Select 用于单元格类型编辑与工具栏高级配置，首帧后按需加载，避免进入 modulepreload。 */
+// React.lazy 的类型擦除泛型值类型；在加载边界恢复所需的 Select 调用签名。
+type DeferredSelectComponent = <
+  ValueType = string | number,
+  OptionType extends BaseOptionType | DefaultOptionType = DefaultOptionType,
+>(
+  props: SelectProps<ValueType, OptionType>,
+) => React.ReactNode;
+const Select = lazy(
+  () => import("antd/es/select"),
+) as unknown as DeferredSelectComponent;
+
+function DeferredSelect<
+  ValueType extends string | number = string | number,
+  OptionType extends BaseOptionType | DefaultOptionType = DefaultOptionType,
+>(props: SelectProps<ValueType, OptionType>): React.ReactNode {
+  const ariaLabel = props["aria-label"];
+  return (
+    <Suspense
+      fallback={
+        <span
+          className="register-table__deferred-control"
+          {...(typeof ariaLabel === "string" ? { "aria-label": ariaLabel } : {})}
+        />
+      }
+    >
+      <Select {...props} />
+    </Suspense>
+  );
+}
 
 /** 写后回读配置选项（PRD §6.5.12）：Select value ↔ ReadVerifySettings。 */
 type WriteVerifyOptionValue = "off" | "immediate" | "100" | "200" | "500";
@@ -712,7 +747,7 @@ const TypeCell = memo(function TypeCell({
       placement="topLeft"
       open={error !== undefined ? undefined : false}
     >
-      <Select
+      <DeferredSelect
         size="small"
         style={{ width: "100%" }}
         value={selectValue}
@@ -760,7 +795,7 @@ const ScaleCell = memo(function ScaleCell({
       placement="topLeft"
       open={applicable ? undefined : false}
     >
-      <Select
+      <DeferredSelect
         size="small"
         style={{ width: "100%" }}
         value={scale}
@@ -870,7 +905,7 @@ const ChildTypeCell = memo(function ChildTypeCell({
   const radix = dataTypeToRadix(row.dataType);
   const scale = dataTypeToScale(row.dataType);
   return (
-    <Select
+    <DeferredSelect
       size="small"
       style={{ width: "100%" }}
       value={radix}
@@ -907,7 +942,7 @@ const ChildScaleCell = memo(function ChildScaleCell({
       placement="topLeft"
       open={applicable ? undefined : false}
     >
-      <Select
+      <DeferredSelect
         size="small"
         style={{ width: "100%" }}
         value={scale}
@@ -1315,7 +1350,7 @@ export const RegisterTable = memo(function RegisterTable({
   // antd 全局 message（App.useApp）：Read All 完成结果富内容提示；
   // modal：ROM/RAM 确定指令安全确认（EEPROM 寿命提示）。
   // 应用已在 MamepApp 用 <AntApp> 包裹（测试须包 <AntApp>，见 BottomPanel.test.tsx）。
-  const { message, modal } = App.useApp();
+  const { message, modal } = AntApp.useApp();
   const host = useAppStore((s) => s.host);
   // 插件工具栏动作贡献：payload 为数组（一插件可贡献多个动作），
   // 按目标表类型过滤（核心表匹配 holding-register；插件表匹配 <pluginId>:<tableTypeId>）。
@@ -2540,7 +2575,7 @@ export const RegisterTable = memo(function RegisterTable({
           <span className="table-toolbar__verify-label">
             {t("table.writeVerifyLabel")}
           </span>
-          <Select
+          <DeferredSelect
             size="small"
             aria-label={t("table.writeVerify")}
             style={{ width: 116 }}

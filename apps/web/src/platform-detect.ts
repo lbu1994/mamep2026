@@ -9,7 +9,7 @@
  * 无桥时才看 Capacitor —— 避免 Android 上误判宿主桥、或宿主内误判 Capacitor。
  */
 import type { MamepHostApi, VscodeHostApi } from "@mamep2026/platform-api";
-import { isAndroidPlatform } from "@mamep2026/platform-android";
+import { isAndroidPlatform } from "@mamep2026/platform-android/detect-android";
 
 /** 运行时平台标识（与 `AppHost.platform` 对齐）。 */
 export type AppPlatformName = "browser" | "electron" | "vscode" | "android";

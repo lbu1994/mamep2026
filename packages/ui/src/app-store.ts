@@ -88,10 +88,7 @@ import {
 } from "./row-result";
 import type { AppHost } from "./host";
 import { hasPlatformCapability } from "./host-contracts";
-import {
-  persistedSettingsSchema,
-  type PersistedConnectionSettings,
-} from "./components/connection-settings-model";
+import type { PersistedConnectionSettings } from "./components/connection-settings-model";
 import { applyLanguage } from "./i18n";
 
 export type BufferSizeOption =
@@ -566,6 +563,49 @@ function reorderSheetsInWorkspace(
   return { ...workspace, sheets, updatedAt: Date.now() };
 }
 
+/**
+ * 连接设置来自 `InputNumber` 等控件，提交前仍需做运行时边界校验。
+ * 这里用轻量类型守卫替代 zod，避免仅因 store 的防御性校验把完整校验器带入首屏。
+ */
+function isPersistedConnectionSettings(
+  value: PersistedConnectionSettings,
+): boolean {
+  if (value.protocol !== "rtu" && value.protocol !== "tcp") return false;
+  const baseValid =
+    Number.isInteger(value.retryCount) &&
+    value.retryCount >= 0 &&
+    value.retryCount <= 10 &&
+    Number.isInteger(value.requestTimeoutMs);
+  if (!baseValid) return false;
+  if (value.protocol === "tcp") {
+    return (
+      typeof value.host === "string" &&
+      value.host.length > 0 &&
+      Number.isInteger(value.port) &&
+      value.port >= 1 &&
+      value.port <= 65535 &&
+      Number.isInteger(value.unitId) &&
+      value.unitId >= 0 &&
+      value.unitId <= 255 &&
+      value.requestTimeoutMs >= 50 &&
+      value.requestTimeoutMs <= 60000 &&
+      typeof value.autoReconnect === "boolean"
+    );
+  }
+  return (
+    Number.isInteger(value.baudRate) &&
+    value.baudRate > 0 &&
+    (value.dataBits === 7 || value.dataBits === 8) &&
+    (value.stopBits === 1 || value.stopBits === 2) &&
+    (value.parity === "none" ||
+      value.parity === "even" ||
+      value.parity === "odd") &&
+    (value.flowControl === "off" || value.flowControl === "rts-cts") &&
+    value.requestTimeoutMs >= 5 &&
+    value.requestTimeoutMs <= 1000
+  );
+}
+
 export const useAppStore = create<AppStoreState>()((set, get) => ({
   host: null,
   workspace: createEmptyWorkspace(),
@@ -773,9 +813,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       const current = state.workspace.connectionProfiles[0];
       if (current === undefined) return {};
       // 防御性校验：InputNumber 临时越界（如输入 999）时拒绝写入，避免污染持久化数据。
-      const validated = persistedSettingsSchema.safeParse(settings);
-      if (!validated.success) return {};
-      const next = validated.data;
+      if (!isPersistedConnectionSettings(settings)) return {};
+      const next = settings;
       // 按协议重建 profile（保留 id）：切换协议时从默认值 + 持久化子集构建。
       const merged =
         next.protocol === "rtu"

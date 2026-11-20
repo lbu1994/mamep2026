@@ -11,7 +11,7 @@
  * - ` ``` ` 围栏代码块（等宽 pre）；
  * - 其余文本按段落输出。
  */
-import { Typography } from "antd";
+import Typography from "antd/es/typography";
 import { Fragment, type ReactNode } from "react";
 
 /** documentation 贡献 payload。 */

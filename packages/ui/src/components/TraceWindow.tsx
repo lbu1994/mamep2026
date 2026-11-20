@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Button,
-  Card,
-  Flex,
-  Input,
-  Select,
-  Slider,
-  Space,
-  Table,
-  Tooltip,
-  Typography,
-} from "antd";
+import Button from "antd/es/button";
+import Card from "antd/es/card";
+import Flex from "antd/es/flex";
+import Input from "antd/es/input";
+import Select from "antd/es/select";
+import Slider from "antd/es/slider";
+import Space from "antd/es/space";
+import Table from "antd/es/table";
+import Tooltip from "antd/es/tooltip";
+import Typography from "antd/es/typography";
 import {
   CloseOutlined,
   DownloadOutlined,

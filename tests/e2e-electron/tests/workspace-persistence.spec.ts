@@ -76,16 +76,17 @@ async function callBridge<T>(
 }
 
 /** 关闭启动时自动弹出的 Connection Settings（非 mock 启动会弹窗）。 */
-/** 关闭启动时自动弹出的 Connection Settings（非 mock 启动会弹窗）。 */
 async function closeConnectionModal(page: Page): Promise<void> {
-  const modal = page.locator(".ant-modal-container:visible");
-  if ((await modal.count()) === 0) return;
+  // 连接弹窗已改为按需加载：先等它真正出现，避免在 lazy chunk 尚未挂载时提前返回。
+  const modal = page.locator(".ant-modal-container").filter({ visible: true });
+  await expect(modal).toBeVisible({ timeout: 15_000 });
   const cancel = modal.getByRole("button", { name: "Cancel" });
   if ((await cancel.count()) > 0) {
     await cancel.click();
-    await expect(cancel).toBeHidden({ timeout: 5000 });
+    await expect(modal).toBeHidden({ timeout: 15_000 });
   } else {
     await page.keyboard.press("Escape");
+    await expect(modal).toBeHidden({ timeout: 15_000 });
   }
 }
 

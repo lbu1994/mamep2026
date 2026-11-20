@@ -8,10 +8,7 @@ import {
   useAppStore,
   type AppHost,
 } from "@mamep2026/ui";
-import { startAppHost } from "./host-assembly";
 import { detectAppPlatform } from "./platform-detect";
-import { createPlatformHostContext } from "./platform-context";
-import { createStoreSinks } from "./store-sinks";
 
 const MOCK_FLAG = "mockTransport";
 const COMPAT_MISS_FLAG = "compatMiss";
@@ -37,11 +34,11 @@ function isCompatMissMode(): boolean {
  *
  * 本文件只做三件事：
  * 1. 计算运行模式（mock / 兼容性覆盖）与共享上下文（注册表，见 `platform-context.ts`）；
- * 2. 探测运行时平台（`platform-detect.ts`）并交给装配编排（`host-assembly.ts`）；
+ * 2. 首帧后动态加载装配编排（`host-assembly.ts`）与共享上下文；
  * 3. 工作区变更 → 自动保存 / 轮询目标同步。
  *
- * 宿主实现按平台**动态 `import()`**（Electron / VSCode / Android 各一个懒 chunk；浏览器保持
- * 静态装配）；装配期间 UI 显示启动骨架（`hostStatus`），失败则提示并保持「无 Host」可操作。
+ * 宿主装配链本身也在首帧后动态加载，避免 AppHost、工作区校验和平台依赖进入
+ * `modulepreload`；装配期间 UI 显示启动骨架（`hostStatus`），失败则保持「无 Host」可操作。
  */
 export default function App(): React.ReactNode {
   /** 活动 host（工作区变更订阅据其调用 `scheduleSave` / `updatePollingTargets`）。 */
@@ -57,30 +54,56 @@ export default function App(): React.ReactNode {
   // 启动装配（一次）：探测平台 → 按平台加载宿主实现 → 编排启动（见 host-assembly.ts）。
   useEffect(() => {
     const controller = new AbortController();
-    const serial = navigator.serial;
-    // 浏览器兼容性检测输入（PRD §8.3 / §15.7）：默认真实环境；?compatMiss=1 强制缺失（dev）。
-    const compatibilityEnv: CompatibilityEnv = isCompatMissMode()
-      ? { serial: undefined, isSecureContext: true }
-      : { serial, isSecureContext: window.isSecureContext === true };
-    const context = createPlatformHostContext({
-      mockTransport: isMockMode(),
-      compatibilityEnv,
-    });
-    resolveTransformRef.current = context.resolveAddressTransform;
-    const bridge = window.mamepHost;
-    void startAppHost(
-      {
-        platform: detectAppPlatform({ bridge, globalObject: globalThis }),
-        context,
-        bridge,
-        sinks: createStoreSinks({
-          setActiveHost: (host) => {
-            hostRef.current = host;
+    void (async () => {
+      try {
+        const [
+          { startAppHost },
+          { createPlatformHostContext },
+          { createStoreSinks },
+        ] = await Promise.all([
+          import("./host-assembly"),
+          import("./platform-context"),
+          import("./store-sinks"),
+        ]);
+        if (controller.signal.aborted) return;
+        const serial = navigator.serial;
+        // 浏览器兼容性检测输入（PRD §8.3 / §15.7）：默认真实环境；?compatMiss=1 强制缺失（dev）。
+        const compatibilityEnv: CompatibilityEnv = isCompatMissMode()
+          ? { serial: undefined, isSecureContext: true }
+          : { serial, isSecureContext: window.isSecureContext === true };
+        const context = createPlatformHostContext({
+          mockTransport: isMockMode(),
+          compatibilityEnv,
+        });
+        resolveTransformRef.current = context.resolveAddressTransform;
+        const bridge = window.mamepHost;
+        await startAppHost(
+          {
+            platform: detectAppPlatform({ bridge, globalObject: globalThis }),
+            context,
+            bridge,
+            sinks: createStoreSinks({
+              setActiveHost: (host) => {
+                hostRef.current = host;
+              },
+            }),
           },
-        }),
-      },
-      controller.signal,
-    );
+          controller.signal,
+        );
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        useAppStore.getState().setHostStatus("failed");
+        useAppStore.getState().appendMessage({
+          timestamp: Date.now(),
+          level: "error",
+          messageKey: "messages.hostLoadFailed",
+          params: {
+            detail: error instanceof Error ? error.message : String(error),
+          },
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
     return () => {
       // 取消装配 / 释放宿主：abort 触发 host-assembly 的退订与 dispose（StrictMode 双挂载下
       // 保证旧 host 不再接收事件——通信日志重复投递的回归防护）。

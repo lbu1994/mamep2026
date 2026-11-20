@@ -1,4 +1,4 @@
-import type { MenuProps } from "antd";
+import type { MenuProps } from "antd/es/menu";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,

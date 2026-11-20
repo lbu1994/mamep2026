@@ -3,7 +3,8 @@
  * 在底部面板渲染已注册插件面板区块。贡献 payload 为声明式描述（id + titleKey + 可选自带翻译
  * title）；交互式面板组件由插件 runtime 提供，当前渲染标题 + 占位内容。
  */
-import { Divider, Empty } from "antd";
+import Divider from "antd/es/divider";
+import Empty from "antd/es/empty";
 import { useTranslation } from "react-i18next";
 import type { AppHost } from "../host";
 import { usePluginContributions } from "../plugin/use-contributions";

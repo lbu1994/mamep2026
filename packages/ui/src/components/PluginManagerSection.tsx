@@ -8,20 +8,18 @@
  */
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  App,
-  Button,
-  Descriptions,
-  Empty,
-  Flex,
-  Listy,
-  Radio,
-  Space,
-  Switch,
-  Tag,
-  Tooltip,
-  Typography,
-} from "antd";
+import { App as AntApp } from "antd";
+import Button from "antd/es/button";
+import Descriptions from "antd/es/descriptions";
+import Empty from "antd/es/empty";
+import Flex from "antd/es/flex";
+import Listy from "antd/es/listy";
+import Radio from "antd/es/radio";
+import Space from "antd/es/space";
+import Switch from "antd/es/switch";
+import Tag from "antd/es/tag";
+import Tooltip from "antd/es/tooltip";
+import Typography from "antd/es/typography";
 import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import {
   PERMISSION_LABEL_KEYS,
@@ -42,7 +40,7 @@ function permissionLabel(
 
 export function PluginManagerSection(): React.ReactNode {
   const { t } = useTranslation();
-  const { message, modal } = App.useApp();
+  const { message, modal } = AntApp.useApp();
   const host = useAppStore((s) => s.host);
   const registry = host?.pluginRegistry ?? null;
   const [, forceRender] = useState(0);
