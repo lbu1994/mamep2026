@@ -236,6 +236,9 @@ async function readFirstRegister(): Promise<void> {
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Read", exact: true }).first(),
+  ).toBeEnabled({ timeout: 5000 });
   await page
     .getByRole("button", { name: "Read", exact: true })
     .first()

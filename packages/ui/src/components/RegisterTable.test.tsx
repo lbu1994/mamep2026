@@ -808,7 +808,7 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
     expect(screen.getAllByLabelText("Data").length).toBeGreaterThanOrEqual(3);
   }
 
-  it("子行 Name 可编辑并写回父行 registers[0].name", () => {
+  it("子行 Name 可编辑并写回父行 registers[0].name", async () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandRangeRow();
     // Name 单元格：父行 1 + 子行 2；子行第一个是 index 1。
@@ -822,12 +822,15 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
     if (input === undefined) throw new Error("missing child name input");
     fireEvent.change(input, { target: { value: "H1" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(
-      useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[0]?.name,
-    ).toBe("H1");
+    await waitFor(() => {
+      expect(
+        useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[0]
+          ?.name,
+      ).toBe("H1");
+    });
   });
 
-  it("子行 Data 可编辑并同步父行 registerValues 与组合文本", () => {
+  it("子行 Data 可编辑并同步父行 registerValues 与组合文本", async () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandRangeRow();
     // 子行 0 显示自身 Type（hex）格式化的值 "0012"。
@@ -840,12 +843,14 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
     if (input === undefined) throw new Error("missing child data input");
     fireEvent.change(input, { target: { value: "AB" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
-    expect(row?.registerValues?.map((v) => v.value)).toEqual([0xab, 0x34]);
-    expect(row?.cellText).toBe("00AB 0034");
+    await waitFor(() => {
+      const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
+      expect(row?.registerValues?.map((v) => v.value)).toEqual([0xab, 0x34]);
+      expect(row?.cellText).toBe("00AB 0034");
+    });
   });
 
-  it("子行 Comment 可编辑并写回父行 registers[1].comment", () => {
+  it("子行 Comment 可编辑并写回父行 registers[1].comment", async () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandRangeRow();
     const cells = screen.getAllByLabelText("Comment");
@@ -858,10 +863,12 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
     if (input === undefined) throw new Error("missing child comment input");
     fireEvent.change(input, { target: { value: "L2" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(
-      useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[1]
-        ?.comment,
-    ).toBe("L2");
+    await waitFor(() => {
+      expect(
+        useAppStore.getState().workspace.sheets[0]?.rows[0]?.registers?.[1]
+          ?.comment,
+      ).toBe("L2");
+    });
   });
 });
 
@@ -934,7 +941,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     expect(bit0.getAttribute("title")).toBe("0x0001");
   });
 
-  it("位行 Name 可编辑并写回父行 bitNames（入撤销栈）", () => {
+  it("位行 Name 可编辑并写回父行 bitNames（入撤销栈）", async () => {
     setupBinaryRow();
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
@@ -947,10 +954,13 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     if (input === undefined) throw new Error("missing bit name input");
     fireEvent.change(input, { target: { value: "Alarm" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(
-      useAppStore.getState().workspace.sheets[0]?.rows[0]?.bitNames?.[0]?.[15],
-    ).toBe("Alarm");
-    expect(useAppStore.getState().undoStack).toHaveLength(1);
+    await waitFor(() => {
+      expect(
+        useAppStore.getState().workspace.sheets[0]?.rows[0]
+          ?.bitNames?.[0]?.[15],
+      ).toBe("Alarm");
+      expect(useAppStore.getState().undoStack).toHaveLength(1);
+    });
   });
 
   it("位行 Data 只提供开关（1/0），不提供输入框", () => {
@@ -1026,7 +1036,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     ).toBe(0);
   });
 
-  it("位注释可编辑并写回父行 bitComments（入撤销栈）", () => {
+  it("位注释可编辑并写回父行 bitComments（入撤销栈）", async () => {
     setupBinaryRow();
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
@@ -1040,11 +1050,13 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     if (input === undefined) throw new Error("missing bit comment input");
     fireEvent.change(input, { target: { value: "warning" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(
-      useAppStore.getState().workspace.sheets[0]?.rows[0]
-        ?.bitComments?.[0]?.[15],
-    ).toBe("warning");
-    expect(useAppStore.getState().undoStack).toHaveLength(1);
+    await waitFor(() => {
+      expect(
+        useAppStore.getState().workspace.sheets[0]?.rows[0]
+          ?.bitComments?.[0]?.[15],
+      ).toBe("warning");
+      expect(useAppStore.getState().undoStack).toHaveLength(1);
+    });
   });
 
   it("范围行寄存器子行展开后切换位值 → 同步父行组合文本（两层嵌套）", () => {

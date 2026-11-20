@@ -102,6 +102,9 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
   await input.pressSequentially(addressHex, { delay: 10 });
   await expect(input).toHaveValue(addressHex);
   await input.press("Enter");
+  await expect(
+    p.getByRole("button", { name: "Read", exact: true }).first(),
+  ).toBeEnabled({ timeout: 5000 });
 }
 
 /** 首行点击 Read。 */
@@ -127,6 +130,7 @@ async function setWriteVerify(p: Page, optionText: string): Promise<void> {
 /** 首行填 Data（HEX）并点击 Write。 */
 async function writeRow(p: Page, valueHex: string): Promise<void> {
   const cell = p.getByLabel("Data").first();
+  const previousText = ((await cell.textContent()) ?? "").trim();
   await cell.click();
   // 同 setRowAddress：等待编辑态 + pressSequentially 逐字符输入 + toHaveValue 同步。
   const data = p.getByLabel("Data").first();
@@ -135,6 +139,11 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
   await data.pressSequentially(valueHex, { delay: 10 });
   await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
+  if (previousText.toUpperCase() !== valueHex.toUpperCase()) {
+    await expect(
+      p.locator(".register-table__status-dot--dirty").first(),
+    ).toBeVisible({ timeout: 5000 });
+  }
   await p
     .getByRole("button", { name: "Write", exact: true })
     .first()
@@ -183,13 +192,16 @@ test("TCP 连接：按 config tcp-local-slave 填 host/port/unitId → Connect �
   const modal = page.locator(".ant-modal-container:visible");
 
   // 切到 Modbus TCP（Segmented）。
-  await modal
+  const tcpProtocolItem = modal
     .locator(".ant-segmented-item")
-    .filter({ hasText: "Modbus TCP" })
-    .click();
+    .filter({ hasText: "Modbus TCP" });
+  await tcpProtocolItem.click();
+  await expect(modal.getByRole("radio", { name: "Modbus TCP" })).toBeChecked();
 
   // host（占位符 192.168.1.10 的 Input）。
-  await modal.getByPlaceholder("192.168.1.10").fill(tcp.host);
+  const hostInput = modal.getByPlaceholder("192.168.1.10");
+  await expect(hostInput).toBeVisible({ timeout: 5000 });
+  await hostInput.fill(tcp.host);
   // TCP Port / Unit ID（Form.Item 定位）。
   await fillNumber(modal, "TCP Port", String(tcp.port));
   await fillNumber(modal, "Unit ID", String(tcp.unitId));
@@ -200,6 +212,22 @@ test("TCP 连接：按 config tcp-local-slave 填 host/port/unitId → Connect �
     timeout: CONNECTED_TIMEOUT,
   });
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
+  // 主进程 TCP 会话已连接是实际选择 TCP 的运行时证据；RTU 连接不会打开该会话。
+  const sessionState = await page.evaluate(async () => {
+    const bridge = (
+      window as unknown as {
+        mamepHost: {
+          sessionGetState(): Promise<{
+            ok: boolean;
+            value?: { connectionState?: string };
+          }>;
+        };
+      }
+    ).mamepHost;
+    return bridge.sessionGetState();
+  });
+  expect(sessionState.ok).toBe(true);
+  expect(sessionState.value?.connectionState).toBe("connected");
 
   await setRadixHex(page);
 });
@@ -405,15 +433,33 @@ test("断开连接 → Offline，重连 → Online（稳定性）", async () => 
   });
   const modal = page.locator(".ant-modal-container:visible");
   const tcp = tcpConfig();
-  await modal
+  const tcpProtocolItem = modal
     .locator(".ant-segmented-item")
-    .filter({ hasText: "Modbus TCP" })
-    .click();
-  await modal.getByPlaceholder("192.168.1.10").fill(tcp.host);
+    .filter({ hasText: "Modbus TCP" });
+  await tcpProtocolItem.click();
+  await expect(modal.getByRole("radio", { name: "Modbus TCP" })).toBeChecked();
+  const hostInput = modal.getByPlaceholder("192.168.1.10");
+  await expect(hostInput).toBeVisible({ timeout: 5000 });
+  await hostInput.fill(tcp.host);
   await fillNumber(modal, "TCP Port", String(tcp.port));
   await fillNumber(modal, "Unit ID", String(tcp.unitId));
   await modal.locator(".ant-btn").filter({ hasText: "Connect" }).click();
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: CONNECTED_TIMEOUT,
   });
+  const sessionState = await page.evaluate(async () => {
+    const bridge = (
+      window as unknown as {
+        mamepHost: {
+          sessionGetState(): Promise<{
+            ok: boolean;
+            value?: { connectionState?: string };
+          }>;
+        };
+      }
+    ).mamepHost;
+    return bridge.sessionGetState();
+  });
+  expect(sessionState.ok).toBe(true);
+  expect(sessionState.value?.connectionState).toBe("connected");
 });

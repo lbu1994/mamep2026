@@ -192,6 +192,9 @@ test("TCP 连接 → 工具栏改 Unit ID → FC03 读断言请求帧 unitId 变
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Read", exact: true }).first(),
+  ).toBeEnabled({ timeout: 5000 });
 
   // 5. FC03 单行读：Data 显示 ABCD（hex）。
   await page

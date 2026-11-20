@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
   App,
@@ -190,9 +191,16 @@ function EditableCellValue({
 }: EditableCellValueProps): React.ReactNode {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [optimisticValue, setOptimisticValue] = useState<{
+    value: string;
+    baseValue: string;
+  } | null>(null);
   const inputRef = useRef<InputRef>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   // 防重入：Enter 提交后输入框卸载可能再触发 blur，用 ref 跳过重复提交。
   const editingRef = useRef(false);
+  /** Enter 提交后恢复单元格焦点；失焦提交不反向抢回用户刚点击的目标。 */
+  const restoreFocusRef = useRef(false);
   // 同步追踪最新草稿：onChange 的 setState 是异步重渲染，若在渲染完成前提交
   // （如自动化 fill+立即 Enter / 用户快速输入），commit 闭包读到旧 draft 会误判
   // "未修改"而跳过提交（real e2e 发现）。commit 改读 ref 根治。
@@ -204,11 +212,24 @@ function EditableCellValue({
   useEffect(() => {
     if (editing) {
       inputRef.current?.focus();
+    } else if (restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      wrapperRef.current?.focus();
     }
   }, [editing]);
 
+  // Store 一旦给出新值（本地提交已落库，或设备回读覆盖），立即撤销显示镜像。
+  useEffect(() => {
+    if (optimisticValue === null || value === optimisticValue.baseValue) {
+      return;
+    }
+    const timer = window.setTimeout(() => setOptimisticValue(null), 0);
+    return () => window.clearTimeout(timer);
+  }, [optimisticValue, value]);
+
   const startEdit = (): void => {
     // 进入编辑时以当前显示值初始化草稿。
+    setOptimisticValue(null);
     setDraft(value);
     draftRef.current = value;
     // 同步置编辑态标记：useEffect 更新是异步的（浏览器在渲染提交后才运行 effect），
@@ -219,13 +240,22 @@ function EditableCellValue({
     setEditing(true);
   };
 
-  const commit = (): void => {
+  const commit = (restoreFocus = false): void => {
     if (!editingRef.current) return;
     editingRef.current = false;
-    setEditing(false);
+    if (restoreFocus) restoreFocusRef.current = true;
+    const nextValue = draftRef.current;
+    // 先同步结束编辑并显示提交值，让 1000 行表的可见单元格立即反馈；
+    // Store/自动保存/轮询目标更新随后在独立任务执行，不阻塞 Enter 的下一帧。
+    flushSync(() => {
+      if (nextValue !== value) {
+        setOptimisticValue({ value: nextValue, baseValue: value });
+      }
+      setEditing(false);
+    });
     // 草稿未变不提交：避免无谓的 store 更新与自动保存。
-    if (draftRef.current === value) return;
-    onCommit(draftRef.current);
+    if (nextValue === value) return;
+    window.setTimeout(() => onCommit(nextValue), 0);
   };
 
   if (editing) {
@@ -242,14 +272,19 @@ function EditableCellValue({
           setDraft(e.target.value);
           draftRef.current = e.target.value;
         }}
-        onPressEnter={commit}
-        onBlur={commit}
+        onPressEnter={() => commit(true)}
+        onBlur={() => commit(false)}
       />
     );
   }
 
+  const displayedValue =
+    optimisticValue !== null && value === optimisticValue.baseValue
+      ? optimisticValue.value
+      : value;
   const wrap = (
     <div
+      ref={wrapperRef}
       className={
         "register-table__editable-cell-value-wrap" +
         (error ? " register-table__editable-cell-value-wrap--error" : "") +
@@ -271,12 +306,12 @@ function EditableCellValue({
       aria-label={ariaLabel}
     >
       <span className="register-table__editable-cell-value-wrap__text">
-        {value === "" && emptyText !== undefined ? (
+        {displayedValue === "" && emptyText !== undefined ? (
           <span className="register-table__editable-cell-value-placeholder">
             {emptyText}
           </span>
         ) : (
-          value
+          displayedValue
         )}
       </span>
       {trailing}
@@ -1325,22 +1360,12 @@ export const RegisterTable = memo(function RegisterTable({
     () => rows.reduce((max, row) => Math.max(max, row.order), 0),
     [rows],
   );
-  // 表内是否存在范围行：有则禁用虚拟滚动（antd tree 数据 + virtual 不兼容风险 1 回退）。
-  const hasRangeRows = useMemo(
-    () => rows.some((r) => r.registerCount > 1),
-    [rows],
-  );
-  // 表内是否存在二进制行：位明细同为 tree 数据，与 virtual 同样不兼容，
-  // 沿用「存在即降级」先例（位行仅在展开时生成，但仅此一次简单判定代价最低）。
-  const hasBinaryRows = useMemo(
-    () =>
-      rows.some(
-        (r) =>
-          r.dataType === "binary" ||
-          (r.registers?.some((meta) => meta.dataType === "binary") ?? false),
-      ),
-    [rows],
-  );
+  /**
+   * 大表统一启用 antd 虚拟渲染。
+   * antd v6 Virtual BodyGrid 会先按 expandedKeys 扁平化 tree children，
+   * 因此范围行/位明细不必再整体关闭 virtual；派生行仍排除拖拽/多选。
+   */
+  const virtualScrollingEnabled = rows.length > VIRTUAL_SCROLL_THRESHOLD;
   const addRow = useAppStore((s) => s.addRow);
   const appendMessage = useAppStore((s) => s.appendMessage);
   // 插件工具栏动作执行（插件外部化）：requiresConfirm 先弹
@@ -2329,9 +2354,9 @@ export const RegisterTable = memo(function RegisterTable({
   // 本表不设行样式，选中/悬停类经 className 按字符串值比较传递）。
   // 依赖与 columns useMemo 一致：任一外部渲染依赖变化时重建行组件，强制全行重渲染，避免陈旧内容。
   // 虚拟子行不注册 useSortable：不可拖拽（不在 SortableContext items 中），
-  // 用无 dnd-kit 的普通 <tr>（hooks 规则：useSortable 只在 SortableRow 内部无条件调用）。
+  // 虚拟模式用 div、非虚拟小表用 tr（hooks 规则：useSortable 只在 SortableRow 内调用）。
   const MemoRow = useMemo(() => {
-    const SortableRow = forwardRef<HTMLTableRowElement, MemoTableRowProps>(
+    const SortableRow = forwardRef<HTMLElement, MemoTableRowProps>(
       function SortableRow(props, ref) {
         const { _record, _index, _selection, _colOrder, ...rest } = props;
         void _index;
@@ -2356,7 +2381,7 @@ export const RegisterTable = memo(function RegisterTable({
         });
         // 组合 dnd-kit 的 setNodeRef 与 rc-table 转发的 ref（虚拟滚动测量依赖转发 ref）。
         const setRefs = useCallback(
-          (node: HTMLTableRowElement | null) => {
+          (node: HTMLElement | null) => {
             setNodeRef(node);
             if (ref !== null && ref !== undefined) {
               if (typeof ref === "function") {
@@ -2381,14 +2406,25 @@ export const RegisterTable = memo(function RegisterTable({
         };
         return (
           <RowContext.Provider value={contextValue}>
-            <tr
-              {...rest}
-              {...(isEmpty ? {} : attributes)}
-              ref={setRefs}
-              style={style}
-              role="row"
-              tabIndex={-1}
-            />
+            {virtualScrollingEnabled ? (
+              <div
+                {...rest}
+                {...(isEmpty ? {} : attributes)}
+                ref={setRefs}
+                style={style}
+                role="row"
+                tabIndex={-1}
+              />
+            ) : (
+              <tr
+                {...rest}
+                {...(isEmpty ? {} : attributes)}
+                ref={setRefs}
+                style={style}
+                role="row"
+                tabIndex={-1}
+              />
+            )}
           </RowContext.Provider>
         );
       },
@@ -2396,22 +2432,30 @@ export const RegisterTable = memo(function RegisterTable({
     SortableRow.displayName = "RegisterTableSortableRow";
 
     /** 虚拟子行：普通 <tr>，无 dnd-kit（不可拖拽），只读展示。 */
-    const ChildRow = forwardRef<HTMLTableRowElement, MemoTableRowProps>(
+    const ChildRow = forwardRef<HTMLElement, MemoTableRowProps>(
       function ChildRow(props, ref) {
         const { _record, _index, _selection, _colOrder, ...rest } = props;
         void _record;
         void _index;
         void _selection;
         void _colOrder;
-        return <tr {...rest} ref={ref} role="row" tabIndex={-1} />;
+        const setRefs = (node: HTMLElement | null): void => {
+          if (typeof ref === "function") ref(node);
+          else if (ref !== null && ref !== undefined) ref.current = node;
+        };
+        return virtualScrollingEnabled ? (
+          <div {...rest} ref={setRefs} role="row" tabIndex={-1} />
+        ) : (
+          <tr {...rest} ref={setRefs} role="row" tabIndex={-1} />
+        );
       },
     );
     ChildRow.displayName = "RegisterTableChildRow";
 
     const MemoizedTr = memo(
-      forwardRef<HTMLTableRowElement, MemoTableRowProps>(
+      forwardRef<HTMLElement, MemoTableRowProps>(
         function RegisterTableRow(props, ref) {
-          // 虚拟子行/位明细行：普通 <tr>（无 useSortable）；父行/普通行走 SortableRow。
+          // 虚拟子行/位明细行：普通 <tr>（无 useSortable）；普通行走对应行实现。
           if (isVirtualRow(props._record)) {
             return <ChildRow {...props} ref={ref} />;
           }
@@ -2431,7 +2475,7 @@ export const RegisterTable = memo(function RegisterTable({
     );
     MemoizedTr.displayName = "RegisterTableRow";
     return MemoizedTr;
-  }, []);
+  }, [virtualScrollingEnabled]);
 
   /**
    * 工具栏次要控件组：地址进制 / 从站地址(Unit ID) / 写后回读 /
@@ -2735,12 +2779,8 @@ export const RegisterTable = memo(function RegisterTable({
                         ? "register-table__row--striped"
                         : ""
                 }
-                // 范围行：tree 数据 + virtual 不兼容 → 禁用虚拟滚动（风险 1 回退）。
-                virtual={
-                  rows.length > VIRTUAL_SCROLL_THRESHOLD &&
-                  !hasRangeRows &&
-                  !hasBinaryRows
-                }
+                // antd v6 Virtual BodyGrid 支持先扁平化 tree children，再渲染可见行。
+                virtual={virtualScrollingEnabled}
                 {...(tableBodyHeight > 0 ||
                 rows.length > VIRTUAL_SCROLL_THRESHOLD
                   ? ({

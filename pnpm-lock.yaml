@@ -723,6 +723,9 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
       react-hook-form:
         specifier: 'catalog:'
         version: 7.85.0(react@19.2.8)

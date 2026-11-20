@@ -395,12 +395,19 @@ test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", 
   // （attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
   // 后 ~2500ms 到达（~2500 / ~2550ms）。等两帧迟到响应都在无活动请求时（pendingExchange
   // 为空）到达并被丢弃，再读回正常区（默认超时 50ms，等待 3000ms 覆盖）。
-  await page.waitForTimeout(3000);
   await setRowAddress(page, "0000");
-  await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect
+    .poll(
+      async () => {
+        await readRow(page);
+        return expect(page.getByLabel("Data").first())
+          .toHaveText("04D2", { timeout: 1000 })
+          .then(() => true)
+          .catch(() => false);
+      },
+      { timeout: CONNECTED_TIMEOUT, intervals: [500] },
+    )
+    .toBe(true);
 });
 
 test("通信日志：请求/响应/异常帧字节", async () => {
