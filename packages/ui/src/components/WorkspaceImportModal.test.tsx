@@ -5,7 +5,13 @@
  */
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App as AntApp, ConfigProvider } from "antd";
 import { createEmptyWorkspace } from "@mamep2026/domain";
@@ -63,7 +69,9 @@ describe("WorkspaceImportModal", () => {
     expect(screen.getByText(/replace the current workspace/i)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Import" }));
-    expect(useAppStore.getState().workspaceImportDraft).toBeNull();
+    await waitFor(() =>
+      expect(useAppStore.getState().workspaceImportDraft).toBeNull(),
+    );
     expect(useAppStore.getState().workspace.name).toBe("Imported Workspace");
   });
 

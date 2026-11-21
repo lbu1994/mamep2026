@@ -11,11 +11,10 @@ import { AppStartupBootstrap } from "@mamep2026/ui/startup";
 import { scheduleAfterPaint } from "./main-thread-scheduler";
 import { detectAppPlatform } from "./platform-detect";
 
-// 与宿主装配并行下载完整界面，但入口只静态依赖轻量运行时骨架。这样首屏不必等待
-// MamepApp 内整组 antd 模块完成解析/执行，也不会把完整界面放进入口 modulepreload。
-const mamepAppModule = import("@mamep2026/ui/MamepApp");
+// 完整界面由入口在 Host/Worker 启动后空闲预取；这里仅保留 lazy 边界，避免完整
+// antd 组件树与工作区恢复同时争用主线程，也不进入首屏 modulepreload。
 const MamepApp = lazy(() =>
-  mamepAppModule.then((m) => ({ default: m.MamepApp })),
+  import("@mamep2026/ui/MamepApp").then((m) => ({ default: m.MamepApp })),
 );
 
 const MOCK_FLAG = "mockTransport";

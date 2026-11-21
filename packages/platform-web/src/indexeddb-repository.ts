@@ -11,7 +11,11 @@ import { createEmptyWorkspace, createMamepError } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { openDB } from "idb";
-import { parseWorkspaceOffMainThread } from "./workspace-parse-off-main";
+import {
+  parseWorkspaceOffMainThread,
+  parseWorkspaceTextOffMainThread,
+  serializeWorkspaceOffMainThread,
+} from "./workspace-parse-off-main";
 
 export interface KeyValueStore {
   get(key: string): Promise<unknown>;
@@ -137,13 +141,15 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
 
   async save(workspace: Workspace): Promise<Result<void>> {
     try {
-      const { serializeWorkspace } = await import("@mamep2026/workspace");
+      // 完整 Schema 校验与 JSON 转换在 Worker 中执行；此处只做 IndexedDB 写入。
+      const serialized = await serializeWorkspaceOffMainThread(workspace);
+      if (!serialized.ok) return serialized;
       // 先轮转备份，再写主记录。
       const previous = await this.store.get(MAIN_KEY);
       if (previous !== undefined) {
         await this.store.put(BACKUP_KEY, previous);
       }
-      await this.store.put(MAIN_KEY, JSON.parse(serializeWorkspace(workspace)));
+      await this.store.put(MAIN_KEY, serialized.value.data);
       return ok(undefined);
     } catch (cause) {
       return fail(
@@ -180,13 +186,14 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
   /** 导出当前持久化工作区为序列化 JSON 字符串（§19.1；无数据时导出空工作区）。 */
   async export(): Promise<Result<string>> {
     try {
-      const { serializeWorkspace } = await import("@mamep2026/workspace");
       const raw = await this.store.get(MAIN_KEY);
-      if (raw === undefined)
-        return ok(serializeWorkspace(createEmptyWorkspace()));
-      const parsed = await parseWorkspaceOffMainThread(raw);
-      if (!parsed.ok) return parsed;
-      return ok(serializeWorkspace(parsed.value));
+      const workspace =
+        raw === undefined
+          ? ok(createEmptyWorkspace())
+          : await parseWorkspaceOffMainThread(raw);
+      if (!workspace.ok) return workspace;
+      const serialized = await serializeWorkspaceOffMainThread(workspace.value);
+      return serialized.ok ? ok(serialized.value.serialized) : serialized;
     } catch (cause) {
       return fail(
         persistenceError(
@@ -201,14 +208,11 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
   /** 导入工作区数据（parse + 校验后按 save() 同形态落盘，§19.1）。 */
   async import(serialized: string): Promise<Result<void>> {
     try {
-      const { parseWorkspace, serializeWorkspace } =
-        await import("@mamep2026/workspace");
-      const parsed = parseWorkspace(JSON.parse(serialized));
+      const parsed = await parseWorkspaceTextOffMainThread(serialized);
       if (!parsed.ok) return parsed;
-      await this.store.put(
-        MAIN_KEY,
-        JSON.parse(serializeWorkspace(parsed.value)),
-      );
+      const normalized = await serializeWorkspaceOffMainThread(parsed.value);
+      if (!normalized.ok) return normalized;
+      await this.store.put(MAIN_KEY, normalized.value.data);
       return ok(undefined);
     } catch (cause) {
       return fail(

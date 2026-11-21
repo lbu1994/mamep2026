@@ -11,6 +11,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -140,6 +141,144 @@ const Select = lazy(
   () => import("antd/es/select"),
 ) as unknown as DeferredSelectComponent;
 const MobileNativeSelectContext = createContext(false);
+
+interface VirtualScrollActivityStore {
+  getSnapshot(): VirtualScrollActivitySnapshot;
+  subscribe(listener: () => void): () => void;
+  setScrolling(scrolling: boolean): void;
+  setScrollingForRender(scrolling: boolean): void;
+}
+
+interface VirtualScrollActivitySnapshot {
+  scrolling: boolean;
+  version: number;
+}
+
+function createVirtualScrollActivityStore(): VirtualScrollActivityStore {
+  let snapshot: VirtualScrollActivitySnapshot = {
+    scrolling: false,
+    version: 0,
+  };
+  const listeners = new Set<() => void>();
+  let notifyGeneration = 0;
+  let pendingNotifications: Array<() => void> = [];
+  const notifyInBatches = (generation: number): void => {
+    if (generation !== notifyGeneration) return;
+    const batch = pendingNotifications.splice(0, 4);
+    for (const listener of batch) listener();
+    if (pendingNotifications.length > 0) {
+      setTimeout(() => notifyInBatches(generation), 0);
+    }
+  };
+  return {
+    getSnapshot: () => snapshot,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    setScrolling: (next) => {
+      if (snapshot.scrolling === next) return;
+      snapshot = { scrolling: next, version: snapshot.version + 1 };
+      if (next) {
+        for (const listener of listeners) listener();
+        return;
+      }
+      // 停止滚动时把订阅者分批唤醒：每批只升级少量单元格，避免“通知所有单元格”
+      // 本身形成一个超过单帧预算的同步 React 提交。
+      notifyGeneration += 1;
+      pendingNotifications = [...listeners];
+      setTimeout(() => notifyInBatches(notifyGeneration), 0);
+    },
+    setScrollingForRender: (next) => {
+      if (snapshot.scrolling === next) return;
+      snapshot = { scrolling: next, version: snapshot.version + 1 };
+    },
+  };
+}
+
+const VirtualScrollActivityContext =
+  createContext<VirtualScrollActivityStore | null>(null);
+const fallbackVirtualScrollActivity = createVirtualScrollActivityStore();
+
+function useVirtualScrollActivityStore(): VirtualScrollActivityStore {
+  return (
+    useContext(VirtualScrollActivityContext) ?? fallbackVirtualScrollActivity
+  );
+}
+
+function useVirtualScrollActivity(): VirtualScrollActivitySnapshot {
+  const store = useVirtualScrollActivityStore();
+  return useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot,
+  );
+}
+
+function VirtualScrollActivityProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.ReactNode {
+  const [store] = useState(createVirtualScrollActivityStore);
+  const importReplacementPending = useAppStore(
+    (state) =>
+      state.workspaceImportDraft !== null &&
+      state.workspace === state.workspaceImportDraft.workspace,
+  );
+  // 导入替换的首次 render 直接读轻量快照；草稿在下一任务关闭后由 effect 分批
+  // 唤醒已挂载单元格并错峰恢复控件。
+  if (importReplacementPending) store.setScrollingForRender(true);
+  useEffect(() => {
+    if (!importReplacementPending) store.setScrolling(false);
+  }, [importReplacementPending, store]);
+  return (
+    <VirtualScrollActivityContext.Provider value={store}>
+      {children}
+    </VirtualScrollActivityContext.Provider>
+  );
+}
+
+function scatterDelayMs(key: string): number {
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) | 0;
+  }
+  return (Math.abs(hash) % 192) * 2;
+}
+
+/**
+ * 滚动窗口内不挂载高成本控件；滚动停止后按行列错峰升级，避免 20 多行、每行
+ * 多列的表单控件在同一宏任务中集中初始化。
+ */
+function useVirtualScrollPlaceholder(key: string): boolean {
+  const { scrolling, version } = useVirtualScrollActivity();
+  const [settledVersion, setSettledVersion] = useState(() =>
+    scrolling ? -1 : version,
+  );
+  useEffect(() => {
+    if (scrolling) return;
+    const timer = setTimeout(
+      () => setSettledVersion(version),
+      scatterDelayMs(key),
+    );
+    return () => clearTimeout(timer);
+  }, [key, scrolling, version]);
+  return scrolling || settledVersion !== version;
+}
+
+/** 跳转期间的高频重型控件占位；滚动停止后由同一单元格原位升级为完整控件。 */
+function VirtualScrollPlaceholder({
+  children,
+}: {
+  children?: React.ReactNode;
+}): React.ReactNode {
+  return (
+    <span className="register-table__virtual-placeholder" aria-hidden>
+      {children}
+    </span>
+  );
+}
 
 interface NativeSelectOption {
   value: string | number;
@@ -322,10 +461,12 @@ function EditableCellValue({
 
   useEffect(() => {
     if (editing) {
-      inputRef.current?.focus();
+      // 虚拟行进入编辑时不得通过 focus 隐式滚动容器；否则会触发滚动轻量窗口，
+      // 正在挂载的输入框被卸载，快速点击+输入会丢失编辑态。
+      inputRef.current?.focus({ preventScroll: true });
     } else if (restoreFocusRef.current) {
       restoreFocusRef.current = false;
-      wrapperRef.current?.focus();
+      wrapperRef.current?.focus({ preventScroll: true });
     }
   }, [editing]);
 
@@ -447,18 +588,31 @@ const NoCell = memo(function NoCell({ order }: { order: number }) {
   return <>{order}</>;
 });
 
-const TmCell = memo(function TmCell({
-  rowId,
-  traceEnabled,
-  dataType,
-  registerCount,
-}: {
+interface TmCellProps {
   rowId: RowId;
   traceEnabled: boolean;
   /** 多寄存器字符串行：Trace 对组合数值采样，字符串行禁用。 */
   dataType: DataType;
   registerCount: number;
-}) {
+}
+
+const TmCell = memo(function TmCell(props: TmCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:tm`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>
+      {props.traceEnabled ? "1" : "0"}
+    </VirtualScrollPlaceholder>
+  ) : (
+    <TmControl {...props} />
+  );
+});
+
+function TmControl({
+  rowId,
+  traceEnabled,
+  dataType,
+  registerCount,
+}: TmCellProps): React.ReactNode {
   const updateRow = useAppStore((s) => s.updateRow);
   const openTraceWindow = useAppStore((s) => s.openTraceWindow);
   const closeTraceWindow = useAppStore((s) => s.closeTraceWindow);
@@ -492,15 +646,23 @@ const TmCell = memo(function TmCell({
       }}
     />
   );
-});
+}
 
-const NameCell = memo(function NameCell({
-  rowId,
-  name,
-}: {
+interface NameCellProps {
   rowId: RowId;
   name: string;
-}) {
+}
+
+const NameCell = memo(function NameCell(props: NameCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:name`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>{props.name}</VirtualScrollPlaceholder>
+  ) : (
+    <NameControl {...props} />
+  );
+});
+
+function NameControl({ rowId, name }: NameCellProps): React.ReactNode {
   // 可撤销（TECH_DESIGN §24.4）：改名经 store.setRowName 入撤销栈。
   const setRowName = useAppStore((s) => s.setRowName);
   return (
@@ -510,18 +672,29 @@ const NameCell = memo(function NameCell({
       onCommit={(value) => setRowName(rowId, value)}
     />
   );
-});
+}
 
-const RegisterCell = memo(function RegisterCell({
-  rowId,
-  addressDraft,
-  error,
-}: {
+interface RegisterCellProps {
   rowId: RowId;
   addressDraft: string;
   /** 地址校验错误（store 记录）：有值时红框 + Tooltip 显示具体原因。 */
   error?: RowFailure | undefined;
-}) {
+}
+
+const RegisterCell = memo(function RegisterCell(props: RegisterCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:address`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>{props.addressDraft}</VirtualScrollPlaceholder>
+  ) : (
+    <RegisterControl {...props} />
+  );
+});
+
+function RegisterControl({
+  rowId,
+  addressDraft,
+  error,
+}: RegisterCellProps): React.ReactNode {
   const { t, i18n } = useTranslation();
   const commitRowAddress = useAppStore((s) => s.commitRowAddress);
   const errorTip =
@@ -542,17 +715,30 @@ const RegisterCell = memo(function RegisterCell({
       }}
     />
   );
-});
+}
 
-const WpCell = memo(function WpCell({
-  rowId,
-  pollingEnabled,
-  hasAddress,
-}: {
+interface WpCellProps {
   rowId: RowId;
   pollingEnabled: boolean;
   hasAddress: boolean;
-}) {
+}
+
+const WpCell = memo(function WpCell(props: WpCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:wp`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>
+      {props.pollingEnabled ? "1" : "0"}
+    </VirtualScrollPlaceholder>
+  ) : (
+    <WpControl {...props} />
+  );
+});
+
+function WpControl({
+  rowId,
+  pollingEnabled,
+  hasAddress,
+}: WpCellProps): React.ReactNode {
   const { t } = useTranslation();
   // 可撤销（§24.4「修改轮询设置」）：经 store.setPollingEnabled 入撤销栈。
   const setPollingEnabled = useAppStore((s) => s.setPollingEnabled);
@@ -585,18 +771,29 @@ const WpCell = memo(function WpCell({
       </span>
     </Tooltip>
   );
-});
+}
 
-const ReadCell = memo(function ReadCell({
-  rowId,
-  hasAddress,
-  typeCountValid,
-}: {
+interface ReadCellProps {
   rowId: RowId;
   hasAddress: boolean;
   /** 范围长度与类型合法集匹配：不匹配时禁用读写。 */
   typeCountValid: boolean;
-}) {
+}
+
+const ReadCell = memo(function ReadCell(props: ReadCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:read`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder />
+  ) : (
+    <ReadControl {...props} />
+  );
+});
+
+function ReadControl({
+  rowId,
+  hasAddress,
+  typeCountValid,
+}: ReadCellProps): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   const updateRow = useAppStore((s) => s.updateRow);
@@ -627,18 +824,31 @@ const ReadCell = memo(function ReadCell({
   ) : (
     button
   );
-});
+}
 
-const DataCell = memo(function DataCell({
-  rowId,
-  cellText,
-  error,
-}: {
+interface DataCellProps {
   rowId: RowId;
   cellText: string;
   /** Data 校验错误（store 记录）：有值时红框 + Tooltip 显示具体原因。 */
   error?: RowFailure | undefined;
-}) {
+}
+
+const DataCell = memo(function DataCell(props: DataCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:data`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>
+      {props.cellText === "" ? "—" : props.cellText}
+    </VirtualScrollPlaceholder>
+  ) : (
+    <DataControl {...props} />
+  );
+});
+
+function DataControl({
+  rowId,
+  cellText,
+  error,
+}: DataCellProps): React.ReactNode {
   const { t, i18n } = useTranslation();
   const commitCellText = useAppStore((s) => s.commitCellText);
   // 三态状态点选择器：返回原语/undefined，memo 只在该行状态变化时重渲染
@@ -676,7 +886,7 @@ const DataCell = memo(function DataCell({
       }}
     />
   );
-});
+}
 
 /**
  * 寄存器行操作结果状态点（Data 列，三态）。
@@ -716,18 +926,31 @@ function RowStatusDot({
   );
 }
 
-const WriteCell = memo(function WriteCell({
-  sheetId,
-  rowId,
-  hasAddress,
-  typeCountValid,
-}: {
+interface WriteCellProps {
   sheetId: SheetId;
   rowId: RowId;
   hasAddress: boolean;
   /** 范围长度与类型合法集匹配：不匹配时禁用读写。 */
   typeCountValid: boolean;
-}) {
+}
+
+const WriteCell = memo(function WriteCell(props: WriteCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(
+    `${props.sheetId}:${props.rowId}:write`,
+  );
+  return placeholder ? (
+    <VirtualScrollPlaceholder />
+  ) : (
+    <WriteControl {...props} />
+  );
+});
+
+function WriteControl({
+  sheetId,
+  rowId,
+  hasAddress,
+  typeCountValid,
+}: WriteCellProps): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   const appendMessage = useAppStore((s) => s.appendMessage);
@@ -776,18 +999,31 @@ const WriteCell = memo(function WriteCell({
   ) : (
     button
   );
-});
+}
 
-const TypeCell = memo(function TypeCell({
-  rowId,
-  dataType,
-  error,
-}: {
+interface TypeCellProps {
   rowId: RowId;
   dataType: DataType;
   /** 类型列校验错误：范围长度与类型合法集不匹配时红框 + Tooltip。 */
   error?: RowFailure | undefined;
-}) {
+}
+
+const TypeCell = memo(function TypeCell(props: TypeCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:type`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>
+      {dataTypeToRadix(props.dataType)}
+    </VirtualScrollPlaceholder>
+  ) : (
+    <TypeControl {...props} />
+  );
+});
+
+function TypeControl({
+  rowId,
+  dataType,
+  error,
+}: TypeCellProps): React.ReactNode {
   const { t, i18n } = useTranslation();
   const setRowDataType = useAppStore((s) => s.setRowDataType);
   const host = useAppStore((s) => s.host);
@@ -853,16 +1089,26 @@ const TypeCell = memo(function TypeCell({
       />
     </Tooltip>
   );
-});
+}
 
 /** Type scale 列：仅 unsigned/signed 可用，其余进制禁用。 */
-const ScaleCell = memo(function ScaleCell({
-  rowId,
-  dataType,
-}: {
+interface ScaleCellProps {
   rowId: RowId;
   dataType: DataType;
-}) {
+}
+
+const ScaleCell = memo(function ScaleCell(props: ScaleCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:scale`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>
+      {dataTypeToScale(props.dataType)}
+    </VirtualScrollPlaceholder>
+  ) : (
+    <ScaleControl {...props} />
+  );
+});
+
+function ScaleControl({ rowId, dataType }: ScaleCellProps): React.ReactNode {
   const { t } = useTranslation();
   const setRowDataType = useAppStore((s) => s.setRowDataType);
   const radix = dataTypeToRadix(dataType);
@@ -889,15 +1135,23 @@ const ScaleCell = memo(function ScaleCell({
       />
     </Tooltip>
   );
-});
+}
 
-const CommentCell = memo(function CommentCell({
-  rowId,
-  comment,
-}: {
+interface CommentCellProps {
   rowId: RowId;
   comment: string;
-}) {
+}
+
+const CommentCell = memo(function CommentCell(props: CommentCellProps) {
+  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:comment`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>{props.comment}</VirtualScrollPlaceholder>
+  ) : (
+    <CommentControl {...props} />
+  );
+});
+
+function CommentControl({ rowId, comment }: CommentCellProps): React.ReactNode {
   // 可撤销（TECH_DESIGN §24.4）：改备注经 store.setRowComment 入撤销栈。
   const setRowComment = useAppStore((s) => s.setRowComment);
   return (
@@ -907,7 +1161,7 @@ const CommentCell = memo(function CommentCell({
       onCommit={(value) => setRowComment(rowId, value)}
     />
   );
-});
+}
 
 // ---- 范围行虚拟子行（+ 子行可编辑化）----
 // 子行=每寄存器一行：Address 列只读展示实际地址；Name/Data/Type/Scale/Comment 五列
@@ -1204,10 +1458,27 @@ interface RowContextProps {
 const RowContext = createContext<RowContextProps>({});
 
 const DragHandle = memo(function DragHandle({
+  rowId,
+  ariaLabel,
+}: {
+  rowId: RowId;
+  ariaLabel: string;
+}) {
+  const placeholder = useVirtualScrollPlaceholder(`${rowId}:drag`);
+  return placeholder ? (
+    <VirtualScrollPlaceholder>
+      <HolderOutlined />
+    </VirtualScrollPlaceholder>
+  ) : (
+    <DragHandleControl ariaLabel={ariaLabel} />
+  );
+});
+
+function DragHandleControl({
   ariaLabel,
 }: {
   ariaLabel: string;
-}) {
+}): React.ReactNode {
   const { setActivatorNodeRef, listeners } = useContext(RowContext);
   return (
     <Button
@@ -1220,7 +1491,7 @@ const DragHandle = memo(function DragHandle({
       {...listeners}
     />
   );
-});
+}
 
 // ---- 表头拖拽列宽----
 // 通过 Table components.header.cell 自定义表头单元格；width/onResize 经 column.onHeaderCell 透传。
@@ -1563,7 +1834,43 @@ const RegisterTableContent = memo(function RegisterTableContent({
   // 最新列宽镜像：拖拽事件内同步更新（不经渲染），保证 mouseup 提交时拿到完整最终值。
   const colWidthsRef = useRef(colWidths);
   const flexRef = useRef<HTMLDivElement | null>(null);
+  const virtualScrollActivity = useVirtualScrollActivityStore();
   const [tableBodyHeight, setTableBodyHeight] = useState(0);
+  useEffect(() => {
+    const flexEl = flexRef.current;
+    if (flexEl === null) return;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastScrollTop =
+      flexEl.querySelector<HTMLElement>(".ant-table-tbody-virtual-holder")
+        ?.scrollTop ?? 0;
+    const handleScroll = (event: Event): void => {
+      const holder = event.target;
+      if (!(holder instanceof HTMLElement)) return;
+      const nextScrollTop = holder.scrollTop;
+      const delta = Math.abs(nextScrollTop - lastScrollTop);
+      lastScrollTop = nextScrollTop;
+      // 聚焦/浏览器 scrollIntoView 造成的小幅校正不应触发整窗降级；用户滚动和跳转
+      // 会跨越至少一行。
+      if (delta < ROW_HEIGHT) return;
+      // 捕获阶段先于 rc-table 的滚动状态更新。此处只写快照、不通知现有单元格：
+      // 新进入虚拟窗口的行会直接挂载轻量占位，避免滚动手势前再同步重渲染一整套
+      // 仍在视口中的完整控件。停止滚动时再统一通知并错峰升级。
+      virtualScrollActivity.setScrollingForRender(true);
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        virtualScrollActivity.setScrolling(false);
+      }, 48);
+    };
+    flexEl.addEventListener("scroll", handleScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () => {
+      flexEl.removeEventListener("scroll", handleScroll, true);
+      if (settleTimer !== null) clearTimeout(settleTimer);
+    };
+  }, [virtualScrollActivity]);
   // 虚拟滚动需要确定的可视高度：表格可视区 = Flex 高度 − 工具栏高度；
   // 用 ResizeObserver 监听窗口缩放/面板拖拽引起的尺寸变化。
   useEffect(() => {
@@ -2321,7 +2628,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
         }),
         render: (_, row) =>
           isVirtualRow(row) ? null : (
-            <DragHandle ariaLabel={t("table.dragHandle")} />
+            <DragHandle rowId={row.rowId} ariaLabel={t("table.dragHandle")} />
           ),
       },
     ],
@@ -3105,5 +3412,9 @@ export const RegisterTable = memo(function RegisterTable(
       </div>
     );
   }
-  return <RegisterTableContent {...props} />;
+  return (
+    <VirtualScrollActivityProvider>
+      <RegisterTableContent {...props} />
+    </VirtualScrollActivityProvider>
+  );
 });

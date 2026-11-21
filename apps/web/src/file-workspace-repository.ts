@@ -13,7 +13,10 @@ import type {
 import { ok } from "@mamep2026/domain";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type { MamepHostApi } from "@mamep2026/platform-api";
-import { parseWorkspaceOffMainThread } from "@mamep2026/platform-web";
+import {
+  parseWorkspaceTextOffMainThread,
+  serializeWorkspaceOffMainThread,
+} from "@mamep2026/platform-web";
 
 export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
   private readonly bridge: Pick<
@@ -41,17 +44,16 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
   async load(): Promise<Result<Workspace>> {
     const result = await this.bridge.workspaceLoad();
     if (!result.ok) return result;
-    // 主进程 load 恒返回序列化 JSON 字符串（无文件 = 空工作区）；parseWorkspace 接收对象，
-    // 故先 JSON.parse 再重建领域对象（含 v1→v4 迁移与断链检测）。
+    // 主进程 load 恒返回序列化 JSON 字符串；JSON.parse、迁移、Schema 校验和重建
+    // 全部经 Worker，主线程不反序列化 1000 行快照。
     this.recoveryInfo = result.value.recoveryInfo ?? null;
-    return parseWorkspaceOffMainThread(JSON.parse(result.value.content));
+    return parseWorkspaceTextOffMainThread(result.value.content);
   }
 
   async save(workspace: Workspace): Promise<Result<void>> {
-    const { serializeWorkspace } = await import("@mamep2026/workspace");
-    const result = await this.bridge.workspaceSave(
-      serializeWorkspace(workspace),
-    );
+    const serialized = await serializeWorkspaceOffMainThread(workspace);
+    if (!serialized.ok) return serialized;
+    const result = await this.bridge.workspaceSave(serialized.value.serialized);
     // 桥返回 Result<null>，Port 契约为 Result<void>，归一化。
     if (!result.ok) return result;
     return ok(undefined);
@@ -77,8 +79,7 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
 
   /** 导入工作区数据（parse + 校验后经主进程原子落盘，§19.1）。 */
   async import(serialized: string): Promise<Result<void>> {
-    const { parseWorkspace } = await import("@mamep2026/workspace");
-    const parsed = parseWorkspace(JSON.parse(serialized));
+    const parsed = await parseWorkspaceTextOffMainThread(serialized);
     if (!parsed.ok) return parsed;
     const result = await this.bridge.workspaceSave(serialized);
     if (!result.ok) return result;

@@ -895,6 +895,16 @@ body {
   transition: border-color 0.15s ease-in-out;
 }
 
+/* 虚拟滚动跳转窗口的轻量占位：与完整控件同高，滚动停止后原位升级。 */
+.register-table__virtual-placeholder {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-tertiary);
+  pointer-events: none;
+}
+
 /* 可编辑单元格值文本：flex 内撑满剩余空间，长文本省略（ellipsis 移到此处，
    为 Data 列状态点 trailing 让位——状态点固定宽、不被省略）。 */
 .register-table__editable-cell-value-wrap__text {

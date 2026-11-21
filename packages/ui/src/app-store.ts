@@ -135,6 +135,11 @@ export interface WorkspaceImportDraft {
   preview: WorkspaceImportPreview;
 }
 
+export interface WorkspaceImportApplyOptions {
+  /** 表格提交后下一帧再关闭确认框，避免大表替换与 Modal 卸载挤在同一 commit。 */
+  deferDraftClear?: boolean;
+}
+
 /**
  * 原始 JSON 文本导入解析器。生产组合根注入 Worker 实现；UI 包不直接依赖
  * platform-web，测试/无注回退由 workspace-transfer 在本地执行。
@@ -230,7 +235,10 @@ export interface AppStoreState {
    * 应用当前导入草稿替换工作区（清空撤销栈、触发自动保存）；无草稿时 no-op。
    * expectedDraft 用于取消后阻止已排队提交作用于新草稿。
    */
-  applyWorkspaceImport: (expectedDraft?: WorkspaceImportDraft) => void;
+  applyWorkspaceImport: (
+    expectedDraft?: WorkspaceImportDraft,
+    options?: WorkspaceImportApplyOptions,
+  ) => void;
   setLoaded: () => void;
   setConnectionState: (state: ConnectionState) => void;
   setConnectionModalOpen: (open: boolean) => void;
@@ -665,14 +673,16 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     set({ workspaceImportDraft }),
   setWorkspaceImportParser: (workspaceImportParser) =>
     set({ workspaceImportParser }),
-  applyWorkspaceImport: (expectedDraft) => {
+  applyWorkspaceImport: (expectedDraft, options) => {
     const draft = get().workspaceImportDraft;
     if (draft === null) return;
     if (expectedDraft !== undefined && draft !== expectedDraft) return;
     // 导入语义对齐 setWorkspace：恢复语言/主题偏好 + 清空撤销栈。
     // 持久化由 App 层 workspace 变更订阅（scheduleSave）自动触发，无需手动保存。
     get().setWorkspace(draft.workspace);
-    set({ workspaceImportDraft: null });
+    if (options?.deferDraftClear !== true) {
+      set({ workspaceImportDraft: null });
+    }
   },
   setWorkspace: (workspace) => {
     // 加载/重置工作区时恢复持久化的语言偏好（刷新后保持上次选择）。

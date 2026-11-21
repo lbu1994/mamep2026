@@ -212,6 +212,12 @@ export const workspaceSchema = z.object({
 
 export type WorkspaceData = z.infer<typeof workspaceSchema>;
 
+/** 保存 Worker 返回的已校验快照：对象供 IndexedDB 写入，字符串供文件/IPC 写入。 */
+export interface WorkspaceSerialization {
+  serialized: string;
+  data: WorkspaceData;
+}
+
 function schemaInvalidError(technicalMessage: string) {
   return createMamepError({
     code: "WORKSPACE_SCHEMA_INVALID",
@@ -223,8 +229,8 @@ function schemaInvalidError(technicalMessage: string) {
   });
 }
 
-/** 序列化工作区为 JSON 字符串（领域对象 -> 存储形态）。 */
-export function serializeWorkspace(workspace: Workspace): string {
+/** 把完整领域对象降为持久化快照；不执行 Schema 校验。 */
+function workspaceDataFromWorkspace(workspace: Workspace): WorkspaceData {
   const data: WorkspaceData = {
     ...workspace,
     sheets: workspace.sheets.map((sheet) => ({
@@ -236,7 +242,35 @@ export function serializeWorkspace(workspace: Workspace): string {
       })),
     })),
   };
-  return JSON.stringify(workspaceSchema.parse(data));
+  return data;
+}
+
+/**
+ * 生成经完整当前 Schema 校验的持久化快照。
+ *
+ * 自动保存只调用该函数一次即可得到文件所需字符串和 IndexedDB 所需对象，避免
+ * JSON.stringify/parse 与 Schema 校验被重复执行。
+ */
+export function serializeWorkspaceSnapshot(
+  workspace: Workspace,
+): Result<WorkspaceSerialization> {
+  const validated = workspaceSchema.safeParse(
+    workspaceDataFromWorkspace(workspace),
+  );
+  if (!validated.success) {
+    return fail(schemaInvalidError(validated.error.message));
+  }
+  return ok({
+    serialized: JSON.stringify(validated.data),
+    data: validated.data,
+  });
+}
+
+/** 序列化工作区为 JSON 字符串（领域对象 -> 存储形态）。 */
+export function serializeWorkspace(workspace: Workspace): string {
+  const serialized = serializeWorkspaceSnapshot(workspace);
+  if (!serialized.ok) throw new Error(serialized.error.technicalMessage);
+  return serialized.value.serialized;
 }
 
 /** 执行迁移和 Schema 校验，返回可结构化克隆的持久化数据。 */

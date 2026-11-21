@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
+    "test:perf:production": "playwright test -c playwright.production-perf.config.ts",
     "test:real": "pnpm -w build:serial-picker-agent && playwright test -c playwright.real.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."

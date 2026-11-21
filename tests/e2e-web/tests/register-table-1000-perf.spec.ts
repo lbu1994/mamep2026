@@ -649,6 +649,16 @@ test("1000 行普通表：虚拟滚动下编辑、选择、新增、切页与自
 
   await resetLongTasks(page);
   const scrollToBottomMs = await scrollToRow(page, rowId("main", 999), true);
+  // 开发模式严格双渲染与 Vite 的绝对耗时只记录；生产目标由独立生产用例强制断言。
+  // 此处仍统计滚动窗口长任务，作为开发环境回归信号。
+  await page.waitForTimeout(480);
+  const scrollPerformance = await getPerfState(page);
+  const scrollLongTaskMaxMs = Math.max(
+    0,
+    ...scrollPerformance.longTasks.map((entry) => entry.duration),
+  );
+  expect(scrollToBottomMs).toBeLessThan(500);
+  expect(scrollLongTaskMaxMs).toBeLessThan(500);
   await expectRowTriple(
     page,
     rowId("main", 999),
@@ -813,6 +823,7 @@ test("1000 行普通表：虚拟滚动下编辑、选择、新增、切页与自
       renderedRowsAfterCycles,
       rowHeightPx: DESKTOP_ROW_HEIGHT,
       scrollToBottomMs,
+      scrollLongTaskMaxMs,
     },
     interactions: {
       commitMs: commitSamples,

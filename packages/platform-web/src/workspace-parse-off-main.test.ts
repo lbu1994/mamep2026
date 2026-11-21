@@ -4,7 +4,10 @@ import { parseWorkspace } from "@mamep2026/workspace";
 import { serializeWorkspace } from "@mamep2026/workspace";
 import { parseWorkspaceOffMainThread } from "./workspace-parse-off-main";
 import {
+  disposeWorkspaceWorker,
   parseWorkspaceTextOffMainThread,
+  serializeWorkspaceOffMainThread,
+  warmWorkspaceParser,
   WORKSPACE_PARSE_ABORTED,
 } from "./workspace-parse-off-main";
 
@@ -12,6 +15,7 @@ const workspace = createEmptyWorkspace();
 const stored = JSON.parse(serializeWorkspace(workspace)) as unknown;
 
 afterEach(() => {
+  disposeWorkspaceWorker();
   vi.unstubAllGlobals();
 });
 
@@ -26,8 +30,7 @@ describe("parseWorkspaceOffMainThread", () => {
     expect(actual.ok).toBe(true);
   });
 
-  it("Worker 返回校验数据后仅重建领域对象并终止 Worker", async () => {
-    const terminate = vi.fn();
+  it("Worker 返回已校验领域快照，主线程不再逐行重建", async () => {
     class FakeWorker {
       private readonly listeners = new Map<
         string,
@@ -43,23 +46,36 @@ describe("parseWorkspaceOffMainThread", () => {
         this.listeners.set(type, listener);
       }
 
-      postMessage(_message: unknown): void {
+      postMessage(message: unknown): void {
+        const { id } = message as { id: number };
         const data = JSON.parse(serializeWorkspace(workspace)) as unknown;
+        const parsed = parseWorkspace(data);
+        if (!parsed.ok) throw new Error("fixture is invalid");
         queueMicrotask(() => {
           this.listeners.get("message")?.({
-            data: { ok: true, value: data },
+            data: {
+              id,
+              result: {
+                ok: true,
+                value: {
+                  workspace: parsed.value,
+                  data,
+                  serialized: serializeWorkspace(parsed.value),
+                },
+              },
+            },
           } as MessageEvent<unknown>);
         });
       }
 
-      terminate = terminate;
+      terminate(): void {}
     }
     vi.stubGlobal("Worker", FakeWorker);
 
     const parsed = await parseWorkspaceOffMainThread({ schemaVersion: 999 });
 
     expect(parsed.ok).toBe(true);
-    expect(terminate).toHaveBeenCalled();
+    expect(parsed).toEqual(parseWorkspace(stored));
   });
 
   it("Worker 创建失败时回退原解析路径", async () => {
@@ -93,11 +109,23 @@ describe("parseWorkspaceOffMainThread", () => {
 
       postMessage(message: unknown): void {
         request = message;
+        const { id } = message as { id: number };
+        const parsed = parseWorkspace(
+          JSON.parse(serializeWorkspace(workspace)),
+        );
+        if (!parsed.ok) throw new Error("fixture is invalid");
         queueMicrotask(() => {
           this.message?.({
             data: {
-              ok: true,
-              value: JSON.parse(serializeWorkspace(workspace)),
+              id,
+              result: {
+                ok: true,
+                value: {
+                  workspace: parsed.value,
+                  data: JSON.parse(serializeWorkspace(workspace)),
+                  serialized: serializeWorkspace(parsed.value),
+                },
+              },
             },
           } as MessageEvent<unknown>);
         });
@@ -111,7 +139,8 @@ describe("parseWorkspaceOffMainThread", () => {
       serializeWorkspace(workspace),
     );
 
-    expect(request).toEqual({
+    expect(request).toMatchObject({
+      kind: "parse",
       input: serializeWorkspace(workspace),
       inputKind: "json-text",
     });
@@ -155,5 +184,86 @@ describe("parseWorkspaceOffMainThread", () => {
     if (!parsed.ok) {
       expect(parsed.error.code).toBe("WORKSPACE_SCHEMA_INVALID");
     }
+  });
+
+  it("保存快照经 Worker 完成完整校验并复用同一原始数据对象", async () => {
+    let request: unknown;
+    class FakeWorker {
+      private message: ((event: MessageEvent<unknown>) => void) | null = null;
+
+      constructor(_url: URL, _options?: WorkerOptions) {}
+
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent<unknown>) => void,
+      ): void {
+        if (type === "message") this.message = listener;
+      }
+
+      postMessage(message: unknown): void {
+        request = message;
+        const { id } = message as { id: number };
+        const data = JSON.parse(serializeWorkspace(workspace)) as unknown;
+        queueMicrotask(() => {
+          this.message?.({
+            data: {
+              id,
+              result: {
+                ok: true,
+                value: { data, serialized: JSON.stringify(data) },
+              },
+            },
+          } as MessageEvent<unknown>);
+        });
+      }
+
+      terminate(): void {}
+    }
+    vi.stubGlobal("Worker", FakeWorker);
+
+    const snapshot = await serializeWorkspaceOffMainThread(workspace);
+
+    expect(request).toMatchObject({ kind: "serialize", input: workspace });
+    expect(snapshot.ok).toBe(true);
+    if (snapshot.ok) {
+      expect(snapshot.value.data).toEqual(
+        JSON.parse(serializeWorkspace(workspace)),
+      );
+      expect(snapshot.value.serialized).toBe(serializeWorkspace(workspace));
+    }
+  });
+
+  it("可预热 Worker 且复用同一实例", async () => {
+    let created = 0;
+    class FakeWorker {
+      private message: ((event: MessageEvent<unknown>) => void) | null = null;
+
+      constructor(_url: URL, _options?: WorkerOptions) {
+        created += 1;
+      }
+
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent<unknown>) => void,
+      ): void {
+        if (type === "message") this.message = listener;
+      }
+
+      postMessage(message: unknown): void {
+        const { id } = message as { id: number };
+        queueMicrotask(() => {
+          this.message?.({
+            data: { id, result: { ok: true, value: { warm: true } } },
+          } as MessageEvent<unknown>);
+        });
+      }
+
+      terminate(): void {}
+    }
+    vi.stubGlobal("Worker", FakeWorker);
+
+    expect((await warmWorkspaceParser()).ok).toBe(true);
+    expect((await warmWorkspaceParser()).ok).toBe(true);
+    expect(created).toBe(1);
   });
 });

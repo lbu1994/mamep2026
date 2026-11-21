@@ -1,7 +1,7 @@
 {
   "name": "mamep2026",
   "private": true,
-  "version": "0.5.5",
+  "version": "0.5.6",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "main": "dist-electron/main.js",
@@ -36,6 +36,7 @@
     "test:e2e:electron": "node scripts/run-logged.mjs e2e-electron -- pnpm --filter @mamep2026/e2e-electron test",
     "test:e2e:vscode": "node scripts/run-logged.mjs e2e-vscode -- \"pnpm build:plugins && pnpm build:vscode && pnpm --filter @mamep2026/e2e-vscode test\"",
     "test:e2e:android": "node scripts/run-logged.mjs e2e-android -- \"pnpm build:plugins && pnpm --filter @mamep2026/e2e-android test\"",
+    "test:perf:production": "pnpm --filter @mamep2026/e2e-web test:perf:production",
     "test:e2e:real": "node scripts/run-logged.mjs e2e-real -- node scripts/e2e-real.mjs all",
     "test:e2e:web:real": "node scripts/run-logged.mjs e2e-web-real -- node scripts/e2e-real.mjs web",
     "test:e2e:electron:real": "node scripts/run-logged.mjs e2e-electron-real -- node scripts/e2e-real.mjs electron",

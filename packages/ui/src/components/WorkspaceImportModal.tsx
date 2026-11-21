@@ -39,12 +39,17 @@ export function WorkspaceImportModal(): React.ReactNode {
     setCommitting(true);
     commitTimerRef.current = setTimeout(() => {
       commitTimerRef.current = null;
-      applyWorkspaceImport(draft);
-      setCommitting(false);
-      message.open({
-        type: "success",
-        content: t("workspace.importSuccess"),
-      });
+      applyWorkspaceImport(draft, { deferDraftClear: true });
+      // 工作区替换先提交；下一任务再卸载 Modal，避免两者的布局/DOM 清理合并。
+      commitTimerRef.current = setTimeout(() => {
+        commitTimerRef.current = null;
+        setWorkspaceImportDraft(null);
+        setCommitting(false);
+        message.open({
+          type: "success",
+          content: t("workspace.importSuccess"),
+        });
+      }, 0);
     }, 0);
   };
 

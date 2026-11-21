@@ -1,20 +1,59 @@
 /**
- * 在一次性 Worker 中执行工作区迁移与 Schema 校验。
+ * 工作区恢复、导入与保存的 Worker 客户端。
  *
- * - 支持 Worker 的浏览器/WebView：Zod 校验与迁移离开主线程，结果回到主线程后只做
- *   低成本领域对象重建；
- * - 非浏览器测试环境或 Worker 创建/加载失败：回退到原同步解析路径，保持兼容和错误
- *   语义不变。
+ * Worker 按请求串行复用：工作区操作本身由应用层串行化，复用可避免每次恢复/保存都
+ * 重新加载 Zod、迁移链和领域工厂。取消活动请求会终止当前 Worker，后续请求使用新
+ * Worker；取消排队请求只移除该请求。
  */
 import type { Result, Workspace } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
-import type { WorkspaceData } from "@mamep2026/workspace";
-import { hydrateWorkspaceData } from "@mamep2026/workspace";
+import type {
+  WorkspaceData,
+  WorkspaceSerialization,
+} from "@mamep2026/workspace";
 
-type ParseResult = Result<WorkspaceData>;
+interface ParsedWorkspaceSnapshot {
+  workspace: Workspace;
+  serialized: string;
+  data: WorkspaceData;
+}
+
+type WorkerRequestPayload =
+  | {
+      kind: "parse";
+      input: unknown;
+      inputKind: "object" | "json-text";
+    }
+  | {
+      kind: "serialize";
+      input: Workspace;
+    }
+  | {
+      kind: "warm";
+    };
+
+type WorkerRequest = WorkerRequestPayload & { id: number };
+
+type WorkerResult =
+  ParsedWorkspaceSnapshot | WorkspaceSerialization | { warm: true };
+
+interface WorkerResponse {
+  id: number;
+  result: Result<WorkerResult>;
+}
+
+interface PendingRequest {
+  id: number;
+  request: WorkerRequest;
+  resolve(value: Result<WorkerResult>): void;
+  reject(reason: unknown): void;
+  settled: boolean;
+  signal?: AbortSignal | undefined;
+  abortListener?: (() => void) | undefined;
+}
 
 export interface WorkspaceParseOptions {
-  /** 取消后立即终止 Worker；迟到消息会被忽略，调用方收到可识别的取消结果。 */
+  /** 取消后立即终止当前 Worker；迟到消息会被忽略，调用方收到可识别的取消结果。 */
   readonly signal?: AbortSignal | undefined;
 }
 
@@ -82,6 +121,160 @@ async function parseTextInMainThread(
   return parseInMainThread(input, options);
 }
 
+async function serializeInMainThread(
+  workspace: Workspace,
+  options: WorkspaceParseOptions,
+): Promise<Result<WorkspaceSerialization>> {
+  if (isAborted(options.signal)) return abortedResult();
+  const { serializeWorkspaceSnapshot } = await import("@mamep2026/workspace");
+  if (isAborted(options.signal)) return abortedResult();
+  return serializeWorkspaceSnapshot(workspace);
+}
+
+let nextRequestId = 0;
+let sharedWorker: Worker | null = null;
+let activeRequest: PendingRequest | null = null;
+const requestQueue: PendingRequest[] = [];
+
+function settle(
+  pending: PendingRequest,
+  result: Result<WorkerResult>,
+): boolean {
+  if (pending.settled) return false;
+  pending.settled = true;
+  if (pending.abortListener !== undefined) {
+    pending.signal?.removeEventListener("abort", pending.abortListener);
+  }
+  pending.resolve(result);
+  return true;
+}
+
+function rejectRequest(pending: PendingRequest, cause: unknown): void {
+  if (pending.settled) return;
+  pending.settled = true;
+  if (pending.abortListener !== undefined) {
+    pending.signal?.removeEventListener("abort", pending.abortListener);
+  }
+  pending.reject(cause);
+}
+
+function removeQueued(pending: PendingRequest): void {
+  const index = requestQueue.indexOf(pending);
+  if (index >= 0) requestQueue.splice(index, 1);
+}
+
+function terminateWorker(): void {
+  const worker = sharedWorker;
+  sharedWorker = null;
+  worker?.terminate();
+}
+
+function failWorker(cause: unknown): void {
+  const current = activeRequest;
+  activeRequest = null;
+  terminateWorker();
+  if (current !== null) rejectRequest(current, cause);
+  const queued = requestQueue.splice(0);
+  for (const pending of queued) rejectRequest(pending, cause);
+}
+
+/** 终止复用 Worker；页面卸载、宿主销毁和隔离测试使用。 */
+export function disposeWorkspaceWorker(): void {
+  const current = activeRequest;
+  activeRequest = null;
+  terminateWorker();
+  if (current !== null) {
+    rejectRequest(current, new Error("workspace worker disposed"));
+  }
+  const queued = requestQueue.splice(0);
+  for (const pending of queued) {
+    rejectRequest(pending, new Error("workspace worker disposed"));
+  }
+}
+
+function pumpQueue(): void {
+  if (activeRequest !== null || requestQueue.length === 0) return;
+  const pending = requestQueue.shift();
+  if (pending === undefined) return;
+  if (pending.settled) {
+    pumpQueue();
+    return;
+  }
+  activeRequest = pending;
+  try {
+    ensureWorker().postMessage(pending.request);
+  } catch (error) {
+    activeRequest = null;
+    terminateWorker();
+    rejectRequest(pending, error);
+    pumpQueue();
+  }
+}
+
+function ensureWorker(): Worker {
+  if (sharedWorker !== null) return sharedWorker;
+  const worker = new Worker(
+    new URL("./workspace-parse.worker.ts", import.meta.url),
+    {
+      type: "module",
+      name: "mamep-workspace-parser",
+    },
+  );
+  worker.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
+    const pending = activeRequest;
+    if (pending === null || pending.id !== event.data.id) return;
+    activeRequest = null;
+    settle(pending, event.data.result);
+    pumpQueue();
+  });
+  worker.addEventListener("error", (event) => {
+    failWorker(new Error(event.message || "workspace parser worker failed"));
+  });
+  worker.addEventListener("messageerror", () => {
+    failWorker(new Error("workspace parser worker message failed"));
+  });
+  sharedWorker = worker;
+  return worker;
+}
+
+function requestWorker(
+  request: WorkerRequestPayload,
+  options: WorkspaceParseOptions,
+): Promise<Result<WorkerResult>> {
+  return new Promise((resolve, rejectRequest) => {
+    const id = ++nextRequestId;
+    const pending: PendingRequest = {
+      id,
+      request: { ...request, id } as WorkerRequest,
+      resolve,
+      reject: rejectRequest,
+      settled: false,
+      signal: options.signal,
+    };
+
+    const abort = (): void => {
+      if (pending.settled) return;
+      if (activeRequest === pending) {
+        activeRequest = null;
+        terminateWorker();
+        settle(pending, abortedResult());
+        pumpQueue();
+        return;
+      }
+      removeQueued(pending);
+      settle(pending, abortedResult());
+    };
+    pending.abortListener = abort;
+    if (isAborted(options.signal)) {
+      abort();
+      return;
+    }
+    options.signal?.addEventListener("abort", abort, { once: true });
+    requestQueue.push(pending);
+    pumpQueue();
+  });
+}
+
 async function parseOffMainThread(
   input: unknown,
   options: WorkspaceParseOptions,
@@ -94,40 +287,17 @@ async function parseOffMainThread(
       : parseInMainThread(input, options);
   }
 
-  let worker: Worker | null = null;
-  let abortListener: (() => void) | null = null;
   try {
-    worker = new Worker(
-      new URL("./workspace-parse.worker.ts", import.meta.url),
-      {
-        type: "module",
-        name: "mamep-workspace-parser",
-      },
+    const parsed = await requestWorker(
+      { kind: "parse", input, inputKind },
+      options,
     );
-    const activeWorker = worker;
-    const parsed = await new Promise<ParseResult>((resolve, reject) => {
-      abortListener = () => {
-        activeWorker.terminate();
-        resolve(abortedResult());
-      };
-      options.signal?.addEventListener("abort", abortListener, { once: true });
-      activeWorker.addEventListener(
-        "message",
-        (event: MessageEvent<ParseResult>) => {
-          resolve(event.data);
-        },
-      );
-      activeWorker.addEventListener("error", (event) => {
-        reject(new Error(event.message || "workspace parser worker failed"));
-      });
-      activeWorker.addEventListener("messageerror", () => {
-        reject(new Error("workspace parser worker message failed"));
-      });
-      activeWorker.postMessage({ input, inputKind });
-    });
     if (isAborted(options.signal)) return abortedResult();
     if (!parsed.ok) return parsed;
-    return ok(hydrateWorkspaceData(parsed.value));
+    if (!("workspace" in parsed.value)) {
+      return workerUnavailableError(new Error("unexpected parse response"));
+    }
+    return ok(parsed.value.workspace);
   } catch (error) {
     if (isAborted(options.signal)) return abortedResult();
     // Worker 在旧 WebView / CSP / 加载失败等环境不可用时保持原路径可恢复。
@@ -138,11 +308,6 @@ async function parseOffMainThread(
     } catch (fallbackError) {
       return workerUnavailableError(fallbackError ?? error);
     }
-  } finally {
-    if (abortListener !== null) {
-      options.signal?.removeEventListener("abort", abortListener);
-    }
-    worker?.terminate();
   }
 }
 
@@ -159,4 +324,61 @@ export async function parseWorkspaceTextOffMainThread(
   options: WorkspaceParseOptions = {},
 ): Promise<Result<Workspace>> {
   return parseOffMainThread(text, options, "json-text");
+}
+
+/**
+ * 预热复用 Worker。调用方可与 Host/UI 模块加载并行执行；失败不改变恢复路径，
+ * 真正解析时仍会按既有规则重建 Worker 或回退主线程。
+ */
+export async function warmWorkspaceParser(
+  options: WorkspaceParseOptions = {},
+): Promise<Result<void>> {
+  if (typeof Worker === "undefined") return ok(undefined);
+  try {
+    const warmed = await requestWorker({ kind: "warm" }, options);
+    if (!warmed.ok) return warmed;
+    return "warm" in warmed.value
+      ? ok(undefined)
+      : workerUnavailableError(new Error("unexpected warm response"));
+  } catch (error) {
+    if (isAborted(options.signal)) return abortedResult();
+    return workerUnavailableError(error);
+  }
+}
+
+/**
+ * 生成经完整 Schema 校验的保存快照。
+ *
+ * Worker 不可用时回退到同一 workspace 包函数；正常浏览器/WebView 下不占主线程。
+ */
+export async function serializeWorkspaceOffMainThread(
+  workspace: Workspace,
+  options: WorkspaceParseOptions = {},
+): Promise<Result<WorkspaceSerialization>> {
+  if (isAborted(options.signal)) return abortedResult();
+  if (typeof Worker === "undefined") {
+    return serializeInMainThread(workspace, options);
+  }
+  try {
+    const serialized = await requestWorker(
+      { kind: "serialize", input: workspace },
+      options,
+    );
+    if (isAborted(options.signal)) return abortedResult();
+    if (!serialized.ok) return serialized;
+    if (!("serialized" in serialized.value) || !("data" in serialized.value)) {
+      return workerUnavailableError(new Error("unexpected serialize response"));
+    }
+    return ok({
+      serialized: serialized.value.serialized,
+      data: serialized.value.data,
+    });
+  } catch (error) {
+    if (isAborted(options.signal)) return abortedResult();
+    try {
+      return await serializeInMainThread(workspace, options);
+    } catch (fallbackError) {
+      return workerUnavailableError(fallbackError ?? error);
+    }
+  }
 }
