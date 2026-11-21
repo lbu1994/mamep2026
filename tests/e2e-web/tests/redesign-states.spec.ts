@@ -118,8 +118,13 @@ test("narrow viewport moves secondary header actions into a More menu", async ({
     .click();
   await expect(page.getByTestId("plugin-manager")).toBeVisible();
 
-  // 连接状态始终可见（并入单按钮；窄窗口收起文字，但保留状态点 + 状态属性，不隐藏连接状态）。
+  // 连接状态始终可见：窄窗口收起文字，但保留状态点、完整可访问名称和动作属性。
   const connBtn = page.locator(".connection-cluster__button");
   await expect(connBtn).toHaveAttribute("data-conn-state", "connected");
+  await expect(connBtn).toHaveAttribute("data-conn-action", "disconnect");
+  await expect(connBtn).toHaveAccessibleName("Online · Disconnect");
   await expect(connBtn.locator(".conn-btn__dot")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Connection settings" }),
+  ).toBeVisible();
 });

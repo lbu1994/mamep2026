@@ -42,18 +42,21 @@ import { useAfterFirstPaint } from "./after-first-paint";
 import { markUiStartup } from "./startup-marks";
 import { AppStartupBootstrap } from "./startup";
 import {
-  ApiOutlined,
   AppstoreOutlined,
+  ControlOutlined,
   DatabaseOutlined,
   DisconnectOutlined,
   FundOutlined,
   LeftOutlined,
+  LinkOutlined,
+  LoadingOutlined,
   MenuOutlined,
   MessageOutlined,
   MoreOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
   ReadOutlined,
+  ReloadOutlined,
   RightOutlined,
   SettingOutlined,
   ThunderboltOutlined,
@@ -73,7 +76,10 @@ import {
 } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { mergeThemeConfig } from "@mamep2026/ui-theme";
-import { connectionButtonSpec } from "./connection-button";
+import {
+  connectionButtonSpec,
+  type ConnectionButtonIcon,
+} from "./connection-button";
 import { useIsMobileLayout } from "./layout/breakpoints";
 import { closeTopOverlay, useOverlayClose } from "./overlay-close";
 import { buildTheme } from "./theme";
@@ -176,6 +182,20 @@ function sidebarGroupIcon(sheetType: SheetType): ReactNode {
       return <FundOutlined aria-label="" aria-hidden />;
     default:
       return <AppstoreOutlined aria-label="" aria-hidden />;
+  }
+}
+
+/** 连接按钮的语义图标：连接、断开、重连与忙态互不复用。 */
+function connectionGlyph(icon: ConnectionButtonIcon): ReactNode {
+  switch (icon) {
+    case "connect":
+      return <LinkOutlined aria-hidden />;
+    case "disconnect":
+      return <DisconnectOutlined aria-hidden />;
+    case "reconnect":
+      return <ReloadOutlined aria-hidden />;
+    case "busy":
+      return <LoadingOutlined spin aria-hidden />;
   }
 }
 
@@ -673,8 +693,15 @@ function MamepAppContent({
   );
 
   const connected = connectionState === "connected";
-  // 连接多功能按钮规格（连接 UI 整合）：状态点 + 文字/图标随连接态切换；窄窗口收起文字。
+  // 连接多功能按钮规格：宽布局同时表达状态与动作，窄布局收起文字后保留状态点与动作图标。
   const connSpec = connectionButtonSpec(connectionState, narrow);
+  const connectionStateLabel = t(connSpec.stateLabelKey);
+  const connectionActionLabel =
+    connSpec.action === null ? null : t(connSpec.action.labelKey);
+  const connectionControlLabel =
+    connectionActionLabel === null
+      ? connectionStateLabel
+      : `${connectionStateLabel} · ${connectionActionLabel}`;
 
   // Header 直连 codec 协议：与连接设置弹窗同源（活动表类型 → 协议）。
   const directSheetProtocol = protocolForSheetType(
@@ -1014,9 +1041,9 @@ function MamepAppContent({
                   vertical
                   style={{ height: 20, marginInline: 2, flex: "none" }}
                 />
-                {/* 连接区：单一多功能按钮（状态显示 + Connect/Disconnect/重连 合一）——
-                状态点并入按钮、按钮文字随连接状态切换；窄窗口收起文字仅留状态点+图标（不隐藏连接状态）。
-                data-conn-state：纯展示钩子，供 CSS 按连接态着色状态点（不改任何行为/契约）。 */}
+                {/* 连接区：状态 + 动作（Connect/Disconnect/Reconnect）在同一按钮内明确分层。
+                窄窗口收起文字，仅保留状态点和语义动作图标；完整语义保留在 aria-label/title。
+                data-conn-state / data-conn-action 是纯展示钩子，不改行为或契约。 */}
                 <div className="connection-cluster">
                   <Button
                     size="small"
@@ -1030,9 +1057,10 @@ function MamepAppContent({
                       void loadConnectionSettingsModalModule()
                     }
                     onFocus={() => void loadConnectionSettingsModalModule()}
-                    aria-label={t(connSpec.ariaLabelKey)}
-                    title={t(connSpec.titleKey)}
+                    aria-label={connectionControlLabel}
+                    title={connectionControlLabel}
                     data-conn-state={connectionState}
+                    data-conn-action={connSpec.action?.kind ?? "busy"}
                   >
                     <span className="connection-cluster__content">
                       <span
@@ -1040,24 +1068,40 @@ function MamepAppContent({
                         style={{ backgroundColor: connSpec.dotColor }}
                       />
                       {connSpec.hideLabel ? (
-                        connSpec.icon === "disconnect" ? (
-                          <DisconnectOutlined />
-                        ) : (
-                          <ApiOutlined />
-                        )
+                        connectionGlyph(connSpec.icon)
                       ) : (
-                        <span>{t(connSpec.labelKey)}</span>
+                        <>
+                          <span className="connection-cluster__state">
+                            {connectionStateLabel}
+                          </span>
+                          {connectionActionLabel !== null && (
+                            <>
+                              <span
+                                className="connection-cluster__separator"
+                                aria-hidden
+                              >
+                                ·
+                              </span>
+                              <span className="connection-cluster__action">
+                                {connectionGlyph(connSpec.icon)}
+                                {connectionActionLabel}
+                              </span>
+                            </>
+                          )}
+                        </>
                       )}
                     </span>
                   </Button>
                 </div>
                 <span className="mamep-header__spacer" />
                 <div className="mamep-header__group">
-                  {/* Connection 入口始终可见（不收进 More），置于 Settings/Help 之前 */}
+                  {/* 连接设置入口始终可见（不收进 More）：配置语义，不复用连接动作图标。 */}
                   <Button
                     size="small"
-                    icon={<ApiOutlined />}
+                    className="connection-settings-button"
+                    icon={<ControlOutlined />}
                     aria-label={t("topbar.connectionSettings")}
+                    title={t("topbar.connectionSettings")}
                     onClick={openConnectionSettings}
                     onPointerEnter={() =>
                       void loadConnectionSettingsModalModule()
@@ -1095,7 +1139,10 @@ function MamepAppContent({
                     <>
                       <Button
                         size="small"
-                        icon={<SettingOutlined />}
+                        className="app-settings-button"
+                        icon={<SettingOutlined aria-hidden />}
+                        aria-label={t("topbar.settings")}
+                        title={t("topbar.settings")}
                         onClick={openSettings}
                         onPointerEnter={() => void loadSettingsDrawerModule()}
                         onFocus={() => void loadSettingsDrawerModule()}

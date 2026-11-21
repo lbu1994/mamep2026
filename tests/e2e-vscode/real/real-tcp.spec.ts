@@ -554,7 +554,7 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
 
     // 重连：Connection Settings → 切 TCP → 重填（值仍来自 config）。
     await frame
-      .getByRole("button", { name: "Connection" })
+      .getByRole("button", { name: "Connection settings" })
       .evaluate((el) => (el as HTMLElement).click());
     const modal = frame.locator(".ant-modal-container:visible");
     await modal.waitFor({ timeout: 10_000 });

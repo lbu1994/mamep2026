@@ -34,7 +34,7 @@ function sidebarItem(page: Page, name: string) {
 /** 打开 Settings 抽屉并把主题切到 Dark，随后关闭抽屉（容器为 Drawer）。 */
 async function switchToDarkTheme(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "Settings" })
+    .getByRole("button", { name: "Settings", exact: true })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".settings-drawer.ant-drawer-open", {
     timeout: 5000,

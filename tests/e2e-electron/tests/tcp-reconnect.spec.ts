@@ -195,8 +195,11 @@ test.afterAll(async () => {
 async function connectViaUi(autoReconnect: boolean): Promise<void> {
   const modal = page.locator(".ant-modal-container:visible");
   if ((await modal.count()) === 0) {
-    // 启动竞态兜底：弹窗未打开 → 点顶栏 Connect 重新打开（不依赖 loadWorkspace）。
-    await page.getByRole("button", { name: "Connect" }).first().click();
+    // 启动竞态兜底：弹窗未打开 → 点顶栏 Offline · Connect 重新打开（不依赖 loadWorkspace）。
+    await page
+      .getByRole("button", { name: "Offline · Connect" })
+      .first()
+      .click();
   }
   await expect(modal).toBeVisible({ timeout: 15000 });
   // 弹窗打开动画完成后再交互（启动竞态 flake 加固，见仓库记忆 electron-modal-launch-race-flake）。

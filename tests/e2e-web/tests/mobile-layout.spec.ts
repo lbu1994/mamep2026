@@ -13,6 +13,7 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 /** 移动布局视口（断点 1023px 之下）。 */
 const MOBILE_VIEWPORT = { width: 900, height: 800 };
+const PHONE_VIEWPORT = { width: 390, height: 844 };
 
 async function openMobileApp(page: Page): Promise<void> {
   await page.setViewportSize(MOBILE_VIEWPORT);
@@ -39,6 +40,56 @@ async function installAddressAdjust(page: Page): Promise<void> {
     executionMode: "same-process",
   });
 }
+
+test("移动顶栏区分连接状态、断开动作与连接设置", async ({ page }) => {
+  await openMobileApp(page);
+
+  const header = page.locator(".mamep-header");
+  const connectionButton = header.locator(".connection-cluster__button");
+
+  // 紧凑布局收起文字，但完整可访问名称仍同时表达状态与动作。
+  await expect(connectionButton).toHaveAttribute(
+    "data-conn-state",
+    "connected",
+  );
+  await expect(connectionButton).toHaveAttribute(
+    "data-conn-action",
+    "disconnect",
+  );
+  await expect(connectionButton).toHaveAccessibleName("Online · Disconnect");
+  await expect(connectionButton.locator(".anticon-disconnect")).toBeVisible();
+
+  // 连接设置是独立配置入口，使用不同图标与名称，不再与断开动作混淆。
+  const settingsButton = header.getByRole("button", {
+    name: "Connection settings",
+  });
+  await expect(settingsButton).toBeVisible();
+  await expect(settingsButton.locator(".anticon-control")).toBeVisible();
+});
+
+test("手机窄屏顶栏保留连接状态、动作与连接设置且不横向溢出", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE_VIEWPORT);
+  await page.goto(BASE_URL);
+
+  const header = page.locator(".mamep-header");
+  const connectionButton = header.locator(".connection-cluster__button");
+  await expect(connectionButton).toHaveAttribute(
+    "data-conn-state",
+    "connected",
+    { timeout: 15000 },
+  );
+  await expect(connectionButton).toHaveAccessibleName("Online · Disconnect");
+  await expect(
+    header.getByRole("button", { name: "Connection settings" }),
+  ).toBeVisible();
+
+  const overflow = await header.evaluate(
+    (element) => element.scrollWidth - element.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+});
 
 test("移动布局：侧栏收起为左抽屉，选中表后自动关闭", async ({ page }) => {
   await openMobileApp(page);

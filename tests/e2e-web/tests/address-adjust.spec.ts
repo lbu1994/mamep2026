@@ -44,7 +44,7 @@ test("toolbar shows Address Adjust defaulting to OFF（Connection Settings 已�
 
   // Connection Settings 弹窗不再包含 Address Adjust（全局选项已移出核心）。
   await page
-    .getByRole("button", { name: "Connection" })
+    .getByRole("button", { name: "Connection settings" })
     .evaluate((el) => (el as HTMLElement).click());
   const modal = page.locator(".ant-modal-container:visible");
   await expect(modal).toContainText("Connection Settings");

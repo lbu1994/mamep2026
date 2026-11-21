@@ -593,13 +593,15 @@ test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Typ
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 });
 
-test("断开连接 → 状态复位为断开（连接按钮恢复 Connect 态）", async () => {
+test("断开连接 → 状态复位为 Offline · Connect", async () => {
   await page.getByRole("button", { name: /Disconnect/i }).click();
-  // Header 连接 UI 已于整合为单一多功能按钮（状态点 + Connect/Disconnect 合一），
-  // 不再单独渲染 "Offline" 文本；改用按钮 data-conn-state 判定断开态（宽/窄窗口均适用）。
+  // Header 连接 UI 同时表达当前状态与动作；data 属性仍用于稳定断言连接态与动作。
   await expect(
     page.locator(".connection-cluster__button[data-conn-state='disconnected']"),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
+  await expect(
+    page.locator(".connection-cluster__button"),
+  ).toHaveAccessibleName("Offline · Connect");
 });
 
 test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {

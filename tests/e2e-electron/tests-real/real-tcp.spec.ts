@@ -426,7 +426,7 @@ test("断开连接 → Offline，重连 → Online（稳定性）", async () => 
 
   // 重连：重新打开 Connection Settings，切 TCP 并重填（值仍来自 config）。
   await page
-    .getByRole("button", { name: "Connection" })
+    .getByRole("button", { name: "Connection settings" })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".ant-modal-container:visible", {
     timeout: 8000,

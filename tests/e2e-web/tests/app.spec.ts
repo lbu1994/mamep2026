@@ -29,7 +29,7 @@ async function closeModal(page: Page): Promise<void> {
 
 async function openConnectionModal(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "Connection" })
+    .getByRole("button", { name: "Connection settings" })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".ant-modal-container:visible", { timeout: 5000 });
 }
@@ -48,11 +48,17 @@ test("mock startup skips Connection Settings and auto-connects", async ({
 
   // 启动即进主界面：不出现 Connection Settings 弹窗。
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
-  // 自动连接 mock：MOCK 徽标、Disconnect 按钮、Online 状态。
+  // 自动连接 mock：MOCK 徽标、Online 状态与 Disconnect 动作、独立连接设置入口。
   const header = page.locator(".ant-layout-header");
   await expect(header).toContainText("MOCK");
   await expect(header).toContainText("Disconnect");
   await expect(header).toContainText("Online");
+  await expect(
+    header.locator(".connection-cluster__button"),
+  ).toHaveAccessibleName("Online · Disconnect");
+  await expect(
+    header.getByRole("button", { name: "Connection settings" }),
+  ).toBeVisible();
 });
 
 test("non-mock startup opens Connection Settings modal with RTU defaults", async ({
@@ -119,6 +125,9 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
   await expect(page.locator(".ant-layout-header")).not.toContainText(
     "Disconnect",
   );
+  await expect(
+    page.locator(".connection-cluster__button"),
+  ).toHaveAccessibleName("Offline · Connect");
 
   // Preset the mock device register.
   await page.evaluate(() =>
@@ -147,6 +156,9 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
     timeout: 8000,
   });
   await expect(page.locator(".ant-layout-header")).toContainText("Online");
+  await expect(
+    page.locator(".connection-cluster__button"),
+  ).toHaveAccessibleName("Online · Disconnect");
 
   // Read: Data shows 00AB (hex).
   await page

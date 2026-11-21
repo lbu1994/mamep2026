@@ -552,7 +552,7 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
 
     // 重连：Connection Settings → 串口下拉复用 → 选 COM4 → Connect。
     await frame
-      .getByRole("button", { name: "Connection" })
+      .getByRole("button", { name: "Connection settings" })
       .evaluate((el) => (el as HTMLElement).click());
     const modal = frame.locator(".ant-modal-container:visible");
     await modal.waitFor({ timeout: 10_000 });

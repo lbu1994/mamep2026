@@ -41,7 +41,7 @@ async function setName(page: Page, index: number, name: string): Promise<void> {
  * 被置 `display:none`），因此开合判定一律用 `.settings-drawer.ant-drawer-open`。
  */
 async function openSettings(page: Page) {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.waitForSelector(".settings-drawer.ant-drawer-open", {
     timeout: 5000,
   });
@@ -217,7 +217,7 @@ test("导入含 connectionProfiles 的工作区：Connection Settings 恢复连�
 
   // 打开 Connection Settings：默认表单值来自 connectionProfiles[0]（baudRate=19200）。
   await page
-    .getByRole("button", { name: "Connection" })
+    .getByRole("button", { name: "Connection settings" })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".ant-modal-container:visible", { timeout: 5000 });
   const modal = page.locator(".ant-modal-container:visible");

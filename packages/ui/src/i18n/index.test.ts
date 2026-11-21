@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zh } from "./index";
+import { en, zh } from "./index";
 
 describe("zh-CN Type labels", () => {
   it("translates every built-in Type option", () => {
@@ -17,6 +17,22 @@ describe("zh-CN Type labels", () => {
       binary: "二进制",
       string: "字符串",
       bool: "布尔值",
+    });
+  });
+});
+
+describe("连接状态、动作与设置文案", () => {
+  it("中英文使用相同语义，并明确区分连接设置与连接动作", () => {
+    expect({
+      enSettings: en.topbar.connectionSettings,
+      zhSettings: zh.topbar.connectionSettings,
+      enConnecting: en.state.connecting,
+      zhConnecting: zh.state.connecting,
+    }).toEqual({
+      enSettings: "Connection settings",
+      zhSettings: "连接设置",
+      enConnecting: "Connecting…",
+      zhConnecting: "连接中…",
     });
   });
 });

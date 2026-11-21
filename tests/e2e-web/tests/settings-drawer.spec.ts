@@ -88,7 +88,7 @@ test("顶栏 Settings 按钮打开抽屉，点击遮罩关闭", async ({ page })
   const errors = await openApp(page);
 
   await page
-    .getByRole("button", { name: "Settings" })
+    .getByRole("button", { name: "Settings", exact: true })
     .evaluate((el) => (el as HTMLElement).click());
   await waitForDrawerOpen(page);
   await expect(

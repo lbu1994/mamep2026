@@ -64,7 +64,7 @@ test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）�
   await expect(connectionModal(page)).toBeHidden({ timeout: 60_000 });
   const disconnectButton = page
     .locator(".mamep-header")
-    .getByRole("button", { name: "Disconnect" });
+    .getByRole("button", { name: "Online · Disconnect" });
   await expect(disconnectButton).toBeVisible({ timeout: 30_000 });
 
   // 通信属性面板应显示所选串口标签（本 Host 记录的 portLabel）。

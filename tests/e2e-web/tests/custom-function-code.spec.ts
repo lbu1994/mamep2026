@@ -40,7 +40,7 @@ async function reconnectAsActiveSheet(page: Page): Promise<void> {
     "Disconnect",
   );
   await page
-    .getByRole("button", { name: "Connection" })
+    .getByRole("button", { name: "Connection settings" })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".ant-modal-container:visible", { timeout: 5000 });
   await page

@@ -34,7 +34,7 @@ pnpm dist:vscode    # 打包 VSIX
 
 ## 使用说明
 
-1. 打开主面板后，点击 **Connection Settings** 配置连接：
+1. 打开主面板后，点击 **Connection settings** 配置连接：
    - **RTU**：选择串口、设置从站地址（每张表独立）、波特率与 Rx Delay
    - **TCP**：填写 host / port / Unit ID / 超时 / 重试
    - 连接对象可通过 **Settings → 工作区导入** 导入（工作区 JSON 含连接对象 `connectionProfiles`，导入后此处预填）

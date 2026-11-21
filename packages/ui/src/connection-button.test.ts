@@ -1,8 +1,9 @@
 /**
  * connection-button（Header 连接 UI 整合）单测。
  * 覆盖：
- * - 9 个连接状态的 label / aria / icon / type / danger / 状态点颜色 / 呼吸映射
- * - 窄窗口隐藏文字（不隐藏状态点）
+ * - 9 个连接状态的“状态 + 动作”语义、图标、type、danger、状态点颜色、呼吸映射
+ * - 过渡态/等待态没有可执行动作
+ * - 窄窗口隐藏文字，但保留动作/忙态图标与状态点
  */
 import { describe, expect, it } from "vitest";
 import type { ConnectionState } from "@mamep2026/communication";
@@ -21,10 +22,13 @@ const ALL_STATES: ConnectionState[] = [
 ];
 
 describe("connectionButtonSpec", () => {
-  it("disconnected → Connect 按钮（default + 主题主色描边，api 图标，灰点，不呼吸，显示文字）", () => {
+  it("disconnected → Offline + Connect（主题主色描边、链接图标、灰点）", () => {
     const spec = connectionButtonSpec("disconnected", false);
-    expect(spec.labelKey).toBe("topbar.connect");
-    expect(spec.ariaLabelKey).toBe("topbar.connect");
+    expect(spec.stateLabelKey).toBe("state.disconnected");
+    expect(spec.action).toEqual({
+      kind: "connect",
+      labelKey: "topbar.connect",
+    });
     expect(spec.icon).toBe("connect");
     expect(spec.type).toBe("default");
     expect(spec.color).toBe("primary");
@@ -35,10 +39,13 @@ describe("connectionButtonSpec", () => {
     expect(spec.hideLabel).toBe(false);
   });
 
-  it("connected → Online / Disconnect 组合（disconnect 图标，绿点，danger 描边，显示文字）", () => {
+  it("connected → Online + Disconnect（断开图标、绿点、danger 描边）", () => {
     const spec = connectionButtonSpec("connected", false);
-    expect(spec.labelKey).toBe("topbar.connected");
-    expect(spec.ariaLabelKey).toBe("topbar.disconnect");
+    expect(spec.stateLabelKey).toBe("state.connected");
+    expect(spec.action).toEqual({
+      kind: "disconnect",
+      labelKey: "topbar.disconnect",
+    });
     expect(spec.icon).toBe("disconnect");
     expect(spec.type).toBe("default");
     expect(spec.color).toBeUndefined();
@@ -49,7 +56,7 @@ describe("connectionButtonSpec", () => {
     expect(spec.hideLabel).toBe(false);
   });
 
-  it("过渡态（connecting/disconnecting/reconnecting/selecting-device）显示状态文字且呼吸", () => {
+  it("过渡态只显示状态，不提供可执行动作并显示忙态图标", () => {
     for (const state of [
       "selecting-device",
       "connecting",
@@ -57,11 +64,32 @@ describe("connectionButtonSpec", () => {
       "reconnecting",
     ] as ConnectionState[]) {
       const spec = connectionButtonSpec(state, false);
-      expect(spec.labelKey).toBe(`state.${state}`);
+      expect(spec.stateLabelKey).toBe(`state.${state}`);
+      expect(spec.action).toBeNull();
+      expect(spec.icon).toBe("busy");
       expect(spec.pulsing).toBe(true);
-      expect(spec.icon).toBe(
-        state === "disconnecting" ? "disconnect" : "connect",
-      );
+      expect(spec.type).toBe("default");
+      expect(spec.danger).toBe(false);
+    }
+  });
+
+  it("reconnect-waiting 只显示状态，不提供重复点击动作", () => {
+    const spec = connectionButtonSpec("reconnect-waiting", false);
+    expect(spec.stateLabelKey).toBe("state.reconnect-waiting");
+    expect(spec.action).toBeNull();
+    expect(spec.icon).toBe("busy");
+    expect(spec.pulsing).toBe(false);
+  });
+
+  it("failed / interrupted → 状态文字 + Reconnect 动作", () => {
+    for (const state of ["failed", "interrupted"] as ConnectionState[]) {
+      const spec = connectionButtonSpec(state, false);
+      expect(spec.stateLabelKey).toBe(`state.${state}`);
+      expect(spec.action).toEqual({
+        kind: "reconnect",
+        labelKey: "topbar.reconnect",
+      });
+      expect(spec.icon).toBe("reconnect");
       expect(spec.type).toBe("default");
       expect(spec.danger).toBe(false);
     }
@@ -79,29 +107,17 @@ describe("connectionButtonSpec", () => {
     }
   });
 
-  it("failed / interrupted → 重连入口（aria/title 为 reconnect）", () => {
-    for (const state of ["failed", "interrupted"] as ConnectionState[]) {
-      const spec = connectionButtonSpec(state, false);
-      expect(spec.ariaLabelKey).toBe("topbar.reconnect");
-      expect(spec.titleKey).toBe("topbar.reconnect");
-      expect(spec.labelKey).toBe(`state.${state}`);
-      expect(spec.icon).toBe("connect");
-      expect(spec.type).toBe("default");
-      expect(spec.danger).toBe(false);
-    }
-  });
-
   it("所有状态均有稳定状态的 dotColor（非空）", () => {
     for (const state of ALL_STATES) {
-      const spec = connectionButtonSpec(state, false);
-      expect(spec.dotColor).not.toBe("");
+      expect(connectionButtonSpec(state, false).dotColor).not.toBe("");
     }
   });
 
-  it("窄窗口隐藏文字（hideLabel=true），但状态点颜色仍保留", () => {
+  it("窄窗口隐藏文字，但保留动作/忙态图标与状态点", () => {
     for (const state of ALL_STATES) {
       const spec = connectionButtonSpec(state, true);
       expect(spec.hideLabel).toBe(true);
+      expect(spec.icon).not.toBe("");
       expect(spec.dotColor).not.toBe("");
     }
   });

@@ -41,7 +41,7 @@ async function openApp(page: Page): Promise<string[]> {
 /** 打开 Settings 抽屉（容器为 Drawer）。 */
 async function openSettings(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "Settings" })
+    .getByRole("button", { name: "Settings", exact: true })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator(".settings-drawer.ant-drawer-open")).toHaveCount(1);
 }

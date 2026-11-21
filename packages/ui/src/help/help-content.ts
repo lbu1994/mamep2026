@@ -35,7 +35,7 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "",
       "## Quick start",
       "",
-      "- **Connect** to your device (see **Connection**).",
+      "- Use **Offline · Connect** to connect to your device (see **Connection**).",
       "- **Add register rows** (see **Table**).",
       "- **Read, write, or poll** rows (see **Read / Write / Polling**).",
       "",
@@ -69,7 +69,7 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
     "en-US": md([
       "# Connection",
       "",
-      "Open **Connection Settings** from the top bar. Choose the protocol, configure the parameters, then click **Connect**. The header shows the connection state as text with a semantic color.",
+      "Open **Connection settings** from the top bar. Choose the protocol and parameters, then use **Offline · Connect** in the header. The header pairs the current state with **Connect**, **Disconnect**, or **Reconnect**, using text and a semantic color.",
       "",
       "## Modbus RTU",
       "",
@@ -90,7 +90,7 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
     "zh-CN": md([
       "# 连接",
       "",
-      "从顶部栏打开 **连接设置**。选择协议、配置参数后点击 **连接**。顶部栏以文字 + 语义色显示连接状态。",
+      "从顶部栏打开 **连接设置**。选择协议与参数后，使用顶栏的 **离线 · 连接**。顶栏会把当前状态与 **连接**、**断开** 或 **重连** 动作并列显示，并同时使用文字和语义色。",
       "",
       "## Modbus RTU",
       "",

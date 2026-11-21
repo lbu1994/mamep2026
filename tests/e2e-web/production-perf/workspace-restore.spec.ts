@@ -413,7 +413,7 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
   const settingsStart = await interactionMark(page);
   await page
     .locator(".mamep-header")
-    .getByRole("button", { name: /Settings/ })
+    .getByRole("button", { name: /^Settings$/ })
     .click();
   const settings = page
     .locator(".ant-drawer")
@@ -455,7 +455,7 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
 
   await page
     .locator(".mamep-header")
-    .getByRole("button", { name: /Settings/ })
+    .getByRole("button", { name: /^Settings$/ })
     .click();
   const importSettings = page
     .locator(".ant-drawer")

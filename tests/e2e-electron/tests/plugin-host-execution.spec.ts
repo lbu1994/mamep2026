@@ -93,7 +93,7 @@ test.afterAll(async () => {
 /** 打开 Settings 抽屉的 Plugins 页签。 */
 async function openPluginsSection() {
   await page
-    .getByRole("button", { name: "Settings" })
+    .getByRole("button", { name: "Settings", exact: true })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".settings-drawer.ant-drawer-open", {
     timeout: 5000,

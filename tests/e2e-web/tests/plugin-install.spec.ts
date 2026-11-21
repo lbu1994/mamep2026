@@ -39,7 +39,7 @@ async function openApp(page: Page): Promise<void> {
 async function openPluginManager(page: Page) {
   if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
     await page
-      .getByRole("button", { name: "Settings" })
+      .getByRole("button", { name: "Settings", exact: true })
       .evaluate((el) => (el as HTMLElement).click());
     await page.waitForSelector(".settings-drawer.ant-drawer-open", {
       timeout: 5000,

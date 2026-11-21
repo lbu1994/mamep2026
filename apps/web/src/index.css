@@ -262,8 +262,8 @@ body {
   outline-offset: 1px;
 }
 
-/* 连接控制区：单一多功能按钮（状态显示 + Connect/Disconnect/重连 合一）。
-   状态点并入按钮并携带语义色；按钮文字随连接状态切换；无外框无底色（融入页面背景）。 */
+/* 连接控制区：同一按钮内明确区分当前状态与连接/断开/重连动作。
+   状态点携带语义色；动作使用独立图标，窄布局收起文字后仍保留状态点与动作图标。 */
 .connection-cluster {
   display: flex;
   align-items: center;
@@ -277,11 +277,28 @@ body {
   font-weight: 600;
 }
 
-/* 按钮内容：状态点 + 文字（窄窗口下文字收起为操作图标） */
+/* 按钮内容：状态点 + 状态文字 + 分隔符 + 动作（窄窗口下收起为状态点 + 动作图标） */
 .connection-cluster__content {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.connection-cluster__state {
+  color: var(--ant-color-text-secondary);
+  font-weight: 500;
+}
+
+.connection-cluster__separator {
+  color: var(--ant-color-text-quaternary);
+  font-weight: 400;
+}
+
+.connection-cluster__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
 }
 
 /* 连接状态点：并入按钮内的彩色圆点（颜色由 connectionButtonSpec.dotColor 内联注入） */

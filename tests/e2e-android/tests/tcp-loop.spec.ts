@@ -257,7 +257,7 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
   });
   const disconnectButton = page
     .locator(".mamep-header")
-    .getByRole("button", { name: "Disconnect" });
+    .getByRole("button", { name: "Online · Disconnect" });
   await expect(disconnectButton).toBeVisible({ timeout: 20_000 });
 
   // 新表默认 OFF；本用例显式 ON，以覆盖写后回读一致性。

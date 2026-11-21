@@ -3,28 +3,43 @@ import { STATE_DOT_COLOR } from "./connection-state";
 
 /**
  * Header 连接多功能按钮（连接 UI 整合）：
- * 把「连接状态显示」与「Connect/Disconnect 按钮」合并为一个一体化控件——
- * 状态点并入按钮 + 按钮文字随连接状态切换。
+ * 把“连接状态”和“Connect/Disconnect 动作”放在同一个操作入口中：
+ * 宽布局显示 `Offline · Connect` / `Online · Disconnect`，窄布局收起文字后
+ * 仍通过状态点、动作图标和完整可访问名称保留三类语义中的前两类。
  *
- * 纯函数：输入连接状态 → 输出按钮渲染所需规格（label / icon / type / danger /
- * 状态点颜色 / 呼吸 / aria-label / title / 窄窗口是否隐藏文字）。
+ * 纯函数：输入连接状态 → 输出按钮渲染所需规格（状态文案 / 动作文案与图标 /
+ * type / danger / 状态点颜色 / 呼吸 / 窄窗口是否隐藏文字）。
  * 状态点颜色沿用 STATE_DOT_COLOR（antd 语义 token），保证与 Comm Properties 状态读数一致。
  */
 
-export type ConnectionButtonIcon = "connect" | "disconnect";
+export type ConnectionButtonIcon =
+  | "connect"
+  | "disconnect"
+  | "reconnect"
+  | "busy";
+
+export type ConnectionButtonActionKind =
+  | "connect"
+  | "disconnect"
+  | "reconnect";
+
+export interface ConnectionButtonAction {
+  /** 动作类型，同时作为 data 属性与图标选择依据。 */
+  kind: ConnectionButtonActionKind;
+  /** 可见动作文案 i18n key。 */
+  labelKey: string;
+}
 
 /** antd Button `color` 取值子集（本项目只用到 primary / default 描边）。 */
 export type ConnectionButtonColor = "default" | "primary";
 
 export interface ConnectionButtonSpec {
-  /** 可见文字 i18n key。 */
-  labelKey: string;
-  /** aria-label i18n key（点击语义）。 */
-  ariaLabelKey: string;
-  /** title（悬停提示）i18n key。 */
-  titleKey: string;
-  /** 按钮内操作图标。 */
-  icon: ConnectionButtonIcon | null;
+  /** 当前连接状态 i18n key。 */
+  stateLabelKey: string;
+  /** 可执行动作；过渡态/等待态没有可执行动作。 */
+  action: ConnectionButtonAction | null;
+  /** 窄布局唯一保留的图标（动作图标或忙态图标）。 */
+  icon: ConnectionButtonIcon;
   /** antd Button type。 */
   type: "primary" | "default";
   /** antd Button `color`（与 variant 配套：Connect 用 primary 主题色描边）。 */
@@ -41,31 +56,26 @@ export interface ConnectionButtonSpec {
   hideLabel: boolean;
 }
 
-/** label 映射：disconnected/connected 用操作文案，其余用状态文字（state.*）。 */
-function labelFor(state: ConnectionState): string {
+function stateLabelFor(state: ConnectionState): string {
+  return `state.${state}`;
+}
+
+function actionFor(state: ConnectionState): ConnectionButtonAction | null {
   switch (state) {
     case "disconnected":
-      return "topbar.connect";
+      return { kind: "connect", labelKey: "topbar.connect" };
     case "connected":
-      return "topbar.connected";
+      return { kind: "disconnect", labelKey: "topbar.disconnect" };
+    case "failed":
+    case "interrupted":
+      return { kind: "reconnect", labelKey: "topbar.reconnect" };
     default:
-      return `state.${state}`;
+      return null;
   }
 }
 
-/** aria-label：连接/断开/重连/忙态状态文字。 */
-function ariaLabelFor(state: ConnectionState): string {
-  switch (state) {
-    case "connected":
-      return "topbar.disconnect";
-    case "failed":
-    case "interrupted":
-      return "topbar.reconnect";
-    case "disconnected":
-      return "topbar.connect";
-    default:
-      return `state.${state}`;
-  }
+function iconFor(action: ConnectionButtonAction | null): ConnectionButtonIcon {
+  return action?.kind ?? "busy";
 }
 
 /** 状态点是否呼吸（连接/断开/重连的过渡态）。 */
@@ -81,18 +91,15 @@ export function connectionButtonSpec(
   narrow: boolean,
 ): ConnectionButtonSpec {
   const disconnected = state === "disconnected";
-  const connected = state === "connected";
-  const icon: ConnectionButtonIcon =
-    connected || state === "disconnecting" ? "disconnect" : "connect";
+  const action = actionFor(state);
   // 统一 Default 样式；未连接（Connect）额外用主题主色描边（default + color=primary + variant=outlined），
   // 与 Disconnect（danger 描边）同为「有外框颜色」的控件，颜色取自主题配套色。
   const type: "primary" | "default" = "default";
-  const danger = connected;
+  const danger = state === "connected";
   const spec: ConnectionButtonSpec = {
-    labelKey: labelFor(state),
-    ariaLabelKey: ariaLabelFor(state),
-    titleKey: ariaLabelFor(state),
-    icon,
+    stateLabelKey: stateLabelFor(state),
+    action,
+    icon: iconFor(action),
     type,
     danger,
     dotColor: STATE_DOT_COLOR[state],

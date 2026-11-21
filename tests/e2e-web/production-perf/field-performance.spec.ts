@@ -23,7 +23,7 @@ async function closeStartupConnectionModal(page: Page): Promise<void> {
 async function openSettings(page: Page) {
   await page
     .locator(".mamep-header")
-    .getByRole("button", { name: /Settings/ })
+    .getByRole("button", { name: /^Settings$/ })
     .click();
   const drawer = page.locator(".settings-drawer.ant-drawer-open");
   await expect(drawer).toBeVisible();

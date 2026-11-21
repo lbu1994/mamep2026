@@ -109,7 +109,7 @@ async function closeSettings(page: Page): Promise<void> {
 async function openSettings(page: Page): Promise<Locator> {
   await page
     .locator(".mamep-header")
-    .getByRole("button", { name: /Settings/ })
+    .getByRole("button", { name: /^Settings$/ })
     .click();
   const drawer = settingsDrawer(page);
   await expect(drawer).toHaveClass(/ant-drawer-open/);
@@ -173,7 +173,9 @@ test("Settings / Connection / Add Row / 1000 行导入的 Event Timing ≤200ms"
   );
 
   const connectionStart = await interactionMark(page);
-  await page.getByRole("button", { name: "Connection", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Connection settings", exact: true })
+    .click();
   const connectionModal = page.locator(".ant-modal-container:visible");
   await expect(connectionModal).toContainText("Connection Settings");
   const connectionWallMs =

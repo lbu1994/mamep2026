@@ -266,7 +266,7 @@ async function reconnectAsActiveSheet(p: Page): Promise<void> {
   );
   // 2) 打开 Connection Settings → 端口下拉枚举 → 选择 COM4 → Connect。
   await p
-    .getByRole("button", { name: "Connection" })
+    .getByRole("button", { name: "Connection settings" })
     .evaluate((el) => (el as HTMLElement).click());
   await p.waitForSelector(".ant-modal-container:visible", { timeout: 8000 });
   const modal = p.locator(".ant-modal-container:visible");
@@ -302,7 +302,7 @@ async function installCustomFunctionCodePlugin(): Promise<void> {
   }, CUSTOM_FC_ENTRY_PATH);
 
   await page
-    .getByRole("button", { name: "Settings" })
+    .getByRole("button", { name: "Settings", exact: true })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".settings-drawer.ant-drawer-open", {
     timeout: 5000,
@@ -733,7 +733,7 @@ test("断开连接 → Offline，可重连 → Online（稳定性）", async () 
 
   // 重连：打开 Connection Settings → 串口下拉已可复用授权快照（enumerated 自动匹配 COM4）。
   await page
-    .getByRole("button", { name: "Connection" })
+    .getByRole("button", { name: "Connection settings" })
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForSelector(".ant-modal-container:visible", {
     timeout: 8000,
