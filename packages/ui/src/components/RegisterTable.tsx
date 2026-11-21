@@ -4,6 +4,7 @@ import {
   lazy,
   memo,
   Suspense,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -32,6 +33,7 @@ import type {
 import Switch from "antd/es/switch";
 import Table from "antd/es/table";
 import Tooltip from "antd/es/tooltip";
+import Typography from "antd/es/typography";
 import {
   ColumnWidthOutlined,
   HolderOutlined,
@@ -102,6 +104,8 @@ import {
 } from "../tree-rows";
 import { useAppStore } from "../app-store";
 import { useIsMobileLayout } from "../layout/breakpoints";
+import { useAfterFirstPaint } from "../after-first-paint";
+import { markUiStartup } from "../startup-marks";
 import type { RowFailure } from "../row-result";
 import { computeNoColumnWidth } from "../no-column-width";
 import { usePluginContributions } from "../plugin/use-contributions";
@@ -134,18 +138,89 @@ type DeferredSelectComponent = <
 const Select = lazy(
   () => import("antd/es/select"),
 ) as unknown as DeferredSelectComponent;
+const MobileNativeSelectContext = createContext(false);
+
+interface NativeSelectOption {
+  value: string | number;
+  label: React.ReactNode;
+  disabled: boolean;
+}
+
+function nativeSelectOptions(value: unknown): NativeSelectOption[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate): NativeSelectOption[] => {
+    if (candidate === null || typeof candidate !== "object") return [];
+    const option = candidate as Record<string, unknown>;
+    if (Array.isArray(option.options)) {
+      return nativeSelectOptions(option.options);
+    }
+    if (typeof option.value !== "string" && typeof option.value !== "number") {
+      return [];
+    }
+    const label =
+      typeof option.label === "string" || typeof option.label === "number"
+        ? option.label
+        : String(option.value);
+    return [
+      {
+        value: option.value,
+        label,
+        disabled: option.disabled === true,
+      },
+    ];
+  });
+}
+
+function MobileNativeSelect<
+  ValueType extends string | number = string | number,
+  OptionType extends BaseOptionType | DefaultOptionType = DefaultOptionType,
+>(props: SelectProps<ValueType, OptionType>): React.ReactNode {
+  const options = nativeSelectOptions(props.options);
+  return (
+    <select
+      className="register-table__native-select"
+      style={props.style}
+      value={props.value === undefined ? "" : String(props.value)}
+      disabled={props.disabled}
+      aria-label={props["aria-label"]}
+      aria-invalid={props.status === "error" ? true : undefined}
+      onChange={(event) => {
+        const selected = options.find(
+          (option) => String(option.value) === event.currentTarget.value,
+        );
+        props.onChange?.(selected?.value as ValueType);
+      }}
+    >
+      {options.map((option) => (
+        <option
+          key={String(option.value)}
+          value={String(option.value)}
+          disabled={option.disabled}
+        >
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function DeferredSelect<
   ValueType extends string | number = string | number,
   OptionType extends BaseOptionType | DefaultOptionType = DefaultOptionType,
 >(props: SelectProps<ValueType, OptionType>): React.ReactNode {
   const ariaLabel = props["aria-label"];
+  const useNativeSelect = useContext(MobileNativeSelectContext);
+  if (useNativeSelect) {
+    return <MobileNativeSelect {...props} />;
+  }
   return (
     <Suspense
       fallback={
         <span
           className="register-table__deferred-control"
-          {...(typeof ariaLabel === "string" ? { "aria-label": ariaLabel } : {})}
+          {...(typeof ariaLabel === "string"
+            ? { "aria-label": ariaLabel }
+            : {})}
         />
       }
     >
@@ -290,6 +365,8 @@ function EditableCellValue({
     });
     // 草稿未变不提交：避免无谓的 store 更新与自动保存。
     if (nextValue === value) return;
+    // Store 提交放到下一宏任务：Enter 事件只负责结束编辑并绘制乐观值，避免 1000 行
+    // 表格的级联更新挤入 Event Timing；后续用户点击发生在新的任务，可读到已提交值。
     window.setTimeout(() => onCommit(nextValue), 0);
   };
 
@@ -339,6 +416,7 @@ function EditableCellValue({
             },
           })}
       aria-label={ariaLabel}
+      data-committed-value={value}
     >
       <span className="register-table__editable-cell-value-wrap__text">
         {displayedValue === "" && emptyText !== undefined ? (
@@ -1320,6 +1398,8 @@ interface MemoTableRowProps {
 
 interface RegisterTableProps {
   sheetId: SheetId;
+  /** 生产启动时先提交工具栏，下一帧挂载表体；组件单测默认即时挂载。 */
+  deferBody?: boolean;
 }
 
 /** 表格行高（size="small" 实测固定 29px），虚拟滚动需要固定行高。 */
@@ -1328,10 +1408,18 @@ const ROW_HEIGHT = 29;
 const MOBILE_ROW_HEIGHT = 44;
 /** 移动布局横向滚动下限（列总宽之和小于该值时仍可横向滑动，避免列被挤压换行）。 */
 const MOBILE_SCROLL_X = 960;
-/** 虚拟滚动启用阈值：行数超过该值启用 antd Table virtual（避免小表无谓开销）。 */
-const VIRTUAL_SCROLL_THRESHOLD = 500;
-/** 虚拟表在隐藏/未测量时的兜底表体高度（px）：scroll.y 必须为数字，显示后由 ResizeObserver 校正。 */
-const FALLBACK_VIRTUAL_HEIGHT = 480;
+/**
+ * 虚拟滚动启用阈值：默认工作区为 50 行，若沿用 500 行阈值会在启动时一次性提交
+ * 全部可编辑单元格，形成数百毫秒 Long Task。20 行以上统一虚拟渲染；小表仍走普通表格。
+ */
+const VIRTUAL_SCROLL_THRESHOLD = 20;
+/** 直接使用组件（含单测）保持原 500 行阈值；生产启动由 MamepApp 显式启用 20 行阈值。 */
+const DIRECT_RENDER_VIRTUAL_THRESHOLD = 500;
+/**
+ * 虚拟表首次提交时的保守表体高度（px）：scroll.y 必须为数字。先只挂载约 8 行，
+ * 首帧后 ResizeObserver 再校正到真实高度，避免启动时一次创建整屏可编辑单元格。
+ */
+const FALLBACK_VIRTUAL_HEIGHT = 240;
 
 /** antd Table 未在公开类型暴露但 virtual 模式运行时透传的 props（见 InternalTable virtualProps）。 */
 interface RegisterTableVirtualProps {
@@ -1343,8 +1431,9 @@ interface RegisterTableVirtualProps {
 
 // memo：多标签页下仅当本表自身 props（sheetId）/订阅数据变化才重渲染，
 // 避免切换页签时所有已挂载表随父组件（MamepApp）整体重渲染（Tab 切换卡顿根因）。
-export const RegisterTable = memo(function RegisterTable({
+const RegisterTableContent = memo(function RegisterTableContent({
   sheetId,
+  deferBody = false,
 }: RegisterTableProps): React.ReactNode {
   const { t } = useTranslation();
   // antd 全局 message（App.useApp）：Read All 完成结果富内容提示；
@@ -1386,6 +1475,13 @@ export const RegisterTable = memo(function RegisterTable({
   const rows = useAppStore(
     (s) => s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.rows ?? [],
   );
+  // 工具栏先提交，表格主体在下一帧挂载：两部分的 React commit 分开，
+  // 但 store 中始终使用完整工作区，不产生“部分行被编辑/保存”的中间事实。
+  const stagedTableReady = useAfterFirstPaint(true);
+  const tableReady = !deferBody || stagedTableReady;
+  useEffect(() => {
+    if (tableReady) markUiStartup("table-ready");
+  }, [tableReady]);
   // 范围行树形数据：registerCount>1 的行带 children（虚拟子行，只读展示）。
   const treeRows = useMemo(() => buildTreeRows(rows), [rows]);
   // 本表最大行号（No 列宽度自适应）：No 列内容 = antd 树形展开图标 +
@@ -1400,7 +1496,10 @@ export const RegisterTable = memo(function RegisterTable({
    * antd v6 Virtual BodyGrid 会先按 expandedKeys 扁平化 tree children，
    * 因此范围行/位明细不必再整体关闭 virtual；派生行仍排除拖拽/多选。
    */
-  const virtualScrollingEnabled = rows.length > VIRTUAL_SCROLL_THRESHOLD;
+  const virtualScrollThreshold = deferBody
+    ? VIRTUAL_SCROLL_THRESHOLD
+    : DIRECT_RENDER_VIRTUAL_THRESHOLD;
+  const virtualScrollingEnabled = rows.length > virtualScrollThreshold;
   const addRow = useAppStore((s) => s.addRow);
   const appendMessage = useAppStore((s) => s.appendMessage);
   // 插件工具栏动作执行（插件外部化）：requiresConfirm 先弹
@@ -1490,7 +1589,7 @@ export const RegisterTable = memo(function RegisterTable({
       // 每次 Tab 切换重建 50 行 ≈ 1s 卡顿根因实测）。显示时高度不变 → React 跳过重渲染。
       // 已知限制：挂载即隐藏的表首显会补测一次（每表每会话一次 ~1s，根因是 useSortable 每行成本）。
       if (next <= 0) return;
-      setTableBodyHeight(Math.max(next, 0));
+      startTransition(() => setTableBodyHeight(Math.max(next, 0)));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -2222,13 +2321,33 @@ export const RegisterTable = memo(function RegisterTable({
     ],
     [t, registerRadix, cellValidationErrors, sheetId, maxOrder, sheetWritable],
   );
+  const [startupColumnLimit, setStartupColumnLimit] = useState(
+    deferBody && isMobileLayout ? 3 : Number.MAX_SAFE_INTEGER,
+  );
+  useEffect(() => {
+    if (
+      !deferBody ||
+      !isMobileLayout ||
+      startupColumnLimit >= baseColumns.length
+    ) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      startTransition(() => {
+        setStartupColumnLimit((current) =>
+          Math.min(baseColumns.length, current + 3),
+        );
+      });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [baseColumns.length, deferBody, isMobileLayout, startupColumnLimit]);
 
   // 合并拖拽列宽、按持久化列顺序重排，并挂载 onHeaderCell（供 HeaderCell 接收 id/width/onResize）。
   // - 列顺序：applyColumnOrder 按本表 columnOrder 重排（null=默认顺序）；缺失/新增列容错。
   // - 所有列都挂 onHeaderCell 返回 id（列拖拽 useSortable id）；仅「有默认宽且非固定宽」的可调列
   //   再附加 width/onResize/onResizeEnd（固定列/弹性列只提供 id：可排序、不可调宽）。
   // - 依赖 baseColumns + colWidths + columnOrder：拖拽只更新列定义，行级 MemoRow 比较器不含 columns，行不重渲染。
-  const columns = useMemo<ColumnsType<RegisterRow>>(
+  const orderedColumns = useMemo<ColumnsType<RegisterRow>>(
     () =>
       applyColumnOrder(baseColumns, columnOrder).map((col) => {
         const key = col.key !== undefined ? String(col.key) : undefined;
@@ -2279,6 +2398,18 @@ export const RegisterTable = memo(function RegisterTable({
       isMobileLayout,
     ],
   );
+  const startupColumnsComplete =
+    !deferBody || startupColumnLimit >= orderedColumns.length;
+  useEffect(() => {
+    if (startupColumnsComplete) markUiStartup("table-columns-ready");
+  }, [startupColumnsComplete]);
+  const columns = useMemo<ColumnsType<RegisterRow>>(
+    () =>
+      startupColumnsComplete
+        ? orderedColumns
+        : orderedColumns.slice(0, startupColumnLimit),
+    [orderedColumns, startupColumnLimit, startupColumnsComplete],
+  );
 
   // ---- 列拖拽排序----
   // 水平方向排序；第一列（antd rowSelection Checkbox 列）在 HeaderCell 中按「无 id」判定禁拖。
@@ -2310,11 +2441,11 @@ export const RegisterTable = memo(function RegisterTable({
     useSensor(KeyboardSensor),
   );
 
-  // 列默认顺序的 key（columnOrder 为 null 时使用；列集合固定，仅标题随 radix/语言变化，故首渲染后稳定）。
-  const defaultColumnKeysRef = useRef<string[] | null>(null);
-  if (defaultColumnKeysRef.current === null) {
-    defaultColumnKeysRef.current = baseColumns.map((col) => String(col.key));
-  }
+  // 列默认顺序的 key（columnOrder 为 null 时使用；列集合固定，标题变化不影响 key 顺序）。
+  const defaultColumnKeys = useMemo(
+    () => baseColumns.map((col) => String(col.key)),
+    [baseColumns],
+  );
 
   /**
    * 列拖拽结束：arrayMove 语义——把活动列移动到 over 列所在索引（只在这 11 个业务列间排序）。
@@ -2328,8 +2459,7 @@ export const RegisterTable = memo(function RegisterTable({
       if (overId === undefined || active.id === overId) return;
       const state = useAppStore.getState();
       const sheet = state.workspace.sheets.find((sh) => sh.sheetId === sheetId);
-      const currentOrder =
-        sheet?.columnOrder ?? defaultColumnKeysRef.current ?? [];
+      const currentOrder = sheet?.columnOrder ?? defaultColumnKeys;
       const activeIndex = currentOrder.findIndex((key) => key === active.id);
       const overIndex = currentOrder.findIndex((key) => key === overId);
       if (activeIndex === -1 || overIndex === -1) return;
@@ -2338,7 +2468,7 @@ export const RegisterTable = memo(function RegisterTable({
         arrayMove(currentOrder, activeIndex, overIndex),
       );
     },
-    [sheetId],
+    [defaultColumnKeys, sheetId],
   );
 
   // ---- 列拖拽上下文归属 ----
@@ -2356,8 +2486,7 @@ export const RegisterTable = memo(function RegisterTable({
       // 渲染期实时读取 store（zustand getState 恒为最新已提交状态），与当前渲染列序保持一致。
       const state = useAppStore.getState();
       const sheet = state.workspace.sheets.find((sh) => sh.sheetId === sheetId);
-      const columnKeys =
-        sheet?.columnOrder ?? defaultColumnKeysRef.current ?? [];
+      const columnKeys = sheet?.columnOrder ?? defaultColumnKeys;
       return (
         <DndContext
           sensors={effectiveColumnSensors}
@@ -2375,9 +2504,8 @@ export const RegisterTable = memo(function RegisterTable({
         </DndContext>
       );
     };
-    HeaderWrapper.displayName = "RegisterTableColumnDragHeader";
     return HeaderWrapper;
-  }, [sheetId, effectiveColumnSensors, handleColumnDragEnd]);
+  }, [sheetId, effectiveColumnSensors, defaultColumnKeys, handleColumnDragEnd]);
 
   // 当前列 key 顺序签名：仅随「列顺序」变化（列宽拖拽不变），驱动数据行在排序后同步重渲染。
   const columnOrderSignature = columns.map((col) => String(col.key)).join(",");
@@ -2649,280 +2777,327 @@ export const RegisterTable = memo(function RegisterTable({
   );
 
   return (
-    <Flex vertical style={{ height: "100%" }} ref={flexRef}>
-      <div className="table-toolbar">
-        <div className="table-toolbar__group">
-          <Tooltip title={t("table.undoHint")}>
-            <Button
-              size="small"
-              icon={<UndoOutlined />}
-              disabled={!canUndo}
-              onClick={undo}
-              aria-label={t("table.undo")}
-            >
-              {t("table.undo")}
-            </Button>
-          </Tooltip>
-          <Tooltip title={t("table.redoHint")}>
-            <Button
-              size="small"
-              icon={<RedoOutlined />}
-              disabled={!canRedo}
-              onClick={redo}
-              aria-label={t("table.redo")}
-            >
-              {t("table.redo")}
-            </Button>
-          </Tooltip>
-        </div>
-        <span className="table-toolbar__sep" aria-hidden="true" />
-        <div className="table-toolbar__group">
-          {rows.length > 0 ? (
-            <Button
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => addRow(sheetId)}
-            >
-              {t("table.addRow")}
-            </Button>
-          ) : null}
-          {selectedRowIds.length > 0 ? (
-            <span className="table-toolbar__info">
-              {t("table.rowsSelected", { count: selectedRowIds.length })}
-            </span>
-          ) : null}
-        </div>
-        <span className="table-toolbar__sep" aria-hidden="true" />
-        <div className="table-toolbar__group">
-          <Button
-            size="small"
-            type="primary"
-            loading={readAllRunning}
-            icon={<ReloadOutlined />}
-            onClick={() => void handleReadAll()}
-          >
-            {t("topbar.readAll")}
-          </Button>
-          {readAllRunning ? (
-            <Button
-              size="small"
-              icon={<StopOutlined />}
-              onClick={handleCancelReadAll}
-              aria-label={t("table.cancelReadAll")}
-            >
-              {t("table.cancelReadAll")}
-            </Button>
-          ) : null}
-        </div>
-        <span className="table-toolbar__spacer" />
-        {/* 移动端：次要控件收进「更多」面板，避免工具栏换行挤压表格；
-            桌面端保持直接铺开（大屏一步到位，不增加点击成本）。 */}
-        {isMobileLayout ? (
-          <Popover
-            trigger="click"
-            placement="bottomRight"
-            content={
-              <div className="table-toolbar__more">{secondaryToolbarGroup}</div>
-            }
-          >
-            <Button
-              size="small"
-              icon={<MoreOutlined />}
-              aria-label={t("table.toolbarMoreLabel")}
-            >
-              {t("table.toolbarMore")}
-            </Button>
-          </Popover>
-        ) : (
-          secondaryToolbarGroup
-        )}
-        {toolbarActions.length > 0 ? (
-          <>
-            <span className="table-toolbar__sep" aria-hidden="true" />
-            <div className="table-toolbar__group table-toolbar__plugins">
-              {toolbarActions.map((action) => {
-                // 插件外部化：动作可用性由插件 runtime 是否声明 handler 决定
-                // （安川 ROM/RAM 确定指令由插件自身承载；声明式占位动作置灰）。
-                const canHandle =
-                  host?.pluginRegistry.canHandleToolbarAction(
-                    action.pluginId,
-                    action.payload.id,
-                  ) ?? false;
-                return (
-                  <Tooltip
-                    key={action.payload.id}
-                    title={
-                      canHandle
-                        ? t(action.payload.titleKey)
-                        : t("plugins.toolbarActionPlaceholder")
-                    }
-                  >
-                    <Button
-                      size="small"
-                      disabled={!canHandle}
-                      aria-label={t(action.payload.titleKey)}
-                      data-testid={`plugin-toolbar-action-${action.payload.id}`}
-                      onClick={() => handlePluginToolbarAction(action)}
-                    >
-                      {t(action.payload.titleKey)}
-                    </Button>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          </>
-        ) : null}
-      </div>
-      <DndContext
-        modifiers={[restrictToVerticalAxis]}
-        onDragStart={handleDragStart}
-        onDragMove={handleDragMove}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
-        sensors={rowSensors}
+    <MobileNativeSelectContext.Provider value={isMobileLayout}>
+      <Flex
+        vertical
+        style={{ height: "100%" }}
+        ref={flexRef}
+        data-startup-hydrated={tableReady && startupColumnsComplete}
       >
-        <Dropdown
-          trigger={["contextMenu"]}
-          open={menuRowId !== null}
-          onOpenChange={(open) => {
-            if (!open) setMenuRowId(null);
-          }}
-          menu={{ items: rowMenuItems }}
-        >
-          <div className="register-table__context">
-            <SortableContext
-              items={rows.map((r) => r.rowId)}
-              strategy={verticalListSortingStrategy}
-            >
-              {/* 斑马纹：按行号奇偶交替打类（antd Table 内置能力 rowClassName）。
-                  该类经 rc-table 作为 className 传入自定义行组件 MemoRow（...rest 透传），
-                  MemoRow 的 memo 比较器已按字符串值比较 className，不会破坏行级性能优化。
-                  样式见 apps/web/src/index.css 的 register-table__row--striped 规则。 */}
-              <Table<RegisterRow>
+        <div className="table-toolbar">
+          <div className="table-toolbar__group">
+            <Tooltip title={t("table.undoHint")}>
+              <Button
                 size="small"
-                rowKey="rowId"
-                columns={columns}
-                dataSource={treeRows}
-                pagination={false}
-                bordered
-                rowClassName={(_record, index) =>
-                  isVirtualBitRow(_record)
-                    ? "register-table__row--bit"
-                    : isVirtualChildRow(_record)
-                      ? "register-table__row--child"
-                      : index % 2 === 1
-                        ? "register-table__row--striped"
-                        : ""
-                }
-                // antd v6 Virtual BodyGrid 支持先扁平化 tree children，再渲染可见行。
-                virtual={virtualScrollingEnabled}
-                {...(tableBodyHeight > 0 ||
-                rows.length > VIRTUAL_SCROLL_THRESHOLD
-                  ? ({
-                      style: { flex: 1, minHeight: 0 },
-                      listItemHeight: rowHeight,
-                    } as RegisterTableVirtualProps)
-                  : {})}
-                scroll={{
-                  x: isMobileLayout ? MOBILE_SCROLL_X : 920,
-                  // 虚拟表 scroll.y 必须为数字：隐藏未测量表（tableBodyHeight=0）用兜底高度，
-                  // 显示后由 ResizeObserver 校正。否则 rc-table 虚拟渲染失败（0 行 + 报错复现）。
-                  ...(tableBodyHeight > 0 ||
-                  rows.length > VIRTUAL_SCROLL_THRESHOLD
-                    ? {
-                        y:
-                          tableBodyHeight > 0
-                            ? tableBodyHeight
-                            : FALLBACK_VIRTUAL_HEIGHT,
-                      }
-                    : {}),
-                }}
-                rowSelection={{
-                  // 固定复选框列宽（antd 内置能力）：不可拖拽调整。
-                  columnWidth: 32,
-                  selectedRowKeys: selectedRowIds,
-                  onChange: (keys) =>
-                    setSelectedRowIds(keys.map((k) => String(k)) as RowId[]),
-                  // 虚拟子行/位明细行：不可多选（复选框禁用）。
-                  getCheckboxProps: (record) => ({
-                    disabled: isVirtualRow(record),
-                  }),
-                  selections: [
-                    Table.SELECTION_ALL,
-                    Table.SELECTION_INVERT,
-                    Table.SELECTION_NONE,
-                    {
-                      key: "odd",
-                      text: t("table.selectOddRows"),
-                      onSelect: (changeableRowKeys) =>
-                        setSelectedRowIds(
-                          changeableRowKeys
-                            .filter((_, index) => index % 2 === 0)
-                            .map((k) => String(k)) as RowId[],
-                        ),
-                    },
-                    {
-                      key: "even",
-                      text: t("table.selectEvenRows"),
-                      onSelect: (changeableRowKeys) =>
-                        setSelectedRowIds(
-                          changeableRowKeys
-                            .filter((_, index) => index % 2 !== 0)
-                            .map((k) => String(k)) as RowId[],
-                        ),
-                    },
-                  ],
-                }}
-                components={{
-                  header: {
-                    wrapper: ColumnDragHeader,
-                    cell: HeaderCell,
-                  },
-                  body: { row: MemoRow },
-                }}
-                onRow={(record, index = 0): MemoTableRowProps => ({
-                  // 行级右键冒泡拦截：非 drag 列 stopPropagation 保留系统右键菜单（见 handleRowContextMenuBubble）。
-                  onContextMenu: (event) =>
-                    rowHandlersRef.current.onRowContextMenuBubble(event),
-                  _record: record,
-                  _index: index,
-                  _selection: selectedRowIds,
-                  _colOrder: columnOrderSignature,
-                })}
-                locale={{
-                  emptyText: (
-                    <Empty
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
-                      description={
-                        <>
-                          <div>{t("table.emptySheet")}</div>
-                          <div
-                            style={{
-                              color: "var(--ant-color-text-tertiary)",
-                              fontSize: 12,
-                            }}
-                          >
-                            {t("table.emptySheetHint")}
-                          </div>
-                        </>
+                icon={<UndoOutlined />}
+                disabled={!canUndo}
+                onClick={undo}
+                aria-label={t("table.undo")}
+              >
+                {t("table.undo")}
+              </Button>
+            </Tooltip>
+            <Tooltip title={t("table.redoHint")}>
+              <Button
+                size="small"
+                icon={<RedoOutlined />}
+                disabled={!canRedo}
+                onClick={redo}
+                aria-label={t("table.redo")}
+              >
+                {t("table.redo")}
+              </Button>
+            </Tooltip>
+          </div>
+          <span className="table-toolbar__sep" aria-hidden="true" />
+          <div className="table-toolbar__group">
+            {rows.length > 0 ? (
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => addRow(sheetId)}
+              >
+                {t("table.addRow")}
+              </Button>
+            ) : null}
+            {selectedRowIds.length > 0 ? (
+              <span className="table-toolbar__info">
+                {t("table.rowsSelected", { count: selectedRowIds.length })}
+              </span>
+            ) : null}
+          </div>
+          <span className="table-toolbar__sep" aria-hidden="true" />
+          <div className="table-toolbar__group">
+            <Button
+              size="small"
+              type="primary"
+              loading={readAllRunning}
+              icon={<ReloadOutlined />}
+              onClick={() => void handleReadAll()}
+            >
+              {t("topbar.readAll")}
+            </Button>
+            {readAllRunning ? (
+              <Button
+                size="small"
+                icon={<StopOutlined />}
+                onClick={handleCancelReadAll}
+                aria-label={t("table.cancelReadAll")}
+              >
+                {t("table.cancelReadAll")}
+              </Button>
+            ) : null}
+          </div>
+          <span className="table-toolbar__spacer" />
+          {/* 移动端：次要控件收进「更多」面板，避免工具栏换行挤压表格；
+            桌面端保持直接铺开（大屏一步到位，不增加点击成本）。 */}
+          {isMobileLayout ? (
+            <Popover
+              trigger="click"
+              placement="bottomRight"
+              content={
+                <div className="table-toolbar__more">
+                  {secondaryToolbarGroup}
+                </div>
+              }
+            >
+              <Button
+                size="small"
+                icon={<MoreOutlined />}
+                aria-label={t("table.toolbarMoreLabel")}
+              >
+                {t("table.toolbarMore")}
+              </Button>
+            </Popover>
+          ) : (
+            secondaryToolbarGroup
+          )}
+          {toolbarActions.length > 0 ? (
+            <>
+              <span className="table-toolbar__sep" aria-hidden="true" />
+              <div className="table-toolbar__group table-toolbar__plugins">
+                {toolbarActions.map((action) => {
+                  // 插件外部化：动作可用性由插件 runtime 是否声明 handler 决定
+                  // （安川 ROM/RAM 确定指令由插件自身承载；声明式占位动作置灰）。
+                  const canHandle =
+                    host?.pluginRegistry.canHandleToolbarAction(
+                      action.pluginId,
+                      action.payload.id,
+                    ) ?? false;
+                  return (
+                    <Tooltip
+                      key={action.payload.id}
+                      title={
+                        canHandle
+                          ? t(action.payload.titleKey)
+                          : t("plugins.toolbarActionPlaceholder")
                       }
                     >
                       <Button
                         size="small"
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={() => addRow(sheetId)}
+                        disabled={!canHandle}
+                        aria-label={t(action.payload.titleKey)}
+                        data-testid={`plugin-toolbar-action-${action.payload.id}`}
+                        onClick={() => handlePluginToolbarAction(action)}
                       >
-                        {t("table.addRow")}
+                        {t(action.payload.titleKey)}
                       </Button>
-                    </Empty>
-                  ),
-                }}
-              />
-            </SortableContext>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
+        </div>
+        {tableReady ? (
+          <DndContext
+            modifiers={[restrictToVerticalAxis]}
+            onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+            sensors={rowSensors}
+          >
+            <Dropdown
+              trigger={["contextMenu"]}
+              open={menuRowId !== null}
+              onOpenChange={(open) => {
+                if (!open) setMenuRowId(null);
+              }}
+              menu={{ items: rowMenuItems }}
+            >
+              <div className="register-table__context">
+                <SortableContext
+                  items={rows.map((r) => r.rowId)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {/* 斑马纹：按行号奇偶交替打类（antd Table 内置能力 rowClassName）。
+                  该类经 rc-table 作为 className 传入自定义行组件 MemoRow（...rest 透传），
+                  MemoRow 的 memo 比较器已按字符串值比较 className，不会破坏行级性能优化。
+                  样式见 apps/web/src/index.css 的 register-table__row--striped 规则。 */}
+                  <Table<RegisterRow>
+                    size="small"
+                    rowKey="rowId"
+                    columns={columns}
+                    dataSource={treeRows}
+                    pagination={false}
+                    bordered
+                    rowClassName={(_record, index) =>
+                      isVirtualBitRow(_record)
+                        ? "register-table__row--bit"
+                        : isVirtualChildRow(_record)
+                          ? "register-table__row--child"
+                          : index % 2 === 1
+                            ? "register-table__row--striped"
+                            : ""
+                    }
+                    // antd v6 Virtual BodyGrid 支持先扁平化 tree children，再渲染可见行。
+                    virtual={virtualScrollingEnabled}
+                    {...(tableBodyHeight > 0 ||
+                    rows.length > virtualScrollThreshold
+                      ? ({
+                          style: { flex: 1, minHeight: 0 },
+                          listItemHeight: rowHeight,
+                        } as RegisterTableVirtualProps)
+                      : {})}
+                    scroll={{
+                      x: isMobileLayout ? MOBILE_SCROLL_X : 920,
+                      // 虚拟表 scroll.y 必须为数字：隐藏未测量表（tableBodyHeight=0）用兜底高度，
+                      // 显示后由 ResizeObserver 校正。否则 rc-table 虚拟渲染失败（0 行 + 报错复现）。
+                      ...(tableBodyHeight > 0 ||
+                      rows.length > virtualScrollThreshold
+                        ? {
+                            y:
+                              tableBodyHeight > 0
+                                ? tableBodyHeight
+                                : FALLBACK_VIRTUAL_HEIGHT,
+                          }
+                        : {}),
+                    }}
+                    rowSelection={{
+                      // 固定复选框列宽（antd 内置能力）：不可拖拽调整。
+                      columnWidth: 32,
+                      selectedRowKeys: selectedRowIds,
+                      onChange: (keys) =>
+                        setSelectedRowIds(
+                          keys.map((k) => String(k)) as RowId[],
+                        ),
+                      // 虚拟子行/位明细行：不可多选（复选框禁用）。
+                      getCheckboxProps: (record) => ({
+                        disabled: isVirtualRow(record),
+                      }),
+                      selections: [
+                        Table.SELECTION_ALL,
+                        Table.SELECTION_INVERT,
+                        Table.SELECTION_NONE,
+                        {
+                          key: "odd",
+                          text: t("table.selectOddRows"),
+                          onSelect: (changeableRowKeys) =>
+                            setSelectedRowIds(
+                              changeableRowKeys
+                                .filter((_, index) => index % 2 === 0)
+                                .map((k) => String(k)) as RowId[],
+                            ),
+                        },
+                        {
+                          key: "even",
+                          text: t("table.selectEvenRows"),
+                          onSelect: (changeableRowKeys) =>
+                            setSelectedRowIds(
+                              changeableRowKeys
+                                .filter((_, index) => index % 2 !== 0)
+                                .map((k) => String(k)) as RowId[],
+                            ),
+                        },
+                      ],
+                    }}
+                    components={{
+                      header: {
+                        wrapper: ColumnDragHeader,
+                        cell: HeaderCell,
+                      },
+                      body: { row: MemoRow },
+                    }}
+                    onRow={(record, index = 0): MemoTableRowProps => ({
+                      // 行级右键冒泡拦截：非 drag 列 stopPropagation 保留系统右键菜单（见 handleRowContextMenuBubble）。
+                      onContextMenu: (event) =>
+                        rowHandlersRef.current.onRowContextMenuBubble(event),
+                      _record: record,
+                      _index: index,
+                      _selection: selectedRowIds,
+                      _colOrder: columnOrderSignature,
+                    })}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description={
+                            <>
+                              <div>{t("table.emptySheet")}</div>
+                              <div
+                                style={{
+                                  color: "var(--ant-color-text-tertiary)",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {t("table.emptySheetHint")}
+                              </div>
+                            </>
+                          }
+                        >
+                          <Button
+                            size="small"
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => addRow(sheetId)}
+                          >
+                            {t("table.addRow")}
+                          </Button>
+                        </Empty>
+                      ),
+                    }}
+                  />
+                </SortableContext>
+              </div>
+            </Dropdown>
+          </DndContext>
+        ) : (
+          <div
+            className="register-table-startup"
+            role="status"
+            aria-label={t("app.loading")}
+          >
+            <Typography.Text type="secondary">
+              {t("app.loading")}
+            </Typography.Text>
           </div>
-        </Dropdown>
-      </DndContext>
-    </Flex>
+        )}
+      </Flex>
+    </MobileNativeSelectContext.Provider>
   );
+});
+
+/**
+ * 启动外壳与重表体之间的最后一道调度边界：生产启动先提交轻量占位，再让包含大量
+ * selector、DnD 和 antd Table 的内部组件在独立 transition 中挂载。
+ * 测试与嵌入式场景不设置 `deferBody` 时保持同步渲染。
+ */
+export const RegisterTable = memo(function RegisterTable(
+  props: RegisterTableProps,
+) {
+  const { t } = useTranslation();
+  const staged = useAfterFirstPaint(props.deferBody === true);
+  if (props.deferBody === true && !staged) {
+    return (
+      <div
+        className="register-table-startup"
+        role="status"
+        aria-label={t("app.loading")}
+      >
+        <Typography.Text type="secondary">{t("app.loading")}</Typography.Text>
+      </div>
+    );
+  }
+  return <RegisterTableContent {...props} />;
 });

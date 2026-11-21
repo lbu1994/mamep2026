@@ -305,12 +305,16 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
+  await expect(
+    page.getByLabel("Address", { exact: true }).first(),
+  ).toHaveAttribute("data-committed-value", "1");
 
   // FC03 单行读：Data 显示 ABCD（hex）。
-  await page
+  const readButton = page
     .getByRole("button", { name: "Read", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  await expect(readButton).toBeEnabled();
+  await readButton.click();
   await expect(page.getByLabel("Data").first()).toHaveText("ABCD", {
     timeout: 8000,
   });
@@ -320,10 +324,15 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   await dataInput.click();
   await dataInput.fill("12AB");
   await dataInput.press("Enter");
-  await page
+  await expect(page.getByLabel("Data").first()).toHaveAttribute(
+    "data-committed-value",
+    "12AB",
+  );
+  const writeButton = page
     .getByRole("button", { name: "Write", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  await expect(writeButton).toBeEnabled();
+  await writeButton.click();
   await expect
     .poll(async () =>
       page.evaluate(() =>
@@ -349,9 +358,12 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
   await addressInput.click();
   await addressInput.fill("0001-0002");
   await addressInput.press("Enter");
+  await expect(
+    page.getByLabel("Address", { exact: true }).first(),
+  ).toHaveAttribute("data-committed-value", "1-2");
   const firstRow = page
     .locator(
-      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key]",
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
     )
     .first();
   await expect(
@@ -368,11 +380,13 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
     timeout: 8000,
   });
   const childDatas = await page.$$eval(
-    '.register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=":c"]',
+    '.register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=":c"]',
     (trs) =>
       trs.map((tr) =>
         (
-          Array.from(tr.querySelectorAll("td"))[7] as HTMLElement | undefined
+          Array.from(tr.querySelectorAll(".ant-table-cell"))[7] as
+            | HTMLElement
+            | undefined
         )?.textContent?.trim(),
       ),
   );
@@ -383,10 +397,15 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
   await dataInput.click();
   await dataInput.fill("AAAA BBBB");
   await dataInput.press("Enter");
-  await page
+  await expect(page.getByLabel("Data").first()).toHaveAttribute(
+    "data-committed-value",
+    "AAAA BBBB",
+  );
+  const writeButton = page
     .getByRole("button", { name: "Write", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  await expect(writeButton).toBeEnabled();
+  await writeButton.click();
   await expect
     .poll(async () =>
       page.evaluate(() => {

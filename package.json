@@ -1,7 +1,7 @@
 {
   "name": "mamep2026",
   "private": true,
-  "version": "0.5.3",
+  "version": "0.5.4",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "main": "dist-electron/main.js",
@@ -22,6 +22,7 @@
     "test:slave": "node scripts/dev-with-slave.mjs --self-test",
     "build:vscode": "node scripts/build-vscode.mjs",
     "build:plugins": "node scripts/build-plugins.mjs",
+    "build:serial-picker-agent": "dotnet build tooling/serial-picker-agent/SerialPickerAgent.csproj -c Release --nologo",
     "build:android": "node scripts/build-android.mjs",
     "build:android:release": "node scripts/build-android.mjs --release",
     "lint": "node scripts/run-logged.mjs lint -- eslint .",

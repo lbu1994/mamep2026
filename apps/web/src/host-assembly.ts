@@ -46,8 +46,13 @@ import type { AppHost, HostStatus } from "@mamep2026/ui";
 import { hasPlatformCapability, requestRouteForSheet } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
 import { createBrowserHost } from "./host-factories/browser";
+import {
+  scheduleAfterPaint,
+  type AfterPaintScheduler,
+} from "./main-thread-scheduler";
 import type { AppPlatformName } from "./platform-detect";
 import type { PlatformHostContext } from "./platform-context";
+import { markStartup } from "./startup-performance";
 
 /**
  * 平台 Host 工厂：用组合根上下文构造宿主实现。
@@ -114,6 +119,11 @@ export interface HostAssemblyDeps {
   shellReadyTimeoutMs?: number;
   /** visibilitychange 监听目标（默认 `document`；测试注入，node 环境无 DOM）。 */
   documentRef?: VisibilityDocument;
+  /**
+   * 首屏后的调度器（默认等待一次真实绘制）。插件恢复、通信日志/轮询结果接线和
+   * 页面生命周期监听经它延后，避免与工作区恢复及主界面首次 React commit 合并成长任务。
+   */
+  scheduleAfterPaint?: AfterPaintScheduler;
 }
 
 /** visibilitychange 监听面（结构类型：便于 node 环境单测注入）。 */
@@ -153,7 +163,9 @@ export const loadPlatformHostFactory: PlatformHostFactoryLoader = async (
 };
 
 /**
- * 装配并启动宿主：加载工厂 → 构造宿主 → 接线 → 启动插件 → 加载工作区。
+ * 装配并启动宿主：加载工厂 → 构造宿主 → 必需接线 → 加载工作区 → 首屏可交互。
+ *
+ * 插件恢复、通信日志/轮询结果接线在首屏绘制后另行调度；它们不再阻塞主界面。
  *
  * 返回构造出的 host（已接线且未取消）；被取消或装配失败返回 `null`：
  * - **失败**（懒 chunk 加载失败 / 工厂拒绝 / 接线抛错）：提示 `messages.hostLoadFailed` 并置
@@ -168,10 +180,13 @@ export async function startAppHost(
   let host: AppHost | null = null;
   try {
     const load = deps.loadHostFactory ?? loadPlatformHostFactory;
+    markStartup("host-load-start");
     const factory = await load(deps.platform);
+    markStartup("host-loaded");
     if (signal.aborted) return null;
     // 工厂可异步（Android：构造前 await 能力探测）；await 后重新校验取消。
     host = await factory({ context, bridge: deps.bridge, signal });
+    markStartup("host-constructed");
     if (signal.aborted) {
       // 装配期间被取消（StrictMode 双挂载 / 卸载）：立即释放且不接线。
       void host.dispose();
@@ -193,60 +208,130 @@ function wireHost(
   signal: AbortSignal,
 ): void {
   const { context, sinks } = deps;
-  // 插件系统启动：加载用户手动安装的插件并装配执行面。
-  // 落定后置「插件就绪」：就绪前主题装配链用启动缓存里的色种子
-  // 过渡（避免一帧默认蓝），就绪后以注册表为准。**fail-open**：失败也置位，否则陈旧种子会长期生效。
-  // 该 promise 同时是启动就绪门的一半（见末尾）。
-  const markPluginsReady = (): void => sinks.setPluginsReady(true);
-  const pluginsSettled = host
-    .startPlugins()
-    .then(markPluginsReady, markPluginsReady);
+  /**
+   * 首屏后的清理函数。插件恢复可能仍在进行时页面被卸载，所以订阅必须独立于
+   * 首屏接线登记，并在 abort 时释放。
+   */
+  const backgroundCleanups = new Set<() => void>();
   // 数据类型解析器注入 store，单元格解析/读取格式化/CSV 白名单经它转发。
   sinks.setDataTypeResolver(context.dataTypeResolver);
   sinks.setHost(host);
   sinks.setActiveHost(host);
 
-  // 日志/保存/连接状态/轮询结果接线。
-  host.subscribeCommLog((event) => sinks.appendCommLog(toCommLogEntry(event)));
+  // 首屏必需接线：消息、保存状态和连接状态。通信日志与轮询结果不影响初始界面，
+  // 在首屏绘制后再订阅（恢复工作区保持离线，期间不会产生设备请求）。
   host.subscribeMessage((message) => sinks.appendMessage(message));
   host.subscribeSaveStatus((status) => sinks.setSaveStatus(status));
   host.subscribeConnectionState((state) => sinks.setConnectionState(state));
-  host.subscribePollResult((pollResult) => {
-    const sheets = sinks.getWorkspaceSheets();
-    const sheet = sheets.find(
-      (candidate) => candidate.sheetId === pollResult.sheetId,
-    );
-    if (sheet === undefined) return;
-    const currentRoute = requestRouteForSheet(host, sheet);
-    if (
-      currentRoute.unitAddress !== pollResult.route.unitAddress ||
-      currentRoute.protocol !== pollResult.route.protocol
-    ) {
-      return;
+
+  // 释放（页面卸载 / StrictMode 重复挂载清理）：退订监听 + 释放 host（断开会话、退订桥事件、
+  // 清空订阅），避免旧 host 残留订阅导致事件重复投递。
+  signal.addEventListener(
+    "abort",
+    () => {
+      for (const cleanup of backgroundCleanups) cleanup();
+      backgroundCleanups.clear();
+      void host.dispose();
+    },
+    { once: true },
+  );
+
+  // 主界面就绪门只等待 Host 已接线且工作区完整加载/校验完成。工作区仍是外壳布局、
+  // Tab、表和行的唯一事实源，所以它必须在首次显示真实外壳前落定；插件恢复不再阻塞。
+  // 超时兜底：仓储/桥挂起时按上限强制切换，避免骨架常驻。取消后不再写 UI。
+  const workspaceSettled = applyWorkspace(host, sinks);
+  void gateWithTimeout(
+    workspaceSettled,
+    deps.shellReadyTimeoutMs ?? SHELL_READY_TIMEOUT_MS,
+  ).then((timedOutAfterMs) => {
+    if (signal.aborted) return;
+    markStartup("interactive");
+    sinks.setHostStatus("ready");
+    if (timedOutAfterMs !== null) {
+      sinks.appendMessage({
+        timestamp: Date.now(),
+        level: "warning",
+        messageKey: "messages.startupTimeout",
+        detail: `timeout=${timedOutAfterMs}ms`,
+      });
     }
-    if (
-      !pollResultTargetMatches(sheets, pollResult, {
-        resolveAddressTransform: context.resolveAddressTransform,
-        resolveProtocol: () => currentRoute.protocol,
-      })
-    ) {
-      return;
+    if (!host.isMockMode) {
+      // 弹窗不依赖插件恢复完成，只需确保连接动作读取最新 pluginsReady。
+      // 与插件恢复并行调度，避免其表单代码在插件落定后才形成最后一轮长任务。
+      const cancelModal = (deps.scheduleAfterPaint ?? scheduleAfterPaint)(
+        () => {
+          if (!signal.aborted) sinks.setConnectionModalOpen(true);
+        },
+      );
+      backgroundCleanups.add(cancelModal);
     }
-    // 轮询/全表读取逐行结果 → 三态状态点：成功清失败/编辑完成态（不产生成功点）；
-    // 失败幂等写失败态（同因子返回原引用，设备掉线时 store 零更新）。
-    sinks.recordPollResult(pollResult.key as RowId, pollResult.result);
-    if (!pollResult.result.ok) return;
-    // 应用层纯函数完成 generation 校验与按 Type 格式化（§17）；地址变换按各行所属 sheet
-    // 应用（表级 Address Adjust 插件外部化：变换经插件注册表解析）。
-    const updated = applyPollResult(
-      sheets,
-      pollResult,
-      pollResult.result.value,
-      { resolveAddressTransform: context.resolveAddressTransform },
+    const cancelBackground = (deps.scheduleAfterPaint ?? scheduleAfterPaint)(
+      () => {
+        void startDeferredServices(host, deps, signal, backgroundCleanups);
+      },
     );
-    if (updated !== null)
-      sinks.updateRow(pollResult.key as RowId, () => updated);
+    backgroundCleanups.add(cancelBackground);
   });
+}
+
+/**
+ * 首屏绘制后的非关键阶段：
+ * 1. 接入通信日志、轮询结果和页面生命周期；
+ * 2. 恢复已安装插件（逐插件等待宿主让出主线程）；
+ * 3. 成功、失败或异常都发布插件就绪，结束主题过渡态。
+ */
+async function startDeferredServices(
+  host: AppHost,
+  deps: HostAssemblyDeps,
+  signal: AbortSignal,
+  cleanups: Set<() => void>,
+): Promise<void> {
+  if (signal.aborted) return;
+  markStartup("deferred-start");
+  const { context, sinks } = deps;
+
+  cleanups.add(
+    host.subscribeCommLog((event) =>
+      sinks.appendCommLog(toCommLogEntry(event)),
+    ),
+  );
+  cleanups.add(
+    host.subscribePollResult((pollResult) => {
+      const sheets = sinks.getWorkspaceSheets();
+      const sheet = sheets.find(
+        (candidate) => candidate.sheetId === pollResult.sheetId,
+      );
+      if (sheet === undefined) return;
+      const currentRoute = requestRouteForSheet(host, sheet);
+      if (
+        currentRoute.unitAddress !== pollResult.route.unitAddress ||
+        currentRoute.protocol !== pollResult.route.protocol
+      ) {
+        return;
+      }
+      if (
+        !pollResultTargetMatches(sheets, pollResult, {
+          resolveAddressTransform: context.resolveAddressTransform,
+          resolveProtocol: () => currentRoute.protocol,
+        })
+      ) {
+        return;
+      }
+      // 轮询/全表读取逐行结果 → 三态状态点：成功清失败/编辑完成态（不产生成功点）；
+      // 失败幂等写失败态（同因子返回原引用，设备掉线时 store 零更新）。
+      sinks.recordPollResult(pollResult.key as RowId, pollResult.result);
+      if (!pollResult.result.ok) return;
+      const updated = applyPollResult(
+        sheets,
+        pollResult,
+        pollResult.result.value,
+        { resolveAddressTransform: context.resolveAddressTransform },
+      );
+      if (updated !== null) {
+        sinks.updateRow(pollResult.key as RowId, () => updated);
+      }
+    }),
+  );
 
   // 关闭/页面隐藏前 flush（崩溃后状态恢复）：把待写快照落盘，减少 debounce 窗口内
   // 编辑在关闭/崩溃时的丢失。**仅**用 visibilitychange→hidden：
@@ -267,38 +352,30 @@ function wireHost(
     }
   };
   doc.addEventListener("visibilitychange", onVisibilityChange);
+  cleanups.add(() => {
+    doc.removeEventListener("visibilitychange", onVisibilityChange);
+  });
 
-  // 释放（页面卸载 / StrictMode 重复挂载清理）：退订监听 + 释放 host（断开会话、退订桥事件、
-  // 清空订阅），避免旧 host 残留订阅导致事件重复投递。
-  signal.addEventListener(
-    "abort",
-    () => {
-      doc.removeEventListener("visibilitychange", onVisibilityChange);
-      void host.dispose();
-    },
-    { once: true },
-  );
-
-  // 启动外壳就绪门：**工作区加载完成 + 插件注册表就绪**之后才切换真实外壳。
-  // 外壳的侧栏折叠/宽度、底部面板、已打开 Tab、表与行、插件贡献全部派生自这两处异步加载，
-  // 若在工作区就位前渲染，必然「先默认后切换」（首屏闪烁）。超时兜底：仓储/桥挂起时按上限强制
-  // 切换（以「可操作但可能跳变一次」作为兜底），避免骨架常驻。取消后不再写 UI。
-  const workspaceSettled = applyWorkspace(host, sinks);
-  void gateWithTimeout(
-    Promise.allSettled([workspaceSettled, pluginsSettled]),
-    deps.shellReadyTimeoutMs ?? SHELL_READY_TIMEOUT_MS,
-  ).then((timedOutAfterMs) => {
-    if (signal.aborted) return;
-    sinks.setHostStatus("ready");
-    if (timedOutAfterMs !== null) {
+  try {
+    await host.startPlugins();
+  } catch (error) {
+    if (!signal.aborted) {
+      const detail = error instanceof Error ? error.message : String(error);
       sinks.appendMessage({
         timestamp: Date.now(),
-        level: "warning",
-        messageKey: "messages.startupTimeout",
-        detail: `timeout=${timedOutAfterMs}ms`,
+        level: "error",
+        messageKey: "messages.pluginLoadFailed",
+        params: { detail },
+        detail,
       });
     }
-  });
+  } finally {
+    // fail-open：插件成功、失败或异常都结束主题过渡态；取消后的旧流程不得写 UI。
+    if (!signal.aborted) {
+      markStartup("plugins-settled");
+      sinks.setPluginsReady(true);
+    }
+  }
 }
 
 /** 启动外壳就绪门超时（ms）：仓储 / 桥异常挂起时强制切换外壳，避免骨架常驻。 */
@@ -331,7 +408,9 @@ async function applyWorkspace(
   sinks: HostAssemblySinks,
 ): Promise<void> {
   try {
+    markStartup("workspace-start");
     const result = await host.loadWorkspace();
+    markStartup("workspace-settled");
     if (result.ok) {
       sinks.setWorkspace(result.value);
     } else {
@@ -374,15 +453,9 @@ async function applyWorkspace(
           detail: connectResult.error.technicalMessage,
         });
       }
-    } else {
-      // 非 Mock 模式：启动自动弹出 Connection Settings。
-      sinks.setConnectionModalOpen(true);
     }
   } catch {
     sinks.setLoaded();
-    if (!host.isMockMode) {
-      sinks.setConnectionModalOpen(true);
-    }
   }
 }
 

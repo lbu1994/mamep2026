@@ -65,6 +65,15 @@
     padding-block: 4px;
   }
 
+  /* 虚拟表体使用 div/role=gridcell，不匹配上面的 tr/td 选择器；移动端仍需 44dp 触摸目标。 */
+  .register-table-wrap
+    .register-table-tabs
+    .ant-table-tbody-virtual-holder
+    .ant-table-cell {
+    height: 44px;
+    padding-block: 4px;
+  }
+
   .register-table-wrap .ant-table-tbody > tr > td {
     user-select: none;
   }

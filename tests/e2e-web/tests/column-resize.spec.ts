@@ -13,6 +13,7 @@ async function openApp(page: Page): Promise<string[]> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
   return errors;
 }
 
@@ -28,9 +29,13 @@ function headerCell(page: Page, label: string) {
 }
 
 async function columnWidth(page: Page, label: string): Promise<number> {
-  return headerCell(page, label).evaluate(
-    (el) => (el as HTMLElement).offsetWidth,
-  );
+  const header = headerCell(page, label);
+  // Tabs 切换会短暂保留隐藏面板；等待活动表头完成布局后再读取，避免把过渡帧的 0
+  // 误判为列宽被重置。
+  await expect
+    .poll(() => header.evaluate((el) => (el as HTMLElement).offsetWidth))
+    .toBeGreaterThan(0);
+  return header.evaluate((el) => (el as HTMLElement).offsetWidth);
 }
 
 /** 拖动某列表头右侧 react-resizable 手柄 deltaX 像素（向右为正）。 */
@@ -124,6 +129,7 @@ test("resized column widths persist across a page reload", async ({ page }) => {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
   // 刷新后列宽保持（workspace 恢复），不回默认宽。
   const after = await columnWidth(page, "Name");
   expect(after).toBeGreaterThanOrEqual(before - 5);

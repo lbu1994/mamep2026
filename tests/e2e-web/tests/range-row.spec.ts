@@ -22,7 +22,7 @@ async function openApp(page: Page): Promise<void> {
 function parentRow(page: Page, index: number) {
   return page
     .locator(
-      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key]",
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
     )
     .nth(index);
 }
@@ -107,7 +107,7 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await expect(first.locator('button[aria-label="Expand row"]')).toBeVisible();
   await first.locator('button[aria-label="Expand row"]').click();
   const childRows = page.locator(
-    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=':c']",
+    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=':c']",
   );
   await expect(childRows).toHaveCount(2);
   await expect(childRows.nth(0)).toContainText("0");
@@ -128,8 +128,12 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await mockSet(page, 0x0001, 0x2222);
   await first.getByRole("button", { name: "Read", exact: true }).click();
   await expect(first.getByLabel("Data")).toHaveText("1111 2222");
-  await expect(childRows.nth(0).locator("td").nth(7)).toHaveText("1111");
-  await expect(childRows.nth(1).locator("td").nth(7)).toHaveText("2222");
+  await expect(
+    childRows.nth(0).locator(".ant-table-cell").nth(7),
+  ).toHaveText("1111");
+  await expect(
+    childRows.nth(1).locator(".ant-table-cell").nth(7),
+  ).toHaveText("2222");
 
   // 多值写（组合文本）+ 写后回读：写入 mock 寄存器并显示绿点。
   const data = first.getByLabel("Data");
@@ -168,19 +172,27 @@ test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", as
   await expect(first.getByLabel("Data")).toHaveText("1111 2222");
   await first.locator('button[aria-label="Expand row"]').click();
   const childRows = page.locator(
-    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=':c']",
+    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=':c']",
   );
   await expect(childRows).toHaveCount(2);
-  await expect(childRows.nth(0).locator("td").nth(7)).toHaveText("1111");
-  await expect(childRows.nth(1).locator("td").nth(7)).toHaveText("2222");
+  await expect(
+    childRows.nth(0).locator(".ant-table-cell").nth(7),
+  ).toHaveText("1111");
+  await expect(
+    childRows.nth(1).locator(".ant-table-cell").nth(7),
+  ).toHaveText("2222");
 
   // 仅手工编辑父行组合文本（不读不写）：子行须随父行文本更新。
   const data = first.getByLabel("Data");
   await data.click();
   await data.fill("FFFF 0000");
   await data.press("Enter");
-  await expect(childRows.nth(0).locator("td").nth(7)).toHaveText("FFFF");
-  await expect(childRows.nth(1).locator("td").nth(7)).toHaveText("0000");
+  await expect(
+    childRows.nth(0).locator(".ant-table-cell").nth(7),
+  ).toHaveText("FFFF");
+  await expect(
+    childRows.nth(1).locator(".ant-table-cell").nth(7),
+  ).toHaveText("0000");
 
   // 改后写入的是父行文本解析值（FFFF / 0000），证明原始值同步未影响待写值语义。
   await first.getByRole("button", { name: "Write", exact: true }).click();
@@ -211,7 +223,7 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
   await expect(first.locator('button[aria-label="Expand row"]')).toBeVisible();
   await first.locator('button[aria-label="Expand row"]').click();
   const childRows = page.locator(
-    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=':c']",
+    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=':c']",
   );
   await expect(childRows).toHaveCount(2);
 
@@ -262,7 +274,7 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
   ).toBeVisible();
   await restoredParent.locator('button[aria-label="Expand row"]').click();
   const restoredChildren = page.locator(
-    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=':c']",
+    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=':c']",
   );
   await expect(restoredChildren).toHaveCount(2);
   await expect(restoredChildren.nth(0).getByLabel("Name")).toHaveText("ChildA");
@@ -279,7 +291,7 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
 test("must-multi 区：单读/单写异常，多读/多写正常", async ({ page }) => {
   await openApp(page);
   // 默认预填 MustMulti_01 在 0x0800（单行）。单读 → 异常红点。
-  const mustRow = page.locator("tr.ant-table-row", {
+  const mustRow = page.locator(".ant-table-tbody [data-row-key]", {
     hasText: "MustMulti_01",
   });
   await mockSet(page, 0x0800, 0x1234);
@@ -373,7 +385,7 @@ test("剪贴板范围编解码往返：复制范围行粘贴恢复 registerCount
 
   // 选择第一行并 Ctrl+C。
   await first
-    .locator("td.ant-table-selection-column .ant-checkbox-input")
+    .locator(".ant-table-selection-column .ant-checkbox-input")
     .check();
   await page.keyboard.press("Control+c");
 

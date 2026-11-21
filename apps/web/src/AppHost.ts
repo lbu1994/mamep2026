@@ -100,6 +100,7 @@ import {
   MockTransport,
   type CompatibilityEnv,
 } from "@mamep2026/platform-web";
+import { yieldToMainThread as defaultYieldToMainThread } from "./main-thread-scheduler";
 
 export interface AppHostOptions {
   capabilities?: PlatformCapabilities;
@@ -133,6 +134,8 @@ export interface AppHostOptions {
    */
   resolveAddressTransform?:
     ((transformId: string) => AddressTransform | null) | undefined;
+  /** 插件恢复逐项让出主线程（测试可注入；默认 Scheduler.yield / setTimeout）。 */
+  yieldToMainThread?: (() => Promise<void>) | undefined;
 }
 
 /** 插件清单校验失败（安装/启动加载路径）。 */
@@ -223,6 +226,7 @@ export class BrowserAppHost
   /** 地址变换解析：address-adjust 插件注册表经装配注入。 */
   private readonly resolveAddressTransform:
     ((transformId: string) => AddressTransform | null) | null;
+  private readonly yieldToMainThread: () => Promise<void>;
   /** RTU 会话宿主（Application 层）：会话/轮询/追踪/读写的单一编排，浏览器与 VSCode 共用。 */
   private readonly rtu: RtuSessionHost;
   /** 当前会话从站地址（每表独立）：UI 切换表/修改值时同步，连接时作为初始值。 */
@@ -284,13 +288,6 @@ export class BrowserAppHost
         ? { syncRegistries: options.syncRegistries }
         : {}),
     });
-    this.mockTransportInstance = options.mockTransport
-      ? new MockTransport()
-      : null;
-    if (this.mockTransportInstance !== null) {
-      // dev-only E2E 钩子：连接前即可预置/断言模拟设备寄存器。
-      installMockHooks(this.mockTransportInstance);
-    }
     this.clock = options.platform?.clock ?? {
       now: () => Date.now(),
       schedule: (cb, ms) => {
@@ -298,6 +295,13 @@ export class BrowserAppHost
         return { cancel: () => clearTimeout(id) };
       },
     };
+    this.mockTransportInstance = options.mockTransport
+      ? new MockTransport()
+      : null;
+    if (this.mockTransportInstance !== null) {
+      // dev-only E2E 钩子：连接前即可预置/断言模拟设备寄存器。
+      installMockHooks(this.mockTransportInstance);
+    }
     this.autoSave = new AutoSaveCoordinator(options.repository, {
       debounceMs: 500,
       now: this.clock.now,
@@ -317,6 +321,8 @@ export class BrowserAppHost
         : null;
     this.pluginStore = options.pluginStore ?? null;
     this.resolveAddressTransform = options.resolveAddressTransform ?? null;
+    this.yieldToMainThread =
+      options.yieldToMainThread ?? defaultYieldToMainThread;
     // codec 注册表：插件 activate 填充；connect 按活动表协议路由。
     this.codecRegistry = options.codecRegistry ?? null;
     this.messageStore.subscribe((message) => {
@@ -366,6 +372,9 @@ export class BrowserAppHost
       return;
     }
     for (const stored of loaded.value.plugins) {
+      // 单个 Worker/线程启动仍可能占用主线程；插件之间主动让出宏任务，
+      // 避免多个插件恢复被 React 合并为一帧长任务。
+      await this.yieldToMainThread();
       await this.registerStoredPlugin(stored);
     }
     this.pluginPersistence?.start();

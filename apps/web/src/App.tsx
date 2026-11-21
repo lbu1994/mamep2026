@@ -1,14 +1,22 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import type { AddressTransform } from "@mamep2026/domain";
 import type { CompatibilityEnv } from "@mamep2026/platform-web";
 import { buildPollingTargets } from "@mamep2026/register-table";
 import {
-  MamepApp,
   requestProtocolResolver,
   useAppStore,
   type AppHost,
-} from "@mamep2026/ui";
+} from "@mamep2026/ui/runtime";
+import { AppStartupBootstrap } from "@mamep2026/ui/startup";
+import { scheduleAfterPaint } from "./main-thread-scheduler";
 import { detectAppPlatform } from "./platform-detect";
+
+// 与宿主装配并行下载完整界面，但入口只静态依赖轻量运行时骨架。这样首屏不必等待
+// MamepApp 内整组 antd 模块完成解析/执行，也不会把完整界面放进入口 modulepreload。
+const mamepAppModule = import("@mamep2026/ui/MamepApp");
+const MamepApp = lazy(() =>
+  mamepAppModule.then((m) => ({ default: m.MamepApp })),
+);
 
 const MOCK_FLAG = "mockTransport";
 const COMPAT_MISS_FLAG = "compatMiss";
@@ -41,6 +49,7 @@ function isCompatMissMode(): boolean {
  * `modulepreload`；装配期间 UI 显示启动骨架（`hostStatus`），失败则保持「无 Host」可操作。
  */
 export default function App(): React.ReactNode {
+  const hostStatus = useAppStore((s) => s.hostStatus);
   /** 活动 host（工作区变更订阅据其调用 `scheduleSave` / `updatePollingTargets`）。 */
   const hostRef = useRef<AppHost | null>(null);
   /**
@@ -116,23 +125,65 @@ export default function App(): React.ReactNode {
   // 用 store 命令式订阅代替 React 选择器 + useEffect：行数据更新（编辑/WP 轮询）
   // 不再触发 App 与 <MamepApp/> 的级联重渲染（性能优化）；仅 workspace 引用变化时执行副作用。
   useEffect(() => {
-    return useAppStore.subscribe((state, prevState) => {
-      if (state.workspace === prevState.workspace) return;
+    let cancelPollingSync: (() => void) | null = null;
+    const schedulePollingSync = (): void => {
+      cancelPollingSync?.();
+      cancelPollingSync = scheduleAfterPaint(() => {
+        cancelPollingSync = null;
+        const host = hostRef.current;
+        if (host === null) return;
+        const state = useAppStore.getState();
+        if (!state.loaded || !state.pluginsReady) return;
+        // 应用层纯函数构建轮询目标（含表级地址变换偏移与地址 0 跳过按 sheet；
+        // 插件外部化：变换经插件注册表解析）。等插件恢复完成后才首次装配，
+        // 确保 codec/地址变换贡献不会在启动阶段缺失。
+        host.updatePollingTargets(
+          buildPollingTargets(state.workspace.sheets, {
+            resolveAddressTransform: resolveTransformRef.current,
+            resolveProtocol: requestProtocolResolver(host),
+          }),
+        );
+      });
+    };
+
+    const unsubscribe = useAppStore.subscribe((state, prevState) => {
       const host = hostRef.current;
       if (host === null) return;
-      if (state.workspace.sheets.length === 0) return;
-      host.scheduleSave(state.workspace);
+      const workspaceChanged = state.workspace !== prevState.workspace;
+      const loadCompleted = state.loaded && !prevState.loaded;
+      const pluginsBecameReady = state.pluginsReady && !prevState.pluginsReady;
 
-      // 应用层纯函数构建轮询目标（含表级地址变换偏移与地址 0 跳过按 sheet；
-      // 插件外部化：变换经插件注册表解析）。
-      host.updatePollingTargets(
-        buildPollingTargets(state.workspace.sheets, {
-          resolveAddressTransform: resolveTransformRef.current,
-          resolveProtocol: requestProtocolResolver(host),
-        }),
-      );
+      if (
+        (workspaceChanged || loadCompleted) &&
+        state.loaded &&
+        state.workspace.sheets.length > 0
+      ) {
+        // `loaded=false` 时对应启动工作区首次写入，不把尚未完成的恢复结果自动保存。
+        // `loadCompleted` 时工作区已完整校验，再落盘一次以保留首次启动默认工作区。
+        host.scheduleSave(state.workspace);
+      }
+      if (
+        state.loaded &&
+        state.pluginsReady &&
+        (workspaceChanged || pluginsBecameReady)
+      ) {
+        schedulePollingSync();
+      }
     });
+
+    return () => {
+      unsubscribe();
+      cancelPollingSync?.();
+    };
   }, []);
 
-  return <MamepApp />;
+  if (hostStatus === "assembling") {
+    return <AppStartupBootstrap />;
+  }
+
+  return (
+    <Suspense fallback={<AppStartupBootstrap />}>
+      <MamepApp deferStartupContent />
+    </Suspense>
+  );
 }

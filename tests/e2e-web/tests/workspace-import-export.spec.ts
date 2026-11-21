@@ -23,7 +23,7 @@ async function openApp(page: Page): Promise<void> {
 }
 
 function row(page: Page, index: number) {
-  return page.locator(".ant-table-tbody tr[data-row-key]").nth(index);
+  return page.locator(".ant-table-tbody [data-row-key]").nth(index);
 }
 
 /** 点击进入 Name 单元格编辑态，填入新名字并提交。 */

@@ -5,7 +5,13 @@
  * - CONNECT 路由：TCP 走 host.connectTcp（携带 TCP profile，含 autoReconnect），空 host 校验阻止提交。
  */
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { App as AntApp } from "antd";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
 import { browserCapabilities, createEmptyWorkspace } from "@mamep2026/domain";
@@ -148,8 +154,13 @@ function renderModal(host: AppHost): void {
 
 describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
   beforeEach(() => {
+    cleanup();
     initI18n();
-    useAppStore.setState({ host: null, connectionModalOpen: false });
+    useAppStore.setState({
+      host: null,
+      connectionModalOpen: false,
+      pluginsReady: true,
+    });
   });
 
   it("TCP 能力开启：显示协议切换，切换到 TCP 展示 host/port/unitId 表单", async () => {

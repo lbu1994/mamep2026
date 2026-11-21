@@ -14,14 +14,16 @@ import {
   BOOT_PREFERENCES_KEY,
   BOOT_PREFERENCES_VERSION,
   DEFAULT_BOOT_PREFERENCES,
-  hydrateBootPreferences,
-  installPreferencesCache,
   parseBootPreferences,
   readBootPreferences,
   writeBootPreferences,
   type BootPreferences,
   type BootPreferencesStorage,
 } from "./boot-preferences";
+import {
+  hydrateBootPreferences,
+  installPreferencesCache,
+} from "./boot-preferences-hydrate";
 
 const DARK_ZH: BootPreferences = {
   theme: "dark",
@@ -30,7 +32,10 @@ const DARK_ZH: BootPreferences = {
   language: "zh-CN",
 };
 
-function payload(preferences: BootPreferences, version = BOOT_PREFERENCES_VERSION): string {
+function payload(
+  preferences: BootPreferences,
+  version = BOOT_PREFERENCES_VERSION,
+): string {
   return JSON.stringify({ version, ...preferences });
 }
 
@@ -43,7 +48,10 @@ function makeStorage(initial: Record<string, string> = {}) {
       entries.set(key, value);
     },
   };
-  return { storage, raw: (key: string): string | null => entries.get(key) ?? null };
+  return {
+    storage,
+    raw: (key: string): string | null => entries.get(key) ?? null,
+  };
 }
 
 /** 抛错的存储（模拟隐私模式 / 被策略禁用）。 */
@@ -125,7 +133,9 @@ describe("readBootPreferences / writeBootPreferences", () => {
 
 describe("hydrateBootPreferences", () => {
   it("有缓存：写 store 偏好 + 初始化 i18n + 标记 <html>", () => {
-    const { storage } = makeStorage({ [BOOT_PREFERENCES_KEY]: payload(DARK_ZH) });
+    const { storage } = makeStorage({
+      [BOOT_PREFERENCES_KEY]: payload(DARK_ZH),
+    });
     const setPreferences = vi.fn();
     const initI18n = vi.fn();
     const documentElement = { lang: "", dataset: {} as Record<string, string> };
@@ -152,7 +162,10 @@ describe("hydrateBootPreferences", () => {
     ]) {
       const setPreferences = vi.fn();
       const initI18n = vi.fn();
-      const documentElement = { lang: "", dataset: {} as Record<string, string> };
+      const documentElement = {
+        lang: "",
+        dataset: {} as Record<string, string>,
+      };
 
       expect(
         hydrateBootPreferences({
@@ -170,7 +183,9 @@ describe("hydrateBootPreferences", () => {
   });
 
   it("默认写入同时落到 store（含 workspace.preferences.language）", () => {
-    const { storage } = makeStorage({ [BOOT_PREFERENCES_KEY]: payload(DARK_ZH) });
+    const { storage } = makeStorage({
+      [BOOT_PREFERENCES_KEY]: payload(DARK_ZH),
+    });
     try {
       hydrateBootPreferences({
         storage,
@@ -213,7 +228,11 @@ describe("hydrateBootPreferences", () => {
 
 describe("installPreferencesCache", () => {
   afterEach(() => {
-    useAppStore.setState({ theme: "light", themePrimary: null, themeColorSeed: null });
+    useAppStore.setState({
+      theme: "light",
+      themePrimary: null,
+      themeColorSeed: null,
+    });
     useAppStore.getState().setLanguage("en-US");
   });
 

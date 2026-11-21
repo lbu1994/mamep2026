@@ -7,19 +7,22 @@ async function openApp(page: Page): Promise<void> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
+  await expect(
+    page.locator('[data-startup-hydrated="true"]'),
+  ).toHaveCount(1);
 }
 
 function parentRow(page: Page, index = 0) {
   return page
     .locator(
-      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key]",
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
     )
     .nth(index);
 }
 
 function bitRows(page: Page) {
   return page.locator(
-    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key*=':b']",
+    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=':b']",
   );
 }
 
@@ -143,7 +146,10 @@ test("coarse-pointer bit switches do not increase row height", async ({
     expect(
       await page.evaluate(() => matchMedia("(pointer: coarse)").matches),
     ).toBe(true);
-    await expect(bit15.locator("td").first()).toHaveCSS("height", "29px");
+    await expect(bit15.locator(".ant-table-cell").first()).toHaveCSS(
+      "height",
+      "29px",
+    );
     const toggleHeight = await bit15
       .getByLabel("Toggle bit 15")
       .evaluate((element) => element.getBoundingClientRect().height);

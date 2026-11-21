@@ -6,6 +6,7 @@ export * from "./real-clock";
 export * from "./web-serial-host";
 export * from "./web-serial-transport";
 export * from "./plugin-worker-bootstrap";
+export * from "./workspace-parse-off-main";
 export * from "./plugin-remote-runtime";
 export * from "./plugin-local-runtime";
 export * from "./plugin-execution-probe";

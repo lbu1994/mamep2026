@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./runtime": "./src/runtime.ts",
+    "./startup": "./src/startup.tsx",
+    "./MamepApp": "./src/MamepApp.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

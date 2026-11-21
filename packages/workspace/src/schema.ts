@@ -6,20 +6,14 @@ import {
   createMamepError,
   DEFAULT_SIDEBAR_WIDTH,
   defaultConfig,
-  RegisterAddress,
-  RawRegisterValue,
   workspaceSchemaVersion,
-  type ConnectionProfileId,
-  type PluginId,
   type Result,
-  type RowId,
-  type SheetId,
   type Workspace,
-  type WorkspaceId,
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import { z } from "zod";
 import { migrateData, migrations } from "./migrations";
+import { hydrateWorkspaceData } from "./hydrate-workspace";
 
 /**
  * dataType：开放字符串——内置字面量 + 插件类型（单寄存器）；
@@ -245,8 +239,8 @@ export function serializeWorkspace(workspace: Workspace): string {
   return JSON.stringify(workspaceSchema.parse(data));
 }
 
-/** 解析并校验持久化数据，重建领域对象（受控工厂恢复值对象）。 */
-export function parseWorkspace(input: unknown): Result<Workspace> {
+/** 执行迁移和 Schema 校验，返回可结构化克隆的持久化数据。 */
+export function parseWorkspaceData(input: unknown): Result<WorkspaceData> {
   // 迁移框架（docs/AGENTS.md §19.6）：先按版本链迁移再校验。v1→v2：
   // 写后回读配置从 workspace 全局 readVerifySettings 迁移到各 sheet.writeVerify。
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
@@ -258,53 +252,14 @@ export function parseWorkspace(input: unknown): Result<Workspace> {
   if (!validated.success) {
     return fail(schemaInvalidError(validated.error.message));
   }
-  const data = validated.data;
+  return ok(validated.data);
+}
 
-  const sheets = data.sheets.map((sheet) => {
-    const rows = sheet.rows.map((row) => {
-      const addressResult =
-        row.addressValue === null
-          ? null
-          : RegisterAddress.create(row.addressValue);
-      if (addressResult !== null && !addressResult.ok) {
-        throw new Error(`stored address invalid: ${String(row.addressValue)}`);
-      }
-      const registerValues =
-        row.registerValues === null
-          ? null
-          : row.registerValues.map((value) => {
-              const created = RawRegisterValue.create(value);
-              if (!created.ok) {
-                throw new Error(`stored raw value invalid: ${String(value)}`);
-              }
-              return created.value;
-            });
-      return {
-        ...row,
-        rowId: row.rowId as RowId,
-        addressValue: addressResult === null ? null : addressResult.value,
-        registerValues,
-      };
-    });
-    return { ...sheet, sheetId: sheet.sheetId as SheetId, rows };
-  });
-
-  return ok({
-    ...data,
-    workspaceId: data.workspaceId as WorkspaceId,
-    activeSheetId: data.activeSheetId as SheetId | null,
-    connectionProfiles: data.connectionProfiles.map((profile) => ({
-      ...profile,
-      id: profile.id as ConnectionProfileId,
-    })),
-    activeConnectionProfileId:
-      data.activeConnectionProfileId as ConnectionProfileId | null,
-    sheets,
-    pluginStates: data.pluginStates.map((state) => ({
-      ...state,
-      pluginId: state.pluginId as PluginId,
-    })),
-  });
+/** 解析并校验持久化数据，重建领域对象（受控工厂恢复值对象）。 */
+export function parseWorkspace(input: unknown): Result<Workspace> {
+  const data = parseWorkspaceData(input);
+  if (!data.ok) return data;
+  return ok(hydrateWorkspaceData(data.value));
 }
 
 /** 当前 schema 版本常量（与 domain 保持一致）。 */

@@ -122,6 +122,12 @@ function makeDeps(overrides: Partial<HostAssemblyDeps> = {}): HostAssemblyDeps {
     sinks: makeSinks(),
     bridge: undefined,
     documentRef: noopDocument,
+    // 单测中把「首屏后」压缩为一个微任务，避免依赖真实帧；专门的就绪门用例
+    // 会覆盖为手动调度，以断言插件恢复确实晚于 ready。
+    scheduleAfterPaint: (task) => {
+      queueMicrotask(task);
+      return () => undefined;
+    },
     ...overrides,
   };
 }
@@ -173,7 +179,7 @@ describe("startAppHost", () => {
     expect(started).toBe(asHost(host));
   });
 
-  it("成功路径：启动插件 → 注入解析器 → 注册 host → 订阅 → 加载工作区", async () => {
+  it("成功路径：主界面就绪后恢复插件并接入非关键服务", async () => {
     const { host } = makeFakeHost();
     const deps = makeDeps({
       loadHostFactory: async () => () => asHost(host),
@@ -182,21 +188,20 @@ describe("startAppHost", () => {
 
     await startAppHost(deps, controller.signal);
 
-    expect(host.startPlugins).toHaveBeenCalledTimes(1);
-    // 插件就绪：`startPlugins()` 落定后置位。
     await vi.waitFor(() => {
+      expect(host.startPlugins).toHaveBeenCalledTimes(1);
       expect(deps.sinks.setPluginsReady).toHaveBeenCalledWith(true);
+      expect(host.subscribeCommLog).toHaveBeenCalledTimes(1);
+      expect(host.subscribePollResult).toHaveBeenCalledTimes(1);
     });
     expect(deps.sinks.setDataTypeResolver).toHaveBeenCalledWith(
       deps.context.dataTypeResolver,
     );
     expect(deps.sinks.setHost).toHaveBeenCalledWith(asHost(host));
     expect(deps.sinks.setActiveHost).toHaveBeenCalledWith(asHost(host));
-    expect(host.subscribeCommLog).toHaveBeenCalledTimes(1);
     expect(host.subscribeMessage).toHaveBeenCalledTimes(1);
     expect(host.subscribeSaveStatus).toHaveBeenCalledTimes(1);
     expect(host.subscribeConnectionState).toHaveBeenCalledTimes(1);
-    expect(host.subscribePollResult).toHaveBeenCalledTimes(1);
 
     await vi.waitFor(() => {
       expect(deps.sinks.setLoaded).toHaveBeenCalledTimes(1);
@@ -210,6 +215,35 @@ describe("startAppHost", () => {
     // 默认工作区，出现「侧栏/Tab/底部面板先默认后切换」的首屏闪烁）。
     await vi.waitFor(() => {
       expect(deps.sinks.setHostStatus).toHaveBeenLastCalledWith("ready");
+    });
+  });
+
+  it("插件恢复和非关键服务在 ready 之后的首屏任务中启动", async () => {
+    const { host } = makeFakeHost();
+    const deferred: { run: (() => void) | null } = { run: null };
+    const deps = makeDeps({
+      loadHostFactory: async () => () => asHost(host),
+      scheduleAfterPaint: (task) => {
+        deferred.run = task;
+        return () => undefined;
+      },
+    });
+
+    await startAppHost(deps, new AbortController().signal);
+
+    await vi.waitFor(() => {
+      expect(deps.sinks.setHostStatus).toHaveBeenLastCalledWith("ready");
+    });
+    expect(host.startPlugins).not.toHaveBeenCalled();
+    expect(host.subscribeCommLog).not.toHaveBeenCalled();
+    expect(host.subscribePollResult).not.toHaveBeenCalled();
+
+    deferred.run?.();
+    await vi.waitFor(() => {
+      expect(host.startPlugins).toHaveBeenCalledTimes(1);
+      expect(host.subscribeCommLog).toHaveBeenCalledTimes(1);
+      expect(host.subscribePollResult).toHaveBeenCalledTimes(1);
+      expect(deps.sinks.setPluginsReady).toHaveBeenCalledWith(true);
     });
   });
 
@@ -321,8 +355,10 @@ describe("startAppHost", () => {
     });
 
     await startAppHost(deps, new AbortController().signal);
+    await vi.waitFor(() => {
+      expect(pollResultListeners).toHaveLength(1);
+    });
     const listener = pollResultListeners[0];
-    expect(listener).toBeDefined();
     listener?.({
       key: "row-1",
       sheetId: "sheet-1",
@@ -352,8 +388,10 @@ describe("startAppHost", () => {
     });
 
     await startAppHost(deps, new AbortController().signal);
+    await vi.waitFor(() => {
+      expect(pollResultListeners).toHaveLength(1);
+    });
     const listener = pollResultListeners[0];
-    expect(listener).toBeDefined();
     listener?.({
       key: row.rowId,
       sheetId: sheet.sheetId,
@@ -463,7 +501,9 @@ describe("startAppHost", () => {
       startAppHost(deps, new AbortController().signal),
     ).resolves.toBe(asHost(host));
     expect(deps.sinks.setHost).toHaveBeenCalledWith(asHost(host));
-    expect(host.startPlugins).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(host.startPlugins).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("异步工厂在 await 期间被取消：仍释放且不接线", async () => {
@@ -504,7 +544,9 @@ describe("startAppHost", () => {
     });
 
     await startAppHost(deps, controller.signal);
-    expect(listeners.size).toBe(1);
+    await vi.waitFor(() => {
+      expect(listeners.size).toBe(1);
+    });
 
     Object.defineProperty(doc, "visibilityState", {
       value: "hidden",
@@ -539,6 +581,9 @@ describe("startAppHost", () => {
     const controller = new AbortController();
 
     await startAppHost(deps, controller.signal);
+    await vi.waitFor(() => {
+      expect(listeners.size).toBe(1);
+    });
     Object.defineProperty(doc, "visibilityState", {
       value: "hidden",
       configurable: true,

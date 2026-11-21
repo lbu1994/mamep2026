@@ -5,8 +5,8 @@
  * 单测）；真实实现放在此处，经 `useAppStore.getState()` **按调用时刻取最新状态**（避免闭包捕获
  * 过期快照——轮询结果要读到当前工作区表）。
  */
-import type { AppHost } from "@mamep2026/ui";
-import { useAppStore } from "@mamep2026/ui";
+import type { AppHost } from "@mamep2026/ui/runtime";
+import { useAppStore } from "@mamep2026/ui/runtime";
 import type { HostAssemblySinks } from "./host-assembly";
 
 export interface StoreSinksDeps {

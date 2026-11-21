@@ -22,7 +22,7 @@
  * - 四端渲染器共用本模块（浏览器 / Electron / VSCode / Android），故放在 `apps/web`（组合根）：
  * `packages/ui` 保持不接触具体存储实现的平台无关性。
  */
-import { initI18n, useAppStore, type AppLanguage } from "@mamep2026/ui";
+import type { AppLanguage } from "@mamep2026/ui/runtime";
 
 /** 缓存键（`localStorage`）。 */
 export const BOOT_PREFERENCES_KEY = "mamep:preferences";
@@ -164,89 +164,12 @@ export function preferencesFromState(
   };
 }
 
-export interface HydrateBootPreferencesDeps {
-  /** 存储（默认 `resolveBootStorage()`；显式传 null = 不使用缓存）。 */
-  storage?: BootPreferencesStorage | null;
-  /** 写 store 偏好（默认 `applyBootPreferencesToStore`）。 */
-  setPreferences?: (preferences: BootPreferences) => void;
-  /** 初始化 i18n（默认 `@mamep2026/ui` 的 `initI18n`）。 */
-  initI18n?: (language: AppLanguage) => void;
-  /** `<html>` 标记目标（默认 `document.documentElement`）。 */
-  documentElement?: BootPreferencesDocument | null;
-}
-
-/**
- * 把首屏偏好写进 store（默认实现）。
- *
- * 语言必须**同时**落到 `workspace.preferences.language`：`MamepApp` 的 `<html lang>` effect 读的是
- * 该字段——只初始化 i18n 的话，首帧之后 effect 会用「尚未加载的工作区」里的默认 `en-US` 把标记
- * 顶回去（实测序列 `en → zh-CN → en-US → zh-CN`），工作区加载完成后才恢复。写入的是**加载前**的
- * 空工作区，随后 `setWorkspace` 整体替换（值一致，故无可见影响；加载失败时反而与界面语言一致）。
- */
-export function applyBootPreferencesToStore(preferences: BootPreferences): void {
-  useAppStore.setState((state) => ({
-    theme: preferences.theme,
-    themePrimary: preferences.themePrimary,
-    themeColorSeed: preferences.themePrimarySeed,
-    workspace: {
-      ...state.workspace,
-      preferences: {
-        ...state.workspace.preferences,
-        theme: preferences.theme,
-        language: preferences.language,
-        themePrimary: preferences.themePrimary,
-      },
-    },
-  }));
-}
-
-/**
- * 首屏渲染前应用偏好（**必须在 `createRoot().render()` 之前调用**，见 `main.tsx`）。
- * 无缓存时写入默认偏好（保证首帧标记确定性，而非留空 / 沿用 `index.html` 的 `en`）。
- */
-export function hydrateBootPreferences(
-  deps: HydrateBootPreferencesDeps = {},
-): BootPreferences {
-  const storage =
-    deps.storage === undefined ? resolveBootStorage() : deps.storage;
-  const preferences = readBootPreferences(storage) ?? DEFAULT_BOOT_PREFERENCES;
-
-  const setPreferences = deps.setPreferences ?? applyBootPreferencesToStore;
-  setPreferences(preferences);
-
-  const init = deps.initI18n ?? initI18n;
-  init(preferences.language);
-
-  const documentElement =
-    deps.documentElement === undefined
-      ? resolveDocumentElement()
-      : deps.documentElement;
-  if (documentElement !== null) {
-    documentElement.dataset.mamepTheme = preferences.theme;
-    documentElement.lang = preferences.language;
-  }
-  return preferences;
-}
-
-/**
- * 订阅 store 偏好（主题 / 主题色预设 / 主色种子 / 语言）变化 → 写回缓存（应用生命周期内常驻）。
- * 覆盖 `setTheme` / `setThemePrimary` / `setThemeColorSeed` / `setLanguage` / `setWorkspace`
- * （加载、导入、重置）。返回退订函数（供测试使用）。
- */
-export function installPreferencesCache(
-  storage: BootPreferencesStorage | null = resolveBootStorage(),
-): () => void {
-  return useAppStore.subscribe((state, prevState) => {
-    const next = preferencesFromState(state);
-    const prev = preferencesFromState(prevState);
-    if (
-      next.theme === prev.theme &&
-      next.themePrimary === prev.themePrimary &&
-      next.themePrimarySeed === prev.themePrimarySeed &&
-      next.language === prev.language
-    ) {
-      return;
-    }
-    writeBootPreferences(next, storage);
-  });
+/** 把缓存偏好同步落到文档根（不依赖 React / Store / i18n）。 */
+export function applyBootPreferencesToDocument(
+  preferences: BootPreferences,
+  documentElement: BootPreferencesDocument | null = resolveDocumentElement(),
+): void {
+  if (documentElement === null) return;
+  documentElement.dataset.mamepTheme = preferences.theme;
+  documentElement.lang = preferences.language;
 }

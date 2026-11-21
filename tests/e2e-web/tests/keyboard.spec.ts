@@ -21,12 +21,12 @@ async function openApp(page: Page): Promise<void> {
 }
 
 function row(page: Page, index: number) {
-  return page.locator(".ant-table-tbody tr[data-row-key]").nth(index);
+  return page.locator(".ant-table-tbody [data-row-key]").nth(index);
 }
 
 function rowCheckbox(page: Page, index: number) {
   return row(page, index).locator(
-    "td.ant-table-selection-column .ant-checkbox-input",
+    ".ant-table-selection-column .ant-checkbox-input",
   );
 }
 

@@ -20,6 +20,7 @@ async function openMobileApp(page: Page): Promise<void> {
   await expect(
     page.locator(".connection-cluster__button[data-conn-state='connected']"),
   ).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
 }
 
 /**
@@ -92,11 +93,12 @@ test("移动表格：横向滚动 + 无固定列 + 行高 44", async ({ page }) 
   const sheet = page.locator(".register-table-tabs .ant-tabs-content-active");
   await expect(sheet.locator(".ant-table-tbody")).toBeVisible();
 
-  // 横向可滚动（scroll.x=960 > 900 视口）。带 scroll.y 时 antd 用 .ant-table-body
-  // 作为滚动容器（无 scroll.y 才是 .ant-table-content），故两者都匹配。
-  const scroller = sheet.locator(".ant-table-content, .ant-table-body").first();
-  const scrollable = await scroller.evaluate(
-    (element) => element.scrollWidth > element.clientWidth,
+  // 横向可滚动（scroll.x=960 > 900 视口）。虚拟表与普通表使用的 antd 内部滚动节点不同，
+  // 因此直接断言活动表内存在水平溢出容器，不绑定某一版本的 class 名。
+  const scrollable = await sheet.evaluate((root) =>
+    Array.from(root.querySelectorAll<HTMLElement>("*")).some(
+      (element) => element.scrollWidth > element.clientWidth + 1,
+    ),
   );
   expect(scrollable).toBe(true);
 
@@ -106,10 +108,14 @@ test("移动表格：横向滚动 + 无固定列 + 行高 44", async ({ page }) 
   await expect(sheet.locator('[class*="ant-table-cell-fix"]')).toHaveCount(0);
 
   // 移动端行高 44px（触摸目标；桌面为 29px）。
-  const firstCell = sheet
-    .locator(".ant-table-tbody > tr.ant-table-row > td")
-    .first();
-  await expect(firstCell).toHaveCSS("height", "44px");
+  const firstRow = sheet.locator(".ant-table-tbody [data-row-key]").first();
+  const cell = firstRow.locator(".ant-table-cell").first();
+  await expect(cell).toHaveCSS("height", "44px");
+
+  // 移动端 Type 控件使用原生 combobox：避免为整屏每行创建 AntD Select 树，
+  // 同时保留键盘、触控与读屏语义。
+  const typeSelect = firstRow.getByRole("combobox", { name: "Type" });
+  await expect(typeSelect).toHaveJSProperty("tagName", "SELECT");
 });
 
 test("移动工具栏：次要控件收进「更多」面板，主操作仍在工具栏", async ({

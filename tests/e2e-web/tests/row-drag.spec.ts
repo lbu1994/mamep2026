@@ -28,13 +28,16 @@ async function openApp(page: Page): Promise<string[]> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
+  await expect(
+    page.locator('[data-startup-hydrated="true"]'),
+  ).toHaveCount(1);
   return errors;
 }
 
 /** 活动表的数据行（限定 tr[data-row-key]，排除 rowSelection 表头行）。 */
 function dataRows(page: Page) {
   return page.locator(
-    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key]",
+    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
   );
 }
 

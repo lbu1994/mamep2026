@@ -23,7 +23,8 @@ async function openApp(page: Page): Promise<string[]> {
 }
 
 function row(page: Page, index: number) {
-  return page.locator(".ant-table-tbody tr[data-row-key]").nth(index);
+  // 普通表在 20 行以上使用虚拟滚动，行容器可能是 div 而非 tr。
+  return page.locator(".ant-table-tbody [data-row-key]").nth(index);
 }
 
 /** 点击进入 Name 单元格编辑态，填入新名字并提交。 */

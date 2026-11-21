@@ -139,10 +139,38 @@ body {
   display: inline-flex;
 }
 
-.app-startup__title.ant-typography {
+.app-startup__title {
   font-size: 16px;
   font-weight: 600;
   line-height: 1.2;
+  color: var(--mamep-text-primary);
+}
+
+.app-startup__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid
+    color-mix(in srgb, var(--mamep-brand-primary) 18%, transparent);
+  border-top-color: var(--mamep-brand-primary);
+  border-radius: 50%;
+  animation: app-startup-spin 0.8s linear infinite;
+}
+
+.app-startup__hint {
+  color: var(--mamep-text-tertiary);
+  font-size: 13px;
+}
+
+@keyframes app-startup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-startup__spinner {
+    animation: none;
+  }
 }
 
 .mamep-main {
@@ -212,6 +240,26 @@ body {
 
 .mamep-header__spacer {
   flex: 1;
+}
+
+/* 移动端单元格使用原生 select：语义、触控和键盘行为与 combobox 一致，
+   避免为可视区每个 Type/Scale 单元格创建完整 AntD Select 树。 */
+.register-table__native-select {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.register-table__native-select:focus-visible {
+  border-radius: var(--mamep-radius-control);
+  outline: 2px solid var(--mamep-focus-ring);
+  outline-offset: 1px;
 }
 
 /* 连接控制区：单一多功能按钮（状态显示 + Connect/Disconnect/重连 合一）。
@@ -642,7 +690,8 @@ body {
 }
 
 /* 页签区空状态：全部表已关闭时提示从侧边栏打开 */
-.register-table-empty {
+.register-table-empty,
+.register-table-startup {
   display: flex;
   align-items: center;
   justify-content: center;

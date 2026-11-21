@@ -12,8 +12,8 @@ import type {
 } from "@mamep2026/domain";
 import { ok } from "@mamep2026/domain";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
-import { parseWorkspace, serializeWorkspace } from "@mamep2026/workspace";
 import type { MamepHostApi } from "@mamep2026/platform-api";
+import { parseWorkspaceOffMainThread } from "@mamep2026/platform-web";
 
 export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
   private readonly bridge: Pick<
@@ -44,10 +44,11 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
     // 主进程 load 恒返回序列化 JSON 字符串（无文件 = 空工作区）；parseWorkspace 接收对象，
     // 故先 JSON.parse 再重建领域对象（含 v1→v4 迁移与断链检测）。
     this.recoveryInfo = result.value.recoveryInfo ?? null;
-    return parseWorkspace(JSON.parse(result.value.content));
+    return parseWorkspaceOffMainThread(JSON.parse(result.value.content));
   }
 
   async save(workspace: Workspace): Promise<Result<void>> {
+    const { serializeWorkspace } = await import("@mamep2026/workspace");
     const result = await this.bridge.workspaceSave(
       serializeWorkspace(workspace),
     );
@@ -76,6 +77,7 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
 
   /** 导入工作区数据（parse + 校验后经主进程原子落盘，§19.1）。 */
   async import(serialized: string): Promise<Result<void>> {
+    const { parseWorkspace } = await import("@mamep2026/workspace");
     const parsed = parseWorkspace(JSON.parse(serialized));
     if (!parsed.ok) return parsed;
     const result = await this.bridge.workspaceSave(serialized);

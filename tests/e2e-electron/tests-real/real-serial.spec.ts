@@ -176,14 +176,23 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
   await input.pressSequentially(addressHex, { delay: 10 });
   await expect(input).toHaveValue(addressHex);
   await input.press("Enter");
+  await expect(
+    activeTable(p).locator('input[aria-label="Address"]'),
+  ).toHaveCount(0);
+  await expect(
+    activeTable(p).getByLabel("Address", { exact: true }).first(),
+  ).toHaveAttribute("data-committed-value", addressHex);
 }
 
 /** 首行点击 Read。 */
 async function readRow(p: Page): Promise<void> {
-  await activeTable(p)
+  const button = activeTable(p)
     .getByRole("button", { name: "Read", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  // Enter 提交到 Store/轮询目标映射是异步宏任务；按钮变为 enabled 才表示首行地址与
+  // 连接路由均已就绪，避免在提交完成前点击禁用按钮。
+  await expect(button).toBeEnabled({ timeout: 5000 });
+  await button.click();
 }
 
 /** 把活动表首行 Type（进制列）切到指定选项（antd Select 选项按 title 定位）。 */
@@ -218,10 +227,18 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
   await data.pressSequentially(valueHex, { delay: 10 });
   await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
-  await activeTable(p)
+  await expect(
+    activeTable(p).locator('input[aria-label="Data"]'),
+  ).toHaveCount(0);
+  await expect(activeTable(p).getByLabel("Data").first()).toHaveAttribute(
+    "data-committed-value",
+    valueHex,
+  );
+  const writeButton = activeTable(p)
     .getByRole("button", { name: "Write", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  await expect(writeButton).toBeEnabled({ timeout: 5000 });
+  await writeButton.click();
 }
 
 /** 通过侧边栏分组「+」按钮新建基础表/自定义表（aria-label = 组标题）。 */

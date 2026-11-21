@@ -87,6 +87,9 @@ async function openApp(page: Page): Promise<string[]> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
+  await expect(
+    page.locator('[data-startup-hydrated="true"]'),
+  ).toHaveCount(1);
   return errors;
 }
 
@@ -121,10 +124,10 @@ async function columnHeaders(page: Page): Promise<string[]> {
 async function firstRowCellLabels(page: Page): Promise<string[]> {
   return page
     .locator(
-      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr.ant-table-row",
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
     )
     .first()
-    .locator("td")
+    .locator(".ant-table-cell")
     .evaluateAll((tds) =>
       tds.map((td) => {
         const labeled = td.querySelector("[aria-label]");
@@ -249,6 +252,9 @@ test("column order persists across a page reload", async ({ page }) => {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
+  await expect(
+    page.locator('[data-startup-hydrated="true"]'),
+  ).toHaveCount(1);
   // 刷新后列顺序恢复（workspace 恢复），不回默认顺序。
   expect(await columnHeaders(page)).toEqual([
     "Name",

@@ -549,11 +549,15 @@ async function collectRuntimeMetrics(page: Page): Promise<{
   const cdp = await page.context().newCDPSession(page);
   try {
     await cdp.send("Performance.enable");
-    await cdp.send("HeapProfiler.collectGarbage");
+    // 虚拟表切页后仍有 useAfterFirstPaint 延迟挂载的单元格控件。先等待两帧让
+    // React 提交这些节点，再 GC；否则新挂载的节点会被误判成两轮采样间的泄漏。
     await page.evaluate(
       () =>
-        new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
     );
+    await cdp.send("HeapProfiler.collectGarbage");
     const response = (await cdp.send("Performance.getMetrics")) as {
       metrics: CdpPerformanceMetric[];
     };

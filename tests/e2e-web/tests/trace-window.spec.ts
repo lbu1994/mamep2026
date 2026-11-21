@@ -12,7 +12,7 @@ async function openApp(page: Page): Promise<void> {
 function firstRow(page: Page) {
   return page
     .locator(
-      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key]",
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
     )
     .first();
 }
@@ -50,7 +50,7 @@ test("TM opens Memory Trace and Play keeps the page responsive", async ({
   // 打开窗口不应自动采样；只有 Play 才启动追踪。
   await page.waitForTimeout(1500);
   await expect(
-    traceWindow.locator(".ant-table-tbody tr.ant-table-row"),
+    traceWindow.locator(".ant-table-tbody [data-row-key]"),
   ).toHaveCount(0);
 
   // 窗口打开后主线程仍可执行，而不是停留在冻结的渲染循环中。
@@ -60,7 +60,7 @@ test("TM opens Memory Trace and Play keeps the page responsive", async ({
 
   await traceWindow.getByRole("button", { name: "Play" }).click();
   await expect(
-    traceWindow.locator(".ant-table-tbody tr.ant-table-row"),
+    traceWindow.locator(".ant-table-tbody [data-row-key]"),
   ).toHaveCount(2, { timeout: 5000 });
   await expect(traceWindow).toContainText("0010");
 

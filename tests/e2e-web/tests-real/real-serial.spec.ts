@@ -21,6 +21,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -29,6 +30,21 @@ const LOCAL_STORAGE_KEY = "mamep:real-serial-port";
 const CONNECTED_TIMEOUT = 15_000;
 /** 仓库根目录（本文件位于 tests/e2e-web/tests-real/）。 */
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
+const SERIAL_PICKER_PROJECT = path.join(
+  REPO_ROOT,
+  "tooling",
+  "serial-picker-agent",
+  "SerialPickerAgent.csproj",
+);
+const SERIAL_PICKER_DLL = path.join(
+  REPO_ROOT,
+  "tooling",
+  "serial-picker-agent",
+  "bin",
+  "Release",
+  "net8.0-windows",
+  "SerialPickerAgent.dll",
+);
 /**
  * ASCII 字符串区（从站保持寄存器 0x0010–0x001F，16 寄存器 = 32 字符）。
  * 期望文本直接由从站配置解码得出（`scripts/modbus-slave/modbus-slave.config.json`
@@ -68,6 +84,78 @@ test.skip(
 
 let browserRef: Awaited<ReturnType<typeof chromium.launch>> | null = null;
 let page: Page;
+
+function buildSerialPickerAgent(): void {
+  try {
+    execFileSync(
+      "dotnet",
+      ["build", SERIAL_PICKER_PROJECT, "-c", "Release", "--nologo"],
+      {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        stdio: "pipe",
+      },
+    );
+  } catch (error) {
+    const detail = error as {
+      stdout?: string;
+      stderr?: string;
+      message?: string;
+    };
+    throw new Error(
+      [
+        "Failed to build the Windows serial picker agent.",
+        detail.stdout,
+        detail.stderr,
+        detail.message,
+      ]
+        .filter((part) => part !== undefined && part !== "")
+        .join("\n"),
+      { cause: error },
+    );
+  }
+}
+
+function selectSerialPortWithFlaUi(windowTitle: string, port: string): string {
+  try {
+    return execFileSync(
+      "dotnet",
+      [
+        SERIAL_PICKER_DLL,
+        "--title-regex",
+        `^${windowTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s+-|$)`,
+        "--select",
+        "--port",
+        port,
+        "--timeout-ms",
+        "30000",
+      ],
+      {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        stdio: "pipe",
+        timeout: 35_000,
+      },
+    ).trim();
+  } catch (error) {
+    const detail = error as {
+      stdout?: string;
+      stderr?: string;
+      message?: string;
+    };
+    throw new Error(
+      [
+        `Failed to select ${port} in the Edge serial picker.`,
+        detail.stdout,
+        detail.stderr,
+        detail.message,
+      ]
+        .filter((part) => part !== undefined && part !== "")
+        .join("\n"),
+      { cause: error },
+    );
+  }
+}
 let consoleErrors: string[] = [];
 
 /** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
@@ -181,6 +269,7 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
 }
 
 test.beforeAll(async () => {
+  buildSerialPickerAgent();
   // 有头系统 Edge（系统 picker 需要可见窗口）。手动 launch，page 在测试间共享。
   browserRef = await chromium.launch({ channel: "msedge", headless: false });
   page = await browserRef.newPage({ viewport: { width: 1600, height: 900 } });
@@ -219,12 +308,14 @@ test.beforeAll(async () => {
 
   // 用户选择串口：点击「Select serial port…」触发系统 picker（用户手势）。
   const modal = page.locator(".ant-modal-container:visible");
-  console.log(
-    "[real-serial] 请在系统串口选择器中选中 COM4（连接 COM5 从站），本测试最长等待 120s…",
-  );
   await modal.getByRole("button", { name: /Select serial port/i }).click();
-  await modal.getByText(/^USB /).waitFor({ timeout: 120_000 });
-  const label = (await modal.getByText(/^USB /).first().innerText()).trim();
+  const port = process.env.MAMEP_REAL_SERIAL_PORT ?? "COM4";
+  const selection = selectSerialPortWithFlaUi(await page.title(), port);
+  console.log(`[real-serial] FlaUI picker result: ${selection}`);
+
+  const portLabel = new RegExp(`\\(${port}\\)|^USB `, "i");
+  await modal.getByText(portLabel).waitFor({ timeout: 15_000 });
+  const label = (await modal.getByText(portLabel).first().innerText()).trim();
   console.log(`[real-serial] 已选择串口: ${label}`);
 
   // 记录到 localStorage（后续运行对照 + 运行内复用）。

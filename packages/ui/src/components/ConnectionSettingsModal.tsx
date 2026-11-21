@@ -121,6 +121,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
   const connectError = useAppStore((s) => s.connectError);
   const setSerialSelection = useAppStore((s) => s.setSerialSelection);
   const setConnectError = useAppStore((s) => s.setConnectError);
+  const pluginsReady = useAppStore((s) => s.pluginsReady);
   // 已连接判定语义与顶栏 connection-cluster 一致（仅 connected 视为已连接）。
   const connected = connectionState === "connected";
   const [connecting, setConnecting] = useState(false);
@@ -228,7 +229,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
   };
 
   const onSubmit = handleSubmit(async (values) => {
-    if (host === null || host === undefined) return;
+    if (host === null || host === undefined || !pluginsReady) return;
     // 需要选口（仅 RTU）：浏览器 picker（supportsSerial）或 enumerated 下拉（VSCode/Electron）均须先选。
     if (
       values.protocol !== "tcp" &&
@@ -318,7 +319,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
           type={connected ? "default" : "primary"}
           danger={connected}
           loading={connecting || disconnecting}
-          disabled={!connected && serialBlocked}
+          disabled={!connected && (serialBlocked || !pluginsReady)}
           icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
           onClick={() => {
             if (connected) {

@@ -38,6 +38,9 @@ import {
   protocolForSheetType,
   type TableTypeContribution,
 } from "./plugin/plugin-registries";
+import { useAfterFirstPaint } from "./after-first-paint";
+import { markUiStartup } from "./startup-marks";
+import { AppStartupBootstrap } from "./startup";
 import {
   ApiOutlined,
   AppstoreOutlined,
@@ -77,11 +80,9 @@ import { buildTheme } from "./theme";
 import { useAppStore } from "./app-store";
 import { canDirectConnect, runConnect } from "./connection-actions";
 import { hasPlatformCapability } from "./host-contracts";
-import { BottomPanel } from "./components/BottomPanel";
 import { AppShortcutLayer } from "./components/AppShortcutLayer";
 import { AppStartupPlaceholder } from "./components/AppStartupPlaceholder";
 import type { DocumentationContribution } from "./components/documentation-markdown";
-import { RegisterTable } from "./components/RegisterTable";
 import { SheetNameEditor } from "./components/SheetNameEditor";
 import { buildSheetMenuItems } from "./components/SheetMenu";
 import { useOpenedOnce } from "./opened-once";
@@ -98,8 +99,8 @@ import { useOpenedOnce } from "./opened-once";
  * Settings 使用右侧 Drawer（`SettingsDrawer`），仍为懒加载 + `useOpenedOnce` 门控，
  * store 字段名（`settingsModalOpen`）保持不变。插件管理位于 Settings 的「Plugins」页签。
  *
- * `ConnectionSettingsModal` 在宿主、工作区与插件就绪后才会自动打开，因此不阻塞启动
- * 骨架和首屏外壳。它为首次打开单独懒加载，且不能与其它懒组件共用 Suspense。
+ * `ConnectionSettingsModal` 在宿主与工作区就绪后自动打开；插件恢复尚未完成时，
+ * 连接动作会被门控。它为首次打开单独懒加载，且不能与其它懒组件共用 Suspense。
  */
 const ConnectionSettingsModal = lazy(() =>
   import("./components/ConnectionSettingsModal").then((m) => ({
@@ -132,6 +133,17 @@ const RecoveryBanner = lazy(() =>
     default: m.RecoveryBanner,
   })),
 );
+const BottomPanel = lazy(() =>
+  import("./components/BottomPanel").then((m) => ({
+    default: m.BottomPanel,
+  })),
+);
+// 启动即并行请求表格块，但仅在工作区外壳提交后才挂载。这样避免动态 import
+// 在首屏后才开始形成网络瀑布，也不把表格及其依赖放入入口 modulepreload。
+const registerTableModule = import("./components/RegisterTable");
+const RegisterTable = lazy(() =>
+  registerTableModule.then((m) => ({ default: m.RegisterTable })),
+);
 
 /** 折叠时底部面板仅保留标签栏的高度（px）。 */
 const COLLAPSED_BOTTOM_PANEL_HEIGHT = 40;
@@ -159,11 +171,77 @@ function sidebarGroupIcon(sheetType: SheetType): ReactNode {
   }
 }
 
-export function MamepApp(): React.ReactNode {
+export interface MamepAppProps {
+  /** 生产组合根启用分阶段首屏；组件测试默认直接渲染完整界面。 */
+  deferStartupContent?: boolean;
+}
+
+/**
+ * 完整界面挂载门：生产组合根先保持轻量骨架，下一帧再把数十个 Store selector、
+ * 主题派生和主壳组件作为可中断 transition 挂载。组件测试默认同步渲染。
+ */
+export function MamepApp(props: MamepAppProps = {}): React.ReactNode {
+  const hostStatus = useAppStore((state) => state.hostStatus);
+  const staged = useAfterFirstPaint(
+    props.deferStartupContent === true && hostStatus !== "assembling",
+  );
+
+  if (props.deferStartupContent === true && !staged) {
+    return <AppStartupBootstrap />;
+  }
+  return <MamepAppContent {...props} />;
+}
+
+function MamepAppContent({
+  deferStartupContent = false,
+}: MamepAppProps = {}): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
   // Host 装配状态（启动骨架）：宿主实现按运行时平台动态加载期间显示占位。
   const hostStatus = useAppStore((s) => s.hostStatus);
+  // 通信日志/属性/插件面板属于非关键启动工作，等主壳与表格完成首帧后再挂载。
+  const stagedHeaderActionsReady = useAfterFirstPaint(hostStatus === "ready");
+  const headerActionsReady = !deferStartupContent || stagedHeaderActionsReady;
+  const stagedShellBodyReady = useAfterFirstPaint(
+    hostStatus === "ready" && headerActionsReady,
+  );
+  const shellBodyReady = !deferStartupContent || stagedShellBodyReady;
+  const stagedBottomPanelReady = useAfterFirstPaint(
+    hostStatus === "ready" && shellBodyReady,
+  );
+  const bottomPanelReady = !deferStartupContent || stagedBottomPanelReady;
+  // 先提交轻量外壳（Header/侧栏/布局），下一帧再挂载寄存器表。两部分各自成为
+  // 独立 React commit，工作区恢复仍只发生一次，不展示默认表或默认行。
+  const stagedWorkspaceContentReady = useAfterFirstPaint(
+    hostStatus === "ready" && shellBodyReady,
+  );
+  const workspaceContentReady =
+    !deferStartupContent || stagedWorkspaceContentReady;
+  const stagedRegisterTableContentReady = useAfterFirstPaint(
+    hostStatus === "ready" && workspaceContentReady,
+  );
+  const registerTableContentReady =
+    !deferStartupContent || stagedRegisterTableContentReady;
+  useEffect(() => {
+    if (hostStatus === "ready") markUiStartup("shell-ready");
+  }, [hostStatus]);
+  useEffect(() => {
+    if (headerActionsReady) markUiStartup("header-actions-ready");
+  }, [headerActionsReady]);
+  useEffect(() => {
+    if (shellBodyReady) markUiStartup("shell-body-ready");
+  }, [shellBodyReady]);
+  useEffect(() => {
+    if (workspaceContentReady) markUiStartup("workspace-content-ready");
+  }, [workspaceContentReady]);
+  useEffect(() => {
+    if (registerTableContentReady) {
+      markUiStartup("register-table-content-ready");
+    }
+  }, [registerTableContentReady]);
+  useEffect(() => {
+    if (bottomPanelReady) markUiStartup("bottom-panel-ready");
+  }, [bottomPanelReady]);
   // 工作区加载恢复元数据（恢复提示）：加载后写入，用于主体顶部横幅。
   const workspaceRecovery = useAppStore((s) => s.workspaceRecovery);
   // 仅订阅表元数据（id/name）与从站地址：行数据变化不触发本组件重渲染，
@@ -231,24 +309,38 @@ export function MamepApp(): React.ReactNode {
   );
   // 首帧主色过渡：插件贡献晚于首帧到达，就绪前用启动缓存里上次解析出的色种子，
   // 避免「先默认蓝再变插件色」（解析规则见 resolveThemeColorSeed）。
-  const pluginsReady = useAppStore((s) => s.pluginsReady);
+  // 仅当用户选择插件主题色时，插件就绪才会影响主题解析。默认主题下不订阅
+  // `pluginsReady`，避免插件恢复完成时让整个主界面和表格树无意义重渲染。
+  const pluginThemeReady = useAppStore(
+    (s) => s.themePrimary === null || s.pluginsReady,
+  );
   const themeColorSeed = useAppStore((s) => s.themeColorSeed);
   const setThemeColorSeed = useAppStore((s) => s.setThemeColorSeed);
   // 装配链：base = VSCode 完整主题或 buildTheme 两态→
   // 用户所选预设（themePrimary 预设 ID；解析不到且插件已就绪 = 插件禁用/卸载 → 回退默认蓝）merge 覆盖。
-  const baseThemeConfig = themeConfig ?? buildTheme(theme === "dark");
+  const baseThemeConfig = useMemo(
+    () => themeConfig ?? buildTheme(theme === "dark"),
+    [theme, themeConfig],
+  );
   const selectedThemeColor =
     themePrimary === null
       ? null
       : findThemeColorOption(themeContributions, themePrimary);
   const colorSeed = resolveThemeColorSeed(
     selectedThemeColor?.colorPrimary ?? null,
-    { themePrimary, pluginsReady, cachedSeed: themeColorSeed },
+    {
+      themePrimary,
+      pluginsReady: pluginThemeReady,
+      cachedSeed: themeColorSeed,
+    },
   );
-  const effectiveThemeConfig =
-    colorSeed === null
-      ? baseThemeConfig
-      : mergeThemeConfig(baseThemeConfig, themeConfigForColorSeed(colorSeed));
+  const effectiveThemeConfig = useMemo(
+    () =>
+      colorSeed === null
+        ? baseThemeConfig
+        : mergeThemeConfig(baseThemeConfig, themeConfigForColorSeed(colorSeed)),
+    [baseThemeConfig, colorSeed],
+  );
   // 文档贡献：Help 弹窗渲染插件寄存器手册等。
   // （settings 贡献消费方已随 Settings 抽出到 SettingsDrawer 代码分割。）
   const documentationContributions =
@@ -343,6 +435,8 @@ export function MamepApp(): React.ReactNode {
   const setPendingDeleteSheetId = useAppStore((s) => s.setPendingDeleteSheetId);
   const pendingBulkClose = useAppStore((s) => s.pendingBulkClose);
   const setPendingBulkClose = useAppStore((s) => s.setPendingBulkClose);
+  const deleteConfirmMounted = useOpenedOnce(pendingDeleteSheetId !== null);
+  const bulkCloseMounted = useOpenedOnce(pendingBulkClose !== null);
   const closeOtherSheets = useAppStore((s) => s.closeOtherSheets);
   const closeSheetsToRight = useAppStore((s) => s.closeSheetsToRight);
   // 帮助/关于弹窗（PRD §8.3 键盘操作）：入 store 便于快捷键弹窗抑制。
@@ -384,6 +478,9 @@ export function MamepApp(): React.ReactNode {
   // 移动端两个抽屉的开合（会话内状态，不入持久化）：返回键优先关它们（见 overlay-close）。
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  // 移动抽屉在首次打开前不挂载，避免启动时为关闭状态构建两份侧栏/底部面板。
+  const mobileSidebarMounted = useOpenedOnce(mobileSidebarOpen);
+  const mobilePanelMounted = useOpenedOnce(mobilePanelOpen);
   useOverlayClose(mobileSidebarOpen, () => setMobileSidebarOpen(false));
   useOverlayClose(mobilePanelOpen, () => setMobilePanelOpen(false));
   // Splitter 受控 size 拖拽过程缓冲：onResize 更新本地，onResizeEnd 才持久化到 panelLayout（避免高频写 store）。
@@ -444,11 +541,11 @@ export function MamepApp(): React.ReactNode {
   // 供下次刷新首帧直接着色。就绪前**不写**，否则会覆盖缓存种子（过渡着色依赖它）；
   // 值未变化则不写（避免 set → 重渲染 → effect 重复触发的循环）。
   useEffect(() => {
-    if (!pluginsReady) return;
+    if (!pluginThemeReady) return;
     const resolvedSeed = selectedThemeColor?.colorPrimary ?? null;
     if (resolvedSeed === themeColorSeed) return;
     setThemeColorSeed(resolvedSeed);
-  }, [pluginsReady, selectedThemeColor, themeColorSeed, setThemeColorSeed]);
+  }, [pluginThemeReady, selectedThemeColor, themeColorSeed, setThemeColorSeed]);
 
   // 主题主色同步到 --mamep-brand-primary / --mamep-focus-ring：
   // 消除 index.css 的第二份硬编码品牌色副本——CSS 变量经 document root 内联覆盖
@@ -558,7 +655,12 @@ export function MamepApp(): React.ReactNode {
   const directConnect = async (
     profile: RtuConnectionProfile | TcpConnectionProfile,
   ): Promise<void> => {
-    if (host === null || host === undefined || directConnectingRef.current) {
+    if (
+      host === null ||
+      host === undefined ||
+      !useAppStore.getState().pluginsReady ||
+      directConnectingRef.current
+    ) {
       return;
     }
     directConnectingRef.current = true;
@@ -586,7 +688,13 @@ export function MamepApp(): React.ReactNode {
       void host?.disconnect();
       return;
     }
-    if (host === null || host === undefined) return;
+    if (
+      host === null ||
+      host === undefined ||
+      !useAppStore.getState().pluginsReady
+    ) {
+      return;
+    }
     // 忙态（连接中/断开中/选择设备/重连等）不重复发起；failed/interrupted 不守 → 作为重连入口。
     if (
       connectionState === "selecting-device" ||
@@ -816,12 +924,11 @@ export function MamepApp(): React.ReactNode {
     },
   );
 
-  // 启动骨架：Host 按运行时平台动态加载（含失败兜底）完成前显示占位——
+  // 启动骨架：Host 装配与工作区完整加载/校验完成前显示占位——
   // 仍包 ConfigProvider/AntApp，保证主题（含 VSCode 完整令牌/暗色）与 antd 上下文一致，
   // 避免深色主题下白屏闪烁。`failed` 状态不占位：应用以「无 Host」保持可操作。
-  //骨架窗口扩展为「宿主装配 + 工作区加载 + 插件就绪」——外壳的侧栏/底部面板/
-  // 已打开 Tab/表与行/插件贡献全部派生自工作区与插件存储，必须等它们就位再渲染（见
-  // apps/web/src/host-assembly.ts 的启动就绪门），否则首屏会出现「先默认后切换」的闪烁。
+  // 骨架覆盖宿主装配与工作区完整恢复，避免先显示默认工作区。进入 ready 后，
+  // 主外壳、表格主体、底部日志面板分阶段挂载；插件贡献稍后到达，不使用默认业务数据伪造。
   // 注意：必须位于全部 hook 调用之后（上方 hook 均无条件执行）。
   if (hostStatus === "assembling") {
     return (
@@ -867,350 +974,419 @@ export function MamepApp(): React.ReactNode {
                 </span>
               )}
             </div>
-            <Divider
-              vertical
-              style={{ height: 20, marginInline: 2, flex: "none" }}
-            />
-            {/* 连接区：单一多功能按钮（状态显示 + Connect/Disconnect/重连 合一）——
+            {headerActionsReady && (
+              <>
+                <Divider
+                  vertical
+                  style={{ height: 20, marginInline: 2, flex: "none" }}
+                />
+                {/* 连接区：单一多功能按钮（状态显示 + Connect/Disconnect/重连 合一）——
                 状态点并入按钮、按钮文字随连接状态切换；窄窗口收起文字仅留状态点+图标（不隐藏连接状态）。
                 data-conn-state：纯展示钩子，供 CSS 按连接态着色状态点（不改任何行为/契约）。 */}
-            <div className="connection-cluster">
-              <Button
-                size="small"
-                className="connection-cluster__button"
-                type={connSpec.type}
-                {...(connSpec.color ? { color: connSpec.color } : {})}
-                {...(connSpec.variant ? { variant: connSpec.variant } : {})}
-                danger={connSpec.danger}
-                onClick={handleConnectToggle}
-                aria-label={t(connSpec.ariaLabelKey)}
-                title={t(connSpec.titleKey)}
-                data-conn-state={connectionState}
-              >
-                <span className="connection-cluster__content">
-                  <span
-                    className={`conn-btn__dot${connSpec.pulsing ? " conn-btn__dot--pulse" : ""}`}
-                    style={{ backgroundColor: connSpec.dotColor }}
-                  />
-                  {connSpec.hideLabel ? (
-                    connSpec.icon === "disconnect" ? (
-                      <DisconnectOutlined />
-                    ) : (
-                      <ApiOutlined />
-                    )
-                  ) : (
-                    <span>{t(connSpec.labelKey)}</span>
-                  )}
-                </span>
-              </Button>
-            </div>
-            <span className="mamep-header__spacer" />
-            <div className="mamep-header__group">
-              {/* Connection 入口始终可见（不收进 More），置于 Settings/Help 之前 */}
-              <Button
-                size="small"
-                icon={<ApiOutlined />}
-                aria-label={t("topbar.connectionSettings")}
-                onClick={() => setConnectionModalOpen(true)}
-              >
-                {isMobileLayout ? undefined : t("topbar.connectionSettings")}
-              </Button>
-              {/* 移动布局：底部面板入口（底部抽屉）；桌面由常驻底部面板承担。 */}
-              {isMobileLayout && (
-                <Button
-                  size="small"
-                  icon={<MessageOutlined />}
-                  aria-label={t("mobile.openPanel")}
-                  title={t("mobile.openPanel")}
-                  onClick={() => setMobilePanelOpen(true)}
-                />
-              )}
-              {narrow ? (
-                <Dropdown
-                  menu={{ items: secondaryMenuItems }}
-                  trigger={["click"]}
-                >
+                <div className="connection-cluster">
                   <Button
                     size="small"
-                    icon={<MoreOutlined />}
-                    aria-label={t("topbar.more")}
+                    className="connection-cluster__button"
+                    type={connSpec.type}
+                    {...(connSpec.color ? { color: connSpec.color } : {})}
+                    {...(connSpec.variant ? { variant: connSpec.variant } : {})}
+                    danger={connSpec.danger}
+                    onClick={handleConnectToggle}
+                    aria-label={t(connSpec.ariaLabelKey)}
+                    title={t(connSpec.titleKey)}
+                    data-conn-state={connectionState}
                   >
-                    {t("topbar.more")}
-                  </Button>
-                </Dropdown>
-              ) : (
-                <>
-                  <Button
-                    size="small"
-                    icon={<SettingOutlined />}
-                    onClick={() => setSettingsOpen(true)}
-                  >
-                    {t("topbar.settings")}
-                  </Button>
-                  <Button
-                    size="small"
-                    icon={<QuestionCircleOutlined />}
-                    onClick={() => setHelpOpen(true)}
-                  >
-                    {t("topbar.help")}
-                  </Button>
-                </>
-              )}
-            </div>
-          </Layout.Header>
-          <Splitter
-            orientation="horizontal"
-            className="mamep-main"
-            style={{ flex: 1, minHeight: 0, minWidth: 0 }}
-            classNames={{ dragger: "sidebar-panel__resize" }}
-            onResize={(sizes) => {
-              const w = sizes[0];
-              if (w !== undefined) setDragSidebarWidth(Math.round(w));
-            }}
-            onResizeEnd={(sizes) => {
-              const w = sizes[0];
-              if (w !== undefined) {
-                setPanelLayout({ sidebarWidth: Math.round(w) });
-                setDragSidebarWidth(null);
-              }
-            }}
-          >
-            {!isMobileLayout && (
-              <Splitter.Panel
-                className={`sheet-sidebar ant-layout-sider${sidebarCollapsed ? " ant-layout-sider-collapsed" : ""}`}
-                size={
-                  sidebarCollapsed ? 36 : (dragSidebarWidth ?? sidebarWidth)
-                }
-                resizable={!sidebarCollapsed}
-                {...(sidebarCollapsed ? {} : { min: 120, max: "40%" })}
-              >
-                <div className="sheet-sidebar__head">
-                  <span className="sheet-sidebar__title">
-                    {t("sidebar.workspace")}
-                  </span>
-                  <Tooltip title={t("topbar.toggleSidebar")}>
-                    <Button
-                      type="text"
-                      size="small"
-                      className="sheet-sidebar__collapse"
-                      aria-label={t("topbar.toggleSidebar")}
-                      icon={
-                        sidebarCollapsed ? <RightOutlined /> : <LeftOutlined />
-                      }
-                      onClick={() =>
-                        setPanelLayout({ sidebarCollapsed: !sidebarCollapsed })
-                      }
-                    />
-                  </Tooltip>
-                </div>
-                {/* 分区标题保留（新建入口已移入各分组头右侧 +） */}
-                <div className="sheet-sidebar__section">
-                  <span className="sheet-sidebar__section-title">
-                    {t("sidebar.registerTables")}
-                  </span>
-                </div>
-                <div ref={sidebarListRef} className="sheet-sidebar__groups">
-                  <Menu
-                    className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
-                    mode="inline"
-                    inlineCollapsed={sidebarCollapsed}
-                    selectable
-                    selectedKeys={
-                      currentSheet !== undefined ? [currentSheet.sheetId] : []
-                    }
-                    {...(sidebarCollapsed
-                      ? {}
-                      : { openKeys: sheetGroupOpenKeys })}
-                    onOpenChange={handleGroupOpenChange}
-                    onClick={({ key, domEvent }) => {
-                      // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
-                      // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
-                      // 而非“切换表”意图，忽略以免把 active 切回源表。
-                      const target = domEvent.target as HTMLElement;
-                      if (target.closest(".ant-dropdown") !== null) return;
-                      // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
-                      openSheet(key as SheetId);
-                    }}
-                    onDragStart={(event) => {
-                      const li = (
-                        event.target as HTMLElement
-                      ).closest<HTMLLIElement>("li[data-sheet-index]");
-                      if (li?.dataset.sheetIndex !== undefined) {
-                        dragIndex.current = Number(li.dataset.sheetIndex);
-                        dragGroup.current = li.dataset.sheetGroup ?? null;
-                      }
-                    }}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const li = (
-                        event.target as HTMLElement
-                      ).closest<HTMLLIElement>("li[data-sheet-index]");
-                      const fromIndex = dragIndex.current;
-                      const fromGroup = dragGroup.current;
-                      dragIndex.current = null;
-                      dragGroup.current = null;
-                      if (li?.dataset.sheetIndex === undefined) return;
-                      if (fromIndex === null) return;
-                      // 跨组禁拖：源/目标分组不同则忽略。
-                      if (li.dataset.sheetGroup !== fromGroup) return;
-                      const toIndex = Number(li.dataset.sheetIndex);
-                      if (fromIndex === toIndex) return;
-                      const source = sheetMeta[fromIndex];
-                      if (source !== undefined) {
-                        moveSheetTo(source.sheetId, toIndex);
-                      }
-                    }}
-                    items={sidebarMenuItems}
-                  />
-                </div>
-                <div className="sheet-sidebar__footer">
-                  {t(
-                    host?.platform === "electron"
-                      ? "sidebar.footerClient"
-                      : host?.platform === "vscode"
-                        ? "sidebar.footerExtension"
-                        : host?.platform === "android"
-                          ? "sidebar.footerAndroid"
-                          : "sidebar.footerBrowser",
-                    { version: host?.appVersion ?? "" },
-                  )}
-                </div>
-              </Splitter.Panel>
-            )}
-            <Splitter.Panel>
-              <div className="mamep-body">
-                {/* 浏览器兼容性提示（PRD §8.3 / §15.7）：不支持 Web Serial / 非安全上下文时展示 */}
-                {compatibilityBannerMounted && (
-                  <Suspense fallback={null}>
-                    <BrowserCompatibilityBanner
-                      compatibility={host?.browserCompatibility ?? null}
-                      isMock={host?.isMockMode ?? false}
-                    />
-                  </Suspense>
-                )}
-                {/* 工作区恢复提示：从备份恢复 / 恢复失败重建为空时展示 */}
-                {recoveryBannerMounted && (
-                  <Suspense fallback={null}>
-                    <RecoveryBanner recovery={workspaceRecovery} />
-                  </Suspense>
-                )}
-                <Splitter
-                  orientation="vertical"
-                  style={{ flex: 1, minHeight: 0 }}
-                  classNames={{ dragger: "bottom-panel__resize" }}
-                  onResize={(sizes) => {
-                    const panelSize = sizes[1];
-                    if (panelSize !== undefined) {
-                      setDragPanelHeight(Math.round(panelSize));
-                    }
-                  }}
-                  onResizeEnd={(sizes) => {
-                    const panelSize = sizes[1];
-                    if (panelSize !== undefined) {
-                      setPanelLayout({
-                        bottomPanelHeight: Math.round(panelSize),
-                      });
-                      setDragPanelHeight(null);
-                    }
-                  }}
-                >
-                  <Splitter.Panel>
-                    <div className="register-table-wrap">
-                      {currentSheet !== undefined ? (
-                        <Tabs
-                          type="editable-card"
-                          size="small"
-                          className="register-table-tabs"
-                          hideAdd
-                          activeKey={currentSheet.sheetId}
-                          onChange={(key) => setActiveSheetId(key as SheetId)}
-                          onEdit={(targetKey) => {
-                            // 页签「×」= 非破坏性关闭（表仍保留在侧边栏，可从侧边栏重新打开）。
-                            // hideAdd 后不存在 add 动作，此处仅处理 remove。
-                            if (typeof targetKey === "string") {
-                              closeSheet(targetKey as SheetId);
-                            }
-                          }}
-                          items={sheetMeta
-                            .map((sheet, index) => ({ sheet, index }))
-                            .filter(({ sheet }) => sheet.open)
-                            .map(({ sheet, index }) => ({
-                              key: sheet.sheetId,
-                              label: (
-                                <Dropdown
-                                  trigger={["contextMenu"]}
-                                  menu={{
-                                    items: sheetMenu(
-                                      sheet.sheetId,
-                                      index,
-                                      "tab",
-                                    ),
-                                  }}
-                                >
-                                  {tabRenamingSheetId === sheet.sheetId ? (
-                                    <SheetNameEditor
-                                      className="sheet-tab__input"
-                                      name={sheet.name}
-                                      autoFocus
-                                      onCommit={(name) => {
-                                        renameSheet(sheet.sheetId, name);
-                                        setTabRenamingSheetId(null);
-                                      }}
-                                      onCancel={() =>
-                                        setTabRenamingSheetId(null)
-                                      }
-                                    />
-                                  ) : (
-                                    <span
-                                      className="sheet-tab__label"
-                                      onDoubleClick={() =>
-                                        startTabRename(sheet.sheetId)
-                                      }
-                                    >
-                                      {sheet.name}
-                                    </span>
-                                  )}
-                                </Dropdown>
-                              ),
-                              children: (
-                                <RegisterTable sheetId={sheet.sheetId} />
-                              ),
-                            }))}
-                        />
+                    <span className="connection-cluster__content">
+                      <span
+                        className={`conn-btn__dot${connSpec.pulsing ? " conn-btn__dot--pulse" : ""}`}
+                        style={{ backgroundColor: connSpec.dotColor }}
+                      />
+                      {connSpec.hideLabel ? (
+                        connSpec.icon === "disconnect" ? (
+                          <DisconnectOutlined />
+                        ) : (
+                          <ApiOutlined />
+                        )
                       ) : (
-                        <div className="register-table-empty">
-                          <Empty
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description={t("table.noOpenSheets")}
+                        <span>{t(connSpec.labelKey)}</span>
+                      )}
+                    </span>
+                  </Button>
+                </div>
+                <span className="mamep-header__spacer" />
+                <div className="mamep-header__group">
+                  {/* Connection 入口始终可见（不收进 More），置于 Settings/Help 之前 */}
+                  <Button
+                    size="small"
+                    icon={<ApiOutlined />}
+                    aria-label={t("topbar.connectionSettings")}
+                    onClick={() => setConnectionModalOpen(true)}
+                  >
+                    {isMobileLayout
+                      ? undefined
+                      : t("topbar.connectionSettings")}
+                  </Button>
+                  {/* 移动布局：底部面板入口（底部抽屉）；桌面由常驻底部面板承担。 */}
+                  {isMobileLayout && (
+                    <Button
+                      size="small"
+                      icon={<MessageOutlined />}
+                      aria-label={t("mobile.openPanel")}
+                      title={t("mobile.openPanel")}
+                      onClick={() => setMobilePanelOpen(true)}
+                    />
+                  )}
+                  {narrow ? (
+                    <Dropdown
+                      menu={{ items: secondaryMenuItems }}
+                      trigger={["click"]}
+                    >
+                      <Button
+                        size="small"
+                        icon={<MoreOutlined />}
+                        aria-label={t("topbar.more")}
+                      >
+                        {t("topbar.more")}
+                      </Button>
+                    </Dropdown>
+                  ) : (
+                    <>
+                      <Button
+                        size="small"
+                        icon={<SettingOutlined />}
+                        onClick={() => setSettingsOpen(true)}
+                      >
+                        {t("topbar.settings")}
+                      </Button>
+                      <Button
+                        size="small"
+                        icon={<QuestionCircleOutlined />}
+                        onClick={() => setHelpOpen(true)}
+                      >
+                        {t("topbar.help")}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </Layout.Header>
+          {shellBodyReady ? (
+            <Splitter
+              orientation="horizontal"
+              className="mamep-main"
+              style={{ flex: 1, minHeight: 0, minWidth: 0 }}
+              classNames={{ dragger: "sidebar-panel__resize" }}
+              onResize={(sizes) => {
+                const w = sizes[0];
+                if (w !== undefined) setDragSidebarWidth(Math.round(w));
+              }}
+              onResizeEnd={(sizes) => {
+                const w = sizes[0];
+                if (w !== undefined) {
+                  setPanelLayout({ sidebarWidth: Math.round(w) });
+                  setDragSidebarWidth(null);
+                }
+              }}
+            >
+              {!isMobileLayout && (
+                <Splitter.Panel
+                  className={`sheet-sidebar ant-layout-sider${sidebarCollapsed ? " ant-layout-sider-collapsed" : ""}`}
+                  size={
+                    sidebarCollapsed ? 36 : (dragSidebarWidth ?? sidebarWidth)
+                  }
+                  resizable={!sidebarCollapsed}
+                  {...(sidebarCollapsed ? {} : { min: 120, max: "40%" })}
+                >
+                  <div className="sheet-sidebar__head">
+                    <span className="sheet-sidebar__title">
+                      {t("sidebar.workspace")}
+                    </span>
+                    <Tooltip title={t("topbar.toggleSidebar")}>
+                      <Button
+                        type="text"
+                        size="small"
+                        className="sheet-sidebar__collapse"
+                        aria-label={t("topbar.toggleSidebar")}
+                        icon={
+                          sidebarCollapsed ? (
+                            <RightOutlined />
+                          ) : (
+                            <LeftOutlined />
+                          )
+                        }
+                        onClick={() =>
+                          setPanelLayout({
+                            sidebarCollapsed: !sidebarCollapsed,
+                          })
+                        }
+                      />
+                    </Tooltip>
+                  </div>
+                  {/* 分区标题保留（新建入口已移入各分组头右侧 +） */}
+                  <div className="sheet-sidebar__section">
+                    <span className="sheet-sidebar__section-title">
+                      {t("sidebar.registerTables")}
+                    </span>
+                  </div>
+                  <div ref={sidebarListRef} className="sheet-sidebar__groups">
+                    <Menu
+                      className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
+                      mode="inline"
+                      inlineCollapsed={sidebarCollapsed}
+                      selectable
+                      selectedKeys={
+                        currentSheet !== undefined ? [currentSheet.sheetId] : []
+                      }
+                      {...(sidebarCollapsed
+                        ? {}
+                        : { openKeys: sheetGroupOpenKeys })}
+                      onOpenChange={handleGroupOpenChange}
+                      onClick={({ key, domEvent }) => {
+                        // Dropdown 弹层（右键/更多菜单项）在 React 树上是 Menu item 的后代，
+                        // 点击弹层项会经 React 树冒泡到条目 onClick；但那是菜单动作（如 Duplicate）
+                        // 而非“切换表”意图，忽略以免把 active 切回源表。
+                        const target = domEvent.target as HTMLElement;
+                        if (target.closest(".ant-dropdown") !== null) return;
+                        // 已关闭的表：先重新打开再激活；已打开的表：仅切换。
+                        openSheet(key as SheetId);
+                      }}
+                      onDragStart={(event) => {
+                        const li = (
+                          event.target as HTMLElement
+                        ).closest<HTMLLIElement>("li[data-sheet-index]");
+                        if (li?.dataset.sheetIndex !== undefined) {
+                          dragIndex.current = Number(li.dataset.sheetIndex);
+                          dragGroup.current = li.dataset.sheetGroup ?? null;
+                        }
+                      }}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const li = (
+                          event.target as HTMLElement
+                        ).closest<HTMLLIElement>("li[data-sheet-index]");
+                        const fromIndex = dragIndex.current;
+                        const fromGroup = dragGroup.current;
+                        dragIndex.current = null;
+                        dragGroup.current = null;
+                        if (li?.dataset.sheetIndex === undefined) return;
+                        if (fromIndex === null) return;
+                        // 跨组禁拖：源/目标分组不同则忽略。
+                        if (li.dataset.sheetGroup !== fromGroup) return;
+                        const toIndex = Number(li.dataset.sheetIndex);
+                        if (fromIndex === toIndex) return;
+                        const source = sheetMeta[fromIndex];
+                        if (source !== undefined) {
+                          moveSheetTo(source.sheetId, toIndex);
+                        }
+                      }}
+                      items={sidebarMenuItems}
+                    />
+                  </div>
+                  <div className="sheet-sidebar__footer">
+                    {t(
+                      host?.platform === "electron"
+                        ? "sidebar.footerClient"
+                        : host?.platform === "vscode"
+                          ? "sidebar.footerExtension"
+                          : host?.platform === "android"
+                            ? "sidebar.footerAndroid"
+                            : "sidebar.footerBrowser",
+                      { version: host?.appVersion ?? "" },
+                    )}
+                  </div>
+                </Splitter.Panel>
+              )}
+              <Splitter.Panel>
+                <div className="mamep-body">
+                  {/* 浏览器兼容性提示（PRD §8.3 / §15.7）：不支持 Web Serial / 非安全上下文时展示 */}
+                  {compatibilityBannerMounted && (
+                    <Suspense fallback={null}>
+                      <BrowserCompatibilityBanner
+                        compatibility={host?.browserCompatibility ?? null}
+                        isMock={host?.isMockMode ?? false}
+                      />
+                    </Suspense>
+                  )}
+                  {/* 工作区恢复提示：从备份恢复 / 恢复失败重建为空时展示 */}
+                  {recoveryBannerMounted && (
+                    <Suspense fallback={null}>
+                      <RecoveryBanner recovery={workspaceRecovery} />
+                    </Suspense>
+                  )}
+                  <Splitter
+                    orientation="vertical"
+                    style={{ flex: 1, minHeight: 0 }}
+                    classNames={{ dragger: "bottom-panel__resize" }}
+                    onResize={(sizes) => {
+                      const panelSize = sizes[1];
+                      if (panelSize !== undefined) {
+                        setDragPanelHeight(Math.round(panelSize));
+                      }
+                    }}
+                    onResizeEnd={(sizes) => {
+                      const panelSize = sizes[1];
+                      if (panelSize !== undefined) {
+                        setPanelLayout({
+                          bottomPanelHeight: Math.round(panelSize),
+                        });
+                        setDragPanelHeight(null);
+                      }
+                    }}
+                  >
+                    <Splitter.Panel>
+                      <div className="register-table-wrap">
+                        {currentSheet !== undefined && workspaceContentReady ? (
+                          <Tabs
+                            type="editable-card"
+                            size="small"
+                            className="register-table-tabs"
+                            hideAdd
+                            activeKey={currentSheet.sheetId}
+                            onChange={(key) => setActiveSheetId(key as SheetId)}
+                            onEdit={(targetKey) => {
+                              // 页签「×」= 非破坏性关闭（表仍保留在侧边栏，可从侧边栏重新打开）。
+                              // hideAdd 后不存在 add 动作，此处仅处理 remove。
+                              if (typeof targetKey === "string") {
+                                closeSheet(targetKey as SheetId);
+                              }
+                            }}
+                            items={sheetMeta
+                              .map((sheet, index) => ({ sheet, index }))
+                              .filter(({ sheet }) => sheet.open)
+                              .map(({ sheet, index }) => ({
+                                key: sheet.sheetId,
+                                label: (
+                                  <Dropdown
+                                    trigger={["contextMenu"]}
+                                    menu={{
+                                      items: sheetMenu(
+                                        sheet.sheetId,
+                                        index,
+                                        "tab",
+                                      ),
+                                    }}
+                                  >
+                                    {tabRenamingSheetId === sheet.sheetId ? (
+                                      <SheetNameEditor
+                                        className="sheet-tab__input"
+                                        name={sheet.name}
+                                        autoFocus
+                                        onCommit={(name) => {
+                                          renameSheet(sheet.sheetId, name);
+                                          setTabRenamingSheetId(null);
+                                        }}
+                                        onCancel={() =>
+                                          setTabRenamingSheetId(null)
+                                        }
+                                      />
+                                    ) : (
+                                      <span
+                                        className="sheet-tab__label"
+                                        onDoubleClick={() =>
+                                          startTabRename(sheet.sheetId)
+                                        }
+                                      >
+                                        {sheet.name}
+                                      </span>
+                                    )}
+                                  </Dropdown>
+                                ),
+                                children: (
+                                  <>
+                                    {registerTableContentReady ? (
+                                      <Suspense
+                                        fallback={
+                                          <div
+                                            className="register-table-startup"
+                                            role="status"
+                                            aria-label={t("app.loading")}
+                                          >
+                                            <Typography.Text type="secondary">
+                                              {t("app.loading")}
+                                            </Typography.Text>
+                                          </div>
+                                        }
+                                      >
+                                        <RegisterTable
+                                          sheetId={sheet.sheetId}
+                                          deferBody={deferStartupContent}
+                                        />
+                                      </Suspense>
+                                    ) : (
+                                      <div
+                                        className="register-table-startup"
+                                        role="status"
+                                        aria-label={t("app.loading")}
+                                      >
+                                        <Typography.Text type="secondary">
+                                          {t("app.loading")}
+                                        </Typography.Text>
+                                      </div>
+                                    )}
+                                  </>
+                                ),
+                              }))}
+                          />
+                        ) : currentSheet === undefined ? (
+                          <div className="register-table-empty">
+                            <Empty
+                              image={Empty.PRESENTED_IMAGE_SIMPLE}
+                              description={t("table.noOpenSheets")}
+                            >
+                              <Typography.Text type="secondary">
+                                {t("table.noOpenSheetsHint")}
+                              </Typography.Text>
+                            </Empty>
+                          </div>
+                        ) : (
+                          <div
+                            className="register-table-startup"
+                            role="status"
+                            aria-label={t("app.loading")}
                           >
                             <Typography.Text type="secondary">
-                              {t("table.noOpenSheetsHint")}
+                              {t("app.loading")}
                             </Typography.Text>
-                          </Empty>
-                        </div>
-                      )}
-                    </div>
-                  </Splitter.Panel>
-                  {!isMobileLayout && (
-                    <Splitter.Panel
-                      size={
-                        bottomPanelCollapsed
-                          ? COLLAPSED_BOTTOM_PANEL_HEIGHT
-                          : (dragPanelHeight ?? bottomPanelHeight)
-                      }
-                      resizable={!bottomPanelCollapsed}
-                      {...(bottomPanelCollapsed
-                        ? {}
-                        : { min: 120, max: "60%" })}
-                    >
-                      <BottomPanel />
+                          </div>
+                        )}
+                      </div>
                     </Splitter.Panel>
-                  )}
-                </Splitter>
-              </div>
-            </Splitter.Panel>
-          </Splitter>
+                    {!isMobileLayout && (
+                      <Splitter.Panel
+                        size={
+                          bottomPanelCollapsed
+                            ? COLLAPSED_BOTTOM_PANEL_HEIGHT
+                            : (dragPanelHeight ?? bottomPanelHeight)
+                        }
+                        resizable={!bottomPanelCollapsed}
+                        {...(bottomPanelCollapsed
+                          ? {}
+                          : { min: 120, max: "60%" })}
+                      >
+                        {bottomPanelReady && (
+                          <Suspense fallback={null}>
+                            <BottomPanel />
+                          </Suspense>
+                        )}
+                      </Splitter.Panel>
+                    )}
+                  </Splitter>
+                </div>
+              </Splitter.Panel>
+            </Splitter>
+          ) : (
+            <div
+              className="register-table-startup"
+              role="status"
+              aria-label={t("app.loading")}
+            >
+              <Typography.Text type="secondary">
+                {t("app.loading")}
+              </Typography.Text>
+            </div>
+          )}
         </Layout>
 
         {connectionModalMounted && (
@@ -1226,64 +1402,72 @@ export function MamepApp(): React.ReactNode {
 
         {/* 移动端抽屉：侧栏表列表 + 底部面板。
             开合为会话内状态（不入持久化）；返回键优先关它们（overlay-close 栈）。 */}
-        <Drawer
-          placement="left"
-          open={isMobileLayout && mobileSidebarOpen}
-          onClose={() => setMobileSidebarOpen(false)}
-          size={280}
-          className="mamep-mobile-drawer mamep-mobile-drawer--sidebar"
-          styles={{ body: { padding: 0 } }}
-        >
-          <div className="sheet-sidebar sheet-sidebar--drawer">
-            <div className="sheet-sidebar__section">
-              <span className="sheet-sidebar__section-title">
-                {t("sidebar.registerTables")}
-              </span>
+        {mobileSidebarMounted && (
+          <Drawer
+            placement="left"
+            open={isMobileLayout && mobileSidebarOpen}
+            onClose={() => setMobileSidebarOpen(false)}
+            size={280}
+            className="mamep-mobile-drawer mamep-mobile-drawer--sidebar"
+            styles={{ body: { padding: 0 } }}
+          >
+            <div className="sheet-sidebar sheet-sidebar--drawer">
+              <div className="sheet-sidebar__section">
+                <span className="sheet-sidebar__section-title">
+                  {t("sidebar.registerTables")}
+                </span>
+              </div>
+              <div className="sheet-sidebar__groups">
+                <Menu
+                  className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
+                  mode="inline"
+                  selectable
+                  selectedKeys={
+                    currentSheet !== undefined ? [currentSheet.sheetId] : []
+                  }
+                  openKeys={sheetGroupOpenKeys}
+                  onOpenChange={handleGroupOpenChange}
+                  onClick={({ key, domEvent }) => {
+                    const target = domEvent.target as HTMLElement;
+                    if (target.closest(".ant-dropdown") !== null) return;
+                    openSheet(key as SheetId);
+                    // 选中表后自动收起抽屉（移动端没有常驻侧栏，避免遮挡表格）。
+                    setMobileSidebarOpen(false);
+                  }}
+                  items={sidebarMenuItems}
+                />
+              </div>
+              <div className="sheet-sidebar__footer">
+                {t(
+                  host?.platform === "electron"
+                    ? "sidebar.footerClient"
+                    : host?.platform === "vscode"
+                      ? "sidebar.footerExtension"
+                      : host?.platform === "android"
+                        ? "sidebar.footerAndroid"
+                        : "sidebar.footerBrowser",
+                  { version: host?.appVersion ?? "" },
+                )}
+              </div>
             </div>
-            <div className="sheet-sidebar__groups">
-              <Menu
-                className="sheet-sidebar__list sheet-sidebar__menu sheet-sidebar__sidebar-menu"
-                mode="inline"
-                selectable
-                selectedKeys={
-                  currentSheet !== undefined ? [currentSheet.sheetId] : []
-                }
-                openKeys={sheetGroupOpenKeys}
-                onOpenChange={handleGroupOpenChange}
-                onClick={({ key, domEvent }) => {
-                  const target = domEvent.target as HTMLElement;
-                  if (target.closest(".ant-dropdown") !== null) return;
-                  openSheet(key as SheetId);
-                  // 选中表后自动收起抽屉（移动端没有常驻侧栏，避免遮挡表格）。
-                  setMobileSidebarOpen(false);
-                }}
-                items={sidebarMenuItems}
-              />
-            </div>
-            <div className="sheet-sidebar__footer">
-              {t(
-                host?.platform === "electron"
-                  ? "sidebar.footerClient"
-                  : host?.platform === "vscode"
-                    ? "sidebar.footerExtension"
-                    : host?.platform === "android"
-                      ? "sidebar.footerAndroid"
-                      : "sidebar.footerBrowser",
-                { version: host?.appVersion ?? "" },
-              )}
-            </div>
-          </div>
-        </Drawer>
-        <Drawer
-          placement="bottom"
-          open={isMobileLayout && mobilePanelOpen}
-          onClose={() => setMobilePanelOpen(false)}
-          size="60vh"
-          className="mamep-mobile-drawer mamep-mobile-drawer--panel"
-          styles={{ body: { padding: 0 } }}
-        >
-          <BottomPanel variant="drawer" />
-        </Drawer>
+          </Drawer>
+        )}
+        {mobilePanelMounted && (
+          <Drawer
+            placement="bottom"
+            open={isMobileLayout && mobilePanelOpen}
+            onClose={() => setMobilePanelOpen(false)}
+            size="60vh"
+            className="mamep-mobile-drawer mamep-mobile-drawer--panel"
+            styles={{ body: { padding: 0 } }}
+          >
+            {bottomPanelReady && (
+              <Suspense fallback={null}>
+                <BottomPanel variant="drawer" />
+              </Suspense>
+            )}
+          </Drawer>
+        )}
         {traceWindowKeys.map((rowId) => (
           <Suspense key={rowId} fallback={null}>
             <TraceWindow rowId={rowId as RowId} />
@@ -1296,43 +1480,51 @@ export function MamepApp(): React.ReactNode {
           </Suspense>
         )}
 
-        <Modal
-          title={t("table.deleteConfirmTitle")}
-          open={pendingDeleteSheetId !== null}
-          onCancel={() => setPendingDeleteSheetId(null)}
-          onOk={confirmDeleteSheet}
-          okText={t("table.deleteOk")}
-          okButtonProps={{ danger: true }}
-        >
-          <Typography.Text>
-            {t("table.deleteConfirmContent", {
-              name:
-                sheetMeta.find(
-                  (sheet) => sheet.sheetId === pendingDeleteSheetId,
-                )?.name ?? "",
-            })}
-          </Typography.Text>
-        </Modal>
+        {deleteConfirmMounted && (
+          <Modal
+            title={t("table.deleteConfirmTitle")}
+            open={pendingDeleteSheetId !== null}
+            onCancel={() => setPendingDeleteSheetId(null)}
+            onOk={confirmDeleteSheet}
+            okText={t("table.deleteOk")}
+            okButtonProps={{ danger: true }}
+          >
+            <Typography.Text>
+              {t("table.deleteConfirmContent", {
+                name:
+                  sheetMeta.find(
+                    (sheet) => sheet.sheetId === pendingDeleteSheetId,
+                  )?.name ?? "",
+              })}
+            </Typography.Text>
+          </Modal>
+        )}
 
-        <Modal
-          title={
-            pendingBulkClose?.kind === "right"
-              ? t("table.closeToRightConfirmTitle")
-              : t("table.closeOthersConfirmTitle")
-          }
-          open={pendingBulkClose !== null}
-          onCancel={() => setPendingBulkClose(null)}
-          onOk={confirmBulkClose}
-          okText={t("table.deleteOk")}
-          okButtonProps={{ danger: true }}
-          cancelText={t("connection.cancel")}
-        >
-          <Typography.Text>
-            {pendingBulkClose?.kind === "right"
-              ? t("table.closeToRightConfirmContent", { count: bulkCloseCount })
-              : t("table.closeOthersConfirmContent", { count: bulkCloseCount })}
-          </Typography.Text>
-        </Modal>
+        {bulkCloseMounted && (
+          <Modal
+            title={
+              pendingBulkClose?.kind === "right"
+                ? t("table.closeToRightConfirmTitle")
+                : t("table.closeOthersConfirmTitle")
+            }
+            open={pendingBulkClose !== null}
+            onCancel={() => setPendingBulkClose(null)}
+            onOk={confirmBulkClose}
+            okText={t("table.deleteOk")}
+            okButtonProps={{ danger: true }}
+            cancelText={t("connection.cancel")}
+          >
+            <Typography.Text>
+              {pendingBulkClose?.kind === "right"
+                ? t("table.closeToRightConfirmContent", {
+                    count: bulkCloseCount,
+                  })
+                : t("table.closeOthersConfirmContent", {
+                    count: bulkCloseCount,
+                  })}
+            </Typography.Text>
+          </Modal>
+        )}
 
         {helpMounted && (
           <Suspense fallback={null}>

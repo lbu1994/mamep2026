@@ -59,6 +59,7 @@ async function openApp(page: Page): Promise<string[]> {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
   return errors;
 }
 
@@ -89,9 +90,19 @@ async function columnHeaders(page: Page): Promise<string[]> {
 }
 
 async function columnWidth(page: Page, label: string): Promise<number> {
-  return headerCell(page, label).evaluate(
-    (el) => (el as HTMLElement).offsetWidth,
-  );
+  let width = 0;
+  await expect
+    .poll(
+      async () => {
+        width = await headerCell(page, label).evaluate(
+          (el) => (el as HTMLElement).offsetWidth,
+        );
+        return width;
+      },
+      { timeout: 3000 },
+    )
+    .toBeGreaterThan(0);
+  return width;
 }
 
 /** 把 from 列表头拖到 to 列表头中心（dnd-kit PointerSensor distance:1）。 */
@@ -153,10 +164,10 @@ async function dragHeaderHandle(
 async function firstRowCellLabels(page: Page): Promise<string[]> {
   return page
     .locator(
-      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr.ant-table-row",
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
     )
     .first()
-    .locator("td")
+    .locator(".ant-table-cell")
     .evaluateAll((tds) =>
       tds.map((td) => {
         const labeled = td.querySelector("[aria-label]");
@@ -241,6 +252,7 @@ test("restore persists across a page reload", async ({ page }) => {
   await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
     timeout: 15000,
   });
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
   // 刷新后保持默认布局（恢复结果已持久化，不回自定义），按钮保持禁用。
   expect(await columnHeaders(page)).toEqual(DEFAULT_ORDER);
   const width = await columnWidth(page, "Name");
@@ -288,7 +300,8 @@ test("restore only affects the current sheet (不共享)", async ({ page }) => {
   ).toContainText("Name");
   const order2 = await columnHeaders(page);
   expect(order2.indexOf("Data")).toBeGreaterThan(order2.indexOf("Write"));
-  const typeWidth = await columnWidth(page, "Type");
-  expect(typeWidth).toBeGreaterThanOrEqual(105);
-  expect(typeWidth).toBeLessThanOrEqual(120);
+  await expect
+    .poll(async () => columnWidth(page, "Type"), { timeout: 3000 })
+    .toBeGreaterThanOrEqual(105);
+  expect(await columnWidth(page, "Type")).toBeLessThanOrEqual(120);
 });

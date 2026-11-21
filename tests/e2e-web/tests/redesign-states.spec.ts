@@ -20,7 +20,14 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const row = page.locator(".ant-table-tbody tr[data-row-key]").last();
+  await page
+    .locator(
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody-virtual-holder",
+    )
+    .evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+  const row = page.locator(".ant-table-tbody [data-row-key]").last();
   const readBtn = row.getByRole("button", { name: "Read", exact: true });
   const writeBtn = row.getByRole("button", { name: "Write", exact: true });
   await expect(readBtn).toBeDisabled();
@@ -29,7 +36,7 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
   await expect(row.getByLabel("WP")).toBeDisabled();
 
   // 禁用控件提供说明 Tooltip（悬停 Read 所在单元格）。
-  const readCell = row.locator("td").filter({ hasText: "Read" });
+  const readCell = row.locator(".ant-table-cell").filter({ hasText: "Read" });
   await readCell.hover();
   await expect(
     page.getByText(

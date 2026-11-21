@@ -112,6 +112,42 @@ async function closeBottomPanel(frame: Frame): Promise<void> {
   await expect(frame.locator(".bottom-panel--drawer")).toBeHidden({
     timeout: 10_000,
   });
+  // 抽屉关闭会改变寄存器表可视高度，虚拟列表可能跨多帧重算挂载行；
+  // 等到表格滚动容器高度连续 3 帧稳定后再点击单元格，避免编辑态刚建立就被行重挂载清除。
+  await frame.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const holder = document.querySelector<HTMLElement>(
+          ".register-table-tabs .ant-tabs-content-active .ant-table-tbody-virtual-holder",
+        );
+        let previous = -1;
+        let stableFrames = 0;
+        let frames = 0;
+        const tick = (): void => {
+          const height =
+            holder?.getBoundingClientRect().height ??
+            document
+              .querySelector<HTMLElement>(
+                ".register-table-tabs .ant-tabs-content-active",
+              )
+              ?.getBoundingClientRect().height ??
+            0;
+          if (height > 0 && Math.abs(height - previous) < 0.5) {
+            stableFrames += 1;
+          } else {
+            stableFrames = 0;
+          }
+          previous = height;
+          frames += 1;
+          if (stableFrames >= 3 || frames >= 30) {
+            resolve();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
 }
 
 /** 展开底部面板（移动布局）并切到通信日志页签；桌面布局等价于点页签。 */
@@ -162,44 +198,69 @@ async function fillNumber(
 
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
-  const cell = frame.getByLabel("Address", { exact: true }).first();
-  await cell.click();
-  // 等待进入编辑态（click 触发 React 重渲染渲染出 input；高负载下可能延迟）。
-  const input = frame.getByLabel("Address", { exact: true }).first();
-  await expect(input).toBeEditable({ timeout: 5000 });
-  // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
-  // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
-  // 短路）。使用 fill("")+pressSequentially 逐字符输入（真实键盘事件，onChange 必然触发），
-  // toHaveValue 确认受控值同步后再 Enter。
-  await input.fill("");
-  await input.pressSequentially(addressHex, { delay: 10 });
-  await expect(input).toHaveValue(addressHex);
-  await input.press("Enter");
+  const table = frame.locator(".register-table-tabs .ant-tabs-content-active");
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const cell = table.getByLabel("Address", { exact: true }).first();
+      await cell.click();
+      const input = frame.locator('input[aria-label="Address"]').first();
+      await expect(input).toBeEditable({ timeout: 5000 });
+      await input.fill("");
+      await input.pressSequentially(addressHex, { delay: 10 });
+      await expect(input).toHaveValue(addressHex);
+      await input.press("Enter");
+      await expect(frame.locator('input[aria-label="Address"]')).toHaveCount(0);
+      await expect(
+        table.getByLabel("Address", { exact: true }).first(),
+      ).toHaveAttribute("data-committed-value", addressHex);
+      return;
+    } catch (error) {
+      lastError = error;
+      // 抽屉关闭后的 ResizeObserver 可能再次重挂载虚拟行，导致编辑节点脱离 DOM。
+      await frame.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+    }
+  }
+  throw lastError;
 }
 
 /** 首行点击 Read。 */
 async function readRow(frame: Frame): Promise<void> {
-  await frame
+  const button = frame
+    .locator(".register-table-tabs .ant-tabs-content-active")
     .getByRole("button", { name: "Read", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  await expect(button).toBeEnabled({ timeout: 5000 });
+  await button.click();
 }
 
 /** 首行填 Data（HEX）并点击 Write。 */
 async function writeRow(frame: Frame, valueHex: string): Promise<void> {
-  const cell = frame.getByLabel("Data").first();
+  const table = frame.locator(".register-table-tabs .ant-tabs-content-active");
+  const cell = table.getByLabel("Data").first();
   await cell.click();
   // 同 setRowAddress：等待编辑态 + pressSequentially 逐字符输入 + toHaveValue 同步。
-  const data = frame.getByLabel("Data").first();
+  const data = frame.locator('input[aria-label="Data"]').first();
   await expect(data).toBeEditable({ timeout: 5000 });
   await data.fill("");
   await data.pressSequentially(valueHex, { delay: 10 });
   await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
-  await frame
+  await expect(frame.locator('input[aria-label="Data"]')).toHaveCount(0);
+  await expect(table.getByLabel("Data").first()).toHaveAttribute(
+    "data-committed-value",
+    valueHex,
+  );
+  const writeButton = table
     .getByRole("button", { name: "Write", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  await expect(writeButton).toBeEnabled({ timeout: 5000 });
+  await writeButton.click();
 }
 
 /** 显式切换当前表的写后回读配置。 */
@@ -214,12 +275,17 @@ async function setWriteVerify(frame: Frame, optionText: string): Promise<void> {
     await expect(morePanel).toBeVisible({ timeout: 5000 });
   }
   const verify = frame.locator(".table-toolbar__verify");
-  await verify.getByLabel("Write verification").click();
-  await frame
-    .locator(".ant-select-dropdown:visible .ant-select-item-option")
-    .filter({ hasText: new RegExp(`^${optionText}$`) })
-    .first()
-    .click();
+  const control = verify.getByLabel("Write verification");
+  if ((await control.evaluate((el) => el.tagName)) === "SELECT") {
+    await control.selectOption({ label: optionText });
+  } else {
+    await control.click();
+    await frame
+      .locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: new RegExp(`^${optionText}$`) })
+      .first()
+      .click();
+  }
   await expect(verify).toContainText(optionText, { timeout: 5000 });
   if (mobile) {
     await moreButton.click();

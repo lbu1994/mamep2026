@@ -64,7 +64,7 @@ async function addBasicSheet(page: Page, groupTitle: string): Promise<void> {
 function parentRow(page: Page, index: number) {
   return page
     .locator(
-      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody tr[data-row-key]",
+      ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
     )
     .nth(index);
 }

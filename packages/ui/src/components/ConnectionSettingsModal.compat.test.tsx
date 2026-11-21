@@ -5,7 +5,7 @@
  * - 非安全上下文：额外提示 Web Serial 需要安全上下文。
  */
 import { describe, expect, it, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { createEmptyWorkspace } from "@mamep2026/domain";
 import { initI18n } from "../i18n";
@@ -37,11 +37,13 @@ const BROWSER_CAPS = {
 };
 
 beforeEach(() => {
+  cleanup();
   initI18n();
   useAppStore.setState({
     host: null,
     workspace: createEmptyWorkspace(),
     connectionModalOpen: false,
+    pluginsReady: true,
   });
 });
 

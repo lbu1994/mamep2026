@@ -151,44 +151,68 @@ async function setRadixHex(frame: Frame): Promise<void> {
 
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
-  const cell = frame.getByLabel("Address", { exact: true }).first();
-  await cell.click();
-  // 等待进入编辑态（click 触发 React 重渲染渲染出 input；高负载下可能延迟）。
-  const input = frame.getByLabel("Address", { exact: true }).first();
-  await expect(input).toBeEditable({ timeout: 5000 });
-  // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
-  // （draftRef 未同步但 DOM value 已变，toHaveValue 假通过，Enter 提交读到旧 draft 而
-  // 短路）。使用 fill("")+pressSequentially 逐字符输入（真实键盘事件，onChange 必然触发），
-  // toHaveValue 确认受控值同步后再 Enter。
-  await input.fill("");
-  await input.pressSequentially(addressHex, { delay: 10 });
-  await expect(input).toHaveValue(addressHex);
-  await input.press("Enter");
+  const table = frame.locator(".register-table-tabs .ant-tabs-content-active");
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const cell = table.getByLabel("Address", { exact: true }).first();
+      await cell.click();
+      const input = frame.locator('input[aria-label="Address"]').first();
+      await expect(input).toBeEditable({ timeout: 5000 });
+      await input.fill("");
+      await input.pressSequentially(addressHex, { delay: 10 });
+      await expect(input).toHaveValue(addressHex);
+      await input.press("Enter");
+      await expect(frame.locator('input[aria-label="Address"]')).toHaveCount(0);
+      await expect(
+        table.getByLabel("Address", { exact: true }).first(),
+      ).toHaveAttribute("data-committed-value", addressHex);
+      return;
+    } catch (error) {
+      lastError = error;
+      await frame.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+    }
+  }
+  throw lastError;
 }
 
 /** 首行点击 Read。 */
 async function readRow(frame: Frame): Promise<void> {
-  await frame
+  const button = frame
+    .locator(".register-table-tabs .ant-tabs-content-active")
     .getByRole("button", { name: "Read", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  await expect(button).toBeEnabled({ timeout: 5000 });
+  await button.click();
 }
 
 /** 首行填 Data（HEX）并点击 Write。 */
 async function writeRow(frame: Frame, valueHex: string): Promise<void> {
-  const cell = frame.getByLabel("Data").first();
+  const table = frame.locator(".register-table-tabs .ant-tabs-content-active");
+  const cell = table.getByLabel("Data").first();
   await cell.click();
   // 同 setRowAddress：等待编辑态 + pressSequentially 逐字符输入 + toHaveValue 同步。
-  const data = frame.getByLabel("Data").first();
+  const data = frame.locator('input[aria-label="Data"]').first();
   await expect(data).toBeEditable({ timeout: 5000 });
   await data.fill("");
   await data.pressSequentially(valueHex, { delay: 10 });
   await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
-  await frame
+  await expect(frame.locator('input[aria-label="Data"]')).toHaveCount(0);
+  await expect(table.getByLabel("Data").first()).toHaveAttribute(
+    "data-committed-value",
+    valueHex,
+  );
+  const writeButton = table
     .getByRole("button", { name: "Write", exact: true })
-    .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .first();
+  await expect(writeButton).toBeEnabled({ timeout: 5000 });
+  await writeButton.click();
 }
 
 /** 显式切换当前表的写后回读配置。 */
@@ -203,12 +227,17 @@ async function setWriteVerify(frame: Frame, optionText: string): Promise<void> {
     await expect(morePanel).toBeVisible({ timeout: 5000 });
   }
   const verify = frame.locator(".table-toolbar__verify");
-  await verify.getByLabel("Write verification").click();
-  await frame
-    .locator(".ant-select-dropdown:visible .ant-select-item-option")
-    .filter({ hasText: new RegExp(`^${optionText}$`) })
-    .first()
-    .click();
+  const control = verify.getByLabel("Write verification");
+  if ((await control.evaluate((el) => el.tagName)) === "SELECT") {
+    await control.selectOption({ label: optionText });
+  } else {
+    await control.click();
+    await frame
+      .locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: new RegExp(`^${optionText}$`) })
+      .first()
+      .click();
+  }
   await expect(verify).toContainText(optionText, { timeout: 5000 });
   if (mobile) {
     await moreButton.click();
@@ -432,6 +461,9 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
   await test.step("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", async () => {
     await setRowAddress(frame, "0700");
     await readRow(frame);
+    // 前一阶段可能已经留下错误点；从本次点击起完整覆盖两帧迟到响应窗口，
+    // 再确认本次超时并发出后续正常读，避免把旧错误状态当成新请求已经结束。
+    await frame.waitForTimeout(3000);
     await expect(
       frame.locator(".register-table__status-dot--error").first(),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
@@ -441,7 +473,6 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     // （attempt1/attempt2）均在 ~100ms 内超时，两帧迟到响应各在其请求
     // 后 ~2500ms 到达（~2500 / ~2550ms）。等两帧迟到响应都在无活动请求时（pendingExchange
     // 为空）到达并被丢弃，再读回正常区（默认超时改 50ms，等待 3000ms 覆盖）。
-    await frame.waitForTimeout(3000);
     await setRowAddress(frame, "0000");
     await readRow(frame);
     await expect(frame.getByLabel("Data").first()).toHaveText("04D2", {
