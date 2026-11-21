@@ -47,6 +47,22 @@ test("runLogged 输出日志、写入 summary 并返回退出码", async () => {
   }
 });
 
+test("runLogged 将本次 run 目录传给子测试", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "test-report-"));
+  try {
+    const code = await runLogged({
+      command:
+        "node -e \"process.stdout.write(process.env.MAMEP_TEST_REPORT_DIR ?? 'missing')\"",
+      name: "env",
+      logDir: dir,
+    });
+    assert.equal(code, 0);
+    assert.equal(readFileSync(path.join(dir, "env.log"), "utf8"), dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("runLogged 对失败命令返回非零退出码", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "test-report-"));
   try {

@@ -13,6 +13,8 @@
   "devDependencies": {
     "@mamep2026/typescript-config": "workspace:*",
     "@playwright/test": "catalog:",
+    "chrome-launcher": "^1.2.3",
+    "lighthouse": "13.6.0",
     "typescript": "catalog:"
   }
 }

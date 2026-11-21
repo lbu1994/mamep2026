@@ -84,7 +84,9 @@ export function runLogged({ command, name, logDir, env = {} }) {
 
     const child = spawn(command, {
       shell: true,
-      env: { ...process.env, ...env },
+      // 子测试与 Playwright reporter 写入同一个 run 目录，避免日志和 JSON
+      // 基线分散到不同位置；调用方显式 env 仍可覆盖。
+      env: { ...process.env, MAMEP_TEST_REPORT_DIR: logDir, ...env },
       stdio: ["ignore", "pipe", "pipe"],
     });
 

@@ -4,5 +4,10 @@
     "lib": ["es2023", "dom", "dom.iterable"],
     "types": ["node"]
   },
-  "include": ["playwright.config.ts", "tests"]
+  "include": [
+    "playwright.config.ts",
+    "playwright.production-perf.config.ts",
+    "tests",
+    "production-perf"
+  ]
 }

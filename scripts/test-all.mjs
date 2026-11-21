@@ -22,6 +22,7 @@ const STEPS = [
   "test",
   "test:acceptance",
   "test:e2e:web",
+  "test:perf:production",
   "test:e2e:electron",
   "test:e2e:vscode",
   "test:serial:virtual",

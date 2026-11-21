@@ -1,18 +1,14 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "../tests/fixtures";
+import { WEB_PERF_BUDGETS } from "./budgets";
+import {
+  finishPerformanceReport,
+  maxBudgetCheck,
+  median,
+  type BudgetCheck,
+} from "./performance-report";
 
 const ROW_COUNT = 1000;
-const HOT_RESTORE_BUDGET_MS = 300;
-const IMPORT_RENDER_BUDGET_MS = 300;
-const SCROLL_JUMP_BUDGET_MS = 100;
-const SCROLL_LONG_TASK_BUDGET_MS = 50;
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  const value = sorted[middle];
-  if (value === undefined) throw new Error("median requires samples");
-  return value;
-}
 
 interface StoredRow {
   rowId: string;
@@ -40,6 +36,17 @@ interface StoredWorkspace {
 
 interface ProductionPerfState {
   longTasks: Array<{ startTime: number; duration: number }>;
+  interactionEvents: Array<{
+    name: string;
+    startTime: number;
+    duration: number;
+  }>;
+}
+
+interface FirstScreenSample {
+  requestCount: number;
+  transferBytes: number;
+  maxChunkBytes: number;
 }
 
 declare global {
@@ -83,7 +90,7 @@ async function writeWorkspace(
   workspace: StoredWorkspace,
 ): Promise<void> {
   await page.evaluate(
-    (next) =>
+    (next: StoredWorkspace) =>
       new Promise<void>((resolve, reject) => {
         const open = indexedDB.open("mamep2026", 1);
         open.onupgradeneeded = () => open.result.createObjectStore("kv");
@@ -150,9 +157,41 @@ async function seedWorkspace(page: Page): Promise<StoredWorkspace> {
   return workspace;
 }
 
-test("1000 行恢复、导入与滚动达到生产性能预算", async ({ page }) => {
+async function settleFrames(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+}
+
+async function interactionMark(page: Page): Promise<number> {
+  return page.evaluate(() => performance.now());
+}
+
+async function eventDurationsSince(
+  page: Page,
+  startTime: number,
+): Promise<number[]> {
+  await settleFrames(page);
+  return page.evaluate(
+    (start: number) =>
+      window.__mamepProductionPerf.interactionEvents
+        .filter((entry) => entry.startTime >= start)
+        .map((entry) => entry.duration),
+    startTime,
+  );
+}
+
+test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async ({
+  page,
+}, testInfo) => {
   await page.addInitScript(() => {
-    const state: ProductionPerfState = { longTasks: [] };
+    const state: ProductionPerfState = {
+      longTasks: [],
+      interactionEvents: [],
+    };
     window.__mamepProductionPerf = state;
     try {
       new PerformanceObserver((list) => {
@@ -166,6 +205,24 @@ test("1000 行恢复、导入与滚动达到生产性能预算", async ({ page }
     } catch {
       // 浏览器不支持 longtask 时保留其余性能断言。
     }
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (entry.entryType !== "event") continue;
+          state.interactionEvents.push({
+            name: entry.name,
+            startTime: entry.startTime,
+            duration: entry.duration,
+          });
+        }
+      }).observe({
+        type: "event",
+        buffered: true,
+        durationThreshold: 16,
+      } as PerformanceObserverInit & { durationThreshold: number });
+    } catch {
+      // 后续 Event Timing 断言会失败，不能用 0ms 伪造支持。
+    }
   });
 
   const workspace = await seedWorkspace(page);
@@ -173,6 +230,50 @@ test("1000 行恢复、导入与滚动达到生产性能预算", async ({ page }
   const pageInteractiveSamples: number[] = [];
   const workspaceRestoreLongTaskSamples: number[] = [];
   const startupLongTaskSamples: number[] = [];
+  const cacheCdp = await page.context().newCDPSession(page);
+  let firstScreenSample: FirstScreenSample | undefined;
+  try {
+    await cacheCdp.send("Network.enable");
+    await cacheCdp.send("Network.clearBrowserCache");
+    await cacheCdp.send("Network.setCacheDisabled", { cacheDisabled: true });
+    await page.reload();
+    await expect(page.locator('[data-row-key="perf--0001"]')).toBeVisible({
+      timeout: 15_000,
+    });
+    firstScreenSample = await page.evaluate(() => {
+      const interactive = performance.getEntriesByName(
+        "mamep:startup:interactive",
+        "mark",
+      )[0];
+      if (interactive === undefined) throw new Error("startup mark missing");
+      const resources = performance
+        .getEntriesByType("resource")
+        .filter(
+          (entry): entry is PerformanceResourceTiming =>
+            entry.startTime <= interactive.startTime,
+        );
+      const scripts = resources.filter(
+        (entry) => entry.initiatorType === "script",
+      );
+      return {
+        requestCount: resources.length,
+        transferBytes: resources.reduce(
+          (total, entry) => total + entry.transferSize,
+          0,
+        ),
+        maxChunkBytes: Math.max(
+          0,
+          ...scripts.map((entry) => entry.transferSize),
+        ),
+      };
+    });
+  } finally {
+    await cacheCdp.send("Network.setCacheDisabled", { cacheDisabled: false });
+    await cacheCdp.detach();
+  }
+  if (firstScreenSample === undefined) {
+    throw new Error("cold first-screen sample was not collected");
+  }
   // 热恢复取 5 次中位数，吸收单次系统调度抖动；同一次测试仍记录全部样本。
   for (let run = 0; run < 5; run += 1) {
     await page.reload();
@@ -253,10 +354,6 @@ test("1000 行恢复、导入与滚动达到生产性能预算", async ({ page }
       pageInteractiveMedian: pageInteractiveMs,
     })}`,
   );
-  expect(hotRestoreMs).toBeLessThanOrEqual(HOT_RESTORE_BUDGET_MS);
-  expect(workspaceRestoreLongTaskMaxMs).toBeLessThanOrEqual(
-    SCROLL_LONG_TASK_BUDGET_MS,
-  );
   const startupLongTaskMaxMs = Math.max(...startupLongTaskSamples);
 
   const scrollMetrics = await page.evaluate(async () => {
@@ -285,24 +382,90 @@ test("1000 行恢复、导入与滚动达到生产性能预算", async ({ page }
       };
       requestAnimationFrame(tick);
     });
-    return performance.now() - started;
+    const scrollMs = performance.now() - started;
+    await new Promise<void>((resolve) => {
+      let previousCount = -1;
+      let quietFrames = 0;
+      const tick = (): void => {
+        if (state.longTasks.length === previousCount) {
+          quietFrames += 1;
+        } else {
+          previousCount = state.longTasks.length;
+          quietFrames = 0;
+        }
+        if (quietFrames >= 2) {
+          resolve();
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    return {
+      scrollMs,
+      longTaskMaxMs: Math.max(
+        0,
+        ...state.longTasks.map((entry) => entry.duration),
+      ),
+    };
   });
-  await page.waitForTimeout(480);
-  const scrollLongTaskMaxMs = await page.evaluate(() =>
-    Math.max(
-      0,
-      ...window.__mamepProductionPerf.longTasks.map((entry) => entry.duration),
-    ),
-  );
-  expect(scrollMetrics).toBeLessThanOrEqual(SCROLL_JUMP_BUDGET_MS);
-  expect(scrollLongTaskMaxMs).toBeLessThanOrEqual(SCROLL_LONG_TASK_BUDGET_MS);
 
-  await page.getByRole("button", { name: /Settings/ }).click();
+  const settingsStart = await interactionMark(page);
+  await page
+    .locator(".mamep-header")
+    .getByRole("button", { name: /Settings/ })
+    .click();
   const settings = page
     .locator(".ant-drawer")
     .filter({ hasText: "Import Workspace" });
+  await expect(settings.getByText("Reset Workspace")).toBeVisible();
+  const settingsWallMs =
+    (await page.evaluate(() => performance.now())) - settingsStart;
+  const settingsEventDurations = await eventDurationsSince(page, settingsStart);
+  const settingsEventMs = Math.max(0, ...settingsEventDurations);
+  await settings.locator(".ant-drawer-close").first().click();
+  await expect(settings.locator(".ant-drawer-content-wrapper")).toBeHidden();
+
+  const cellEditDurations: number[] = [];
+  const activeRow = page
+    .locator(".register-table-tabs .ant-tabs-content-active")
+    .locator('[data-row-key="perf--0001"]');
+  const activeHolder = page.locator(
+    ".register-table-tabs .ant-tabs-content-active .ant-table-tbody-virtual-holder",
+  );
+  await activeHolder.evaluate((element) => {
+    (element as HTMLElement).scrollTop = 0;
+  });
+  await expect(activeRow).toBeVisible();
+  for (const [index, value] of ["AAAA", "AAAB", "AAAC"].entries()) {
+    await activeRow.getByLabel("Data").click();
+    const input = activeRow.locator('input[aria-label="Data"]');
+    await input.fill(value);
+    await settleFrames(page);
+    const editStart = await interactionMark(page);
+    await page.keyboard.press("Enter");
+    await expect(activeRow.getByLabel("Data")).toHaveText(value);
+    const durations = await eventDurationsSince(page, editStart);
+    const eventDuration = Math.max(0, ...durations);
+    if (eventDuration === 0) {
+      throw new Error(`cell edit ${index + 1}: no Event Timing entry`);
+    }
+    cellEditDurations.push(eventDuration);
+  }
+
+  await page
+    .locator(".mamep-header")
+    .getByRole("button", { name: /Settings/ })
+    .click();
+  const importSettings = page
+    .locator(".ant-drawer")
+    .filter({ hasText: "Import Workspace" });
+  await expect(importSettings.getByText("Reset Workspace")).toBeVisible();
   const chooserPromise = page.waitForEvent("filechooser");
-  await settings.getByRole("button", { name: "Import Workspace" }).click();
+  const importParseStart = await interactionMark(page);
+  await importSettings
+    .getByRole("button", { name: "Import Workspace" })
+    .click();
   const chooser = await chooserPromise;
   const sheet = workspace.sheets[0];
   if (sheet === undefined || sheet.rows[0] === undefined) {
@@ -318,6 +481,11 @@ test("1000 行恢复、导入与滚动达到生产性能预算", async ({ page }
     .locator(".ant-modal-container")
     .filter({ hasText: "Format version" });
   await expect(preview).toBeVisible({ timeout: 10_000 });
+  const importParseEventDurations = await eventDurationsSince(
+    page,
+    importParseStart,
+  );
+  const importParseEventMs = Math.max(0, ...importParseEventDurations);
   const importRenderProbe = page.evaluate(
     () =>
       new Promise<number>((resolve, reject) => {
@@ -350,22 +518,156 @@ test("1000 行恢复、导入与滚动达到生产性能预算", async ({ page }
         );
       }),
   );
+  const importCommitStart = await interactionMark(page);
   await preview.getByRole("button", { name: "Import", exact: true }).click();
   const importRenderMs = await importRenderProbe;
-  expect(importRenderMs).toBeLessThanOrEqual(IMPORT_RENDER_BUDGET_MS);
+  const importCommitEventDurations = await eventDurationsSince(
+    page,
+    importCommitStart,
+  );
+  const importCommitEventMs = Math.max(0, ...importCommitEventDurations);
+  const cellEditMedianMs = median(cellEditDurations);
+  const firstScreen = {
+    requestCount: firstScreenSample.requestCount,
+    transferBytes: firstScreenSample.transferBytes,
+    maxChunkBytes: firstScreenSample.maxChunkBytes,
+  };
+  const interactionApproxInpMs = Math.max(
+    settingsEventMs,
+    cellEditMedianMs,
+    importParseEventMs,
+    importCommitEventMs,
+  );
   const metrics = {
     hotRestoreMs,
     pageInteractiveMs,
     hotRestoreSamples,
     workspaceRestoreLongTaskMaxMs,
     startupLongTaskMaxMs,
-    scrollJumpMs: scrollMetrics,
-    scrollLongTaskMaxMs,
-    importRenderMs,
+    firstScreen,
+    scrollJumpMs: scrollMetrics.scrollMs,
+    scrollLongTaskMaxMs: scrollMetrics.longTaskMaxMs,
+    settings: {
+      firstOpenWallMs: settingsWallMs,
+      eventTimingMs: settingsEventMs,
+      eventSampleCount: settingsEventDurations.length,
+    },
+    cellEdit: {
+      eventTimingSamplesMs: cellEditDurations,
+      eventTimingMedianMs: cellEditMedianMs,
+    },
+    import: {
+      parseEventTimingMs: importParseEventMs,
+      parseEventSampleCount: importParseEventDurations.length,
+      commitEventTimingMs: importCommitEventMs,
+      commitEventSampleCount: importCommitEventDurations.length,
+      renderMs: importRenderMs,
+    },
+    interactionApproxInpMs,
   };
-  console.log(`[performance-production] ${JSON.stringify(metrics)}`);
-  await test.info().attach("performance-production.json", {
-    body: JSON.stringify(metrics, null, 2),
-    contentType: "application/json",
+  const budget = WEB_PERF_BUDGETS.playwright;
+  const checks: BudgetCheck[] = [
+    maxBudgetCheck(
+      "playwright.firstInteractiveMs",
+      pageInteractiveMs,
+      budget.firstInteractiveMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.hotRestoreMs",
+      hotRestoreMs,
+      budget.hotRestoreMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.workspaceRestoreLongTaskMs",
+      workspaceRestoreLongTaskMaxMs,
+      budget.workspaceRestoreLongTaskMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.firstScreen.requestCount",
+      firstScreen.requestCount,
+      budget.firstScreenRequestCount,
+      "count",
+    ),
+    maxBudgetCheck(
+      "playwright.firstScreen.transferBytes",
+      firstScreen.transferBytes,
+      budget.firstScreenTransferBytes,
+      "bytes",
+    ),
+    maxBudgetCheck(
+      "playwright.firstScreen.maxChunkBytes",
+      firstScreen.maxChunkBytes,
+      budget.firstScreenMaxChunkBytes,
+      "bytes",
+    ),
+    maxBudgetCheck(
+      "playwright.scrollJumpMs",
+      scrollMetrics.scrollMs,
+      budget.scrollJumpMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.scrollLongTaskMs",
+      scrollMetrics.longTaskMaxMs,
+      budget.scrollLongTaskMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.settingsFirstOpenEventMs",
+      settingsEventMs,
+      budget.settingsEventMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.cellEditMedianMs",
+      cellEditMedianMs,
+      budget.cellEditMedianMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.importParseEventMs",
+      importParseEventMs,
+      budget.interactionEventMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.importCommitEventMs",
+      importCommitEventMs,
+      budget.interactionEventMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.importRenderMs",
+      importRenderMs,
+      budget.importRenderMs,
+      "ms",
+    ),
+    maxBudgetCheck(
+      "playwright.interactionApproxInpMs",
+      interactionApproxInpMs,
+      budget.interactionEventMs,
+      "ms",
+    ),
+  ];
+  await finishPerformanceReport(testInfo, {
+    name: "playwright-workspace",
+    metrics: {
+      baseUrl: "http://localhost:4173/",
+      rowCount: ROW_COUNT,
+      ...metrics,
+      inpApprox: {
+        valueMs: interactionApproxInpMs,
+        method: "max of measured Event Timing durations",
+        isFieldData: false,
+      },
+    },
+    budgetChecks: checks,
+    notes: [
+      "测试工作区由本地确定性构造的 1000 行配置组成，不包含设备报文或真实用户工作区。",
+      "INP 为 Playwright 实验室 Event Timing 近似值，不是字段数据。",
+    ],
   });
 });
