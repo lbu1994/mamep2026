@@ -76,3 +76,47 @@ describe("loadPlatformHostFactory runtime boundary", () => {
     20_000,
   );
 });
+
+describe("production host loader boundary", () => {
+  it.each([
+    ["browser", "./host-factories/loader.browser"],
+    ["electron", "./host-factories/loader.electron"],
+    ["vscode", "./host-factories/loader.vscode"],
+    ["android", "./host-factories/loader.android"],
+  ] satisfies Array<[AppPlatformName, string]>)(
+    "%s 生产入口可解析自身工厂",
+    async (platform, loaderPath) => {
+      const module = (await import(loaderPath)) as {
+        loadPlatformHostFactory: (
+          target: AppPlatformName,
+        ) => Promise<unknown>;
+      };
+
+      await expect(
+        module.loadPlatformHostFactory(platform),
+      ).resolves.toBeTypeOf("function");
+    },
+    20_000,
+  );
+
+  it.each([
+    ["electron", "./host-factories/loader.browser"],
+    ["vscode", "./host-factories/loader.electron"],
+    ["android", "./host-factories/loader.vscode"],
+    ["electron", "./host-factories/loader.android"],
+  ] satisfies Array<[AppPlatformName, string]>)(
+    "生产入口拒绝加载 %s Host",
+    async (runtimePlatform, loaderPath) => {
+      const module = (await import(loaderPath)) as {
+        loadPlatformHostFactory: (
+          requested: AppPlatformName,
+        ) => Promise<unknown>;
+      };
+
+      await expect(
+        module.loadPlatformHostFactory(runtimePlatform),
+      ).rejects.toThrow(`build cannot load ${runtimePlatform} host`);
+    },
+    20_000,
+  );
+});

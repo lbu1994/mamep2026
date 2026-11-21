@@ -486,7 +486,7 @@ export function auditWorkspaceBoundaries(root) {
       ...peerDependencies,
       ...optionalDependencies,
     ]);
-    const usedAnywhere = new Set();
+    const usedByProductionSource = new Set();
     const moduleReferences = [];
     const sourceFiles = collectSourceFiles(directory, root);
     sourceFileCount += sourceFiles.length;
@@ -515,7 +515,9 @@ export function auditWorkspaceBoundaries(root) {
         if (parsed === null) continue;
         const { packageName: importedName, subpath } = parsed;
         if (importedName === manifest.name) continue;
-        usedAnywhere.add(importedName);
+        if (!isTestWorkspace && isRuntimeSource(relativeSource)) {
+          usedByProductionSource.add(importedName);
+        }
         moduleReferences.push({
           specifier,
           importedName,
@@ -609,13 +611,17 @@ export function auditWorkspaceBoundaries(root) {
     const allowlisted =
       RUNTIME_DEPENDENCY_ALLOWLIST.get(manifest.name) ?? new Set();
     for (const dependency of productionDependencies) {
-      if (!usedAnywhere.has(dependency) && !allowlisted.has(dependency)) {
+      if (
+        !isTestWorkspace &&
+        !usedByProductionSource.has(dependency) &&
+        !allowlisted.has(dependency)
+      ) {
         collectViolation(violations, {
           code: "UNUSED_RUNTIME_DEPENDENCY",
           packageName: manifest.name,
           file: relativeManifest,
           specifier: dependency,
-          message: `${dependency} is declared in dependencies but has no static runtime import or explicit packaging use`,
+          message: `${dependency} is declared in dependencies but has no production-source import or explicit packaging use`,
         });
       }
     }

@@ -114,6 +114,58 @@ describe("workspace boundary audit", () => {
     }
   });
 
+  it("does not count test-only imports as production dependency use", async () => {
+    const fixtureRoot = await mkdtemp(
+      path.join(tmpdir(), "mamep-runtime-dependency-audit-"),
+    );
+    try {
+      const packageRoot = path.join(fixtureRoot, "packages", "app");
+      await mkdir(path.join(packageRoot, "src"), { recursive: true });
+      await writeFile(
+        path.join(fixtureRoot, "package.json"),
+        JSON.stringify({ name: "fixture-root", private: true }),
+      );
+      await writeFile(
+        path.join(fixtureRoot, "pnpm-workspace.yaml"),
+        'packages:\n  - "packages/*"\n',
+      );
+      await writeFile(
+        path.join(packageRoot, "package.json"),
+        JSON.stringify({
+          name: "@mamep2026/fixture-app",
+          dependencies: {
+            "dynamic-runtime": "1.0.0",
+            "test-only": "1.0.0",
+            "type-only": "1.0.0",
+          },
+        }),
+      );
+      await writeFile(
+        path.join(packageRoot, "src", "index.ts"),
+        [
+          'import type { Value } from "type-only";',
+          'export const load = () => import("dynamic-runtime");',
+          "export type Result = Value;",
+        ].join("\n"),
+      );
+      await writeFile(
+        path.join(packageRoot, "src", "index.test.ts"),
+        'import "test-only";\n',
+      );
+
+      const result = auditWorkspaceBoundaries(fixtureRoot);
+      assert.deepEqual(
+        result.violations
+          .filter((violation) => violation.code === "UNUSED_RUNTIME_DEPENDENCY")
+          .map((violation) => violation.specifier)
+          .sort(),
+        ["test-only"],
+      );
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("parses scoped package subpaths", () => {
     assert.deepEqual(
       parsePackageSpecifier("@mamep2026/platform-android/capacitor-app"),

@@ -45,7 +45,7 @@ import type { SaveStatus } from "@mamep2026/workspace";
 import type { AppHost, HostStatus } from "@mamep2026/ui";
 import { hasPlatformCapability, requestRouteForSheet } from "@mamep2026/ui";
 import { BrowserAppHost } from "./AppHost";
-import { createBrowserHost } from "./host-factories/browser";
+import { loadPlatformHostFactory as loadHostFactoryForBuildTarget } from "./host-factories/loader";
 import {
   scheduleAfterPaint,
   type AfterPaintScheduler,
@@ -71,6 +71,13 @@ export type PlatformHostFactory = (input: {
 export type PlatformHostFactoryLoader = (
   platform: AppPlatformName,
 ) => Promise<PlatformHostFactory>;
+
+/**
+ * 默认加载器。Vite 生产构建按 mode 把 `host-factories/loader` 别名到目标平台入口；
+ * 开发服务器使用默认入口，按运行时桥 / Capacitor 探测结果加载。
+ */
+export const loadPlatformHostFactory: PlatformHostFactoryLoader =
+  loadHostFactoryForBuildTarget;
 
 /** 装配编排写入 UI 的唯一端口（由 composition root 用 store 动作实现，见 `store-sinks.ts`）。 */
 export interface HostAssemblySinks {
@@ -132,35 +139,6 @@ export interface VisibilityDocument {
   addEventListener(type: "visibilitychange", listener: () => void): void;
   removeEventListener(type: "visibilitychange", listener: () => void): void;
 }
-
-/**
- * 默认工厂加载器：浏览器静态装配，其余平台各自动态 `import()`（产物各成一个懒 chunk，
- * 平台专属依赖——`@capacitor/core` 等——只在其 chunk 内可达）。
- */
-export const loadPlatformHostFactory: PlatformHostFactoryLoader = async (
-  platform,
-) => {
-  switch (platform) {
-    case "browser":
-      // 三端 inner 同源（BrowserAppHost 也是 Electron/Android 的 inner），无收益且会引入额外异步跳。
-      return createBrowserHost;
-    case "electron": {
-      const module = await import("./host-factories/electron");
-      return module.createElectronHost;
-    }
-    case "vscode": {
-      const module = await import("./host-factories/vscode");
-      return module.createVscodeHost;
-    }
-    case "android": {
-      const module = await import("./host-factories/android");
-      return module.createAndroidHost;
-    }
-    default:
-      // 穷尽守卫：平台联合类型新增分支时必须在此显式处理（不得静默回退浏览器路径）。
-      throw new Error(`Unsupported platform: ${String(platform)}`);
-  }
-};
 
 /**
  * 装配并启动宿主：加载工厂 → 构造宿主 → 必需接线 → 加载工作区 → 首屏可交互。

@@ -19,6 +19,93 @@ const RENDERER_DIST_VSCODE = path.resolve(ROOT, "apps/web/dist-vscode");
 /** Android（Capacitor）渲染器独立产物目录：Capacitor 的 webDir 指向它。 */
 const RENDERER_DIST_ANDROID = path.resolve(ROOT, "apps/web/dist-android");
 
+type BuildTarget = "auto" | "browser" | "electron" | "vscode" | "android";
+type PlatformFactoryName = Exclude<BuildTarget, "auto">;
+
+/**
+ * 生产产物只能包含共享浏览器工厂与当前目标平台工厂。开发服务器仍使用 `auto`
+ * 以便 VSCode iframe / Electron 在同一个 dev server 中按运行时桥探测。
+ */
+function enforcePlatformHostBuildBoundary(
+  target: PlatformFactoryName,
+): Plugin {
+  const expectedFactories = new Set<PlatformFactoryName>(["browser"]);
+  if (target !== "browser") expectedFactories.add(target);
+  const platformHostImplementations = new Map<
+    PlatformFactoryName,
+    readonly string[]
+  >([
+    ["browser", ["/apps/web/src/AppHost.ts"]],
+    ["electron", ["/apps/web/src/electron-app-host.ts"]],
+    ["vscode", ["/apps/web/src/vscode-app-host.ts"]],
+    [
+      "android",
+      [
+        "/apps/web/src/android-app-host.ts",
+        "/apps/web/src/android-capabilities-probe.ts",
+      ],
+    ],
+  ]);
+  return {
+    name: "mamep-enforce-platform-host-boundary",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      const factories = new Set<PlatformFactoryName>();
+      const hostImplementations = new Set<string>();
+      let containsCapacitor = false;
+      for (const output of Object.values(bundle)) {
+        if (output.type !== "chunk") continue;
+        for (const moduleId of output.moduleIds) {
+          const normalized = moduleId.replaceAll("\\", "/");
+          const match =
+            /\/apps\/web\/src\/host-factories\/(browser|electron|vscode|android)\.ts$/.exec(
+              normalized,
+            );
+          if (match?.[1] !== undefined) {
+            factories.add(match[1] as PlatformFactoryName);
+          }
+          if (normalized.includes("/node_modules/@capacitor/")) {
+            containsCapacitor = true;
+          }
+          if (normalized.includes("/node_modules/.pnpm/@capacitor+")) {
+            containsCapacitor = true;
+          }
+          for (const [owner, implementations] of platformHostImplementations) {
+            if (implementations.some((entry) => normalized.endsWith(entry))) {
+              hostImplementations.add(owner);
+            }
+          }
+        }
+      }
+
+      const unexpected = [...factories].filter(
+        (factory) => !expectedFactories.has(factory),
+      );
+      const missing = [...expectedFactories].filter(
+        (factory) => !factories.has(factory),
+      );
+      if (unexpected.length > 0 || missing.length > 0) {
+        this.error(
+          `[platform-host-boundary] target=${target} factories=${[...factories].sort().join(",") || "none"} expected=${[...expectedFactories].sort().join(",")}`,
+        );
+      }
+      const leakedHosts = [...hostImplementations].filter(
+        (owner) => owner !== "browser" && owner !== target,
+      );
+      if (leakedHosts.length > 0) {
+        this.error(
+          `[platform-host-boundary] target=${target} includes foreign host implementations: ${leakedHosts.sort().join(",")}`,
+        );
+      }
+      if (target !== "android" && containsCapacitor) {
+        this.error(
+          `[platform-host-boundary] target=${target} must not bundle @capacitor modules`,
+        );
+      }
+    },
+  };
+}
+
 /**
  * 生产构建向 index.html 注入 CSP meta（docs/TECH_DESIGN.md §22.1、§22.4）。
  * Electron 生产模式用 loadFile(file://) 加载页面，file:// 请求不经过 webRequest headers，
@@ -70,13 +157,23 @@ function injectCspMeta(): Plugin {
  * chunk），评估首屏必须算「HTML + 入口 + modulepreload + CSS」。
  */
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const isElectron = mode === "electron";
   // VSCode Webview 模式：产物独立目录（apps/web/dist-vscode），base "./" 供 asWebviewUri 相对解析。
   const isVscode = mode === "vscode";
   // Android（Capacitor）模式：产物独立目录（apps/web/dist-android），base "./" 供 WebViewAssetLoader 加载。
   const isAndroid = mode === "android";
   const isPlatformBuild = isElectron || isVscode || isAndroid;
+  const buildTarget: BuildTarget =
+    command === "build"
+      ? isElectron
+        ? "electron"
+        : isVscode
+          ? "vscode"
+          : isAndroid
+            ? "android"
+            : "browser"
+      : "auto";
   // 应用版本号取自根 package.json（三端共用版本），经 __APP_VERSION__ 注入，dev/build 均生效。
   const rootPkg = JSON.parse(
     readFileSync(path.resolve(ROOT, "package.json"), "utf-8"),
@@ -94,6 +191,20 @@ export default defineConfig(({ mode }) => {
   return {
     define: {
       __APP_VERSION__: JSON.stringify(rootPkg.version),
+    },
+    resolve: {
+      alias:
+        buildTarget === "auto"
+          ? []
+          : [
+              {
+                find: /^\.\/host-factories\/loader$/,
+                replacement: path.resolve(
+                  import.meta.dirname,
+                  `src/host-factories/loader.${buildTarget}.ts`,
+                ),
+              },
+            ],
     },
     // Electron 生产模式经 loadFile(file://)、VSCode Webview 经 asWebviewUri 加载：必须相对路径。
     base: isPlatformBuild ? "./" : "/",
@@ -119,6 +230,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       injectCspMeta(),
+      ...(buildTarget === "auto"
+        ? []
+        : [enforcePlatformHostBuildBoundary(buildTarget)]),
       ...(isElectron
         ? [
             electron({
