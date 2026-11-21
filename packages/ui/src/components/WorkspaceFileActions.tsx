@@ -11,6 +11,7 @@ import Tooltip from "antd/es/tooltip";
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceTransfer } from "../workspace-transfer";
+import { loadWorkspaceImportModalModule } from "../overlay-modules";
 
 export function WorkspaceFileActions(): React.ReactNode {
   const { t } = useTranslation();
@@ -39,6 +40,8 @@ export function WorkspaceFileActions(): React.ReactNode {
             size="small"
             icon={<UploadOutlined />}
             onClick={handleImportWorkspace}
+            onPointerEnter={() => void loadWorkspaceImportModalModule()}
+            onFocus={() => void loadWorkspaceImportModalModule()}
             aria-label={t("workspace.import")}
           >
             {t("workspace.import")}

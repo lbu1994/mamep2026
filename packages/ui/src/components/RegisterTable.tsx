@@ -105,6 +105,7 @@ import {
 import { useAppStore } from "../app-store";
 import { useIsMobileLayout } from "../layout/breakpoints";
 import { useAfterFirstPaint } from "../after-first-paint";
+import { scheduleAfterInput } from "../defer-user-commit";
 import { markUiStartup } from "../startup-marks";
 import type { RowFailure } from "../row-result";
 import { computeNoColumnWidth } from "../no-column-width";
@@ -1501,6 +1502,11 @@ const RegisterTableContent = memo(function RegisterTableContent({
     : DIRECT_RENDER_VIRTUAL_THRESHOLD;
   const virtualScrollingEnabled = rows.length > virtualScrollThreshold;
   const addRow = useAppStore((s) => s.addRow);
+  const handleAddRow = useCallback((): void => {
+    // 1000 行表的快照、重编号和整表订阅更新不占用按钮点击事件；连续点击仍按
+    // 宏任务顺序追加，Store 在每次提交时读取最新行集合。
+    scheduleAfterInput(() => addRow(sheetId));
+  }, [addRow, sheetId]);
   const appendMessage = useAppStore((s) => s.appendMessage);
   // 插件工具栏动作执行（插件外部化）：requiresConfirm 先弹
   // 安全确认（文案经贡献点 confirmKey，安川 ROM/RAM 确定指令 EEPROM 寿命提示，决策③），
@@ -2815,7 +2821,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
               <Button
                 size="small"
                 icon={<PlusOutlined />}
-                onClick={() => addRow(sheetId)}
+                onClick={handleAddRow}
               >
                 {t("table.addRow")}
               </Button>
@@ -3050,7 +3056,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
                             size="small"
                             type="primary"
                             icon={<PlusOutlined />}
-                            onClick={() => addRow(sheetId)}
+                            onClick={handleAddRow}
                           >
                             {t("table.addRow")}
                           </Button>

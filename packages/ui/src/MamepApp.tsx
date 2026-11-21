@@ -85,7 +85,14 @@ import { AppStartupPlaceholder } from "./components/AppStartupPlaceholder";
 import type { DocumentationContribution } from "./components/documentation-markdown";
 import { SheetNameEditor } from "./components/SheetNameEditor";
 import { buildSheetMenuItems } from "./components/SheetMenu";
+import { scheduleAfterInput } from "./defer-user-commit";
 import { useOpenedOnce } from "./opened-once";
+import {
+  loadConnectionSettingsModalModule,
+  loadSettingsDrawerModule,
+  loadWorkspaceImportModalModule,
+  prefetchOverlayModulesAfterIdle,
+} from "./overlay-modules";
 
 /**
  * 代码分割：仅按需打开的弹窗/抽屉使用
@@ -103,7 +110,7 @@ import { useOpenedOnce } from "./opened-once";
  * 连接动作会被门控。它为首次打开单独懒加载，且不能与其它懒组件共用 Suspense。
  */
 const ConnectionSettingsModal = lazy(() =>
-  import("./components/ConnectionSettingsModal").then((m) => ({
+  loadConnectionSettingsModalModule().then((m) => ({
     default: m.ConnectionSettingsModal,
   })),
 );
@@ -111,7 +118,7 @@ const HelpDrawer = lazy(() =>
   import("./components/HelpDrawer").then((m) => ({ default: m.HelpDrawer })),
 );
 const WorkspaceImportModal = lazy(() =>
-  import("./components/WorkspaceImportModal").then((m) => ({
+  loadWorkspaceImportModalModule().then((m) => ({
     default: m.WorkspaceImportModal,
   })),
 );
@@ -119,7 +126,7 @@ const TraceWindow = lazy(() =>
   import("./components/TraceWindow").then((m) => ({ default: m.TraceWindow })),
 );
 const SettingsDrawer = lazy(() =>
-  import("./components/SettingsDrawer").then((m) => ({
+  loadSettingsDrawerModule().then((m) => ({
     default: m.SettingsDrawer,
   })),
 );
@@ -242,6 +249,16 @@ function MamepAppContent({
   useEffect(() => {
     if (bottomPanelReady) markUiStartup("bottom-panel-ready");
   }, [bottomPanelReady]);
+  // 交互 chunk 在首帧和关键表格挂载之后才逐项预取。用户悬停/聚焦入口时会更早
+  // 触发同一 import promise；两处不会重复下载，也不会把预取放进首屏关键路径。
+  useEffect(() => {
+    if (!headerActionsReady) return;
+    return prefetchOverlayModulesAfterIdle([
+      loadConnectionSettingsModalModule,
+      loadSettingsDrawerModule,
+      loadWorkspaceImportModalModule,
+    ]);
+  }, [headerActionsReady]);
   // 工作区加载恢复元数据（恢复提示）：加载后写入，用于主体顶部横幅。
   const workspaceRecovery = useAppStore((s) => s.workspaceRecovery);
   // 仅订阅表元数据（id/name）与从站地址：行数据变化不触发本组件重渲染，
@@ -294,6 +311,15 @@ function MamepAppContent({
   const setConnectError = useAppStore((s) => s.setConnectError);
   const settingsOpen = useAppStore((s) => s.settingsModalOpen);
   const setSettingsOpen = useAppStore((s) => s.setSettingsModalOpen);
+  const openConnectionSettings = (): void => {
+    void loadConnectionSettingsModalModule();
+    // 表单注册、zod resolver 与 Modal 首次提交放到下一任务；点击事件只登记用户意图。
+    scheduleAfterInput(() => setConnectionModalOpen(true));
+  };
+  const openSettings = (): void => {
+    void loadSettingsDrawerModule();
+    scheduleAfterInput(() => setSettingsOpen(true));
+  };
   const theme = useAppStore((s) => s.theme);
   // 界面语言（持久化在 workspace.preferences.language）：同步到 <html lang>，见下方 effect。
   const language = useAppStore((s) => s.workspace.preferences.language);
@@ -710,7 +736,7 @@ function MamepAppContent({
     if (canDirectConnect(host, profile, selectedSerialHandle)) {
       void directConnect(profile);
     } else {
-      setConnectionModalOpen(true);
+      openConnectionSettings();
     }
   };
 
@@ -799,7 +825,7 @@ function MamepAppContent({
     {
       key: "settings",
       label: t("topbar.settings"),
-      onClick: () => setSettingsOpen(true),
+      onClick: openSettings,
     },
     {
       key: "help",
@@ -992,6 +1018,10 @@ function MamepAppContent({
                     {...(connSpec.variant ? { variant: connSpec.variant } : {})}
                     danger={connSpec.danger}
                     onClick={handleConnectToggle}
+                    onPointerEnter={() =>
+                      void loadConnectionSettingsModalModule()
+                    }
+                    onFocus={() => void loadConnectionSettingsModalModule()}
                     aria-label={t(connSpec.ariaLabelKey)}
                     title={t(connSpec.titleKey)}
                     data-conn-state={connectionState}
@@ -1020,7 +1050,11 @@ function MamepAppContent({
                     size="small"
                     icon={<ApiOutlined />}
                     aria-label={t("topbar.connectionSettings")}
-                    onClick={() => setConnectionModalOpen(true)}
+                    onClick={openConnectionSettings}
+                    onPointerEnter={() =>
+                      void loadConnectionSettingsModalModule()
+                    }
+                    onFocus={() => void loadConnectionSettingsModalModule()}
                   >
                     {isMobileLayout
                       ? undefined
@@ -1054,7 +1088,9 @@ function MamepAppContent({
                       <Button
                         size="small"
                         icon={<SettingOutlined />}
-                        onClick={() => setSettingsOpen(true)}
+                        onClick={openSettings}
+                        onPointerEnter={() => void loadSettingsDrawerModule()}
+                        onFocus={() => void loadSettingsDrawerModule()}
                       >
                         {t("topbar.settings")}
                       </Button>

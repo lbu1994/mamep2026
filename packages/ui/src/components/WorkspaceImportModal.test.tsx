@@ -4,8 +4,8 @@
  * 断言：草稿摘要展示、OK 应用导入（清空草稿 + 替换工作区）、取消清除草稿、无草稿不展示。
  */
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App as AntApp, ConfigProvider } from "antd";
 import { createEmptyWorkspace } from "@mamep2026/domain";
@@ -89,5 +89,37 @@ describe("WorkspaceImportModal", () => {
     expect(useAppStore.getState().workspace.name).not.toBe(
       "Imported Workspace",
     );
+  });
+
+  it("确认提交排队期间草稿被取消，则提交失效且不覆盖工作区", () => {
+    vi.useFakeTimers();
+    try {
+      const before = useAppStore.getState().workspace;
+      const imported = createEmptyWorkspace();
+      imported.name = "Should Not Commit";
+      useAppStore.setState({
+        workspaceImportDraft: {
+          workspace: imported,
+          preview: {
+            name: imported.name,
+            sheets: 1,
+            rows: 0,
+            connections: 1,
+            schemaVersion: 5,
+          },
+        },
+      });
+      renderModal();
+
+      fireEvent.click(screen.getByRole("button", { name: "Import" }));
+      // 排队提交持有草稿引用；关闭预览（或外部取消）清除草稿后，旧提交必须 no-op。
+      useAppStore.getState().setWorkspaceImportDraft(null);
+      act(() => vi.runAllTimers());
+
+      expect(useAppStore.getState().workspace).toBe(before);
+      expect(useAppStore.getState().workspaceImportDraft).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

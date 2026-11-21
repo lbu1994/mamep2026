@@ -27,7 +27,7 @@
  *
  * 关闭方式：右上角关闭按钮 / `Esc` / 点击遮罩（antd 默认行为，与改造前 Modal 一致）。
  */
-import { useMemo, type ReactNode } from "react";
+import { lazy, Suspense, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "antd/es/button";
 import Divider from "antd/es/divider";
@@ -48,8 +48,23 @@ import {
   type ThemeContribution,
 } from "../plugin/theme-contributions";
 import type { SettingsContribution } from "../plugin/plugin-registries";
-import { PluginManagerSection } from "./PluginManagerSection";
 import { WorkspaceFileActions } from "./WorkspaceFileActions";
+
+let pluginManagerModule:
+  Promise<typeof import("./PluginManagerSection")> | undefined;
+
+function loadPluginManagerSection(): Promise<
+  typeof import("./PluginManagerSection")
+> {
+  pluginManagerModule ??= import("./PluginManagerSection");
+  return pluginManagerModule;
+}
+
+const PluginManagerSection = lazy(() =>
+  loadPluginManagerSection().then((module) => ({
+    default: module.PluginManagerSection,
+  })),
+);
 
 /** 主题色选项 label：色块 + 名称。 */
 function themeColorOptionLabel(title: string, color: string): ReactNode {
@@ -208,7 +223,13 @@ export function SettingsDrawer({
   // + 插件 settings 贡献分区。
   const pluginsTab = (
     <Space orientation="vertical" style={{ width: "100%" }}>
-      <PluginManagerSection />
+      <Suspense
+        fallback={
+          <Typography.Text type="secondary">{t("app.loading")}</Typography.Text>
+        }
+      >
+        <PluginManagerSection />
+      </Suspense>
       {settingsContributions.length > 0 && (
         <div className="plugin-settings" data-testid="plugin-settings">
           {settingsContributions.map((contribution) => (
@@ -244,7 +265,14 @@ export function SettingsDrawer({
           },
           {
             key: "plugins",
-            label: t("settings.tabPlugins"),
+            label: (
+              <span
+                onPointerEnter={() => void loadPluginManagerSection()}
+                onFocus={() => void loadPluginManagerSection()}
+              >
+                {t("settings.tabPlugins")}
+              </span>
+            ),
             children: pluginsTab,
           },
         ]}

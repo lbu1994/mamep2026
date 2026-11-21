@@ -1859,6 +1859,37 @@ describe("workspaceImportDraft（工作区导入，2026-08-29）", () => {
     expect(canRedo()).toBe(false);
   });
 
+  it("applyWorkspaceImport 的过期草稿版本不覆盖新工作区", () => {
+    initI18n();
+    const stale = {
+      workspace: createEmptyWorkspace(),
+      preview: {
+        name: "Stale",
+        sheets: 1,
+        rows: 0,
+        connections: 1,
+        schemaVersion: 5,
+      },
+    };
+    const current = {
+      workspace: createEmptyWorkspace(),
+      preview: {
+        name: "Current",
+        sheets: 1,
+        rows: 0,
+        connections: 1,
+        schemaVersion: 5,
+      },
+    };
+    const before = useAppStore.getState().workspace;
+    useAppStore.getState().setWorkspaceImportDraft(current);
+
+    useAppStore.getState().applyWorkspaceImport(stale);
+
+    expect(useAppStore.getState().workspace).toBe(before);
+    expect(useAppStore.getState().workspaceImportDraft).toBe(current);
+  });
+
   it("无草稿时 applyWorkspaceImport 为 no-op", () => {
     const before = useAppStore.getState().workspace;
     useAppStore.getState().applyWorkspaceImport();

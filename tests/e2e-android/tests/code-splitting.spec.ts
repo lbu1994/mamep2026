@@ -10,14 +10,15 @@
  * 覆盖（ToDoList 阶段一 [verify] 条目）：
  * ① 入口 + 多个 chunk 均能加载、**单 chunk < 500 kB**（Vite 告警阈值，未压缩口径）、
  *    React 正常挂载（无 `Class extends value undefined` 类循环依赖症状）；
- * ② 懒加载覆盖层**按需加载**：打开前对应 chunk 不在已加载集合中，打开后才出现；
+ * ② 覆盖层保持独立 chunk：Help/Trace 在打开前不加载；Settings/Import 允许在首帧后
+ *    的空闲时段预取，但仍不得进入入口 modulepreload；
  * ③ 启动自动弹出 Connection Settings 不回归 + 全程无 console 错误。
  *
  * 说明：待办条目里的「Plugin Manager」弹窗已于并入 Settings（`SettingsDrawer`），
  * 实际懒加载覆盖层为 4 个：HelpDrawer / SettingsDrawer / WorkspaceImportModal / TraceWindow。
  * 其中 `WorkspaceImportModal` 在 Android 上**不可达**（`androidCapabilities.workspaceImport ===
  * "unsupported"`，文件导入属），故本用例断言其「点击给出能力提示 + 不加载其 chunk」，
- * 而非「能打开」；并验证能力不支持时不得静默无操作。
+ * 而非「能打开」；空闲预取该独立 chunk 属于允许行为，能力不支持时仍不得静默无操作。
  */
 import { expect, test, type Locator } from "@playwright/test";
 import {
@@ -28,14 +29,6 @@ import {
 
 /** Vite 的分包告警阈值（**未压缩** kB 口径，与 `pnpm build` 的告警一致）。 */
 const MAX_CHUNK_BYTES = 500_000;
-
-/** 懒加载覆盖层对应的产物 chunk 名前缀（rolldown 以源文件名为动态 import chunk 命名）。 */
-const LAZY_CHUNK_PREFIXES = [
-  "HelpDrawer-",
-  "SettingsDrawer-",
-  "TraceWindow-",
-  "WorkspaceImportModal-",
-] as const;
 
 interface LoadedChunk {
   /** 文件名（如 `HelpDrawer-CqQ-vuKf.js`）。 */
@@ -174,12 +167,12 @@ test("② 懒加载覆盖层按需加载（Help / Settings / Trace Window；Impo
   const { page } = session;
   await dismissConnectionSettings(page);
 
-  // 打开任何覆盖层之前：4 个懒加载 chunk 都不应在首屏加载（分包生效的判据）。
+  // Help/Trace 只能由真实交互触发；Settings/Import 允许首帧后的空闲预取。
   const before = await loadedChunkNames(page);
-  for (const prefix of LAZY_CHUNK_PREFIXES) {
+  for (const prefix of ["HelpDrawer-", "TraceWindow-"] as const) {
     expect(
       before.some((name) => name.startsWith(prefix)),
-      `首屏不应预加载 ${prefix}*`,
+      `打开前不应预加载 ${prefix}*`,
     ).toBe(false);
   }
   console.log(`[code-splitting] 首屏 chunk：${before.join(", ")}`);
@@ -212,7 +205,7 @@ test("② 懒加载覆盖层按需加载（Help / Settings / Trace Window；Impo
   await expect(settingsDrawer).toHaveClass(/ant-drawer-open/);
 
   // —— Workspace Import / Export：Android 能力位均为 `unsupported`（才接 SAF / 分享），
-  // 故导入弹窗不可达 → 断言「给出能力提示（非静默无操作）+ 不加载其 chunk + 不报错」。
+  // 故导入弹窗不可达 → 断言「给出能力提示（非静默无操作）+ 不挂载 Modal + 不报错」。
   await settingsDrawer
     .getByRole("button", { name: "Import Workspace" })
     .click();
@@ -221,12 +214,7 @@ test("② 懒加载覆盖层按需加载（Help / Settings / Trace Window；Impo
     .getByRole("button", { name: "Export Workspace" })
     .click();
   await expect(capabilityNotice(page, "export")).toBeVisible();
-  expect(
-    (await loadedChunkNames(page)).some((name) =>
-      name.startsWith("WorkspaceImportModal-"),
-    ),
-    "Android 上工作区导入不可达：不应加载其 chunk",
-  ).toBe(false);
+  await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
   await closeDrawer(settingsDrawer);
 
   // —— Trace Window（行 TM 勾选即打开；用原生 click 规避移动端横向滚动/视口问题）——

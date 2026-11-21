@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import {
   createEmptyWorkspace,
+  ok,
   type PlatformCapabilities,
 } from "@mamep2026/domain";
 import { serializeWorkspace } from "@mamep2026/workspace";
@@ -60,6 +61,17 @@ function renderActions(): void {
   );
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function draftName(): string | undefined {
   return useAppStore.getState().workspaceImportDraft?.preview.name;
 }
@@ -70,6 +82,7 @@ beforeEach(() => {
     host: makeHost(),
     workspace: createEmptyWorkspace(),
     workspaceImportDraft: null,
+    workspaceImportParser: null,
     loaded: true,
   });
 });
@@ -179,6 +192,40 @@ describe("WorkspaceFileActions 导入（file 能力，桌面端）", () => {
       expect(screen.getByText("Import cancelled.")).toBeTruthy();
     });
     expect(useAppStore.getState().workspaceImportDraft).toBeNull();
+  });
+
+  it("新导入开始后，旧文件读取结果不会覆盖新草稿", async () => {
+    const host = makeHost({ workspaceImport: "file" });
+    const firstRead = deferred<Awaited<ReturnType<AppHost["openTextFile"]>>>();
+    const secondRead = deferred<Awaited<ReturnType<AppHost["openTextFile"]>>>();
+    const openTextFileMock = host.openTextFile as unknown as {
+      mockReturnValueOnce: (value: unknown) => void;
+    };
+    openTextFileMock.mockReturnValueOnce(firstRead.promise);
+    openTextFileMock.mockReturnValueOnce(secondRead.promise);
+    const firstWorkspace = createEmptyWorkspace();
+    firstWorkspace.name = "Old Import";
+    const secondWorkspace = createEmptyWorkspace();
+    secondWorkspace.name = "New Import";
+    useAppStore
+      .getState()
+      .setWorkspaceImportParser(async (text) =>
+        ok(text === "old" ? firstWorkspace : secondWorkspace),
+      );
+    useAppStore.setState({ host });
+    renderActions();
+
+    const importButton = screen.getByRole("button", {
+      name: "Import Workspace",
+    });
+    fireEvent.click(importButton);
+    fireEvent.click(importButton);
+    secondRead.resolve({ ok: true, value: { content: "new" } });
+    await waitFor(() => expect(draftName()).toBe("New Import"));
+
+    firstRead.resolve({ ok: true, value: { content: "old" } });
+    await Promise.resolve();
+    expect(draftName()).toBe("New Import");
   });
 });
 

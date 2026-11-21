@@ -136,6 +136,15 @@ export interface WorkspaceImportDraft {
 }
 
 /**
+ * 原始 JSON 文本导入解析器。生产组合根注入 Worker 实现；UI 包不直接依赖
+ * platform-web，测试/无注回退由 workspace-transfer 在本地执行。
+ */
+export type WorkspaceImportParser = (
+  text: string,
+  signal: AbortSignal,
+) => Promise<Result<Workspace>>;
+
+/**
  * Host 装配状态（启动骨架）：宿主实现按运行时平台动态加载（composition root
  * 在渲染前置 `"assembling"`），MamepApp 据此显示启动占位；装配失败以 `"failed"` 保持
  * 「无 Host 可操作」（能力入口依 host 为空自然禁用），不阻断应用。
@@ -205,6 +214,7 @@ export interface AppStoreState {
   cellValidationErrors: Record<string, RowFailure | undefined>;
   /** 工作区导入草稿（解析通过待确认；null=无待确认导入）。纯 UI 会话状态，不持久化。 */
   workspaceImportDraft: WorkspaceImportDraft | null;
+  workspaceImportParser: WorkspaceImportParser | null;
 
   setHost: (host: AppHost) => void;
   /** 设置 Host 装配状态（启动骨架；由装配编排调用）。 */
@@ -214,8 +224,13 @@ export interface AppStoreState {
   setWorkspace: (workspace: Workspace) => void;
   /** 设置工作区导入草稿（解析通过待确认）；null 清除/关闭预览。 */
   setWorkspaceImportDraft: (draft: WorkspaceImportDraft | null) => void;
-  /** 应用当前导入草稿替换工作区（清空撤销栈、触发自动保存）；无草稿时 no-op。 */
-  applyWorkspaceImport: () => void;
+  /** 注入原始 JSON 文本解析器（生产组合根提供 Worker 实现）。 */
+  setWorkspaceImportParser: (parser: WorkspaceImportParser | null) => void;
+  /**
+   * 应用当前导入草稿替换工作区（清空撤销栈、触发自动保存）；无草稿时 no-op。
+   * expectedDraft 用于取消后阻止已排队提交作用于新草稿。
+   */
+  applyWorkspaceImport: (expectedDraft?: WorkspaceImportDraft) => void;
   setLoaded: () => void;
   setConnectionState: (state: ConnectionState) => void;
   setConnectionModalOpen: (open: boolean) => void;
@@ -640,6 +655,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   clipboardPayload: null,
   clipboardSourceSheetType: null,
   workspaceImportDraft: null,
+  workspaceImportParser: null,
   ...createEmptyRowStatusState(),
 
   setHost: (host) => set({ host }),
@@ -647,9 +663,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setDataTypeResolver: (dataTypeResolver) => set({ dataTypeResolver }),
   setWorkspaceImportDraft: (workspaceImportDraft) =>
     set({ workspaceImportDraft }),
-  applyWorkspaceImport: () => {
+  setWorkspaceImportParser: (workspaceImportParser) =>
+    set({ workspaceImportParser }),
+  applyWorkspaceImport: (expectedDraft) => {
     const draft = get().workspaceImportDraft;
     if (draft === null) return;
+    if (expectedDraft !== undefined && draft !== expectedDraft) return;
     // 导入语义对齐 setWorkspace：恢复语言/主题偏好 + 清空撤销栈。
     // 持久化由 App 层 workspace 变更订阅（scheduleSave）自动触发，无需手动保存。
     get().setWorkspace(draft.workspace);

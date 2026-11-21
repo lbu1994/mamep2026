@@ -11,6 +11,10 @@ import {
   useGlobalShortcuts,
   type GlobalShortcutActions,
 } from "../keyboard/useGlobalShortcuts";
+import {
+  loadConnectionSettingsModalModule,
+  loadSettingsDrawerModule,
+} from "../overlay-modules";
 import { useWorkspaceTransfer } from "../workspace-transfer";
 
 interface AppShortcutLayerProps {
@@ -60,11 +64,15 @@ export function AppShortcutLayer({
       }
     };
     return {
-      openSettings: () => setSettingsOpen(true),
+      openSettings: () => {
+        void loadSettingsDrawerModule();
+        setSettingsOpen(true);
+      },
       toggleConnect: () => {
         if (connectionState === "connected") {
           void host?.disconnect();
         } else {
+          void loadConnectionSettingsModalModule();
           setConnectionModalOpen(true);
         }
       },

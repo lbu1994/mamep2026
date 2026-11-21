@@ -99,7 +99,7 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
     expect(screen.queryByTestId("plugin-manager")).toBeNull();
   });
 
-  it("切到 Plugins 页签显示插件管理区块（插件列表 + Install Plugin）", () => {
+  it("切到 Plugins 页签显示插件管理区块（插件列表 + Install Plugin）", async () => {
     const registry = makeRegistry();
     registry.register({
       id: "example-panel",
@@ -115,14 +115,14 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
     renderDrawer(registry);
 
     clickTab("Plugins");
-    expect(screen.getByTestId("plugin-manager")).toBeTruthy();
+    expect(await screen.findByTestId("plugin-manager")).toBeTruthy();
     expect(screen.getByText("Example Panel")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /Install Plugin/i }),
     ).toBeTruthy();
   });
 
-  it("插件 settings 贡献分区渲染在 Plugins 页签", () => {
+  it("插件 settings 贡献分区渲染在 Plugins 页签", async () => {
     const registry = makeRegistry();
     registry.register({
       id: "with-settings",
@@ -139,7 +139,7 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
     renderDrawer(registry);
 
     clickTab("Plugins");
-    const section = screen.getByTestId("plugin-settings");
+    const section = await screen.findByTestId("plugin-settings");
     // 贡献标题经 i18n 解析 + 占位说明（声明式标题）。
     expect(section.textContent).toContain("Author");
     expect(section.textContent).toContain(
@@ -147,10 +147,10 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
     );
   });
 
-  it("无 settings 贡献时不渲染插件 settings 分区", () => {
+  it("无 settings 贡献时不渲染插件 settings 分区", async () => {
     renderDrawer(makeRegistry());
     clickTab("Plugins");
-    expect(screen.getByTestId("plugin-manager")).toBeTruthy();
+    expect(await screen.findByTestId("plugin-manager")).toBeTruthy();
     expect(screen.queryByTestId("plugin-settings")).toBeNull();
   });
 });

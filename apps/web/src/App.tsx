@@ -37,6 +37,18 @@ function isCompatMissMode(): boolean {
   );
 }
 
+/** 生产导入解析器：仅在用户选择文件后加载 Worker 客户端，不进入首屏 chunk。 */
+async function parseWorkspaceTextForImport(
+  text: string,
+  signal: AbortSignal,
+): ReturnType<
+  typeof import("@mamep2026/platform-web").parseWorkspaceTextOffMainThread
+> {
+  const { parseWorkspaceTextOffMainThread } =
+    await import("@mamep2026/platform-web");
+  return parseWorkspaceTextOffMainThread(text, { signal });
+}
+
 /**
  * 组合根（装配重构后）。
  *
@@ -63,6 +75,9 @@ export default function App(): React.ReactNode {
   // 启动装配（一次）：探测平台 → 按平台加载宿主实现 → 编排启动（见 host-assembly.ts）。
   useEffect(() => {
     const controller = new AbortController();
+    useAppStore
+      .getState()
+      .setWorkspaceImportParser(parseWorkspaceTextForImport);
     void (async () => {
       try {
         const [
@@ -118,6 +133,10 @@ export default function App(): React.ReactNode {
       // 保证旧 host 不再接收事件——通信日志重复投递的回归防护）。
       controller.abort();
       hostRef.current = null;
+      const store = useAppStore.getState();
+      if (store.workspaceImportParser === parseWorkspaceTextForImport) {
+        store.setWorkspaceImportParser(null);
+      }
     };
   }, []);
 
