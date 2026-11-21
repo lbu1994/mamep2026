@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "antd/es/button";
 import Card from "antd/es/card";
@@ -23,6 +23,7 @@ import { useAppStore, type BufferSizeOption } from "../app-store";
 import { requestRouteForSheet } from "../request-route";
 import { computeTraceAverage } from "../trace-statistics";
 import { traceSpeedToInterval } from "../trace-speed";
+import { isCommunicationAvailable } from "../communication-gate";
 
 const TRACE_WINDOW_WIDTH = 360;
 const TRACE_WINDOW_TOP = 80;
@@ -36,6 +37,10 @@ interface TraceWindowProps {
 export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
+  const communicationAvailable = useAppStore((s) =>
+    isCommunicationAvailable(s.connectionState),
+  );
+  const playReasonId = useId();
   const row = useAppStore((s) =>
     s.workspace.sheets.flatMap((sh) => sh.rows).find((r) => r.rowId === rowId),
   );
@@ -60,6 +65,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   useEffect(() => {
     if (
       windowModel?.playing &&
+      communicationAvailable &&
       row?.addressValue !== null &&
       row?.addressValue !== undefined &&
       host !== null &&
@@ -81,6 +87,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   }, [
     windowModel?.playing,
     windowModel?.speed,
+    communicationAvailable,
     row?.addressValue?.value,
     row?.registerCount,
     sheetRoute?.type,
@@ -295,14 +302,37 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
           <Flex vertical gap={6}>
             <Flex align="center" gap={8}>
               <Space size={6}>
-                <Button
-                  size="small"
-                  type={windowModel.playing ? "default" : "primary"}
-                  icon={<PlayCircleOutlined />}
-                  onClick={() => setTracePlaying(rowId, true)}
+                <Tooltip
+                  title={
+                    communicationAvailable
+                      ? undefined
+                      : t("table.connectBeforeCommunication")
+                  }
                 >
-                  {t("trace.play")}
-                </Button>
+                  <span>
+                    <Button
+                      size="small"
+                      type={
+                        windowModel.playing || !communicationAvailable
+                          ? "default"
+                          : "primary"
+                      }
+                      icon={<PlayCircleOutlined />}
+                      disabled={!communicationAvailable}
+                      aria-describedby={
+                        communicationAvailable ? undefined : playReasonId
+                      }
+                      onClick={() => setTracePlaying(rowId, true)}
+                    >
+                      {t("trace.play")}
+                    </Button>
+                  </span>
+                </Tooltip>
+                {!communicationAvailable ? (
+                  <span id={playReasonId} className="register-table__sr-only">
+                    {t("table.connectBeforeCommunication")}
+                  </span>
+                ) : null}
                 <Button
                   size="small"
                   className={

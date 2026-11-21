@@ -38,10 +38,18 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
   // 禁用控件提供说明 Tooltip（悬停 Read 所在单元格）。
   const readCell = row.locator(".ant-table-cell").filter({ hasText: "Read" });
   await readCell.hover();
+  const reasonId = await readBtn.getAttribute("aria-describedby");
+  expect(reasonId).toBeTruthy();
+  await expect(page.locator(`[id="${reasonId}"]`)).toHaveText(
+    "Set a valid register address first to enable this control.",
+  );
   await expect(
-    page.getByText(
-      "Set a valid register address first to enable this control.",
-    ),
+    page
+      .locator(".ant-tooltip")
+      .filter({
+        hasText: "Set a valid register address first to enable this control.",
+      })
+      .last(),
   ).toBeVisible();
 
   // 填写合法地址后控件恢复可用。

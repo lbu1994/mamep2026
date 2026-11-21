@@ -8,6 +8,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -36,6 +37,7 @@ import Table from "antd/es/table";
 import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import {
+  ApiOutlined,
   ColumnWidthOutlined,
   HolderOutlined,
   MoreOutlined,
@@ -128,6 +130,7 @@ import { matchesShortcut, tableShortcut } from "../keyboard/shortcuts";
 import { readRowById, writeRowById } from "../row-io";
 import { requestRouteForSheet } from "../request-route";
 import { runPluginToolbarAction } from "../plugin-toolbar-actions";
+import { isCommunicationAvailable } from "../communication-gate";
 
 /** Select 用于单元格类型编辑与工具栏高级配置，首帧后按需加载，避免进入 modulepreload。 */
 // React.lazy 的类型擦除泛型值类型；在加载边界恢复所需的 Select 调用签名。
@@ -721,6 +724,7 @@ interface WpCellProps {
   rowId: RowId;
   pollingEnabled: boolean;
   hasAddress: boolean;
+  communicationReasonId: string;
 }
 
 const WpCell = memo(function WpCell(props: WpCellProps) {
@@ -738,38 +742,58 @@ function WpControl({
   rowId,
   pollingEnabled,
   hasAddress,
+  communicationReasonId,
 }: WpCellProps): React.ReactNode {
   const { t } = useTranslation();
+  const localReasonId = useId();
+  const communicationAvailable = useAppStore((s) =>
+    isCommunicationAvailable(s.connectionState),
+  );
   // 可撤销（§24.4「修改轮询设置」）：经 store.setPollingEnabled 入撤销栈。
   const setPollingEnabled = useAppStore((s) => s.setPollingEnabled);
-  const connected = useAppStore((s) => s.connectionState) === "connected";
-  // 无合法地址时禁用并说明原因（任务要求）；离线不禁用（可预配置，连接后即生效）。
-  const disabled = !hasAddress;
+  const reason = !communicationAvailable
+    ? t("table.connectBeforeCommunication")
+    : !hasAddress
+      ? t("table.emptyAddressTooltip")
+      : null;
+  const disabled = reason !== null;
+  const describedBy =
+    reason === null
+      ? undefined
+      : communicationAvailable
+        ? localReasonId
+        : communicationReasonId;
   // 纯 UI 派生轮询指示：已连接 + 有合法地址 + WP 开启 = 正在轮询。
-  const polling = connected && hasAddress && pollingEnabled;
+  const polling = communicationAvailable && hasAddress && pollingEnabled;
   return (
-    <Tooltip
-      title={disabled ? t("table.emptyAddressTooltip") : t("table.wpHint")}
-    >
-      <span className="register-table__wp">
-        <Switch
-          size="small"
-          aria-label="WP"
-          checked={pollingEnabled}
-          disabled={disabled}
-          onChange={(checked) => setPollingEnabled(rowId, checked)}
-        />
-        {polling ? (
-          <Tooltip title={t("table.pollingActive")}>
-            <span
-              className="register-table__wp-indicator"
-              role="img"
-              aria-label={t("table.pollingActive")}
-            />
-          </Tooltip>
-        ) : null}
-      </span>
-    </Tooltip>
+    <>
+      <Tooltip title={reason ?? t("table.wpHint")}>
+        <span className="register-table__wp">
+          <Switch
+            size="small"
+            aria-label="WP"
+            checked={pollingEnabled}
+            disabled={disabled}
+            aria-describedby={describedBy}
+            onChange={(checked) => setPollingEnabled(rowId, checked)}
+          />
+          {polling ? (
+            <Tooltip title={t("table.pollingActive")}>
+              <span
+                className="register-table__wp-indicator"
+                role="img"
+                aria-label={t("table.pollingActive")}
+              />
+            </Tooltip>
+          ) : null}
+        </span>
+      </Tooltip>
+      {reason !== null && communicationAvailable ? (
+        <span id={localReasonId} className="register-table__sr-only">
+          {reason}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -778,6 +802,7 @@ interface ReadCellProps {
   hasAddress: boolean;
   /** 范围长度与类型合法集匹配：不匹配时禁用读写。 */
   typeCountValid: boolean;
+  communicationReasonId: string;
 }
 
 const ReadCell = memo(function ReadCell(props: ReadCellProps) {
@@ -793,17 +818,39 @@ function ReadControl({
   rowId,
   hasAddress,
   typeCountValid,
+  communicationReasonId,
 }: ReadCellProps): React.ReactNode {
   const { t } = useTranslation();
+  const localReasonId = useId();
+  const communicationAvailable = useAppStore((s) =>
+    isCommunicationAvailable(s.connectionState),
+  );
   const host = useAppStore((s) => s.host);
   const updateRow = useAppStore((s) => s.updateRow);
   const recordManualResult = useAppStore((s) => s.recordManualResult);
-  const connected = useAppStore((s) => s.connectionState) === "connected";
-  // 离线、未配置合法地址或范围长度与类型合法集不匹配时禁用；无地址时提供 Tooltip 说明原因。
-  const disabled = !connected || !hasAddress || !typeCountValid;
+  const reason = !communicationAvailable
+    ? t("table.connectBeforeCommunication")
+    : !hasAddress
+      ? t("table.emptyAddressTooltip")
+      : !typeCountValid
+        ? t("table.typeCountMismatchTooltip")
+        : null;
+  const disabled = reason !== null;
+  const describedBy =
+    reason === null
+      ? undefined
+      : communicationAvailable
+        ? localReasonId
+        : communicationReasonId;
   // 单行读逻辑统一在 row-io.readRowById（与 F8 读选中行快捷键共用）。
   const handleRead = (): void => {
-    if (host === null || host === undefined) return;
+    if (
+      host === null ||
+      host === undefined ||
+      !isCommunicationAvailable(useAppStore.getState().connectionState)
+    ) {
+      return;
+    }
     void readRowById(host, rowId, { updateRow, recordManualResult });
   };
   const button = (
@@ -811,18 +858,24 @@ function ReadControl({
       size="small"
       type="primary"
       disabled={disabled}
+      aria-describedby={describedBy}
       onClick={handleRead}
     >
       {t("table.read")}
     </Button>
   );
-  // 无合法地址时禁用并说明原因（禁用元素不触发 Tooltip，需包一层 span）。
-  return !hasAddress ? (
-    <Tooltip title={t("table.emptyAddressTooltip")}>
-      <span>{button}</span>
-    </Tooltip>
-  ) : (
-    button
+  // 禁用元素不触发 Tooltip，需包一层 span；文本原因同时供 aria-describedby 读取。
+  return (
+    <>
+      <Tooltip title={reason ?? undefined}>
+        <span>{button}</span>
+      </Tooltip>
+      {reason !== null && communicationAvailable ? (
+        <span id={localReasonId} className="register-table__sr-only">
+          {reason}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -932,6 +985,7 @@ interface WriteCellProps {
   hasAddress: boolean;
   /** 范围长度与类型合法集匹配：不匹配时禁用读写。 */
   typeCountValid: boolean;
+  communicationReasonId: string;
 }
 
 const WriteCell = memo(function WriteCell(props: WriteCellProps) {
@@ -950,13 +1004,17 @@ function WriteControl({
   rowId,
   hasAddress,
   typeCountValid,
+  communicationReasonId,
 }: WriteCellProps): React.ReactNode {
   const { t } = useTranslation();
+  const localReasonId = useId();
+  const communicationAvailable = useAppStore((s) =>
+    isCommunicationAvailable(s.connectionState),
+  );
   const host = useAppStore((s) => s.host);
   const appendMessage = useAppStore((s) => s.appendMessage);
   const recordManualResult = useAppStore((s) => s.recordManualResult);
   const updateRow = useAppStore((s) => s.updateRow);
-  const connected = useAppStore((s) => s.connectionState) === "connected";
   // 只读表：discrete-input/input-register 按表类型禁用写（WriteCell 守卫）。
   const sheetType = useAppStore(
     (s) =>
@@ -964,13 +1022,33 @@ function WriteControl({
       "holding-register",
   );
   const readOnly = !sheetTypeWritable(sheetType);
-  // 离线、未配置合法地址、范围长度与类型合法集不匹配或只读表时禁用；无地址时提供 Tooltip 说明原因。
-  const disabled = !connected || !hasAddress || !typeCountValid || readOnly;
+  const reason = !communicationAvailable
+    ? t("table.connectBeforeCommunication")
+    : !hasAddress
+      ? t("table.emptyAddressTooltip")
+      : !typeCountValid
+        ? t("table.typeCountMismatchTooltip")
+        : readOnly
+          ? t("table.readOnlyTable")
+          : null;
+  const disabled = reason !== null;
+  const describedBy =
+    reason === null
+      ? undefined
+      : communicationAvailable
+        ? localReasonId
+        : communicationReasonId;
 
   // 单行写逻辑（含每表写后回读配置）统一在 row-io.writeRowById
   // （与 Ctrl+Shift+Enter 写选中行快捷键共用）。
   const handleWrite = (): void => {
-    if (host === null || host === undefined) return;
+    if (
+      host === null ||
+      host === undefined ||
+      !isCommunicationAvailable(useAppStore.getState().connectionState)
+    ) {
+      return;
+    }
     void writeRowById(host, sheetId, rowId, {
       updateRow,
       recordManualResult,
@@ -982,22 +1060,23 @@ function WriteControl({
       size="small"
       type="primary"
       disabled={disabled}
+      aria-describedby={describedBy}
       onClick={handleWrite}
     >
       {t("table.write")}
     </Button>
   );
-  // 无合法地址时禁用并说明原因（禁用元素不触发 Tooltip，需包一层 span）；只读表同理。
-  return !hasAddress ? (
-    <Tooltip title={t("table.emptyAddressTooltip")}>
-      <span>{button}</span>
-    </Tooltip>
-  ) : readOnly ? (
-    <Tooltip title={t("table.readOnlyTable")}>
-      <span>{button}</span>
-    </Tooltip>
-  ) : (
-    button
+  return (
+    <>
+      <Tooltip title={reason ?? undefined}>
+        <span>{button}</span>
+      </Tooltip>
+      {reason !== null && communicationAvailable ? (
+        <span id={localReasonId} className="register-table__sr-only">
+          {reason}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -1743,6 +1822,9 @@ const RegisterTableContent = memo(function RegisterTableContent({
   // 连接状态订阅：连接/断开时刷新（工具栏「从站地址 / Unit ID」label 按活动协议切换，
   // TCP Unit ID 会话内动态修改；协议只在连接时变化）。
   const connectionState = useAppStore((s) => s.connectionState);
+  const communicationAvailable = isCommunicationAvailable(connectionState);
+  const communicationReasonId = useId();
+  const setConnectionModalOpen = useAppStore((s) => s.setConnectionModalOpen);
   const cellValidationErrors = useAppStore((s) => s.cellValidationErrors);
   const rows = useAppStore(
     (s) => s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.rows ?? [],
@@ -1787,7 +1869,13 @@ const RegisterTableContent = memo(function RegisterTableContent({
     (action: { pluginId: string; payload: ToolbarActionContribution }) => {
       const actionId = action.payload.id;
       const run = () => {
-        if (host === null || host === undefined) return;
+        if (
+          host === null ||
+          host === undefined ||
+          !isCommunicationAvailable(useAppStore.getState().connectionState)
+        ) {
+          return;
+        }
         void runPluginToolbarAction(host, action.pluginId, actionId, {
           appendMessage,
         });
@@ -1977,7 +2065,13 @@ const RegisterTableContent = memo(function RegisterTableContent({
       : "rtu";
 
   const handleReadAll = async (): Promise<void> => {
-    if (host === null || host === undefined) return;
+    if (
+      host === null ||
+      host === undefined ||
+      !isCommunicationAvailable(useAppStore.getState().connectionState)
+    ) {
+      return;
+    }
     const sheet = useAppStore
       .getState()
       .workspace.sheets.find((candidate) => candidate.sheetId === sheetId);
@@ -2158,7 +2252,13 @@ const RegisterTableContent = memo(function RegisterTableContent({
 
   /** 读取选中行（F8）：与 ReadCell 按钮同一路径（row-io.readRowById），逐行执行。 */
   const handleReadSelectedRows = (): void => {
-    if (host === null || host === undefined) return;
+    if (
+      host === null ||
+      host === undefined ||
+      !isCommunicationAvailable(useAppStore.getState().connectionState)
+    ) {
+      return;
+    }
     for (const rowId of selectedRowIds) {
       void readRowById(host, rowId, { updateRow, recordManualResult });
     }
@@ -2166,7 +2266,13 @@ const RegisterTableContent = memo(function RegisterTableContent({
 
   /** 写入选中行（Ctrl+Shift+Enter）：与 WriteCell 按钮同一路径（row-io.writeRowById）。 */
   const handleWriteSelectedRows = (): void => {
-    if (host === null || host === undefined) return;
+    if (
+      host === null ||
+      host === undefined ||
+      !isCommunicationAvailable(useAppStore.getState().connectionState)
+    ) {
+      return;
+    }
     for (const rowId of selectedRowIds) {
       void writeRowById(host, sheetId, rowId, {
         updateRow,
@@ -2179,6 +2285,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
   /** 轮询启停（Alt+P）：切换选中行的 WP（与 WP 开关同一 store 动作 setPollingEnabled）。 */
   const togglePollingSelected = (): void => {
     const state = useAppStore.getState();
+    if (!isCommunicationAvailable(state.connectionState)) return;
     const sheet = state.workspace.sheets.find((sh) => sh.sheetId === sheetId);
     for (const rowId of selectedRowIds) {
       const row = sheet?.rows.find((r) => r.rowId === rowId);
@@ -2237,24 +2344,30 @@ const RegisterTableContent = memo(function RegisterTableContent({
       event.preventDefault();
       if (readAllRunning) {
         handleCancelReadAll();
-      } else {
+      } else if (communicationAvailable) {
         void handleReadAll();
       }
       return;
     }
     if (matchesShortcut(event, tableShortcut("readSelected").combo)) {
       event.preventDefault();
-      handleReadSelectedRows();
+      if (communicationAvailable) {
+        handleReadSelectedRows();
+      }
       return;
     }
     if (matchesShortcut(event, tableShortcut("writeSelected").combo)) {
       event.preventDefault();
-      handleWriteSelectedRows();
+      if (communicationAvailable) {
+        handleWriteSelectedRows();
+      }
       return;
     }
     if (matchesShortcut(event, tableShortcut("togglePolling").combo)) {
       event.preventDefault();
-      togglePollingSelected();
+      if (communicationAvailable) {
+        togglePollingSelected();
+      }
       return;
     }
     if (matchesShortcut(event, tableShortcut("restoreColumnLayout").combo)) {
@@ -2508,6 +2621,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
               rowId={row.rowId}
               pollingEnabled={row.pollingEnabled}
               hasAddress={row.addressValue !== null}
+              communicationReasonId={communicationReasonId}
             />
           ),
       },
@@ -2522,6 +2636,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
               rowId={row.rowId}
               hasAddress={row.addressValue !== null}
               typeCountValid={isRowTypeCountValid(row)}
+              communicationReasonId={communicationReasonId}
             />
           ),
       },
@@ -2560,6 +2675,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
               rowId={row.rowId}
               hasAddress={row.addressValue !== null}
               typeCountValid={isRowTypeCountValid(row)}
+              communicationReasonId={communicationReasonId}
             />
           ),
       },
@@ -2632,7 +2748,15 @@ const RegisterTableContent = memo(function RegisterTableContent({
           ),
       },
     ],
-    [t, registerRadix, cellValidationErrors, sheetId, maxOrder, sheetWritable],
+    [
+      t,
+      registerRadix,
+      cellValidationErrors,
+      sheetId,
+      maxOrder,
+      sheetWritable,
+      communicationReasonId,
+    ],
   );
   const [startupColumnLimit, setStartupColumnLimit] = useState(
     deferBody && isMobileLayout ? 3 : Number.MAX_SAFE_INTEGER,
@@ -3141,15 +3265,36 @@ const RegisterTableContent = memo(function RegisterTableContent({
           </div>
           <span className="table-toolbar__sep" aria-hidden="true" />
           <div className="table-toolbar__group">
-            <Button
-              size="small"
-              type="primary"
-              loading={readAllRunning}
-              icon={<ReloadOutlined />}
-              onClick={() => void handleReadAll()}
-            >
-              {t("topbar.readAll")}
-            </Button>
+            {communicationAvailable ? (
+              <Button
+                size="small"
+                type="primary"
+                loading={readAllRunning}
+                icon={<ReloadOutlined />}
+                onClick={() => void handleReadAll()}
+              >
+                {t("topbar.readAll")}
+              </Button>
+            ) : (
+              !readAllRunning && (
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<ApiOutlined />}
+                  onClick={() => setConnectionModalOpen(true)}
+                >
+                  {t("table.connectDevice")}
+                </Button>
+              )
+            )}
+            {!communicationAvailable ? (
+              <span
+                id={communicationReasonId}
+                className="register-table__sr-only"
+              >
+                {t("table.connectBeforeCommunication")}
+              </span>
+            ) : null}
             {readAllRunning ? (
               <Button
                 size="small"
@@ -3189,7 +3334,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
             <>
               <span className="table-toolbar__sep" aria-hidden="true" />
               <div className="table-toolbar__group table-toolbar__plugins">
-                {toolbarActions.map((action) => {
+                {toolbarActions.map((action, index) => {
                   // 插件外部化：动作可用性由插件 runtime 是否声明 handler 决定
                   // （安川 ROM/RAM 确定指令由插件自身承载；声明式占位动作置灰）。
                   const canHandle =
@@ -3197,25 +3342,45 @@ const RegisterTableContent = memo(function RegisterTableContent({
                       action.pluginId,
                       action.payload.id,
                     ) ?? false;
+                  const disabledReason = !communicationAvailable
+                    ? t("table.connectBeforeCommunication")
+                    : !canHandle
+                      ? t("plugins.toolbarActionPlaceholder")
+                      : null;
+                  const disabledReasonId = !communicationAvailable
+                    ? communicationReasonId
+                    : `${communicationReasonId}-plugin-${index}`;
                   return (
-                    <Tooltip
-                      key={action.payload.id}
-                      title={
-                        canHandle
-                          ? t(action.payload.titleKey)
-                          : t("plugins.toolbarActionPlaceholder")
-                      }
-                    >
-                      <Button
-                        size="small"
-                        disabled={!canHandle}
-                        aria-label={t(action.payload.titleKey)}
-                        data-testid={`plugin-toolbar-action-${action.payload.id}`}
-                        onClick={() => handlePluginToolbarAction(action)}
+                    <span key={action.payload.id}>
+                      <Tooltip
+                        title={disabledReason ?? t(action.payload.titleKey)}
                       >
-                        {t(action.payload.titleKey)}
-                      </Button>
-                    </Tooltip>
+                        <span>
+                          <Button
+                            size="small"
+                            disabled={disabledReason !== null}
+                            aria-label={t(action.payload.titleKey)}
+                            aria-describedby={
+                              disabledReason !== null
+                                ? disabledReasonId
+                                : undefined
+                            }
+                            data-testid={`plugin-toolbar-action-${action.payload.id}`}
+                            onClick={() => handlePluginToolbarAction(action)}
+                          >
+                            {t(action.payload.titleKey)}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      {disabledReason !== null && communicationAvailable ? (
+                        <span
+                          id={disabledReasonId}
+                          className="register-table__sr-only"
+                        >
+                          {disabledReason}
+                        </span>
+                      ) : null}
+                    </span>
                   );
                 })}
               </div>

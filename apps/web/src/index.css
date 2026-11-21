@@ -800,6 +800,19 @@ body {
   white-space: nowrap;
 }
 
+/* 禁用原因的辅助技术文本：保留 aria-describedby 语义，不增加工具栏/行高。 */
+.register-table__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .table-toolbar__radix {
   display: inline-flex;
   align-items: center;

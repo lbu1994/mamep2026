@@ -140,6 +140,11 @@ export const en = {
     bitToggle: "Toggle bit {{bit}}",
     emptyAddressTooltip:
       "Set a valid register address first to enable this control.",
+    connectDevice: "Connect device",
+    connectBeforeCommunication:
+      "Connect the device before reading, writing, or polling.",
+    typeCountMismatchTooltip:
+      "The row range length does not match the selected data type.",
     addressFormatHint:
       "Address display format only; does not affect the Data value format.",
     addRow: "Add Row",
@@ -716,6 +721,9 @@ export const zh: TranslationResources = {
     bitLabel: "位 {{bit}}",
     bitToggle: "切换位 {{bit}}",
     emptyAddressTooltip: "请先填写合法寄存器地址以启用该控件。",
+    connectDevice: "连接设备",
+    connectBeforeCommunication: "请先连接设备，再进行读取、写入或轮询。",
+    typeCountMismatchTooltip: "行范围长度与所选数据类型不匹配。",
     addressFormatHint: "仅影响地址的显示与输入进制，不影响 Data 值格式。",
     addRow: "新增行",
     dragHandle: "拖拽排序",

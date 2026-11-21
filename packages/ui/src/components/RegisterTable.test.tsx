@@ -16,6 +16,7 @@ import { App as AntApp } from "antd";
 import type {
   BatchReadHandle,
   BatchReadSummary,
+  ConnectionState,
   WriteOutcome,
 } from "@mamep2026/communication";
 import {
@@ -1510,4 +1511,147 @@ describe("RegisterTable 基础表（ADR-043 E-2）", () => {
     // 首行有合法地址：按钮可用。
     expect((writeButtons[0] as HTMLButtonElement).disabled).toBe(false);
   });
+});
+
+describe("RegisterTable 离线通信操作门控", () => {
+  const offlineStates: ConnectionState[] = [
+    "disconnected",
+    "failed",
+    "interrupted",
+  ];
+
+  it("三种离线态统一禁用通信入口、快捷键不发起请求，恢复连接后自动解锁", async () => {
+    initI18n();
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet !== undefined) {
+      sheet.rows = sheet.rows.slice(0, 1).map((row, index) => {
+        const address = RegisterAddress.create(index);
+        return {
+          ...row,
+          addressDraft: String(index),
+          addressValue: address.ok ? address.value : null,
+        };
+      });
+    }
+    const readAllRows = vi.fn(
+      (): BatchReadHandle =>
+        ({
+          promise: new Promise<Result<BatchReadSummary>>(() => {}),
+          cancel: vi.fn(),
+        }) as BatchReadHandle,
+    );
+    const readRow = vi.fn(async (): Promise<Result<number | number[]>> =>
+      ok(42),
+    );
+    const writeRow = vi.fn(async (): Promise<Result<WriteOutcome>> =>
+      ok({ kind: "write-succeeded-no-verify" } as WriteOutcome),
+    );
+    const host = {
+      readAllRows,
+      readRow,
+      writeRow,
+      getCommProperties: vi.fn(() => ({
+        protocol: "rtu" as const,
+        portLabel: null,
+        unitId: null,
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: "none",
+        flowControl: "off",
+        timeoutMs: 1000,
+        retryCount: 1,
+        connectionState: "connected",
+      })),
+    } as unknown as AppHost;
+    const selectedRowId = workspace.sheets[0]?.rows[0]?.rowId;
+    useAppStore.setState({
+      host,
+      workspace,
+      activeSheetId: null,
+      connectionState: "disconnected",
+      connectionModalOpen: false,
+      selectedRowIds: selectedRowId === undefined ? [] : [selectedRowId],
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+    render(
+      <AntApp>
+        <RegisterTable sheetId={sheetId()} />
+      </AntApp>,
+    );
+
+    for (const state of offlineStates) {
+      readAllRows.mockClear();
+      readRow.mockClear();
+      writeRow.mockClear();
+      useAppStore.setState({
+        connectionState: state,
+        connectionModalOpen: false,
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /Connect device/ }),
+        ).toBeTruthy();
+      });
+
+      expect(screen.queryByRole("button", { name: /Read All/ })).toBeNull();
+      const connectButton = screen.getByRole("button", {
+        name: /Connect device/,
+      });
+      fireEvent.click(connectButton);
+      expect(useAppStore.getState().connectionModalOpen).toBe(true);
+      useAppStore.setState({ connectionModalOpen: false });
+
+      const communicationControls = [
+        ...screen.getAllByRole("button", { name: "Read" }),
+        ...screen.getAllByRole("button", { name: "Write" }),
+        ...screen.getAllByRole("switch", { name: "WP" }),
+      ];
+      expect(communicationControls.length).toBeGreaterThan(0);
+      const descriptions = new Set<string>();
+      for (const control of communicationControls) {
+        expect((control as HTMLButtonElement).disabled).toBe(true);
+        const describedBy = control.getAttribute("aria-describedby");
+        expect(describedBy).toBeTruthy();
+        const description = document.getElementById(describedBy ?? "");
+        expect(description?.textContent).toBe(
+          "Connect the device before reading, writing, or polling.",
+        );
+        descriptions.add(description?.textContent ?? "");
+      }
+      expect(descriptions.size).toBe(1);
+
+      fireEvent.click(screen.getAllByRole("button", { name: "Read" })[0]!);
+      fireEvent.click(screen.getAllByRole("button", { name: "Write" })[0]!);
+      fireEvent.keyDown(window, { key: "F9" });
+      fireEvent.keyDown(window, { key: "F8" });
+      fireEvent.keyDown(window, {
+        key: "Enter",
+        ctrlKey: true,
+        shiftKey: true,
+      });
+      fireEvent.keyDown(window, { key: "p", altKey: true });
+      expect(readAllRows).not.toHaveBeenCalled();
+      expect(readRow).not.toHaveBeenCalled();
+      expect(writeRow).not.toHaveBeenCalled();
+    }
+
+    useAppStore.setState({ connectionState: "connected" });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Read All/ })).toBeTruthy();
+    });
+    expect(screen.queryByRole("button", { name: /Connect device/ })).toBeNull();
+    for (const control of [
+      ...screen.getAllByRole("button", { name: "Read" }),
+      ...screen.getAllByRole("button", { name: "Write" }),
+      ...screen.getAllByRole("switch", { name: "WP" }),
+    ]) {
+      expect((control as HTMLButtonElement).disabled).toBe(false);
+      expect(control.getAttribute("aria-describedby")).toBeNull();
+    }
+  }, 30_000);
 });
