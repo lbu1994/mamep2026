@@ -36,3 +36,9 @@ export {
   type AppLanguage,
   type TranslationResources,
 } from "./i18n";
+export {
+  type FieldPerformanceCacheMode,
+  type FieldPerformanceNetworkProfile,
+  type FieldPerformanceSettings,
+  type FieldPerformanceZoomPercent,
+} from "./local-performance-settings";

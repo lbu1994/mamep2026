@@ -1,7 +1,7 @@
 {
   "name": "mamep2026",
   "private": true,
-  "version": "0.5.7",
+  "version": "0.6.0",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "main": "dist-electron/main.js",
@@ -27,7 +27,7 @@
     "build:android:release": "node scripts/build-android.mjs --release",
     "lint": "node scripts/run-logged.mjs lint -- eslint .",
     "typecheck": "node scripts/run-logged.mjs typecheck -- turbo run typecheck",
-    "test:scripts": "node --test scripts/lib/test-report.test.mjs scripts/lib/workspace-boundary-audit.test.mjs scripts/lib/test-plan-audit.test.mjs scripts/lib/bundle-budget.test.mjs",
+    "test:scripts": "node --test scripts/lib/test-report.test.mjs scripts/lib/workspace-boundary-audit.test.mjs scripts/lib/test-plan-audit.test.mjs scripts/lib/bundle-budget.test.mjs scripts/lib/field-performance-report.test.mjs",
     "test": "node scripts/run-logged.mjs unit -- \"pnpm test:scripts && turbo run test --filter=!@mamep2026/acceptance --filter=!@mamep2026/e2e-web --filter=!@mamep2026/e2e-electron --filter=!@mamep2026/e2e-vscode --filter=!@mamep2026/e2e-android\"",
     "check:boundaries": "node scripts/audit-workspace-boundaries.mjs",
     "test:all": "node scripts/test-all.mjs",

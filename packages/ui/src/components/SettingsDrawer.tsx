@@ -36,10 +36,15 @@ import Popconfirm from "antd/es/popconfirm";
 import Segmented from "antd/es/segmented";
 import Select from "antd/es/select";
 import Space from "antd/es/space";
+import Switch from "antd/es/switch";
 import Tabs from "antd/es/tabs";
 import Typography from "antd/es/typography";
 import type { AppHost } from "../host";
 import { useAppStore } from "../app-store";
+import type {
+  FieldPerformanceNetworkProfile,
+  FieldPerformanceSettings,
+} from "../local-performance-settings";
 import { usePluginContributions } from "../plugin/use-contributions";
 import {
   buildThemeColorOptions,
@@ -86,8 +91,10 @@ function themeColorOptionLabel(title: string, color: string): ReactNode {
 
 export function SettingsDrawer({
   host,
+  performanceSettings,
 }: {
   host: AppHost | null;
+  performanceSettings?: FieldPerformanceSettings | undefined;
 }): React.ReactNode {
   const { t, i18n } = useTranslation();
   const open = useAppStore((s) => s.settingsModalOpen);
@@ -213,6 +220,137 @@ export function SettingsDrawer({
       <div>
         <WorkspaceFileActions />
       </div>
+      {performanceSettings !== undefined && (
+        <div
+          className="local-performance-settings"
+          data-testid="local-performance-settings"
+        >
+          <Divider titlePlacement="left" plain>
+            {t("settings.fieldPerformanceTitle")}
+          </Divider>
+          <div>
+            <Typography.Text>
+              {t("settings.fieldPerformanceEnable")}
+            </Typography.Text>
+            <Switch
+              style={{ marginLeft: 8 }}
+              aria-label={t("settings.fieldPerformanceEnable")}
+              checked={performanceSettings.enabled}
+              onChange={performanceSettings.setEnabled}
+            />
+          </div>
+          <Typography.Paragraph type="secondary">
+            {t("settings.fieldPerformanceHint")}
+          </Typography.Paragraph>
+          <div>
+            <Typography.Text>
+              {t("settings.fieldPerformanceCache")}
+            </Typography.Text>
+            <Segmented
+              style={{ marginLeft: 8 }}
+              value={performanceSettings.cacheMode}
+              onChange={(value) =>
+                performanceSettings.setCacheMode(value as "cold" | "warm")
+              }
+              options={[
+                {
+                  value: "cold",
+                  label: t("settings.fieldPerformanceCold"),
+                },
+                {
+                  value: "warm",
+                  label: t("settings.fieldPerformanceWarm"),
+                },
+              ]}
+            />
+          </div>
+          <div>
+            <Typography.Text>
+              {t("settings.fieldPerformanceZoom")}
+            </Typography.Text>
+            <Select
+              size="small"
+              style={{ marginLeft: 8, minWidth: 96 }}
+              aria-label={t("settings.fieldPerformanceZoom")}
+              value={performanceSettings.zoomPercent}
+              onChange={(value) => performanceSettings.setZoomPercent(value)}
+              options={[100, 125, 150].map((value) => ({
+                value,
+                label: `${value}%`,
+              }))}
+            />
+          </div>
+          <div>
+            <Typography.Text>
+              {t("settings.fieldPerformanceNetwork")}
+            </Typography.Text>
+            <Select
+              size="small"
+              style={{ marginLeft: 8, minWidth: 128 }}
+              aria-label={t("settings.fieldPerformanceNetwork")}
+              value={performanceSettings.networkProfile}
+              onChange={(value) =>
+                performanceSettings.setNetworkProfile(
+                  value as FieldPerformanceNetworkProfile,
+                )
+              }
+              options={[
+                {
+                  value: "local",
+                  label: t("settings.fieldPerformanceNetworkLocal"),
+                },
+                {
+                  value: "wifi",
+                  label: t("settings.fieldPerformanceNetworkWifi"),
+                },
+                {
+                  value: "fast-4g",
+                  label: t("settings.fieldPerformanceNetworkFast4g"),
+                },
+                {
+                  value: "slow-4g",
+                  label: t("settings.fieldPerformanceNetworkSlow4g"),
+                },
+                {
+                  value: "3g",
+                  label: t("settings.fieldPerformanceNetwork3g"),
+                },
+              ]}
+            />
+          </div>
+          <Space wrap>
+            <Button
+              size="small"
+              disabled={performanceSettings.sessionCount === 0}
+              onClick={performanceSettings.exportReport}
+            >
+              {t("settings.fieldPerformanceExport")}
+            </Button>
+            <Popconfirm
+              title={t("settings.fieldPerformanceClearConfirmTitle")}
+              description={t("settings.fieldPerformanceClearConfirmContent")}
+              okText={t("settings.fieldPerformanceClearOk")}
+              cancelText={t("connection.cancel")}
+              okButtonProps={{ danger: true }}
+              disabled={performanceSettings.sessionCount === 0}
+              onConfirm={performanceSettings.clearSessions}
+            >
+              <Button
+                danger
+                size="small"
+                disabled={performanceSettings.sessionCount === 0}
+              >
+                {t("settings.fieldPerformanceClear")}
+              </Button>
+            </Popconfirm>
+          </Space>
+          <Typography.Text type="secondary">
+            {t("settings.fieldPerformanceSessionCount", {
+              count: performanceSettings.sessionCount,
+            })}
+          </Typography.Text>
+        </div>
+      )}
       <Typography.Paragraph type="secondary">
         {t("settings.aboutText")}
       </Typography.Paragraph>

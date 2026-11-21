@@ -16,6 +16,7 @@ import {
 import type { AppHost } from "../host";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
+import type { FieldPerformanceSettings } from "../local-performance-settings";
 import { SettingsDrawer } from "./SettingsDrawer";
 
 /** 带贡献点注册表的 PluginRegistry（贡献聚合需要，与 App 装配一致）。 */
@@ -62,14 +63,33 @@ function makeHost(registry: PluginRegistry | null): AppHost {
   } as unknown as AppHost;
 }
 
-function renderDrawer(registry: PluginRegistry | null): void {
+function renderDrawer(
+  registry: PluginRegistry | null,
+  performanceSettings?: FieldPerformanceSettings,
+): void {
   const host = makeHost(registry);
   useAppStore.setState({ host, settingsModalOpen: true });
   render(
     <AntApp>
-      <SettingsDrawer host={host} />
+      <SettingsDrawer host={host} performanceSettings={performanceSettings} />
     </AntApp>,
   );
+}
+
+function performanceSettings(): FieldPerformanceSettings {
+  return {
+    enabled: false,
+    cacheMode: "cold",
+    zoomPercent: 100,
+    networkProfile: "local",
+    sessionCount: 2,
+    setEnabled: vi.fn(),
+    setCacheMode: vi.fn(),
+    setZoomPercent: vi.fn(),
+    setNetworkProfile: vi.fn(),
+    exportReport: vi.fn(),
+    clearSessions: vi.fn(),
+  };
 }
 
 describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
@@ -152,5 +172,34 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
     clickTab("Plugins");
     expect(await screen.findByTestId("plugin-manager")).toBeTruthy();
     expect(screen.queryByTestId("plugin-settings")).toBeNull();
+  });
+
+  it("仅在浏览器组合根注入时显示本地性能采样，并可切换与导出", () => {
+    const settings = performanceSettings();
+    renderDrawer(null, settings);
+
+    const section = screen.getByTestId("local-performance-settings");
+    expect(section.textContent).toContain("Local performance sampling");
+    expect(section.textContent).toContain("never uploads");
+    expect(section.textContent).toContain("Local / loopback");
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Collect performance data" }),
+    );
+    expect(settings.setEnabled).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(settings.setEnabled).mock.calls[0]?.[0]).toBe(true);
+
+    fireEvent.click(screen.getByText("Warm"));
+    expect(settings.setCacheMode).toHaveBeenCalledWith("warm");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Export local report" }),
+    );
+    expect(settings.exportReport).toHaveBeenCalledTimes(1);
+  });
+
+  it("未注入本地性能采样契约时不渲染采集开关", () => {
+    renderDrawer(null);
+    expect(screen.queryByTestId("local-performance-settings")).toBeNull();
   });
 });

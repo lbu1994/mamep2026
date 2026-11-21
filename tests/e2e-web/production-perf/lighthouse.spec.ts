@@ -1,8 +1,15 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import lighthouse, { desktopConfig } from "lighthouse";
 import { launch, type LaunchedChrome } from "chrome-launcher";
 import { expect, test } from "@playwright/test";
 import { WEB_PERF_BUDGETS } from "./budgets";
-import { resolveEdgeExecutable } from "./edge";
+import {
+  reserveDebuggingPort,
+  resolveEdgeExecutable,
+  terminateLaunchedChrome,
+} from "./edge";
 import {
   finishPerformanceReport,
   maxBudgetCheck,
@@ -78,9 +85,13 @@ async function runLighthouseSample(
   run: number,
 ): Promise<LighthouseSample> {
   let chrome: LaunchedChrome | undefined;
+  const userDataDir = mkdtempSync(join(tmpdir(), "mamep-lighthouse-"));
   try {
+    const port = await reserveDebuggingPort();
     chrome = await launch({
       chromePath: resolveEdgeExecutable(),
+      port,
+      userDataDir,
       chromeFlags: [
         "--disable-gpu",
         "--no-first-run",
@@ -129,7 +140,7 @@ async function runLighthouseSample(
       runtimeError: lhr.runtimeError?.message ?? null,
     };
   } finally {
-    chrome?.kill();
+    terminateLaunchedChrome(chrome, userDataDir);
   }
 }
 

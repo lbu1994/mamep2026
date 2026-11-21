@@ -27,6 +27,10 @@
   错误。预算、原始样本、中位数与通过状态写入
   `test-reports/run-<时间戳>/web-performance-baseline.json`；单独在包内执行时写入
   `tests/e2e-web/test-results/`。系统 Edge 不在标准路径时设置 `MAMEP_EDGE_PATH`。
+  真实设备字段 INP 通过 Settings → General 的本地性能采样导出，再用
+  `node scripts/summarize-field-performance.mjs <report.json...> --out <summary.md>`
+  汇总；流程见
+  [Web 真实设备性能验证](architecture/quality/performance/真实设备验证.md)。
 - `pnpm test:e2e:real` / `pnpm test:e2e:web:real` / `pnpm test:e2e:electron:real` / `pnpm test:e2e:vscode:real` — 三端「真实端口」e2e（com0com COM4↔COM5 + 真实 RTU/TCP 从站）：`scripts/e2e-real.mjs` 统一编排（预检 → 启停从站 → 设 `MAMEP_REAL=1` → 跑对应端 `test:real`）；缺环境 SKIP 不失败；浏览器端启动时需在系统串口选择器手动选 COM4 一次（记录 localStorage 复用）。VSCode real 需先 `pnpm build:vscode`（runner 已处理）
 - `pnpm format` / `pnpm format:check` — Prettier
 

@@ -87,6 +87,7 @@ import { SheetNameEditor } from "./components/SheetNameEditor";
 import { buildSheetMenuItems } from "./components/SheetMenu";
 import { scheduleAfterInput } from "./defer-user-commit";
 import { useOpenedOnce } from "./opened-once";
+import type { FieldPerformanceSettings } from "./local-performance-settings";
 import {
   loadConnectionSettingsModalModule,
   loadSettingsDrawerModule,
@@ -181,6 +182,10 @@ function sidebarGroupIcon(sheetType: SheetType): ReactNode {
 export interface MamepAppProps {
   /** 生产组合根启用分阶段首屏；组件测试默认直接渲染完整界面。 */
   deferStartupContent?: boolean;
+  /** 浏览器组合根注入的本地性能采样控制；其他平台不传。 */
+  performanceSettings?: FieldPerformanceSettings | undefined;
+  /** Settings 首次打开前按需加载性能采样控制，避免默认关闭时增加首屏请求。 */
+  requestPerformanceSettings?: (() => void) | undefined;
 }
 
 /**
@@ -201,6 +206,8 @@ export function MamepApp(props: MamepAppProps = {}): React.ReactNode {
 
 function MamepAppContent({
   deferStartupContent = false,
+  performanceSettings,
+  requestPerformanceSettings,
 }: MamepAppProps = {}): React.ReactNode {
   const { t } = useTranslation();
   const host = useAppStore((s) => s.host);
@@ -317,6 +324,7 @@ function MamepAppContent({
     scheduleAfterInput(() => setConnectionModalOpen(true));
   };
   const openSettings = (): void => {
+    requestPerformanceSettings?.();
     void loadSettingsDrawerModule();
     scheduleAfterInput(() => setSettingsOpen(true));
   };
@@ -1512,7 +1520,10 @@ function MamepAppContent({
 
         {settingsMounted && (
           <Suspense fallback={null}>
-            <SettingsDrawer host={host} />
+            <SettingsDrawer
+              host={host}
+              performanceSettings={performanceSettings}
+            />
           </Suspense>
         )}
 

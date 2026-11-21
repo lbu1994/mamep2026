@@ -1,13 +1,15 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
-import type { AddressTransform } from "@mamep2026/domain";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import type { AddressTransform, Workspace } from "@mamep2026/domain";
 import type { CompatibilityEnv } from "@mamep2026/platform-web";
 import { buildPollingTargets } from "@mamep2026/register-table";
 import {
   requestProtocolResolver,
   useAppStore,
   type AppHost,
+  type FieldPerformanceSettings,
 } from "@mamep2026/ui/runtime";
 import { AppStartupBootstrap } from "@mamep2026/ui/startup";
+import { isFieldPerformanceOptInEnabled } from "./field-performance-config";
 import { scheduleAfterPaint } from "./main-thread-scheduler";
 import { detectAppPlatform } from "./platform-detect";
 
@@ -36,6 +38,23 @@ function isCompatMissMode(): boolean {
   );
 }
 
+function fieldPerformanceWorkspaceContext(workspace: Workspace): {
+  activeSheetRows: number;
+  totalWorkspaceRows: number;
+} {
+  const activeSheet =
+    workspace.sheets.find(
+      (sheet) => sheet.sheetId === workspace.activeSheetId,
+    ) ?? workspace.sheets[0];
+  return {
+    activeSheetRows: activeSheet?.rows.length ?? 0,
+    totalWorkspaceRows: workspace.sheets.reduce(
+      (total, sheet) => total + sheet.rows.length,
+      0,
+    ),
+  };
+}
+
 /** 生产导入解析器：仅在用户选择文件后加载 Worker 客户端，不进入首屏 chunk。 */
 async function parseWorkspaceTextForImport(
   text: string,
@@ -61,8 +80,16 @@ async function parseWorkspaceTextForImport(
  */
 export default function App(): React.ReactNode {
   const hostStatus = useAppStore((s) => s.hostStatus);
+  const [performanceSettings, setPerformanceSettings] =
+    useState<FieldPerformanceSettings | null>(null);
   /** 活动 host（工作区变更订阅据其调用 `scheduleSave` / `updatePollingTargets`）。 */
   const hostRef = useRef<AppHost | null>(null);
+  /** 本地性能采样按需加载；未加载或非浏览器平台时保持 no-op。 */
+  const updateFieldPerformanceRef = useRef<
+    (context: { activeSheetRows: number; totalWorkspaceRows: number }) => void
+  >(() => undefined);
+  /** Settings 首次打开时才加载完整采样器；已开启采样的上一次访问会提前加载。 */
+  const requestFieldPerformanceRef = useRef<() => void>(() => undefined);
   /**
    * 地址变换解析：跨 effect 共享——装配 effect 建立注册表后写入，工作区
    * 变更订阅（下方 effect）在回调触发时读取；初始 no-op 兜底（装配完成前无可轮询行）。
@@ -74,11 +101,52 @@ export default function App(): React.ReactNode {
   // 启动装配（一次）：探测平台 → 按平台加载宿主实现 → 编排启动（见 host-assembly.ts）。
   useEffect(() => {
     const controller = new AbortController();
+    let unsubscribePerformance: (() => void) | null = null;
     useAppStore
       .getState()
       .setWorkspaceImportParser(parseWorkspaceTextForImport);
     void (async () => {
       try {
+        const bridge = window.mamepHost;
+        const platform = detectAppPlatform({
+          bridge,
+          globalObject: globalThis,
+        });
+        let performanceImport: Promise<
+          typeof import("./field-performance")
+        > | null = null;
+        let performanceReady = false;
+        const ensureFieldPerformanceLoaded = (): void => {
+          if (platform !== "browser") return;
+          performanceImport ??= import("./field-performance");
+          void performanceImport
+            .then((performanceModule) => {
+              if (controller.signal.aborted || performanceReady) return;
+              performanceReady = true;
+              performanceModule.initializeFieldPerformanceCapture(true);
+              updateFieldPerformanceRef.current =
+                performanceModule.updateFieldPerformanceWorkspace;
+              updateFieldPerformanceRef.current(
+                fieldPerformanceWorkspaceContext(
+                  useAppStore.getState().workspace,
+                ),
+              );
+              unsubscribePerformance =
+                performanceModule.subscribeFieldPerformanceSettings(() => {
+                  setPerformanceSettings(
+                    performanceModule.getFieldPerformanceSettings(),
+                  );
+                });
+              setPerformanceSettings(
+                performanceModule.getFieldPerformanceSettings(),
+              );
+            })
+            .catch(() => {
+              performanceImport = null;
+            });
+        };
+        requestFieldPerformanceRef.current = ensureFieldPerformanceLoaded;
+        if (isFieldPerformanceOptInEnabled()) ensureFieldPerformanceLoaded();
         const [
           { startAppHost },
           { createPlatformHostContext },
@@ -99,10 +167,9 @@ export default function App(): React.ReactNode {
           compatibilityEnv,
         });
         resolveTransformRef.current = context.resolveAddressTransform;
-        const bridge = window.mamepHost;
         await startAppHost(
           {
-            platform: detectAppPlatform({ bridge, globalObject: globalThis }),
+            platform,
             context,
             bridge,
             sinks: createStoreSinks({
@@ -131,6 +198,9 @@ export default function App(): React.ReactNode {
       // 取消装配 / 释放宿主：abort 触发 host-assembly 的退订与 dispose（StrictMode 双挂载下
       // 保证旧 host 不再接收事件——通信日志重复投递的回归防护）。
       controller.abort();
+      unsubscribePerformance?.();
+      updateFieldPerformanceRef.current = () => undefined;
+      requestFieldPerformanceRef.current = () => undefined;
       hostRef.current = null;
       const store = useAppStore.getState();
       if (store.workspaceImportParser === parseWorkspaceTextForImport) {
@@ -171,6 +241,11 @@ export default function App(): React.ReactNode {
       const loadCompleted = state.loaded && !prevState.loaded;
       const pluginsBecameReady = state.pluginsReady && !prevState.pluginsReady;
 
+      if (workspaceChanged) {
+        updateFieldPerformanceRef.current(
+          fieldPerformanceWorkspaceContext(state.workspace),
+        );
+      }
       if (
         (workspaceChanged || loadCompleted) &&
         state.loaded &&
@@ -188,6 +263,9 @@ export default function App(): React.ReactNode {
         schedulePollingSync();
       }
     });
+    updateFieldPerformanceRef.current(
+      fieldPerformanceWorkspaceContext(useAppStore.getState().workspace),
+    );
 
     return () => {
       unsubscribe();
@@ -201,7 +279,11 @@ export default function App(): React.ReactNode {
 
   return (
     <Suspense fallback={<AppStartupBootstrap />}>
-      <MamepApp deferStartupContent />
+      <MamepApp
+        deferStartupContent
+        performanceSettings={performanceSettings ?? undefined}
+        requestPerformanceSettings={() => requestFieldPerformanceRef.current()}
+      />
     </Suspense>
   );
 }
