@@ -1568,6 +1568,47 @@ describe("RegisterTable 基础表（ADR-043 E-2）", () => {
   });
 });
 
+describe("RegisterTable 行操作视觉权重", () => {
+  beforeEach(() => {
+    initI18n();
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet !== undefined) sheet.rows = sheet.rows.slice(0, 3);
+    useAppStore.setState({
+      host: null,
+      workspace,
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  it("行级 READ/WRITE 使用默认描边按钮并保留完整文字，Read All 保持主按钮", () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+
+    const rowActions = [
+      ...screen.getAllByRole("button", { name: "Read" }),
+      ...screen.getAllByRole("button", { name: "Write" }),
+    ];
+    expect(rowActions.length).toBeGreaterThan(0);
+    for (const action of rowActions) {
+      expect(action.classList.contains("ant-btn-primary")).toBe(false);
+      expect(action.classList.contains("register-table__row-action")).toBe(
+        true,
+      );
+      expect(action.textContent?.trim()).toMatch(/^(Read|Write)$/);
+    }
+
+    expect(
+      screen
+        .getByRole("button", { name: /Read All/ })
+        .classList.contains("ant-btn-primary"),
+    ).toBe(true);
+  });
+});
+
 describe("RegisterTable 离线通信操作门控", () => {
   const offlineStates: ConnectionState[] = [
     "disconnected",

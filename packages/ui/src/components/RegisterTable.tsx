@@ -857,7 +857,8 @@ function ReadControl({
   const button = (
     <Button
       size="small"
-      type="primary"
+      type="default"
+      className="register-table__row-action register-table__row-action--read"
       disabled={disabled}
       aria-describedby={describedBy}
       onClick={handleRead}
@@ -1059,7 +1060,8 @@ function WriteControl({
   const button = (
     <Button
       size="small"
-      type="primary"
+      type="default"
+      className="register-table__row-action register-table__row-action--write"
       disabled={disabled}
       aria-describedby={describedBy}
       onClick={handleWrite}

@@ -953,6 +953,18 @@ body {
   opacity: 1;
 }
 
+/* 行级 READ/WRITE 使用默认描边按钮，主色只留给批量操作与当前键盘焦点。 */
+.register-table__row-action:focus-visible {
+  outline: 2px solid var(--mamep-focus-ring);
+  outline-offset: 1px;
+}
+
+@media (forced-colors: active) {
+  .register-table__row-action:focus-visible {
+    outline-color: Highlight;
+  }
+}
+
 /* 行右键菜单由 antd Dropdown 提供；表格包装层保持原布局（display:contents 不产生盒子） */
 .register-table__context {
   display: contents;
