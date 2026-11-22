@@ -194,6 +194,19 @@ describe("平台生命周期能力门控", () => {
   });
 });
 
+describe("侧边栏分组标题可访问名称", () => {
+  it("截断容器中的标题可聚焦并保留完整分组名称", () => {
+    render(<MamepApp />);
+
+    const groupTitle = screen.getByLabelText("HOLDING REGISTERS (R/W)");
+    expect(groupTitle.getAttribute("tabindex")).toBe("0");
+    expect(groupTitle.getAttribute("aria-label")).toBe(
+      "HOLDING REGISTERS (R/W)",
+    );
+    expect(groupTitle.textContent).toBe("HOLDING REGISTERS (R/W)");
+  });
+});
+
 describe("themeConfig（VSCode 完整主题注入 ConfigProvider，ADR-027）", () => {
   it("store.themeConfig 非空时 ConfigProvider 使用它（antd cssVar 输出对应 token）", () => {
     // 与 VscodeAppHost 装配路径一致：base + 覆盖合并后的完整配置。

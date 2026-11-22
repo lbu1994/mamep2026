@@ -3357,8 +3357,8 @@ const RegisterTableContent = memo(function RegisterTableContent({
             <span className="table-toolbar__slave">
               <span className="table-toolbar__slave-label">
                 {activeProtocol === "tcp"
-                  ? t("table.unitId")
-                  : t("table.slaveAddress")}
+                  ? t("table.unitIdLabel")
+                  : t("table.slaveAddressLabel")}
               </span>
               <InputNumber
                 size="small"

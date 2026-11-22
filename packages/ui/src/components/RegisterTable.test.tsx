@@ -539,6 +539,9 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
     useAppStore.setState({ host: makeHost("tcp"), workspace });
     render(<RegisterTable sheetId={sheetId()} />);
     await openTableSettings();
+    expect(screen.getByText("Address:")).toBeTruthy();
+    expect(screen.getByText("Unit ID:")).toBeTruthy();
+    expect(screen.getByText("Verify:")).toBeTruthy();
     expect(screen.getByLabelText("Unit ID")).toBeTruthy();
     expect(screen.queryByLabelText("Slave Address")).toBeNull();
   });
@@ -548,6 +551,9 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
     useAppStore.setState({ host: makeHost("rtu"), workspace });
     render(<RegisterTable sheetId={sheetId()} />);
     await openTableSettings();
+    expect(screen.getByText("Address:")).toBeTruthy();
+    expect(screen.getByText("Slave Address:")).toBeTruthy();
+    expect(screen.getByText("Verify:")).toBeTruthy();
     expect(screen.getByLabelText("Slave Address")).toBeTruthy();
     expect(screen.queryByLabelText("Unit ID")).toBeNull();
   });

@@ -575,6 +575,12 @@ body {
   white-space: nowrap;
 }
 
+.sheet-sidebar__group-title:focus-visible {
+  outline: 1px solid var(--ant-color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .sheet-sidebar__group-action {
   color: var(--ant-color-text-tertiary);
 }

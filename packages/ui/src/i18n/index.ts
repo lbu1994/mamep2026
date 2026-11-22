@@ -222,9 +222,11 @@ export const en = {
     restoreColumnLayoutHint:
       "Reset column widths and order to default for this table.",
     slaveAddress: "Slave Address",
+    slaveAddressLabel: "Slave Address:",
     slaveAddressHint:
-      "Slave address used for this table's read/write requests.",
+      "Slave Address used for this table's read/write requests.",
     unitId: "Unit ID",
+    unitIdLabel: "Unit ID:",
     unitIdHint: "Modbus TCP Unit ID used for this table's read/write requests.",
     // 写后回读：每表独立配置。
     writeVerify: "Write verification",
@@ -420,8 +422,8 @@ export const en = {
     toggleTheme: "Toggle light / dark theme",
     focusCommLog: "Focus communication log",
     readAll: "Read All (press again to cancel)",
-    readSelected: "Read selected rows",
-    writeSelected: "Write selected rows",
+    readSelected: "Read Selected Rows",
+    writeSelected: "Write Selected Rows",
     togglePolling: "Toggle polling for selected rows",
     moveSelectionUp: "Move selection up",
     moveSelectionDown: "Move selection down",
@@ -538,7 +540,8 @@ export const en = {
   errors: {
     notConnected: "Not connected to a device.",
     requestTimeout: "No response from the device within the timeout.",
-    requestRouteInvalid: "The request contains an invalid unit address.",
+    requestRouteInvalid:
+      "The request contains an invalid Slave Address or Unit ID.",
     requestRouteProtocolMismatch:
       "The request protocol does not match the active connection protocol.",
     writeVerifyMismatch: "Write succeeded but the read-back value differs.",
@@ -581,7 +584,7 @@ export const en = {
     bridgePayloadInvalid: "The platform bridge returned an invalid response.",
     tcpHostInvalid: "Invalid TCP host.",
     tcpPortOutOfRange: "TCP port is out of range (1..65535).",
-    tcpUnitIdOutOfRange: "TCP unit ID is out of range (0..255).",
+    tcpUnitIdOutOfRange: "TCP Unit ID is out of range (0..255).",
     workspaceSchemaInvalid: "The workspace file is invalid or corrupted.",
     workspaceImportUnsupported:
       "Importing a workspace file is not supported in this environment.",
@@ -681,8 +684,8 @@ export const zh: TranslationResources = {
     groupTcp: "TCP",
     host: "主机 / IP",
     portTcp: "TCP 端口",
-    unitId: "Unit ID",
-    unitIdHint: "MBAP 单元标识：0~255；0=广播（未实现）。",
+    unitId: "单元 ID",
+    unitIdHint: "MBAP 单元 ID：0–255；0 = 广播（未实现）。",
     autoReconnect: "自动重连",
     autoReconnectHint: "TCP 断线后自动重连（有限次数 + 指数退避）。",
   },
@@ -719,7 +722,7 @@ export const zh: TranslationResources = {
     addressDec: "地址[DEC]",
     addressHex: "地址[HEX]",
     addressFormat: "地址格式",
-    addressRadixLabel: "地址:",
+    addressRadixLabel: "地址：",
     wp: "WP",
     pollAction: "轮询",
     traceAction: "追踪",
@@ -810,12 +813,14 @@ export const zh: TranslationResources = {
     restoreColumnLayout: "恢复列布局",
     restoreColumnLayoutHint: "将本表列宽与列排序恢复为默认。",
     slaveAddress: "从站地址",
+    slaveAddressLabel: "从站地址：",
     slaveAddressHint: "本表读写请求使用的从站地址。",
-    unitId: "Unit ID",
-    unitIdHint: "本表读写请求使用的 Modbus TCP Unit ID。",
+    unitId: "单元 ID",
+    unitIdLabel: "单元 ID：",
+    unitIdHint: "本表读写请求使用的 Modbus TCP 单元 ID。",
     // 写后回读：每表独立配置。
     writeVerify: "写后回读",
-    writeVerifyLabel: "回读:",
+    writeVerifyLabel: "回读：",
     writeVerifyHint:
       "本表写入后回读（FC03）校验。ON = 写入后立即回读；ON 100/200/500 ms = 等待后再回读。",
     // 表级 Address Adjust：每表独立 OFF/ON。
@@ -829,9 +834,9 @@ export const zh: TranslationResources = {
     noOpenSheets: "没有打开的表",
     noOpenSheetsHint: "从侧边栏选择一张表以打开。",
     batchSummary:
-      "全表读取：成功 {{success}}，失败 {{failure}}，跳过 {{skipped}}，取消 {{cancelled}}",
+      "读取全表：成功 {{success}}，失败 {{failure}}，跳过 {{skipped}}，取消 {{cancelled}}",
     // Read All 完成结果的全局提示（antd message）。
-    readAllComplete: "全表读取完成",
+    readAllComplete: "读取全表完成",
     readAllSucceeded: "成功 {{count}}",
     readAllFailed: "失败 {{count}}",
     readAllSkipped: "跳过 {{count}}",
@@ -1092,7 +1097,7 @@ export const zh: TranslationResources = {
     writeVerifyMatched: "写入校验通过：回读一致（{{address}}）。",
     writeVerifyMismatch:
       "写入成功但回读不一致（{{address}}）：期望 {{expected}}，回读 {{read}}。",
-    readAllFailed: "全表读取失败：{{detail}}",
+    readAllFailed: "读取全表失败：{{detail}}",
     requestRouteProtocolSkipped:
       "已跳过使用不兼容协议的表的请求：{{protocols}}。",
     clipboardWriteFailed: "系统剪贴板写入失败：{{detail}}",
@@ -1114,7 +1119,7 @@ export const zh: TranslationResources = {
   errors: {
     notConnected: "未连接设备。",
     requestTimeout: "设备在超时时间内未响应。",
-    requestRouteInvalid: "请求包含无效的从站地址或 Unit ID。",
+    requestRouteInvalid: "请求中的从站地址或单元 ID 无效。",
     requestRouteProtocolMismatch: "请求协议与当前连接协议不匹配。",
     writeVerifyMismatch: "写入成功但回读值不一致。",
     modbusException: "设备返回 Modbus 异常。",
@@ -1152,7 +1157,7 @@ export const zh: TranslationResources = {
     bridgePayloadInvalid: "平台桥返回了非法数据。",
     tcpHostInvalid: "TCP 主机无效。",
     tcpPortOutOfRange: "TCP 端口超出范围（1..65535）。",
-    tcpUnitIdOutOfRange: "TCP 单元标识超出范围（0..255）。",
+    tcpUnitIdOutOfRange: "TCP 单元 ID 超出范围（0..255）。",
     workspaceSchemaInvalid: "工作区文件无效或已损坏。",
     workspaceImportUnsupported: "当前环境不支持导入工作区文件。",
     workspaceExportUnsupported: "当前环境不支持导出工作区文件。",

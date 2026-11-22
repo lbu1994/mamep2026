@@ -73,7 +73,7 @@ describe("ReadAllResultMessage", () => {
     applyLanguage("zh-CN");
     render(<ReadAllResultMessage summary={summary()} />);
     const root = document.querySelector(".read-all-result");
-    expect(root?.textContent).toContain("全表读取完成");
+    expect(root?.textContent).toContain("读取全表完成");
     expect(root?.textContent).toContain("成功 8");
     expect(root?.textContent).toContain("152 毫秒");
   });

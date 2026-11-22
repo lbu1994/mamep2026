@@ -921,6 +921,7 @@ function MamepAppContent({
       const groupSheets = sheetMeta
         .map((sheet, index) => ({ ...sheet, index }))
         .filter((sheet) => sheet.type === group.sheetType);
+      const groupTitle = t(group.titleKey);
       return {
         key: group.key,
         icon: sidebarGroupIcon(group.sheetType),
@@ -930,10 +931,14 @@ function MamepAppContent({
             className="sheet-sidebar__group-head"
             data-sheet-group={group.key}
           >
-            {/* 点击分组名折叠/展开（悬浮提示）；「+」为唯一右侧操作（stopPropagation 不触发折叠）。 */}
-            <Tooltip title={t("sidebar.toggleGroup")}>
-              <span className="sheet-sidebar__group-title">
-                {t(group.titleKey)}
+            {/* 标题可聚焦：截断时仍可通过悬停、键盘焦点和辅助技术取得完整名称。 */}
+            <Tooltip title={groupTitle}>
+              <span
+                className="sheet-sidebar__group-title"
+                tabIndex={0}
+                aria-label={groupTitle}
+              >
+                {groupTitle}
               </span>
             </Tooltip>
             <Tooltip title={t("sidebar.newTable")}>

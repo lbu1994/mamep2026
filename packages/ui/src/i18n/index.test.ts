@@ -56,3 +56,45 @@ describe("逐行控件可访问名称模板", () => {
     });
   });
 });
+
+describe("紧凑控件标签与动作术语", () => {
+  it("中英文使用统一的大小写、冒号和协议术语", () => {
+    expect({
+      enAddress: en.table.addressRadixLabel,
+      enSlaveAddress: en.table.slaveAddressLabel,
+      enUnitId: en.table.unitIdLabel,
+      enVerify: en.table.writeVerifyLabel,
+      zhAddress: zh.table.addressRadixLabel,
+      zhSlaveAddress: zh.table.slaveAddressLabel,
+      zhUnitId: zh.table.unitIdLabel,
+      zhVerify: zh.table.writeVerifyLabel,
+    }).toEqual({
+      enAddress: "Address:",
+      enSlaveAddress: "Slave Address:",
+      enUnitId: "Unit ID:",
+      enVerify: "Verify:",
+      zhAddress: "地址：",
+      zhSlaveAddress: "从站地址：",
+      zhUnitId: "单元 ID：",
+      zhVerify: "回读：",
+    });
+  });
+
+  it("选中行动作和读取全表动作使用同一动词短语", () => {
+    expect({
+      enReadAll: en.topbar.readAll,
+      enReadSelected: en.keyboard.readSelected,
+      enWriteSelected: en.keyboard.writeSelected,
+      zhReadAll: zh.topbar.readAll,
+      zhReadSelected: zh.keyboard.readSelected,
+      zhWriteSelected: zh.keyboard.writeSelected,
+    }).toEqual({
+      enReadAll: "Read All",
+      enReadSelected: "Read Selected Rows",
+      enWriteSelected: "Write Selected Rows",
+      zhReadAll: "读取全表",
+      zhReadSelected: "读取选中行",
+      zhWriteSelected: "写入选中行",
+    });
+  });
+});
