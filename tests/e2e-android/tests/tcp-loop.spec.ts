@@ -251,7 +251,7 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
     .filter({ hasText: "CONNECT" })
     .click();
 
-  // 连接成功：弹窗自动关闭，头部出现 Disconnect 按钮（窄屏下为图标态，故按可访问名称断言）。
+  // 连接成功：弹窗自动关闭，头部状态显示 Online；可访问名称保留断开快捷动作。
   await expect(page.locator(".ant-modal-container:visible")).toBeHidden({
     timeout: 20_000,
   });
@@ -284,7 +284,7 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
   await expect(dataInput).toHaveText("12AB", { timeout: 20_000 });
   await setWriteVerify(page, "OFF");
 
-  // 断开：回到未连接状态（头部 Disconnect 按钮消失）。
+  // 断开：回到未连接状态（头部状态恢复为 Offline）。
   await disconnectButton.evaluate((element) =>
     (element as HTMLElement).click(),
   );

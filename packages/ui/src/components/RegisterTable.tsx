@@ -38,12 +38,13 @@ import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import {
   ApiOutlined,
+  CloseOutlined,
   ColumnWidthOutlined,
   HolderOutlined,
-  MoreOutlined,
   PlusOutlined,
   RedoOutlined,
   ReloadOutlined,
+  SettingOutlined,
   StopOutlined,
   UndoOutlined,
 } from "@ant-design/icons";
@@ -1922,6 +1923,82 @@ const RegisterTableContent = memo(function RegisterTableContent({
   // 最新列宽镜像：拖拽事件内同步更新（不经渲染），保证 mouseup 提交时拿到完整最终值。
   const colWidthsRef = useRef(colWidths);
   const flexRef = useRef<HTMLDivElement | null>(null);
+  const tableSettingsTriggerRef = useRef<HTMLButtonElement>(null);
+  const tableSettingsPanelRef = useRef<HTMLDivElement>(null);
+  const [tableSettingsOpen, setTableSettingsOpen] = useState(false);
+  const tableSettingsTitleId = useId();
+  const tableSettingsPanelId = useId();
+
+  useEffect(() => {
+    // 直接订阅活动表变化，避免所有已挂载表的组件都因 activeSheetId 变化重渲染。
+    return useAppStore.subscribe((state, previousState) => {
+      if (
+        previousState.activeSheetId !== state.activeSheetId &&
+        state.activeSheetId !== null &&
+        state.activeSheetId !== sheetId
+      ) {
+        setTableSettingsOpen(false);
+      }
+    });
+  }, [sheetId]);
+
+  const restoreTableSettingsFocus = useCallback((): void => {
+    window.setTimeout(() => tableSettingsTriggerRef.current?.focus(), 0);
+  }, []);
+
+  const closeTableSettings = useCallback(
+    (restoreFocus: boolean): void => {
+      setTableSettingsOpen(false);
+      if (restoreFocus) restoreTableSettingsFocus();
+    },
+    [restoreTableSettingsFocus, setTableSettingsOpen],
+  );
+
+  const setTableSettingsPanelRef = useCallback(
+    (node: HTMLDivElement | null): void => {
+      tableSettingsPanelRef.current = node;
+      if (node !== null && tableSettingsOpen) node.focus();
+    },
+    [tableSettingsOpen],
+  );
+
+  const handleTableSettingsKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>): void => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        event.preventDefault();
+        closeTableSettings(true);
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const panel = tableSettingsPanelRef.current;
+      if (panel === null) return;
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter(
+        (element) =>
+          !element.closest('[aria-hidden="true"]') &&
+          element.getAttribute("aria-hidden") !== "true",
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (first === undefined || last === undefined) return;
+
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || document.activeElement === panel)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    },
+    [closeTableSettings],
+  );
   const virtualScrollActivity = useVirtualScrollActivityStore();
   const [tableBodyHeight, setTableBodyHeight] = useState(0);
   useEffect(() => {
@@ -3078,138 +3155,267 @@ const RegisterTableContent = memo(function RegisterTableContent({
   }, [virtualScrollingEnabled]);
 
   /**
-   * 工具栏次要控件组：地址进制 / 从站地址(Unit ID) / 写后回读 /
-   * 表级 Address Adjust / 恢复列布局 / 行数。
-   *
-   * 桌面（≥ 1024px）直接铺在工具栏右侧；移动端收进「更多」Popover 面板——**同一份 JSX
-   * 复用**，避免桌面/移动两套实现漂移（漏改一处就是功能缺失）。
+   * 低频表格配置统一收进 Table settings。首层只保留常用操作，避免中等桌面宽度下
+   * 地址、写回读和列布局控件挤压主操作；配置仍只保留一份 JSX，桌面与移动端行为一致。
    */
-  const secondaryToolbarGroup = (
-    <div className="table-toolbar__group">
-      <Tooltip title={t("table.addressFormatHint")}>
-        <span className="table-toolbar__radix">
-          <span className="table-toolbar__radix-label">
-            {t("table.addressRadixLabel")}
-          </span>
-          <Segmented
-            size="small"
-            aria-label={t("table.addressFormat")}
-            options={[
-              { label: "DEC", value: "dec" },
-              { label: "HEX", value: "hex" },
-            ]}
-            value={registerRadix}
-            onChange={(value) => {
-              if (value === "hex" || value === "dec") {
-                setSheetRegisterRadix(sheetId, value);
-              }
-            }}
-          />
-        </span>
-      </Tooltip>
-      <Tooltip
-        title={
-          activeProtocol === "tcp"
-            ? t("table.unitIdHint")
-            : t("table.slaveAddressHint")
-        }
+  const tableSettingsContent = (
+    <div
+      id={tableSettingsPanelId}
+      ref={setTableSettingsPanelRef}
+      className="table-toolbar__settings"
+      role="dialog"
+      aria-labelledby={tableSettingsTitleId}
+      aria-modal="false"
+      tabIndex={-1}
+      onKeyDown={handleTableSettingsKeyDown}
+    >
+      <div className="table-toolbar__settings-header">
+        <div>
+          <Typography.Title
+            id={tableSettingsTitleId}
+            level={5}
+            className="table-toolbar__settings-title"
+          >
+            {t("table.tableSettings")}
+          </Typography.Title>
+          <Typography.Text
+            type="secondary"
+            className="table-toolbar__settings-description"
+          >
+            {t("table.tableSettingsHint")}
+          </Typography.Text>
+        </div>
+        <Button
+          type="text"
+          size="small"
+          icon={<CloseOutlined />}
+          aria-label={t("table.closeTableSettings")}
+          onClick={() => closeTableSettings(true)}
+        />
+      </div>
+
+      <section
+        className="table-toolbar__settings-section"
+        aria-labelledby={`${tableSettingsPanelId}-address`}
       >
-        <span className="table-toolbar__slave">
-          <span className="table-toolbar__slave-label">
-            {activeProtocol === "tcp"
-              ? t("table.unitId")
-              : t("table.slaveAddress")}
-          </span>
-          <InputNumber
-            size="small"
-            aria-label={
-              activeProtocol === "tcp"
-                ? t("table.unitId")
-                : t("table.slaveAddress")
-            }
-            min={0}
-            max={255}
-            value={slaveAddress}
-            onChange={(v) => setSheetSlaveAddress(sheetId, v ?? 1)}
-            style={{ width: 64 }}
-          />
-        </span>
-      </Tooltip>
-      <Tooltip title={t("table.writeVerifyHint")}>
-        <span className="table-toolbar__verify">
-          <span className="table-toolbar__verify-label">
-            {t("table.writeVerifyLabel")}
-          </span>
-          <DeferredSelect
-            size="small"
-            aria-label={t("table.writeVerify")}
-            style={{ width: 116 }}
-            value={writeVerifyValue}
-            onChange={(value) => {
-              const option = WRITE_VERIFY_OPTIONS.find(
-                (o) => o.value === value,
-              );
-              if (option !== undefined) {
-                setSheetWriteVerify(sheetId, option.settings);
-              }
-            }}
-            options={WRITE_VERIFY_OPTIONS.map((o) => ({
-              value: o.value,
-              label:
-                o.value === "off" || o.value === "immediate"
-                  ? t(writeVerifyOptionLabel(o.value))
-                  : t(writeVerifyOptionLabel(o.value), {
-                      ms: writeVerifyOptionMs(o.value),
-                    }),
-            }))}
-          />
-        </span>
-      </Tooltip>
-      {/* 表级 Address Adjust：每表独立 OFF/ON；
-              选项来自 addressTransform 贡献（内置恒在），仅 RTU 显示。 */}
-      {activeProtocol === "rtu" && addressTransformContributions.length > 0 ? (
-        <Tooltip title={t("table.addressAdjustHint")}>
-          <span className="table-toolbar__adjust">
-            <span className="table-toolbar__adjust-label">
-              {t("table.addressAdjust")}
+        <div
+          id={`${tableSettingsPanelId}-address`}
+          className="table-toolbar__settings-section-title"
+        >
+          {t("table.settingsAddress")}
+        </div>
+        <div className="table-toolbar__settings-row">
+          <Tooltip title={t("table.addressFormatHint")}>
+            <span className="table-toolbar__radix">
+              <span className="table-toolbar__radix-label">
+                {t("table.addressRadixLabel")}
+              </span>
+              <Segmented
+                size="small"
+                aria-label={t("table.addressFormat")}
+                options={[
+                  { label: "DEC", value: "dec" },
+                  { label: "HEX", value: "hex" },
+                ]}
+                value={registerRadix}
+                onChange={(value) => {
+                  if (value === "hex" || value === "dec") {
+                    setSheetRegisterRadix(sheetId, value);
+                  }
+                }}
+              />
             </span>
-            <Segmented
+          </Tooltip>
+          <Tooltip
+            title={
+              activeProtocol === "tcp"
+                ? t("table.unitIdHint")
+                : t("table.slaveAddressHint")
+            }
+          >
+            <span className="table-toolbar__slave">
+              <span className="table-toolbar__slave-label">
+                {activeProtocol === "tcp"
+                  ? t("table.unitId")
+                  : t("table.slaveAddress")}
+              </span>
+              <InputNumber
+                size="small"
+                aria-label={
+                  activeProtocol === "tcp"
+                    ? t("table.unitId")
+                    : t("table.slaveAddress")
+                }
+                min={0}
+                max={255}
+                value={slaveAddress}
+                onChange={(v) => setSheetSlaveAddress(sheetId, v ?? 1)}
+                style={{ width: 64 }}
+              />
+            </span>
+          </Tooltip>
+        </div>
+        {/* 表级 Address Adjust：每表独立 OFF/ON；
+            选项来自 addressTransform 贡献（内置恒在），仅 RTU 显示。 */}
+        {activeProtocol === "rtu" &&
+        addressTransformContributions.length > 0 ? (
+          <Tooltip title={t("table.addressAdjustHint")}>
+            <span className="table-toolbar__adjust">
+              <span className="table-toolbar__adjust-label">
+                {t("table.addressAdjust")}
+              </span>
+              <Segmented
+                size="small"
+                aria-label={t("table.addressAdjust")}
+                value={sheetAddressTransform?.enabled ? "on" : "off"}
+                onChange={(value) => {
+                  const transform = addressTransformContributions[0]?.payload;
+                  setSheetAddressTransform(
+                    sheetId,
+                    value === "on" && transform !== undefined
+                      ? {
+                          transformId: transform.id,
+                          enabled: true,
+                        }
+                      : null,
+                  );
+                }}
+                options={[
+                  { value: "off", label: t("table.addressAdjustOff") },
+                  { value: "on", label: t("table.addressAdjustOn") },
+                ]}
+              />
+            </span>
+          </Tooltip>
+        ) : null}
+      </section>
+
+      <section
+        className="table-toolbar__settings-section"
+        aria-labelledby={`${tableSettingsPanelId}-writing`}
+      >
+        <div
+          id={`${tableSettingsPanelId}-writing`}
+          className="table-toolbar__settings-section-title"
+        >
+          {t("table.settingsWriting")}
+        </div>
+        <Tooltip title={t("table.writeVerifyHint")}>
+          <span className="table-toolbar__verify">
+            <span className="table-toolbar__verify-label">
+              {t("table.writeVerifyLabel")}
+            </span>
+            <DeferredSelect
               size="small"
-              aria-label={t("table.addressAdjust")}
-              value={sheetAddressTransform?.enabled ? "on" : "off"}
+              aria-label={t("table.writeVerify")}
+              style={{ width: 132 }}
+              value={writeVerifyValue}
               onChange={(value) => {
-                const transform = addressTransformContributions[0]?.payload;
-                setSheetAddressTransform(
-                  sheetId,
-                  value === "on" && transform !== undefined
-                    ? {
-                        transformId: transform.id,
-                        enabled: true,
-                      }
-                    : null,
+                const option = WRITE_VERIFY_OPTIONS.find(
+                  (o) => o.value === value,
                 );
+                if (option !== undefined) {
+                  setSheetWriteVerify(sheetId, option.settings);
+                }
               }}
-              options={[
-                { value: "off", label: t("table.addressAdjustOff") },
-                { value: "on", label: t("table.addressAdjustOn") },
-              ]}
+              options={WRITE_VERIFY_OPTIONS.map((o) => ({
+                value: o.value,
+                label:
+                  o.value === "off" || o.value === "immediate"
+                    ? t(writeVerifyOptionLabel(o.value))
+                    : t(writeVerifyOptionLabel(o.value), {
+                        ms: writeVerifyOptionMs(o.value),
+                      }),
+              }))}
             />
           </span>
         </Tooltip>
-      ) : null}
-      <Tooltip title={t("table.restoreColumnLayoutHint")}>
-        <Button
-          size="small"
-          icon={<ColumnWidthOutlined />}
-          disabled={!hasCustomColumnLayout}
-          onClick={handleRestoreColumnLayout}
+      </section>
+
+      <section
+        className="table-toolbar__settings-section"
+        aria-labelledby={`${tableSettingsPanelId}-columns`}
+      >
+        <div
+          id={`${tableSettingsPanelId}-columns`}
+          className="table-toolbar__settings-section-title"
         >
-          {t("table.restoreColumnLayout")}
-        </Button>
-      </Tooltip>
-      <span className="table-toolbar__info">
-        {t("table.rowCount", { count: rows.length })}
-      </span>
+          {t("table.settingsColumns")}
+        </div>
+        <Tooltip title={t("table.restoreColumnLayoutHint")}>
+          <Button
+            size="small"
+            block
+            icon={<ColumnWidthOutlined />}
+            disabled={!hasCustomColumnLayout}
+            onClick={handleRestoreColumnLayout}
+          >
+            {t("table.restoreColumnLayout")}
+          </Button>
+        </Tooltip>
+      </section>
+
+      {toolbarActions.length > 0 ? (
+        <section
+          className="table-toolbar__settings-section"
+          aria-labelledby={`${tableSettingsPanelId}-actions`}
+        >
+          <div
+            id={`${tableSettingsPanelId}-actions`}
+            className="table-toolbar__settings-section-title"
+          >
+            {t("table.settingsActions")}
+          </div>
+          <div className="table-toolbar__settings-actions">
+            {toolbarActions.map((action, index) => {
+              // 插件外部化：动作可用性由插件 runtime 是否声明 handler 决定
+              // （安川 ROM/RAM 确定指令由插件自身承载；声明式占位动作置灰）。
+              const canHandle =
+                host?.pluginRegistry.canHandleToolbarAction(
+                  action.pluginId,
+                  action.payload.id,
+                ) ?? false;
+              const disabledReason = !communicationAvailable
+                ? t("table.connectBeforeCommunication")
+                : !canHandle
+                  ? t("plugins.toolbarActionPlaceholder")
+                  : null;
+              const disabledReasonId = !communicationAvailable
+                ? communicationReasonId
+                : `${communicationReasonId}-plugin-${index}`;
+              return (
+                <span key={action.payload.id}>
+                  <Tooltip title={disabledReason ?? t(action.payload.titleKey)}>
+                    <span>
+                      <Button
+                        size="small"
+                        block
+                        disabled={disabledReason !== null}
+                        aria-label={t(action.payload.titleKey)}
+                        aria-describedby={
+                          disabledReason !== null ? disabledReasonId : undefined
+                        }
+                        data-testid={`plugin-toolbar-action-${action.payload.id}`}
+                        onClick={() => handlePluginToolbarAction(action)}
+                      >
+                        {t(action.payload.titleKey)}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  {disabledReason !== null && communicationAvailable ? (
+                    <span
+                      id={disabledReasonId}
+                      className="register-table__sr-only"
+                    >
+                      {disabledReason}
+                    </span>
+                  ) : null}
+                </span>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 
@@ -3231,7 +3437,9 @@ const RegisterTableContent = memo(function RegisterTableContent({
                 onClick={undo}
                 aria-label={t("table.undo")}
               >
-                {t("table.undo")}
+                <span className="table-toolbar__optional-label">
+                  {t("table.undo")}
+                </span>
               </Button>
             </Tooltip>
             <Tooltip title={t("table.redoHint")}>
@@ -3242,7 +3450,9 @@ const RegisterTableContent = memo(function RegisterTableContent({
                 onClick={redo}
                 aria-label={t("table.redo")}
               >
-                {t("table.redo")}
+                <span className="table-toolbar__optional-label">
+                  {t("table.redo")}
+                </span>
               </Button>
             </Tooltip>
           </div>
@@ -3256,11 +3466,6 @@ const RegisterTableContent = memo(function RegisterTableContent({
               >
                 {t("table.addRow")}
               </Button>
-            ) : null}
-            {selectedRowIds.length > 0 ? (
-              <span className="table-toolbar__info">
-                {t("table.rowsSelected", { count: selectedRowIds.length })}
-              </span>
             ) : null}
           </div>
           <span className="table-toolbar__sep" aria-hidden="true" />
@@ -3307,85 +3512,43 @@ const RegisterTableContent = memo(function RegisterTableContent({
             ) : null}
           </div>
           <span className="table-toolbar__spacer" />
-          {/* 移动端：次要控件收进「更多」面板，避免工具栏换行挤压表格；
-            桌面端保持直接铺开（大屏一步到位，不增加点击成本）。 */}
-          {isMobileLayout ? (
-            <Popover
-              trigger="click"
-              placement="bottomRight"
-              content={
-                <div className="table-toolbar__more">
-                  {secondaryToolbarGroup}
-                </div>
-              }
-            >
-              <Button
-                size="small"
-                icon={<MoreOutlined />}
-                aria-label={t("table.toolbarMoreLabel")}
-              >
-                {t("table.toolbarMore")}
-              </Button>
-            </Popover>
-          ) : (
-            secondaryToolbarGroup
-          )}
-          {toolbarActions.length > 0 ? (
-            <>
-              <span className="table-toolbar__sep" aria-hidden="true" />
-              <div className="table-toolbar__group table-toolbar__plugins">
-                {toolbarActions.map((action, index) => {
-                  // 插件外部化：动作可用性由插件 runtime 是否声明 handler 决定
-                  // （安川 ROM/RAM 确定指令由插件自身承载；声明式占位动作置灰）。
-                  const canHandle =
-                    host?.pluginRegistry.canHandleToolbarAction(
-                      action.pluginId,
-                      action.payload.id,
-                    ) ?? false;
-                  const disabledReason = !communicationAvailable
-                    ? t("table.connectBeforeCommunication")
-                    : !canHandle
-                      ? t("plugins.toolbarActionPlaceholder")
-                      : null;
-                  const disabledReasonId = !communicationAvailable
-                    ? communicationReasonId
-                    : `${communicationReasonId}-plugin-${index}`;
-                  return (
-                    <span key={action.payload.id}>
-                      <Tooltip
-                        title={disabledReason ?? t(action.payload.titleKey)}
-                      >
-                        <span>
-                          <Button
-                            size="small"
-                            disabled={disabledReason !== null}
-                            aria-label={t(action.payload.titleKey)}
-                            aria-describedby={
-                              disabledReason !== null
-                                ? disabledReasonId
-                                : undefined
-                            }
-                            data-testid={`plugin-toolbar-action-${action.payload.id}`}
-                            onClick={() => handlePluginToolbarAction(action)}
-                          >
-                            {t(action.payload.titleKey)}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      {disabledReason !== null && communicationAvailable ? (
-                        <span
-                          id={disabledReasonId}
-                          className="register-table__sr-only"
-                        >
-                          {disabledReason}
-                        </span>
-                      ) : null}
-                    </span>
-                  );
-                })}
-              </div>
-            </>
+          <Popover
+            trigger="click"
+            placement="bottomRight"
+            open={tableSettingsOpen}
+            destroyOnHidden
+            onOpenChange={setTableSettingsOpen}
+            content={tableSettingsContent}
+            classNames={{ root: "table-toolbar__settings-popover" }}
+          >
+            <span className="table-toolbar__settings-trigger">
+              <Tooltip title={t("table.tableSettings")}>
+                <Button
+                  ref={tableSettingsTriggerRef}
+                  size="small"
+                  icon={<SettingOutlined />}
+                  aria-label={t("table.tableSettings")}
+                  aria-haspopup="dialog"
+                  aria-expanded={tableSettingsOpen}
+                  aria-controls={tableSettingsPanelId}
+                >
+                  <span className="table-toolbar__optional-label">
+                    {t("table.tableSettings")}
+                  </span>
+                </Button>
+              </Tooltip>
+            </span>
+          </Popover>
+        </div>
+        <div className="register-table__summary">
+          {selectedRowIds.length > 0 ? (
+            <span className="table-toolbar__info">
+              {t("table.rowsSelected", { count: selectedRowIds.length })}
+            </span>
           ) : null}
+          <span className="table-toolbar__info">
+            {t("table.rowCount", { count: rows.length })}
+          </span>
         </div>
         {tableReady ? (
           <DndContext

@@ -28,7 +28,7 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   return errors;
@@ -257,7 +257,7 @@ test("选中插件色：antd token 与 CSS 变量同步 + reload 持久化", asy
   await closeSettings(page);
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await openSettings(page);

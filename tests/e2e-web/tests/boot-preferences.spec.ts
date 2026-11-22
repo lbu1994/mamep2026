@@ -32,7 +32,7 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   return errors;
@@ -158,7 +158,7 @@ test("刷新后首帧渲染即已保存的主题 / 语言（无 FOUC）", async 
   await installBootRecorder(page);
   await page.reload();
   // 中文界面 + 已连接（mock）：确认应用已就绪（此刻早已是「已保存偏好」）。
-  await expect(page.locator(".ant-layout-header")).toContainText("断开", {
+  await expect(page.locator(".ant-layout-header")).toContainText("在线", {
     timeout: 15000,
   });
 
@@ -190,7 +190,7 @@ test("首次访问（无缓存）：首帧为默认明亮 + en-US", async ({ pag
   });
   await installBootRecorder(page);
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 

@@ -9,8 +9,8 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
@@ -126,7 +126,7 @@ test("resized column widths persist across a page reload", async ({ page }) => {
   await page.waitForTimeout(1000);
   await page.reload();
   // Mock 模式刷新后自动重连，就绪信号与 openApp 一致。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);

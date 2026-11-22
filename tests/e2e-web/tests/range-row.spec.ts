@@ -13,8 +13,8 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 }
@@ -265,7 +265,7 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
   // 重启恢复（IndexedDB 自动保存）：先等自动保存落盘，再 reload；展开后子行元数据与值全部还原。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   const restoredParent = parentRow(page, 0);

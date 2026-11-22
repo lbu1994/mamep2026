@@ -4,8 +4,8 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 }

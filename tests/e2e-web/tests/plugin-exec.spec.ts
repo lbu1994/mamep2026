@@ -55,7 +55,7 @@ export function activate() {
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 }
@@ -152,7 +152,7 @@ test("重启持久化：entrySource 落盘，reload 后恢复并重新激活", a
   // 等 IndexedDB 自动保存落盘（防抖）再 reload（踩坑）。
   await page.waitForTimeout(1200);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 
@@ -200,7 +200,7 @@ test("卸载可执行插件：确认后移除，reload 不再出现", async ({ p
   // 等自动保存落盘再 reload → 不再出现。
   await page.waitForTimeout(1200);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   modal = await openPluginManager(page);

@@ -76,7 +76,7 @@ async function waitForWebviewFrame(page: Page): Promise<Frame> {
  * VSCode webview 是否处于移动布局（视口 < 1024px）。
  *
  * VS Code 面板为窄窗口（实测两侧栏同时展开时编辑区 < 1024px），共享 UI 因此走移动分支：
- * 底部面板 → 底部抽屉（Header「Open panel」入口）、工具栏次要控件 → 「更多」面板。
+ * 底部面板 → 底部抽屉（Header「Open panel」入口）、低频表格配置 → Table settings。
  * 桌面布局下下列 helper 自动退化为 no-op，两套布局共用同一份用例（不依赖窗口宽度）。
  */
 async function isMobileLayout(frame: Frame): Promise<boolean> {
@@ -121,32 +121,33 @@ async function openCommLog(frame: Frame): Promise<void> {
   await frame.getByRole("tab", { name: "Comm Log" }).click();
 }
 
-/**
- * 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。
- *
- * 移动布局：地址进制收在工具栏「更多」面板内 —— 先展开、点选后收起（浮层会遮挡表格右侧
- * 的 Read/Write 按钮）。桌面布局：直接点击工具栏内 Segmented。
- */
-async function setRadixHex(frame: Frame): Promise<void> {
-  const mobile = await isMobileLayout(frame);
-  const moreButton = frame.getByRole("button", {
-    name: "More toolbar actions",
-  });
-  const morePanel = frame.locator(".table-toolbar__more");
-  if (mobile) {
-    await moreButton.click();
-    await expect(morePanel).toBeVisible({ timeout: 5000 });
+/** 打开当前表的 Table settings 面板。 */
+async function openTableSettings(frame: Frame) {
+  const trigger = frame
+    .getByRole("button", { name: "Table settings", exact: true })
+    .first();
+  const panel = frame.locator(".table-toolbar__settings:visible").first();
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+    await trigger.click();
   }
-  const radix = frame.locator(".table-toolbar__radix");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(panel).toBeVisible({ timeout: 5000 });
+  return panel;
+}
+
+/** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
+async function setRadixHex(frame: Frame): Promise<void> {
+  const panel = await openTableSettings(frame);
+  const radix = panel.locator(".table-toolbar__radix");
   await radix.locator(".ant-segmented-item", { hasText: "HEX" }).click();
   await expect(radix.locator(".ant-segmented-item-selected")).toHaveText(
     "HEX",
     { timeout: 5000 },
   );
-  if (mobile) {
-    await moreButton.click();
-    await expect(morePanel).toBeHidden({ timeout: 5000 });
-  }
+  await frame
+    .getByRole("button", { name: "Table settings", exact: true })
+    .click();
+  await expect(panel).toBeHidden({ timeout: 5000 });
 }
 
 /** 首行填入地址（HEX 4 位）并提交。 */
@@ -217,32 +218,25 @@ async function writeRow(frame: Frame, valueHex: string): Promise<void> {
 
 /** 显式切换当前表的写后回读配置。 */
 async function setWriteVerify(frame: Frame, optionText: string): Promise<void> {
-  const mobile = await isMobileLayout(frame);
-  const moreButton = frame.getByRole("button", {
-    name: "More toolbar actions",
-  });
-  const morePanel = frame.locator(".table-toolbar__more");
-  if (mobile) {
-    await moreButton.click();
-    await expect(morePanel).toBeVisible({ timeout: 5000 });
-  }
-  const verify = frame.locator(".table-toolbar__verify");
+  const panel = await openTableSettings(frame);
+  const verify = panel.locator(".table-toolbar__verify");
   const control = verify.getByLabel("Write verification");
+  await expect(control).toBeVisible();
   if ((await control.evaluate((el) => el.tagName)) === "SELECT") {
     await control.selectOption({ label: optionText });
   } else {
-    await control.click();
+    await control.click({ force: true });
     await frame
       .locator(".ant-select-dropdown:visible .ant-select-item-option")
       .filter({ hasText: new RegExp(`^${optionText}$`) })
       .first()
-      .click();
+      .evaluate((el) => (el as HTMLElement).click());
   }
   await expect(verify).toContainText(optionText, { timeout: 5000 });
-  if (mobile) {
-    await moreButton.click();
-    await expect(morePanel).toBeHidden({ timeout: 5000 });
-  }
+  await frame
+    .getByRole("button", { name: "Close table settings", exact: true })
+    .click();
+  await expect(panel).toBeHidden({ timeout: 5000 });
 }
 
 /**
@@ -523,7 +517,13 @@ test("真实串口 RTU（UI 级）：连接 + 全场景矩阵", async ({
     // 写忽略区（0x0900–0x090f）：写入返回正常成功帧但不落盘——回读仍为旧值 0。
     // 新表默认 OFF；本用例显式 ON，写入后立即 FC03 回读 → 值不一致 → 失败点（红点），
     // Data 列被回读值覆盖（§15.1）显示 0000 而非写入的 1234。
-    await expect(frame.locator(".table-toolbar__verify")).toContainText("OFF");
+    const settings = await openTableSettings(frame);
+    await expect(settings.locator(".table-toolbar__verify")).toContainText(
+      "OFF",
+    );
+    await frame
+      .getByRole("button", { name: "Table settings", exact: true })
+      .click();
     await setWriteVerify(frame, "ON");
     await setRowAddress(frame, "0900");
     await writeRow(frame, "1234");

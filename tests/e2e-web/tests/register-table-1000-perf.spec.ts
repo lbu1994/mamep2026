@@ -139,7 +139,7 @@ function cloneSheet(
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15_000,
   });
 }
@@ -620,7 +620,7 @@ test("1000 行普通表：虚拟滚动下编辑、选择、新增、切页与自
 
   await installPerfObserver(page);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15_000,
   });
   await expect(activeRow(page, rowId("main", 0))).toBeVisible();
@@ -880,7 +880,7 @@ test("1000 行含范围行：tree 数据兼容虚拟滚动后仍可滚动与展�
 
   await installPerfObserver(page);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15_000,
   });
   await expect(activeRow(page, rowId("range", 0))).toBeVisible({
@@ -979,7 +979,7 @@ test("1000 行含位明细：tree 数据兼容虚拟滚动后展开位行仍可�
 
   await installPerfObserver(page);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15_000,
   });
   await expect(activeRow(page, rowId("bit", 0))).toBeVisible({

@@ -83,8 +83,8 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(
@@ -249,7 +249,7 @@ test("column order persists across a page reload", async ({ page }) => {
   // 等待 IndexedDB 自动保存落盘（AppHost 防抖 500ms + 异步写入），避免刷新竞态。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(

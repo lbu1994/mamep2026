@@ -132,22 +132,22 @@ export async function writeRow(page: Page, valueHex: string): Promise<void> {
     .evaluate((element) => (element as HTMLElement).click());
 }
 
-/** 切换当前表的写后回读配置；移动布局会自动展开/收起工具栏「更多」面板。 */
+/** 切换当前表的写后回读配置；配置位于 Table settings 面板。 */
 export async function setWriteVerify(
   page: Page,
   optionText: string,
 ): Promise<void> {
-  const moreButton = page.getByRole("button", {
-    name: "More toolbar actions",
+  const settingsButton = page.getByRole("button", {
+    name: "Table settings",
+    exact: true,
   });
-  const morePanel = page.locator(".table-toolbar__more");
-  const mobile = await moreButton.isVisible();
-  if (mobile) {
-    await moreButton.click();
-    await expect(morePanel).toBeVisible({ timeout: 5000 });
+  const settingsPanel = page.locator(".table-toolbar__settings");
+  if (!(await settingsPanel.isVisible())) {
+    await settingsButton.click();
   }
+  await expect(settingsPanel).toBeVisible({ timeout: 5000 });
 
-  const verify = page.locator(".table-toolbar__verify");
+  const verify = settingsPanel.locator(".table-toolbar__verify");
   await verify.getByLabel("Write verification").click();
   await page
     .locator(".ant-select-dropdown:visible .ant-select-item-option")
@@ -156,11 +156,10 @@ export async function setWriteVerify(
     .click();
   await expect(verify).toContainText(optionText, { timeout: 5000 });
 
-  if (mobile) {
-    await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
-    await moreButton.click();
-    await expect(morePanel).toBeHidden({ timeout: 5000 });
-  }
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
+  await expect(settingsPanel).toBeVisible();
+  await settingsButton.click();
+  await expect(settingsPanel).toBeHidden({ timeout: 5000 });
 }
 
 /** 会话设置弹窗（启动时自动打开）。 */

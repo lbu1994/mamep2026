@@ -262,8 +262,7 @@ body {
   outline-offset: 1px;
 }
 
-/* 连接控制区：同一按钮内明确区分当前状态与连接/断开/重连动作。
-   状态点携带语义色；动作使用独立图标，窄布局收起文字后仍保留状态点与动作图标。 */
+/* 连接控制区：视觉上只显示当前连接状态，状态点携带语义色。 */
 .connection-cluster {
   display: flex;
   align-items: center;
@@ -277,7 +276,7 @@ body {
   font-weight: 600;
 }
 
-/* 按钮内容：状态点 + 状态文字 + 分隔符 + 动作（窄窗口下收起为状态点 + 动作图标） */
+/* 按钮内容：状态点 + 状态文字 */
 .connection-cluster__content {
   display: inline-flex;
   align-items: center;
@@ -287,18 +286,6 @@ body {
 .connection-cluster__state {
   color: var(--ant-color-text-secondary);
   font-weight: 500;
-}
-
-.connection-cluster__separator {
-  color: var(--ant-color-text-quaternary);
-  font-weight: 400;
-}
-
-.connection-cluster__action {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 600;
 }
 
 /* 连接状态点：并入按钮内的彩色圆点（颜色由 connectionButtonSpec.dotColor 内联注入） */
@@ -788,11 +775,12 @@ body {
 .table-toolbar {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 6px;
   padding: 6px 8px 4px;
 }
 
-/* 工具栏按功能分组（行操作 | 批量操作 | 显示设置），弱分割线而非多重容器边框 */
+/* 首层仅保留常用操作；低频配置统一进入 Table settings，避免中等桌面宽度溢出。 */
 .table-toolbar__group {
   display: inline-flex;
   align-items: center;
@@ -809,6 +797,7 @@ body {
 
 .table-toolbar__spacer {
   flex: 1;
+  min-width: 8px;
 }
 
 .table-toolbar__info {
@@ -828,6 +817,91 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.register-table__summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 20px;
+  gap: 10px;
+  padding: 0 10px 3px;
+}
+
+.table-toolbar__settings-trigger {
+  flex: none;
+}
+
+.table-toolbar__settings-popover .ant-popover-inner {
+  padding: 12px;
+}
+
+.table-toolbar__settings {
+  display: grid;
+  width: min(340px, calc(100vw - 32px));
+  gap: 12px;
+  outline: none;
+}
+
+.table-toolbar__settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.table-toolbar__settings-title.ant-typography {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.table-toolbar__settings-description.ant-typography {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.table-toolbar__settings-section {
+  display: grid;
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mamep-border-subtle);
+}
+
+.table-toolbar__settings-section-title {
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.table-toolbar__settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 10px;
+}
+
+.table-toolbar__settings .table-toolbar__radix,
+.table-toolbar__settings .table-toolbar__slave,
+.table-toolbar__settings .table-toolbar__verify,
+.table-toolbar__settings .table-toolbar__adjust {
+  justify-content: space-between;
+}
+
+.table-toolbar__settings .table-toolbar__verify,
+.table-toolbar__settings .table-toolbar__adjust {
+  width: 100%;
+}
+
+.table-toolbar__settings-actions {
+  display: grid;
+  gap: 6px;
 }
 
 .table-toolbar__radix {
@@ -852,6 +926,20 @@ body {
   font-size: 12px;
   color: var(--ant-color-text-secondary);
   white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .table-toolbar__optional-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 }
 
 /* 行操作：平时淡出，悬停行 / 行内键盘聚焦时显现，降低视觉噪声 */

@@ -111,16 +111,16 @@ const consoleErrors: string[] = [];
 
 /** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
 async function setRadixHex(p: Page): Promise<void> {
-  // 限定到活动表选项卡的工具栏（多 Sheet 时每个表各有工具栏，不得命中隐藏表）。
-  const toolbar = p.locator(
-    ".register-table-tabs .ant-tabs-content-active .table-toolbar__radix",
-  );
-  await toolbar
+  const panel = await openTableSettings(p);
+  const radix = panel.locator(".table-toolbar__radix");
+  await radix
     .locator(".ant-segmented-item")
     .filter({ hasText: "HEX" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(toolbar).toContainText("HEX", { timeout: 5000 });
+  await expect(radix).toContainText("HEX", { timeout: 5000 });
+  await p.keyboard.press("Escape");
+  await expect(panel).toBeHidden({ timeout: 5000 });
 }
 /**
  * 把 RTU 超时 Select 设为固定档位。真实端口 e2e 稳定连接：应用默认超时为 50ms
@@ -203,16 +203,36 @@ async function setRowType(p: Page, optionTitle: string): Promise<void> {
     .click();
 }
 
+/** 打开活动表的 Table settings 面板。 */
+async function openTableSettings(p: Page) {
+  const active = activeTable(p);
+  const trigger = active
+    .getByRole("button", { name: "Table settings", exact: true })
+    .first();
+  // Popover 面板经 portal 渲染，不能限定在活动表子树内。
+  const panel = p.locator(".table-toolbar__settings:visible").first();
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+    await trigger.click();
+  }
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(panel).toBeVisible({ timeout: 5000 });
+  return panel;
+}
+
 /** 显式切换活动表的写后回读配置。 */
 async function setWriteVerify(p: Page, optionText: string): Promise<void> {
-  const verify = activeTable(p).locator(".table-toolbar__verify");
-  await verify.getByLabel("Write verification").click();
-  await p
+  const panel = await openTableSettings(p);
+  const verify = panel.locator(".table-toolbar__verify");
+  await verify.locator(".ant-select").first().click({ force: true });
+  const option = p
     .locator(".ant-select-dropdown:visible .ant-select-item-option")
     .filter({ hasText: new RegExp(`^${optionText}$`) })
-    .first()
-    .click();
+    .first();
+  await expect(option).toBeVisible({ timeout: 5000 });
+  await option.evaluate((el) => (el as HTMLElement).click());
   await expect(verify).toContainText(optionText, { timeout: 5000 });
+  await p.keyboard.press("Escape");
+  await expect(panel).toBeHidden({ timeout: 5000 });
 }
 
 /** 首行填 Data（HEX）并点击 Write。 */
@@ -227,9 +247,9 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
   await data.pressSequentially(valueHex, { delay: 10 });
   await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
-  await expect(
-    activeTable(p).locator('input[aria-label="Data"]'),
-  ).toHaveCount(0);
+  await expect(activeTable(p).locator('input[aria-label="Data"]')).toHaveCount(
+    0,
+  );
   await expect(activeTable(p).getByLabel("Data").first()).toHaveAttribute(
     "data-committed-value",
     valueHex,
@@ -283,7 +303,7 @@ async function reconnectAsActiveSheet(p: Page): Promise<void> {
   await option.waitFor({ state: "visible", timeout: 15_000 });
   await option.click();
   await modal.locator(".ant-btn").filter({ hasText: "Connect" }).click();
-  await expect(p.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(p.locator(".ant-layout-header")).toContainText("Online", {
     timeout: CONNECTED_TIMEOUT,
   });
   await expect(p.locator(".ant-modal-container:visible")).toHaveCount(0);
@@ -586,9 +606,9 @@ test("RTU：写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 
   // 写忽略区（0x0900–0x090f）：写入返回正常成功帧但不落盘——回读仍为旧值 0。
   // 新表默认 OFF；本用例显式 ON，写入后立即 FC03 回读 → 值不一致 → 失败点（红点），
   // Data 列被回读值覆盖（§15.1）显示 0000 而非写入的 1234。
-  await expect(
-    activeTable(page).locator(".table-toolbar__verify"),
-  ).toContainText("OFF");
+  const settings = await openTableSettings(page);
+  await expect(settings.locator(".table-toolbar__verify")).toContainText("OFF");
+  await page.keyboard.press("Escape");
   await setWriteVerify(page, "ON");
   await setRowAddress(page, "0900");
   await writeRow(page, "1234");

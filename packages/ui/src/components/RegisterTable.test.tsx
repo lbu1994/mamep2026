@@ -8,6 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 // AntApp：RegisterTable 使用 App.useApp()（antd message）。antd 的 useApp
 // 无 <App> context 时返回空对象、不抛错（useContext 默认值），因此不调用 message 的既有
 // 测试无需包裹；仅 Read All 成功路径会调用 message.open，此类测试须包 <AntApp>
@@ -57,6 +58,11 @@ function firstRowId(): RowId {
   const rowId = useAppStore.getState().workspace.sheets[0]?.rows[0]?.rowId;
   if (rowId === undefined) throw new Error("missing row");
   return rowId;
+}
+
+async function openTableSettings(): Promise<HTMLElement> {
+  fireEvent.click(screen.getByRole("button", { name: "Table settings" }));
+  return screen.findByRole("dialog", { name: "Table settings" });
 }
 
 /** 构造当前第一行的成功点对象（Record key 需显式 RowId 类型，避免字面量推断为 string）。 */
@@ -446,20 +452,65 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
     return workspace;
   }
 
-  it("TCP 连接时工具栏 label 显示 Unit ID（InputNumber aria-label 同步）", () => {
+  it("TCP 连接时设置面板 label 显示 Unit ID（InputNumber aria-label 同步）", async () => {
     const workspace = smallWorkspace();
     useAppStore.setState({ host: makeHost("tcp"), workspace });
     render(<RegisterTable sheetId={sheetId()} />);
+    await openTableSettings();
     expect(screen.getByLabelText("Unit ID")).toBeTruthy();
     expect(screen.queryByLabelText("Slave Address")).toBeNull();
   });
 
-  it("RTU 连接时工具栏 label 保持 Slave Address", () => {
+  it("RTU 连接时设置面板 label 保持 Slave Address", async () => {
     const workspace = smallWorkspace();
     useAppStore.setState({ host: makeHost("rtu"), workspace });
     render(<RegisterTable sheetId={sheetId()} />);
+    await openTableSettings();
     expect(screen.getByLabelText("Slave Address")).toBeTruthy();
     expect(screen.queryByLabelText("Unit ID")).toBeNull();
+  });
+});
+
+describe("RegisterTable Table settings 键盘交互（2026-11-22）", () => {
+  beforeEach(() => {
+    initI18n();
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet !== undefined) sheet.rows = sheet.rows.slice(0, 3);
+    useAppStore.setState({
+      host: null,
+      workspace,
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  it("键盘打开后聚焦面板，可 Tab 遍历，Escape 关闭并恢复触发器焦点", async () => {
+    const user = userEvent.setup();
+    render(<RegisterTable sheetId={sheetId()} />);
+    const trigger = screen.getByRole("button", { name: "Table settings" });
+    trigger.focus();
+
+    await user.keyboard("{Enter}");
+    const panel = await screen.findByRole("dialog", {
+      name: "Table settings",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(panel));
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+
+    await user.tab();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Close table settings" }),
+    );
+    await user.keyboard("{Escape}");
+
+    await waitFor(() =>
+      expect(trigger.getAttribute("aria-expanded")).toBe("false"),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 });
 
@@ -484,6 +535,7 @@ describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
       delayMs: null,
     });
     render(<RegisterTable sheetId={sid} />);
+    await openTableSettings();
     // aria-label 来自 i18n table.writeVerify。
     const verifySelect = screen.getByLabelText("Write verification");
     expect(verifySelect).toBeTruthy();
@@ -522,6 +574,7 @@ describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
       delayMs: 500,
     });
     render(<RegisterTable sheetId={first} />);
+    await openTableSettings();
     // 打开下拉，选择「ON 200 ms」只影响当前表。
     const verifySelect = screen.getByLabelText("Write verification");
     fireEvent.mouseDown(verifySelect);
@@ -631,7 +684,8 @@ describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）
       useAppStore.getState().workspace.sheets[0]?.addressTransform,
     ).toBeNull();
     render(<RegisterTable sheetId={sid} />);
-    // 工具栏 label 文本（i18n table.addressAdjust）+ 相邻 Segmented（.table-toolbar__adjust）。
+    await openTableSettings();
+    // 设置面板 label 文本（i18n table.addressAdjust）+ 相邻 Segmented（.table-toolbar__adjust）。
     const label = screen.getByText("Address Adjust");
     const adjustSegmented = label
       .closest(".table-toolbar__adjust")
@@ -657,6 +711,7 @@ describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）
       enabled: true,
     });
     render(<RegisterTable sheetId={sid} />);
+    await openTableSettings();
     const label = screen.getByText("Address Adjust");
     const adjustSegmented = label
       .closest(".table-toolbar__adjust")

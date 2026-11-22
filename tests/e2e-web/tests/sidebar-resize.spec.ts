@@ -4,8 +4,8 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 }
@@ -66,7 +66,7 @@ test("sidebar width persists after reload", async ({ page }) => {
   // 等待 IndexedDB 自动保存落盘（防抖 500ms，留 1s 余量）。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 

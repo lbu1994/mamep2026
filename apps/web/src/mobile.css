@@ -18,28 +18,20 @@
     height: 30px;
   }
 
-  /* 工具栏溢出到「更多」下拉后仍可能换行，允许换行避免横向挤压。 */
+  /* 首层已收拢为常用操作；极窄屏仍允许换行兜底，避免控件被压扁。 */
   .table-toolbar {
     flex-wrap: wrap;
     row-gap: 4px;
   }
 
-  /* 「更多」面板：次要控件纵向堆叠，标签保持可见（触摸无 hover 提示）。
-     必须限制面板宽度：控件组默认不换行（inline-flex），一行铺开会比手机视口更宽，
-     Popover 定位后选项会落到视口之外（e2e 实测 click 报 "outside of the viewport"）。 */
-  .table-toolbar__more {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
-    max-width: min(78vw, 320px);
+  /* Table settings 限制在触摸视口内；地址行在极窄屏先换行，避免 Popover 落到视口外。 */
+  .table-toolbar__settings {
+    width: min(82vw, 340px);
   }
 
-  .table-toolbar__more .table-toolbar__group {
-    flex: none;
+  .table-toolbar__settings-row {
     flex-wrap: wrap;
-    gap: 6px;
-    max-width: 100%;
+    justify-content: flex-start;
   }
 
   .table-toolbar .ant-btn {

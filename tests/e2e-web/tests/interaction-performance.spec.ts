@@ -51,7 +51,7 @@ async function installEventTimingObserver(page: Page): Promise<void> {
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15_000,
   });
 }

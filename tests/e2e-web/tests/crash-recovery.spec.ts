@@ -15,8 +15,8 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   return errors;
@@ -93,7 +93,7 @@ test("关闭丢数据：编辑后关闭/重载不丢数据（autosave 兜底 + f
   // 详见 3：浏览器 unload 会中断异步 IndexedDB 写入，故以 autosave 兜底）。
   await page.waitForTimeout(800);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   // 恢复后第一行 Name 单元格仍显示 FlushName（非编辑态为静态文本）。
@@ -114,7 +114,7 @@ test("损坏恢复：损坏主记录 + 合法备份 → reload 恢复 + Recovery
     backup: main,
   });
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   // RecoveryBanner 展示（恢复数据来自备份），且无恢复失败横幅。

@@ -207,10 +207,19 @@ test("TCP 连接 → 工具栏改 Unit ID → FC03 读断言请求帧 unitId 变
 
   // 6. 工具栏「Unit ID」（TCP 连接后 aria-label 切换为 Unit ID）改为 9：
   //    渲染端 setSlaveAddress → 按活动协议路由 session-set-unit-id → 主进程会话 setUnitId。
-  const unitIdInput = page.getByLabel("Unit ID");
+  await page
+    .getByRole("button", { name: "Table settings", exact: true })
+    .click();
+  const settingsPanel = page.locator(".table-toolbar__settings:visible");
+  await expect(settingsPanel).toBeVisible();
+  const unitIdInput = settingsPanel.getByLabel("Unit ID");
   await unitIdInput.click();
   await unitIdInput.fill("9");
   await unitIdInput.press("Enter");
+  await page
+    .getByRole("button", { name: "Close table settings", exact: true })
+    .click();
+  await expect(settingsPanel).toBeHidden();
 
   // 7. 再次 FC03 读：假设备收到的请求帧 Unit ID 应为 9。
   const before = fakeSeenUnitIds.length;

@@ -10,8 +10,8 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   //地址变换由插件提供（不再随包安装）——先手动安装，
@@ -24,18 +24,32 @@ async function openApp(page: Page): Promise<string[]> {
   return errors;
 }
 
-/** 表格上方工具栏里的 Address Adjust Segmented（每表独立）。 */
-function adjustSegmented(page: Page) {
-  return page.locator(
-    ".register-table-tabs .ant-tabs-content-active .table-toolbar__adjust",
+/** 打开 Table settings 并返回其中的 Address Adjust Segmented（每表独立）。 */
+async function adjustSegmented(page: Page) {
+  const activeTable = page.locator(
+    ".register-table-tabs .ant-tabs-content-active",
   );
+  const trigger = activeTable.getByRole("button", {
+    name: "Table settings",
+    exact: true,
+  });
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+    await trigger.click();
+  }
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect
+    .poll(() => page.locator(".table-toolbar__settings:visible").count())
+    .toBe(1);
+  const panel = page.locator(".table-toolbar__settings:visible");
+  await expect(panel).toBeVisible();
+  return panel.locator(".table-toolbar__adjust");
 }
 
 test("toolbar shows Address Adjust defaulting to OFF（Connection Settings 已移除全局项）", async ({
   page,
 }) => {
   const errors = await openApp(page);
-  const container = adjustSegmented(page);
+  const container = await adjustSegmented(page);
   await expect(container).toContainText("Address Adjust");
   // 默认选中 OFF（antd Segmented 恒渲染 OFF/ON 两项，用 selected 类断言选中态）。
   await expect(container.locator(".ant-segmented-item-selected")).toHaveText(
@@ -67,7 +81,7 @@ test("Address Adjust ON：用户地址 1 发送到 0（comm log 帧地址 00 00�
   await addressInput.press("Enter");
 
   // 工具栏切到 ON。
-  const container = adjustSegmented(page);
+  const container = await adjustSegmented(page);
   await container
     .locator(".ant-segmented-item", { hasText: "ON" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -89,7 +103,7 @@ test("Address Adjust ON：用户地址 1 发送到 0（comm log 帧地址 00 00�
 
 test("Address Adjust 每表独立且刷新后恢复", async ({ page }) => {
   await openApp(page);
-  const container = adjustSegmented(page);
+  const container = await adjustSegmented(page);
   // Sheet 1：切到 ON。
   await container
     .locator(".ant-segmented-item", { hasText: "ON" })
@@ -107,7 +121,7 @@ test("Address Adjust 每表独立且刷新后恢复", async ({ page }) => {
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
   ).toContainText("Sheet 2");
-  const container2 = adjustSegmented(page);
+  const container2 = await adjustSegmented(page);
   await expect(container2.locator(".ant-segmented-item-selected")).toHaveText(
     "OFF",
   );
@@ -118,23 +132,23 @@ test("Address Adjust 每表独立且刷新后恢复", async ({ page }) => {
     .filter({ hasText: "Sheet 1" })
     .click();
   await expect(
-    adjustSegmented(page).locator(".ant-segmented-item-selected"),
+    (await adjustSegmented(page)).locator(".ant-segmented-item-selected"),
   ).toHaveText("ON");
 
   // 刷新后恢复：Sheet 1 ON、Sheet 2 OFF。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(
-    adjustSegmented(page).locator(".ant-segmented-item-selected"),
+    (await adjustSegmented(page)).locator(".ant-segmented-item-selected"),
   ).toHaveText("ON");
   await page
     .locator(".register-table-tabs div[role=tab]")
     .filter({ hasText: "Sheet 2" })
     .click();
   await expect(
-    adjustSegmented(page).locator(".ant-segmented-item-selected"),
+    (await adjustSegmented(page)).locator(".ant-segmented-item-selected"),
   ).toHaveText("OFF");
 });

@@ -55,8 +55,8 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
@@ -74,9 +74,16 @@ function headerCell(page: Page, label: string) {
   return tableHeader(page).locator("th").filter({ hasText: label }).first();
 }
 
-/** 恢复列布局按钮（工具栏右侧组，文案走 i18n en-US "Reset layout"；默认语言 en-US）。 */
-function restoreButton(page: Page) {
-  return page.getByRole("button", { name: "Reset layout" });
+/** 打开 Table settings 并返回恢复列布局按钮（默认语言 en-US）。 */
+async function restoreButton(page: Page) {
+  const panel = page.locator(".table-toolbar__settings");
+  if (!(await panel.isVisible())) {
+    await page
+      .getByRole("button", { name: "Table settings", exact: true })
+      .click();
+  }
+  await expect(panel).toBeVisible();
+  return panel.getByRole("button", { name: "Reset layout" });
 }
 
 async function columnHeaders(page: Page): Promise<string[]> {
@@ -183,11 +190,11 @@ test("restore button is disabled by default and enabled after layout customizati
 }) => {
   const errors = await openApp(page);
   // 默认无自定义布局：按钮禁用。
-  await expect(restoreButton(page)).toBeDisabled();
+  await expect(await restoreButton(page)).toBeDisabled();
   // 拖排序 + 拖宽后按钮可用。
   await dragColumnTo(page, "Name", "No");
   await dragHeaderHandle(page, "Name", 60);
-  await expect(restoreButton(page)).toBeEnabled();
+  await expect(await restoreButton(page)).toBeEnabled();
   expect(errors).toEqual([]);
 });
 
@@ -217,14 +224,14 @@ test("clicking restore resets column order and widths for the current sheet", as
     .poll(async () => columnWidth(page, "Name"), { timeout: 3000 })
     .toBeGreaterThan(170);
   // 一键恢复：列序回到默认、列宽回到默认（Name 150）、按钮回到禁用。
-  await restoreButton(page).click();
+  await (await restoreButton(page)).click();
   await expect
     .poll(async () => columnHeaders(page), { timeout: 3000 })
     .toEqual(DEFAULT_ORDER);
   const width = await columnWidth(page, "Name");
   expect(width).toBeGreaterThanOrEqual(145);
   expect(width).toBeLessThanOrEqual(155);
-  await expect(restoreButton(page)).toBeDisabled();
+  await expect(await restoreButton(page)).toBeDisabled();
   // body 数据列与表头同步（恢复后首行列序与 DEFAULT_ORDER 一致）。
   // 注意：首列为 rowSelection 复选框（aria-label="Select row 1"），最右为 drag 列手柄（label="Drag to reorder"）。
   const labels = await firstRowCellLabels(page);
@@ -246,10 +253,10 @@ test("restore persists across a page reload", async ({ page }) => {
   await dragHeaderHandle(page, "Name", 60);
   await page.waitForTimeout(1000);
   // 一键恢复，再等待自动保存落盘后刷新。
-  await restoreButton(page).click();
+  await (await restoreButton(page)).click();
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
@@ -258,7 +265,7 @@ test("restore persists across a page reload", async ({ page }) => {
   const width = await columnWidth(page, "Name");
   expect(width).toBeGreaterThanOrEqual(145);
   expect(width).toBeLessThanOrEqual(155);
-  await expect(restoreButton(page)).toBeDisabled();
+  await expect(await restoreButton(page)).toBeDisabled();
 });
 
 test("restore only affects the current sheet (不共享)", async ({ page }) => {
@@ -284,7 +291,7 @@ test("restore only affects the current sheet (不共享)", async ({ page }) => {
   await expect(
     page.locator(".register-table-tabs .ant-tabs-content-active"),
   ).toContainText("Name");
-  await restoreButton(page).click();
+  await (await restoreButton(page)).click();
   // 表 1 恢复默认。
   expect(await columnHeaders(page)).toEqual(DEFAULT_ORDER);
   const nameWidth = await columnWidth(page, "Name");

@@ -132,7 +132,7 @@ async function openApp(page: Page): Promise<string[]> {
     if (message.type() === "error") errors.push(`CONSOLE: ${message.text()}`);
   });
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(
@@ -243,7 +243,7 @@ test("多表 / 活动 Tab / 行数据：刷新后外壳首帧即持久化状态"
 
   await page.addInitScript(RECORDER_SCRIPT);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(
@@ -298,7 +298,7 @@ test("侧栏折叠 / 底部面板折叠 / 活动底部页签：刷新后首帧�
 
   await page.addInitScript(RECORDER_SCRIPT);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(
@@ -332,7 +332,7 @@ test("侧栏宽度 / 底部面板高度：刷新后首帧即持久化值", async
 
   await page.addInitScript(RECORDER_SCRIPT);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(

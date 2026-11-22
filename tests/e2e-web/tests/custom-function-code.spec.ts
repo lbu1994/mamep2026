@@ -11,7 +11,7 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   //示例插件不再随包安装——先手动安装并授权同进程执行
@@ -53,7 +53,7 @@ async function reconnectAsActiveSheet(page: Page): Promise<void> {
       timeout: 5000,
     })
     .catch(() => undefined);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect");
+  await expect(page.locator(".ant-layout-header")).toContainText("Online");
 }
 
 test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 写闭环", async ({

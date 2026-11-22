@@ -3,7 +3,7 @@
  *
  * 覆盖手机竖屏（< 1024px 断点）下的可观察结果：
  * - 侧栏 / 底部面板由顶栏按钮打开的抽屉呈现；
- * - 工具栏次要控件（进制 / 从站地址 / 写后回读 / Address Adjust / 恢复列布局）收进「更多」面板，
+ * - 低频表格配置（进制 / 从站地址 / 写后回读 / Address Adjust / 恢复列布局）收进 Table settings，
  *   主操作（撤销/重做、新建行、Read All）仍在工具栏；
  * - 硬件返回键（`@capacitor/app`）：有覆盖层时关抽屉且不离开应用，无覆盖层时最小化到后台。
  *
@@ -54,7 +54,7 @@ function foregroundWindow(): string {
   return focuses.at(-1) ?? "";
 }
 
-test("移动布局：侧栏/底部面板改为抽屉，工具栏次要控件进「更多」面板", async () => {
+test("移动布局：侧栏/底部面板改为抽屉，低频配置进 Table settings", async () => {
   const { page } = session;
   await dismissConnectionSettings(page);
 
@@ -75,13 +75,15 @@ test("移动布局：侧栏/底部面板改为抽屉，工具栏次要控件进�
     timeout: 10_000,
   });
 
-  // 工具栏：主操作直接可达，次要控件收进「更多」。
+  // 工具栏：主操作直接可达，低频配置收进 Table settings。
   const toolbar = page.locator(".table-toolbar");
   await expect(toolbar.getByRole("button", { name: "Read All" })).toBeVisible();
   await expect(toolbar.locator(".table-toolbar__radix")).toHaveCount(0);
 
-  await toolbar.getByRole("button", { name: "More toolbar actions" }).click();
-  const panel = page.locator(".table-toolbar__more");
+  await toolbar
+    .getByRole("button", { name: "Table settings", exact: true })
+    .click();
+  const panel = page.locator(".table-toolbar__settings");
   await expect(panel).toBeVisible();
   await expect(panel.locator(".table-toolbar__radix")).toBeVisible();
   await expect(panel.locator(".table-toolbar__slave")).toBeVisible();

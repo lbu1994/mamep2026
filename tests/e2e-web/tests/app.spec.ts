@@ -5,8 +5,8 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 }
@@ -48,11 +48,11 @@ test("mock startup skips Connection Settings and auto-connects", async ({
 
   // 启动即进主界面：不出现 Connection Settings 弹窗。
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
-  // 自动连接 mock：MOCK 徽标、Online 状态与 Disconnect 动作、独立连接设置入口。
+  // 自动连接 mock：MOCK 徽标、Online 状态、独立连接设置入口；动作文案不进入可见文本。
   const header = page.locator(".ant-layout-header");
   await expect(header).toContainText("MOCK");
-  await expect(header).toContainText("Disconnect");
   await expect(header).toContainText("Online");
+  await expect(header).not.toContainText("Disconnect");
   await expect(
     header.locator(".connection-cluster__button"),
   ).toHaveAccessibleName("Online · Disconnect");
@@ -128,6 +128,9 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
   await expect(
     page.locator(".connection-cluster__button"),
   ).toHaveAccessibleName("Offline · Connect");
+  await expect(page.locator(".connection-cluster__button")).toContainText(
+    "Offline",
+  );
 
   // Preset the mock device register.
   await page.evaluate(() =>
@@ -151,11 +154,13 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
   await openConnectionModal(page);
   await clickModalConnect(page);
 
-  // Connected: top bar button becomes Disconnect and state is Online.
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Connected: top bar visibly shows Online only.
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 8000,
   });
-  await expect(page.locator(".ant-layout-header")).toContainText("Online");
+  await expect(page.locator(".ant-layout-header")).not.toContainText(
+    "Disconnect",
+  );
   await expect(
     page.locator(".connection-cluster__button"),
   ).toHaveAccessibleName("Online · Disconnect");

@@ -4,8 +4,8 @@ const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 }
@@ -58,7 +58,11 @@ test("collapsed sidebar pops up group submenu and switches table", async ({
   await expect(popup).toContainText("Sheet 2");
 
   // 点击「Sheet 1」（此时活动表为新建的 Sheet 2）切换到该表（页签栏活动表跟随）。
-  await popup.locator(".sheet-item", { hasText: "Sheet 1" }).first().click();
+  const sheetOne = popup
+    .locator(".sheet-item", { hasText: "Sheet 1" })
+    .first();
+  await expect(sheetOne).toBeVisible();
+  await sheetOne.evaluate((el) => (el as HTMLElement).click());
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
   ).toContainText("Sheet 1");

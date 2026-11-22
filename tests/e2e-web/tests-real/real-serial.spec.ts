@@ -160,14 +160,17 @@ let consoleErrors: string[] = [];
 
 /** 将当前表 Register 地址列进制切到 HEX（与从站规则地址一致）。 */
 async function setRadixHex(p: Page): Promise<void> {
-  await p
+  const panel = await openTableSettings(p);
+  await panel
     .locator(".table-toolbar__radix .ant-segmented-item")
     .filter({ hasText: "HEX" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(p.locator(".table-toolbar__radix")).toContainText("HEX", {
+  await expect(panel.locator(".table-toolbar__radix")).toContainText("HEX", {
     timeout: 5000,
   });
+  await p.keyboard.press("Escape");
+  await expect(panel).toBeHidden({ timeout: 5000 });
 }
 
 /**
@@ -235,19 +238,44 @@ async function setRowType(p: Page, optionTitle: string): Promise<void> {
 }
 
 /** 切换工具栏「写后回读」配置选项（OFF / ON / ON 100 ms / …）。 */
+async function openTableSettings(p: Page) {
+  const trigger = p
+    .getByRole("button", { name: "Table settings", exact: true })
+    .first();
+  const panel = p.locator(".table-toolbar__settings");
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+    await trigger.click();
+  }
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(panel).toBeVisible({ timeout: 5000 });
+  return panel;
+}
+
 async function setWriteVerify(p: Page, optionText: string): Promise<void> {
-  await p.getByLabel("Write verification").click();
-  await p
+  const panel = await openTableSettings(p);
+  const control = panel.getByLabel("Write verification");
+  await expect(control).toBeVisible();
+  await panel
+    .locator(".table-toolbar__verify .ant-select")
+    .first()
+    .click({ force: true });
+  const option = p
     .locator(".ant-select-item-option")
     .filter({ hasText: new RegExp(`^${optionText}$`) })
-    .first()
-    .click();
+    .first();
+  await expect(option).toBeVisible({ timeout: 5000 });
+  await option.click({ force: true });
   // 确认选中值：antd v6 单选选中文本渲染在 Select 内 .ant-select-content
   // （combobox input 的 value 恒为空），故断言包裹容器 .table-toolbar__verify
   // 包含所选 label。
-  await expect(p.locator(".table-toolbar__verify")).toContainText(optionText, {
-    timeout: 5000,
-  });
+  await expect(panel.locator(".table-toolbar__verify")).toContainText(
+    optionText,
+    {
+      timeout: 5000,
+    },
+  );
+  await p.keyboard.press("Escape");
+  await expect(panel).toBeHidden({ timeout: 5000 });
 }
 
 /** 首行填 Data（HEX）并点击 Write。 */
@@ -306,16 +334,33 @@ test.beforeAll(async () => {
     console.log(`[real-serial] 上次选择记录: ${previous}`);
   }
 
-  // 用户选择串口：点击「Select serial port…」触发系统 picker（用户手势）。
+  // 用户选择串口：系统 picker 偶发关闭但未回传选择，允许重新打开并重试。
   const modal = page.locator(".ant-modal-container:visible");
-  await modal.getByRole("button", { name: /Select serial port/i }).click();
   const port = process.env.MAMEP_REAL_SERIAL_PORT ?? "COM4";
-  const selection = selectSerialPortWithFlaUi(await page.title(), port);
-  console.log(`[real-serial] FlaUI picker result: ${selection}`);
-
   const portLabel = new RegExp(`\\(${port}\\)|^USB `, "i");
-  await modal.getByText(portLabel).waitFor({ timeout: 15_000 });
-  const label = (await modal.getByText(portLabel).first().innerText()).trim();
+  let label: string | null = null;
+  for (let attempt = 1; attempt <= 3 && label === null; attempt += 1) {
+    await modal
+      .getByRole("button", { name: /Select serial port/i })
+      .click();
+    const selection = selectSerialPortWithFlaUi(await page.title(), port);
+    console.log(
+      `[real-serial] FlaUI picker attempt ${attempt}: ${selection}`,
+    );
+    try {
+      const selected = modal.getByText(portLabel);
+      await selected.waitFor({ timeout: 10_000 });
+      label = (await selected.first().innerText()).trim();
+    } catch (error) {
+      if (attempt === 3) throw error;
+      console.log(
+        `[real-serial] Port not reflected after attempt ${attempt}; retrying.`,
+      );
+    }
+  }
+  if (label === null) {
+    throw new Error(`Serial picker did not select ${port}.`);
+  }
   console.log(`[real-serial] 已选择串口: ${label}`);
 
   // 记录到 localStorage（后续运行对照 + 运行内复用）。
@@ -329,7 +374,7 @@ test.beforeAll(async () => {
 
   // Connect → Online。
   await modal.locator(".ant-btn").filter({ hasText: "Connect" }).click();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: CONNECTED_TIMEOUT,
   });
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
@@ -538,7 +583,9 @@ test("写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 显示
   // 写忽略区（0x0900–0x090f）：写入返回正常成功帧，但**不实际写入**——回读仍为旧值 0。
   // 新表默认 OFF；本用例显式 ON（immediate）：写入后立即 FC03 回读 → 值不一致（写 1234 / 读 0000）
   // → 失败点（红点），且 Data 列被回读值覆盖（§15.1），显示 0000 而非写入的 1234。
-  await expect(page.locator(".table-toolbar__verify")).toContainText("OFF");
+  const settings = await openTableSettings(page);
+  await expect(settings.locator(".table-toolbar__verify")).toContainText("OFF");
+  await page.keyboard.press("Escape");
   await setWriteVerify(page, "ON");
   await setRowAddress(page, "0900");
   await writeRow(page, "1234");
@@ -561,7 +608,9 @@ test("写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 显示
 
 test("写后回读 Verify=OFF（默认）：写忽略区 0x0900 写入后 Data 保持写入值 1234", async () => {
   // 新表默认 OFF：写入成功即成功态（绿点），不回读；Data 保持用户输入值 1234。
-  await expect(page.locator(".table-toolbar__verify")).toContainText("OFF");
+  const settings = await openTableSettings(page);
+  await expect(settings.locator(".table-toolbar__verify")).toContainText("OFF");
+  await page.keyboard.press("Escape");
   await setRowAddress(page, "0900");
   await writeRow(page, "1234");
   await expect(
@@ -593,7 +642,7 @@ test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Typ
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
 });
 
-test("断开连接 → 状态复位为 Offline · Connect", async () => {
+test("断开连接 → 可见状态复位为 Offline", async () => {
   await page.getByRole("button", { name: /Disconnect/i }).click();
   // Header 连接 UI 同时表达当前状态与动作；data 属性仍用于稳定断言连接态与动作。
   await expect(
@@ -602,6 +651,9 @@ test("断开连接 → 状态复位为 Offline · Connect", async () => {
   await expect(
     page.locator(".connection-cluster__button"),
   ).toHaveAccessibleName("Offline · Connect");
+  await expect(page.locator(".connection-cluster__button")).toContainText(
+    "Offline",
+  );
 });
 
 test("无 console 错误（含 CSP 违规、antd 弃用）", async () => {

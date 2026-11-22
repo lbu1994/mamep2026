@@ -42,7 +42,7 @@ test("不支持 Web Serial：横幅 + 连接弹窗警告 + CONNECT 禁用，工�
 test("正常浏览器（mock 传输）：不显示兼容性横幅", async ({ page }) => {
   const errors = trackErrors(page);
   await page.goto(BASE_URL);
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   await expect(page.getByTestId("browser-compat-banner")).toHaveCount(0);

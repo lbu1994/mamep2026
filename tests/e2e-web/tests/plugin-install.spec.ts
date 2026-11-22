@@ -28,8 +28,8 @@ const manifest = {
 
 async function openApp(page: Page): Promise<void> {
   await page.goto(BASE_URL);
-  // Mock 模式启动不弹 Connection Settings，自动连接后 header 出现 Disconnect 即就绪。
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  // Mock 模式启动不弹 Connection Settings，自动连接后 header 显示 Online 即就绪。
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 }
@@ -173,7 +173,7 @@ test("重启持久化：安装 + 启停状态 reload 后仍在", async ({ page }
   // 等 IndexedDB 自动保存落盘（防抖）再 reload（踩坑）。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
 
@@ -266,7 +266,7 @@ test("卸载持久化：卸载后 reload 不再出现", async ({ page }) => {
   // 等 IndexedDB 自动保存落盘（防抖）再 reload → 卸载后插件不再出现。
   await page.waitForTimeout(1000);
   await page.reload();
-  await expect(page.locator(".ant-layout-header")).toContainText("Disconnect", {
+  await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
   modal = await openPluginManager(page);

@@ -60,7 +60,7 @@ test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）�
 
   await clickConnect(page);
 
-  // 连接成功：弹窗关闭 + 头部 Disconnect 可见（可能需用户在系统弹窗确认权限）。
+  // 连接成功：弹窗关闭 + 头部状态显示 Online（可能需用户在系统弹窗确认权限）。
   await expect(connectionModal(page)).toBeHidden({ timeout: 60_000 });
   const disconnectButton = page
     .locator(".mamep-header")

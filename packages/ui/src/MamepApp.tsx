@@ -45,18 +45,14 @@ import {
   AppstoreOutlined,
   ControlOutlined,
   DatabaseOutlined,
-  DisconnectOutlined,
   FundOutlined,
   LeftOutlined,
-  LinkOutlined,
-  LoadingOutlined,
   MenuOutlined,
   MessageOutlined,
   MoreOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
   ReadOutlined,
-  ReloadOutlined,
   RightOutlined,
   SettingOutlined,
   ThunderboltOutlined,
@@ -76,10 +72,7 @@ import {
 } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { mergeThemeConfig } from "@mamep2026/ui-theme";
-import {
-  connectionButtonSpec,
-  type ConnectionButtonIcon,
-} from "./connection-button";
+import { connectionButtonSpec } from "./connection-button";
 import { useIsMobileLayout } from "./layout/breakpoints";
 import { closeTopOverlay, useOverlayClose } from "./overlay-close";
 import { buildTheme } from "./theme";
@@ -182,20 +175,6 @@ function sidebarGroupIcon(sheetType: SheetType): ReactNode {
       return <FundOutlined aria-label="" aria-hidden />;
     default:
       return <AppstoreOutlined aria-label="" aria-hidden />;
-  }
-}
-
-/** 连接按钮的语义图标：连接、断开、重连与忙态互不复用。 */
-function connectionGlyph(icon: ConnectionButtonIcon): ReactNode {
-  switch (icon) {
-    case "connect":
-      return <LinkOutlined aria-hidden />;
-    case "disconnect":
-      return <DisconnectOutlined aria-hidden />;
-    case "reconnect":
-      return <ReloadOutlined aria-hidden />;
-    case "busy":
-      return <LoadingOutlined spin aria-hidden />;
   }
 }
 
@@ -693,8 +672,8 @@ function MamepAppContent({
   );
 
   const connected = connectionState === "connected";
-  // 连接多功能按钮规格：宽布局同时表达状态与动作，窄布局收起文字后保留状态点与动作图标。
-  const connSpec = connectionButtonSpec(connectionState, narrow);
+  // 连接状态规格：视觉只显示状态；action 仅用于可访问名称、标题和展示数据属性。
+  const connSpec = connectionButtonSpec(connectionState);
   const connectionStateLabel = t(connSpec.stateLabelKey);
   const connectionActionLabel =
     connSpec.action === null ? null : t(connSpec.action.labelKey);
@@ -1041,17 +1020,13 @@ function MamepAppContent({
                   vertical
                   style={{ height: 20, marginInline: 2, flex: "none" }}
                 />
-                {/* 连接区：状态 + 动作（Connect/Disconnect/Reconnect）在同一按钮内明确分层。
-                窄窗口收起文字，仅保留状态点和语义动作图标；完整语义保留在 aria-label/title。
-                data-conn-state / data-conn-action 是纯展示钩子，不改行为或契约。 */}
+                {/* 连接区只显示当前状态；点击仍复用既有连接/断开逻辑，
+                可访问名称和 data-conn-action 保留动作语义。 */}
                 <div className="connection-cluster">
                   <Button
                     size="small"
                     className="connection-cluster__button"
-                    type={connSpec.type}
-                    {...(connSpec.color ? { color: connSpec.color } : {})}
-                    {...(connSpec.variant ? { variant: connSpec.variant } : {})}
-                    danger={connSpec.danger}
+                    type="text"
                     onClick={handleConnectToggle}
                     onPointerEnter={() =>
                       void loadConnectionSettingsModalModule()
@@ -1067,29 +1042,13 @@ function MamepAppContent({
                         className={`conn-btn__dot${connSpec.pulsing ? " conn-btn__dot--pulse" : ""}`}
                         style={{ backgroundColor: connSpec.dotColor }}
                       />
-                      {connSpec.hideLabel ? (
-                        connectionGlyph(connSpec.icon)
-                      ) : (
-                        <>
-                          <span className="connection-cluster__state">
-                            {connectionStateLabel}
-                          </span>
-                          {connectionActionLabel !== null && (
-                            <>
-                              <span
-                                className="connection-cluster__separator"
-                                aria-hidden
-                              >
-                                ·
-                              </span>
-                              <span className="connection-cluster__action">
-                                {connectionGlyph(connSpec.icon)}
-                                {connectionActionLabel}
-                              </span>
-                            </>
-                          )}
-                        </>
-                      )}
+                      <span
+                        className="connection-cluster__state"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {connectionStateLabel}
+                      </span>
                     </span>
                   </Button>
                 </div>

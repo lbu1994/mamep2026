@@ -41,13 +41,13 @@ async function installAddressAdjust(page: Page): Promise<void> {
   });
 }
 
-test("移动顶栏区分连接状态、断开动作与连接设置", async ({ page }) => {
+test("移动顶栏只显示连接状态并区分连接设置", async ({ page }) => {
   await openMobileApp(page);
 
   const header = page.locator(".mamep-header");
   const connectionButton = header.locator(".connection-cluster__button");
 
-  // 紧凑布局收起文字，但完整可访问名称仍同时表达状态与动作。
+  // 视觉只显示状态；完整可访问名称仍保留断开动作，连接设置保持独立入口。
   await expect(connectionButton).toHaveAttribute(
     "data-conn-state",
     "connected",
@@ -57,7 +57,10 @@ test("移动顶栏区分连接状态、断开动作与连接设置", async ({ pa
     "disconnect",
   );
   await expect(connectionButton).toHaveAccessibleName("Online · Disconnect");
-  await expect(connectionButton.locator(".anticon-disconnect")).toBeVisible();
+  await expect(
+    connectionButton.locator(".connection-cluster__state"),
+  ).toHaveText("Online");
+  await expect(connectionButton.locator(".anticon-disconnect")).toHaveCount(0);
 
   // 连接设置是独立配置入口，使用不同图标与名称，不再与断开动作混淆。
   const settingsButton = header.getByRole("button", {
@@ -67,7 +70,7 @@ test("移动顶栏区分连接状态、断开动作与连接设置", async ({ pa
   await expect(settingsButton.locator(".anticon-control")).toBeVisible();
 });
 
-test("手机窄屏顶栏保留连接状态、动作与连接设置且不横向溢出", async ({
+test("手机窄屏顶栏保留连接状态与连接设置且不横向溢出", async ({
   page,
 }) => {
   await page.setViewportSize(PHONE_VIEWPORT);
@@ -81,6 +84,9 @@ test("手机窄屏顶栏保留连接状态、动作与连接设置且不横向�
     { timeout: 15000 },
   );
   await expect(connectionButton).toHaveAccessibleName("Online · Disconnect");
+  await expect(
+    connectionButton.locator(".connection-cluster__state"),
+  ).toHaveText("Online");
   await expect(
     header.getByRole("button", { name: "Connection settings" }),
   ).toBeVisible();
@@ -169,7 +175,7 @@ test("移动表格：横向滚动 + 无固定列 + 行高 44", async ({ page }) 
   await expect(typeSelect).toHaveJSProperty("tagName", "SELECT");
 });
 
-test("移动工具栏：次要控件收进「更多」面板，主操作仍在工具栏", async ({
+test("移动工具栏：低频配置收进 Table settings，主操作仍在工具栏", async ({
   page,
 }) => {
   // Address Adjust 现为插件贡献：先安装（同进程）再切移动视口。
@@ -184,8 +190,10 @@ test("移动工具栏：次要控件收进「更多」面板，主操作仍在�
   // 次要控件不在工具栏内（未展开时）。
   await expect(toolbar.locator(".table-toolbar__radix")).toHaveCount(0);
 
-  await toolbar.getByRole("button", { name: "More toolbar actions" }).click();
-  const panel = page.locator(".table-toolbar__more");
+  await toolbar
+    .getByRole("button", { name: "Table settings", exact: true })
+    .click();
+  const panel = page.locator(".table-toolbar__settings");
   await expect(panel).toBeVisible();
   // 同一份控件在面板内可用：地址进制 / 从站地址 / 写后回读 / 地址变换 / 恢复列布局。
   await expect(panel.locator(".table-toolbar__radix")).toBeVisible();
