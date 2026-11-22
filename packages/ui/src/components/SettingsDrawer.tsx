@@ -188,6 +188,7 @@ export function SettingsDrawer({
       <div>
         <Typography.Text type="secondary">{t("app.title")}</Typography.Text>{" "}
         <Select
+          data-testid="settings-language-select"
           size="small"
           value={i18n.language}
           style={{ width: 100, marginLeft: 8 }}

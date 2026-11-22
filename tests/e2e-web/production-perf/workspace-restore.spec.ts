@@ -438,13 +438,15 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
   });
   await expect(activeRow).toBeVisible();
   for (const [index, value] of ["AAAA", "AAAB", "AAAC"].entries()) {
-    await activeRow.getByLabel("Data").click();
-    const input = activeRow.locator('input[aria-label="Data"]');
+    await activeRow.locator('[data-register-cell="data"]').click();
+    const input = activeRow.locator('input[data-register-cell="data"]');
     await input.fill(value);
     await settleFrames(page);
     const editStart = await interactionMark(page);
     await page.keyboard.press("Enter");
-    await expect(activeRow.getByLabel("Data")).toHaveText(value);
+    await expect(activeRow.locator('[data-register-cell="data"]')).toHaveText(
+      value,
+    );
     const durations = await eventDurationsSince(page, editStart);
     const eventDuration = Math.max(0, ...durations);
     if (eventDuration === 0) {

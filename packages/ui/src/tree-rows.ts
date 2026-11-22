@@ -18,6 +18,8 @@ export interface VirtualChildInfo {
   /** 子行在父行内的序号（0-based）。 */
   index: number;
   parentRowId: RowId;
+  /** 该寄存器所属真实父行的界面行号；可编辑单元格名称使用。 */
+  parentOrder: number;
   /** 该寄存器实际地址 = 父行起始地址 + index。 */
   address: number;
   /** 该寄存器原始值格式化文本（未读取时为 null）。 */
@@ -168,6 +170,7 @@ export function buildTreeRows(rows: readonly RegisterRow[]): TreeRow[] {
         __virtualChild: {
           index: i,
           parentRowId: row.rowId,
+          parentOrder: row.order,
           address: baseAddress + i,
           dataText,
         },

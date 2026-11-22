@@ -35,12 +35,14 @@ test("TM opens Memory Trace and Play keeps the page responsive", async ({
     ).__mamepMock.setRegister(1, 0x0010);
   });
 
-  const address = firstRow(page).getByLabel("Address", { exact: true });
+  const address = firstRow(page).locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("1");
   await address.press("Enter");
 
-  await firstRow(page).getByLabel(/^Trace row /).click();
+  await firstRow(page)
+    .getByLabel(/^Trace row /)
+    .click();
   const traceWindow = page.locator(".trace-window");
   await expect(traceWindow).toBeVisible({ timeout: 15_000 });
   await expect(traceWindow).toContainText("M@MEp2006 Advance [Memory Trace]");
@@ -65,7 +67,9 @@ test("TM opens Memory Trace and Play keeps the page responsive", async ({
   await expect(traceWindow).toContainText("0010");
 
   // 窗口打开期间取消 TM 不会关闭追踪窗。
-  await firstRow(page).getByLabel(/^Trace row /).click();
+  await firstRow(page)
+    .getByLabel(/^Trace row /)
+    .click();
   await expect(traceWindow).toBeVisible();
   await expect(firstRow(page).getByLabel(/^Trace row /)).toBeChecked();
 

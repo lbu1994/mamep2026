@@ -185,7 +185,7 @@ test("TCP 配置连接 + FC03 读 + FC10 写闭环（主进程会话）", async 
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
 
   // 4. 首行填入地址 0001。
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
@@ -198,12 +198,15 @@ test("TCP 配置连接 + FC03 读 + FC10 写闭环（主进程会话）", async 
     .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByLabel("Data").first()).toHaveText("ABCD", {
-    timeout: 10000,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "ABCD",
+    {
+      timeout: 10000,
+    },
+  );
 
   // 6. FC10 单行写：12AB 写入设备寄存器（假 TCP 设备寄存器回读确认）。
-  const dataInput = page.getByLabel("Data").first();
+  const dataInput = page.locator('[data-register-cell="data"]').first();
   await dataInput.click();
   await dataInput.fill("12AB");
   await dataInput.press("Enter");

@@ -78,16 +78,16 @@ test("Type/Scale 双列：hex 行 scale 禁用，unsigned 行 scale 可用", asy
   await openApp(page);
   // 第一行默认 hex：Scale 下拉禁用。
   const first = parentRow(page, 0);
-  await expect(first.getByLabel("Type")).toBeVisible();
+  await expect(first.locator('[data-register-cell="type"]')).toBeVisible();
   await expect(first.getByLabel("Scale")).toBeDisabled();
   // 切到 Unsigned：Scale 可用。
-  await first.getByLabel("Type").click();
+  await first.locator('[data-register-cell="type"]').click();
   await page
     .locator(".ant-select-dropdown:visible [title='Unsigned Dec.']")
     .click();
   await expect(first.getByLabel("Scale")).toBeEnabled();
   // 切到 HEX 恢复。
-  await first.getByLabel("Type").click();
+  await first.locator('[data-register-cell="type"]').click();
   await page.locator(".ant-select-dropdown:visible [title='HEX']").click();
   await expect(first.getByLabel("Scale")).toBeDisabled();
 });
@@ -98,7 +98,7 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await openApp(page);
   // 用第一行（Normal_01，默认 0x0000）改为范围 "0-1"。
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");
@@ -127,16 +127,18 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await mockSet(page, 0x0000, 0x1111);
   await mockSet(page, 0x0001, 0x2222);
   await first.getByRole("button", { name: /^Read row / }).click();
-  await expect(first.getByLabel("Data")).toHaveText("1111 2222");
-  await expect(
-    childRows.nth(0).locator(".ant-table-cell").nth(7),
-  ).toHaveText("1111");
-  await expect(
-    childRows.nth(1).locator(".ant-table-cell").nth(7),
-  ).toHaveText("2222");
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "1111 2222",
+  );
+  await expect(childRows.nth(0).locator(".ant-table-cell").nth(7)).toHaveText(
+    "1111",
+  );
+  await expect(childRows.nth(1).locator(".ant-table-cell").nth(7)).toHaveText(
+    "2222",
+  );
 
   // 多值写（组合文本）+ 写后回读：写入 mock 寄存器并显示绿点。
-  const data = first.getByLabel("Data");
+  const data = first.locator('[data-register-cell="data"]');
   await data.click();
   await data.fill("AAAA BBBB");
   await data.press("Enter");
@@ -160,7 +162,7 @@ test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", as
 }) => {
   await openApp(page);
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");
@@ -169,30 +171,32 @@ test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", as
   await mockSet(page, 0x0000, 0x1111);
   await mockSet(page, 0x0001, 0x2222);
   await first.getByRole("button", { name: /^Read row / }).click();
-  await expect(first.getByLabel("Data")).toHaveText("1111 2222");
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "1111 2222",
+  );
   await first.locator('button[aria-label="Expand row"]').click();
   const childRows = page.locator(
     ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=':c']",
   );
   await expect(childRows).toHaveCount(2);
-  await expect(
-    childRows.nth(0).locator(".ant-table-cell").nth(7),
-  ).toHaveText("1111");
-  await expect(
-    childRows.nth(1).locator(".ant-table-cell").nth(7),
-  ).toHaveText("2222");
+  await expect(childRows.nth(0).locator(".ant-table-cell").nth(7)).toHaveText(
+    "1111",
+  );
+  await expect(childRows.nth(1).locator(".ant-table-cell").nth(7)).toHaveText(
+    "2222",
+  );
 
   // 仅手工编辑父行组合文本（不读不写）：子行须随父行文本更新。
-  const data = first.getByLabel("Data");
+  const data = first.locator('[data-register-cell="data"]');
   await data.click();
   await data.fill("FFFF 0000");
   await data.press("Enter");
-  await expect(
-    childRows.nth(0).locator(".ant-table-cell").nth(7),
-  ).toHaveText("FFFF");
-  await expect(
-    childRows.nth(1).locator(".ant-table-cell").nth(7),
-  ).toHaveText("0000");
+  await expect(childRows.nth(0).locator(".ant-table-cell").nth(7)).toHaveText(
+    "FFFF",
+  );
+  await expect(childRows.nth(1).locator(".ant-table-cell").nth(7)).toHaveText(
+    "0000",
+  );
 
   // 改后写入的是父行文本解析值（FFFF / 0000），证明原始值同步未影响待写值语义。
   await first.getByRole("button", { name: /^Write row / }).click();
@@ -216,7 +220,7 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
   await openApp(page);
   const first = parentRow(page, 0);
   // 首行改为范围 "0-1" 并展开。
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");
@@ -230,39 +234,43 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
   // 子行 Name/Data/Type/Scale/Comment 可编辑（其余列维持不可用：无 Read/Write、无拖拽、复选框禁用）。
   const child0 = childRows.nth(0);
   const child1 = childRows.nth(1);
-  await expect(
-    child0.getByRole("button", { name: /^Read row / }),
-  ).toHaveCount(0);
+  await expect(child0.getByRole("button", { name: /^Read row / })).toHaveCount(
+    0,
+  );
   await expect(child0.locator("input[type='checkbox']")).toBeDisabled();
 
   // 子行 0 Name / Data / Comment。
-  const name0 = child0.getByLabel("Name");
+  const name0 = child0.locator('[data-register-cell="name"]');
   await name0.click();
   await name0.fill("ChildA");
   await name0.press("Enter");
-  const data0 = child0.getByLabel("Data");
+  const data0 = child0.locator('[data-register-cell="data"]');
   await data0.click();
   await data0.fill("00AB");
   await data0.press("Enter");
-  const comment0 = child0.getByLabel("Comment");
+  const comment0 = child0.locator('[data-register-cell="comment"]');
   await comment0.click();
   await comment0.fill("First");
   await comment0.press("Enter");
   // 子行 Data 编辑同步父行组合文本（子行 1 未读 → 0）。
-  await expect(first.getByLabel("Data")).toHaveText("00AB 0000");
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "00AB 0000",
+  );
 
   // 子行 1 Type 切到 Unsigned（Scale 随之可用）+ Data "300"。
-  const type1 = child1.getByLabel("Type");
+  const type1 = child1.locator('[data-register-cell="type"]');
   await type1.click();
   await page
     .locator(".ant-select-dropdown:visible [title='Unsigned Dec.']")
     .click();
   await expect(child1.getByLabel("Scale")).toBeEnabled();
-  const data1 = child1.getByLabel("Data");
+  const data1 = child1.locator('[data-register-cell="data"]');
   await data1.click();
   await data1.fill("300");
   await data1.press("Enter");
-  await expect(first.getByLabel("Data")).toHaveText("00AB 012C");
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "00AB 012C",
+  );
 
   // 重启恢复（IndexedDB 自动保存）：先等自动保存落盘，再 reload；展开后子行元数据与值全部还原。
   await page.waitForTimeout(1000);
@@ -279,12 +287,18 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
     ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=':c']",
   );
   await expect(restoredChildren).toHaveCount(2);
-  await expect(restoredChildren.nth(0).getByLabel("Name")).toHaveText("ChildA");
-  await expect(restoredChildren.nth(0).getByLabel("Data")).toHaveText("00AB");
-  await expect(restoredChildren.nth(0).getByLabel("Comment")).toHaveText(
-    "First",
-  );
-  await expect(restoredChildren.nth(1).getByLabel("Data")).toHaveText("300");
+  await expect(
+    restoredChildren.nth(0).locator('[data-register-cell="name"]'),
+  ).toHaveText("ChildA");
+  await expect(
+    restoredChildren.nth(0).locator('[data-register-cell="data"]'),
+  ).toHaveText("00AB");
+  await expect(
+    restoredChildren.nth(0).locator('[data-register-cell="comment"]'),
+  ).toHaveText("First");
+  await expect(
+    restoredChildren.nth(1).locator('[data-register-cell="data"]'),
+  ).toHaveText("300");
   // 子行 1 Type 已还原为 Unsigned（Scale 下拉仅 unsigned/signed 时可用；且 Data 显示 "300"
   // 而非 hex 的 "012C"，本身即证明 unsigned 类型随工作区持久化）。
   await expect(restoredChildren.nth(1).getByLabel("Scale")).toBeEnabled();
@@ -306,7 +320,7 @@ test("must-multi 区：单读/单写异常，多读/多写正常", async ({ page
   ).toHaveCount(0);
 
   // 把 MustMulti_01 改为范围 "2048-2049"（0x0800-0x0801）→ 多读正常。
-  const address = mustRow.getByLabel("Address", { exact: true });
+  const address = mustRow.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("2048-2049");
   await address.press("Enter");
@@ -315,13 +329,15 @@ test("must-multi 区：单读/单写异常，多读/多写正常", async ({ page
   ).toBeVisible();
   await mockSet(page, 0x0801, 0x5678);
   await mustRow.getByRole("button", { name: /^Read row / }).click();
-  await expect(mustRow.getByLabel("Data")).toHaveText("1234 5678");
+  await expect(mustRow.locator('[data-register-cell="data"]')).toHaveText(
+    "1234 5678",
+  );
   await expect(
     mustRow.locator(".register-table__status-dot--success"),
   ).toBeVisible();
 
   // 多值写 + 写后回读 → 正常（写入 mock 寄存器）。
-  const data = mustRow.getByLabel("Data");
+  const data = mustRow.locator('[data-register-cell="data"]');
   await data.click();
   await data.fill("CAFE BEEF");
   await data.press("Enter");
@@ -346,11 +362,11 @@ test("范围长度 × 类型合法集校验：unsigned 非法数量在类型列�
   await openApp(page);
   const first = parentRow(page, 0);
   // 范围 "0-2"（3 寄存器）+ unsigned（仅 1/2/4 合法）→ 类型列红框 + Read/Write 禁用。
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("0-2");
   await address.press("Enter");
-  await first.getByLabel("Type").click();
+  await first.locator('[data-register-cell="type"]').click();
   await page
     .locator(".ant-select-dropdown:visible [title='Unsigned Dec.']")
     .click();
@@ -363,14 +379,12 @@ test("范围长度 × 类型合法集校验：unsigned 非法数量在类型列�
   ).toBeDisabled();
 
   // 改回合法数量（2 寄存器）：错误消失，读写恢复。
-  const address2 = first.getByLabel("Address", { exact: true });
+  const address2 = first.locator('[data-register-cell="address"]');
   await address2.click();
   await address2.fill("0-1");
   await address2.press("Enter");
   await expect(first.locator(".ant-select-status-error")).toHaveCount(0);
-  await expect(
-    first.getByRole("button", { name: /^Read row / }),
-  ).toBeEnabled();
+  await expect(first.getByRole("button", { name: /^Read row / })).toBeEnabled();
 });
 
 test("剪贴板范围编解码往返：复制范围行粘贴恢复 registerCount", async ({
@@ -380,7 +394,7 @@ test("剪贴板范围编解码往返：复制范围行粘贴恢复 registerCount
   await openApp(page);
   // 第一行改为范围 "0-1"，然后复制 → 粘贴到末尾 → 新行仍是范围行（可展开）。
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");
@@ -402,7 +416,7 @@ test("剪贴板范围编解码往返：复制范围行粘贴恢复 registerCount
   await page.keyboard.press("Control+v");
   const pasted = parentRow(page, 1);
   await expect(pasted.locator('button[aria-label="Expand row"]')).toBeVisible();
-  await expect(pasted.getByLabel("Address", { exact: true })).toHaveText(
+  await expect(pasted.locator('[data-register-cell="address"]')).toHaveText(
     /^\d+-\d+$/,
   );
 });

@@ -203,17 +203,21 @@ async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const cell = table.getByLabel("Address", { exact: true }).first();
+      const cell = table.locator('[data-register-cell="address"]').first();
       await cell.click();
-      const input = frame.locator('input[aria-label="Address"]').first();
+      const input = frame
+        .locator('input[data-register-cell="address"]')
+        .first();
       await expect(input).toBeEditable({ timeout: 5000 });
       await input.fill("");
       await input.pressSequentially(addressHex, { delay: 10 });
       await expect(input).toHaveValue(addressHex);
       await input.press("Enter");
-      await expect(frame.locator('input[aria-label="Address"]')).toHaveCount(0);
       await expect(
-        table.getByLabel("Address", { exact: true }).first(),
+        frame.locator('input[data-register-cell="address"]'),
+      ).toHaveCount(0);
+      await expect(
+        table.locator('[data-register-cell="address"]').first(),
       ).toHaveAttribute("data-committed-value", addressHex);
       return;
     } catch (error) {
@@ -243,20 +247,21 @@ async function readRow(frame: Frame): Promise<void> {
 /** 首行填 Data（HEX）并点击 Write。 */
 async function writeRow(frame: Frame, valueHex: string): Promise<void> {
   const table = frame.locator(".register-table-tabs .ant-tabs-content-active");
-  const cell = table.getByLabel("Data").first();
+  const cell = table.locator('[data-register-cell="data"]').first();
   await cell.click();
   // 同 setRowAddress：等待编辑态 + pressSequentially 逐字符输入 + toHaveValue 同步。
-  const data = frame.locator('input[aria-label="Data"]').first();
+  const data = frame.locator('input[data-register-cell="data"]').first();
   await expect(data).toBeEditable({ timeout: 5000 });
   await data.fill("");
   await data.pressSequentially(valueHex, { delay: 10 });
   await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
-  await expect(frame.locator('input[aria-label="Data"]')).toHaveCount(0);
-  await expect(table.getByLabel("Data").first()).toHaveAttribute(
-    "data-committed-value",
-    valueHex,
+  await expect(frame.locator('input[data-register-cell="data"]')).toHaveCount(
+    0,
   );
+  await expect(
+    table.locator('[data-register-cell="data"]').first(),
+  ).toHaveAttribute("data-committed-value", valueHex);
   const writeButton = table
     .getByRole("button", { name: /^Write row / })
     .first();
@@ -343,7 +348,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
   await test.step("FC03 读正常区 0x0000 → 0x04D2（从站初始值 1234）", async () => {
     await setRowAddress(frame, "0000");
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("04D2", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("04D2", {
       timeout: CONNECTED_TIMEOUT,
     });
   });
@@ -355,7 +362,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
       frame.locator(".register-table__status-dot--success").first(),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("12AB", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("12AB", {
       timeout: CONNECTED_TIMEOUT,
     });
   });
@@ -374,7 +383,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
       frame.locator(".register-table__status-dot--success").first(),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("1234", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("1234", {
       timeout: CONNECTED_TIMEOUT,
     });
   });
@@ -419,7 +430,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     );
     await setRowAddress(frame, "0000");
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("04D2", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("04D2", {
       timeout: CONNECTED_TIMEOUT,
     });
   });
@@ -427,12 +440,16 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
   await test.step("边界：地址 0 与最大地址 0xFFFF（规则外回退正常）", async () => {
     await setRowAddress(frame, "0000");
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("04D2", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("04D2", {
       timeout: CONNECTED_TIMEOUT,
     });
     await setRowAddress(frame, "FFFF");
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("0000", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("0000", {
       timeout: CONNECTED_TIMEOUT,
     });
     await writeRow(frame, "1234");
@@ -440,7 +457,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
       frame.locator(".register-table__status-dot--success").first(),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("1234", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("1234", {
       timeout: CONNECTED_TIMEOUT,
     });
   });
@@ -452,7 +471,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
       frame.locator(".register-table__status-dot--success").first(),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("1234", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("1234", {
       timeout: CONNECTED_TIMEOUT,
     });
   });
@@ -471,7 +492,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await frame.waitForTimeout(800);
     await setRowAddress(frame, "0000");
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("04D2", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("04D2", {
       timeout: CONNECTED_TIMEOUT,
     });
   });
@@ -490,7 +513,9 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await writeRow(frame, "0001");
     await setRowAddress(frame, "0000");
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("04D2", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("04D2", {
       timeout: CONNECTED_TIMEOUT,
     });
     await frame.waitForTimeout(300);
@@ -532,12 +557,18 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await expect(
       frame.locator(".register-table__status-dot--error").first(),
     ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
-    await expect(frame.getByLabel("Data").first()).toHaveText("0000", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("0000", {
       timeout: CONNECTED_TIMEOUT,
     });
-    await expect(frame.getByLabel("Data").first()).not.toHaveText("1234");
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).not.toHaveText("1234");
     await readRow(frame);
-    await expect(frame.getByLabel("Data").first()).toHaveText("0000", {
+    await expect(
+      frame.locator('[data-register-cell="data"]').first(),
+    ).toHaveText("0000", {
       timeout: CONNECTED_TIMEOUT,
     });
     await setWriteVerify(frame, "OFF");

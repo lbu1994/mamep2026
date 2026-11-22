@@ -243,7 +243,9 @@ async function installPerfObserver(page: Page): Promise<void> {
         ".register-table-tabs .ant-tabs-content-active",
       );
       const row = active?.querySelector<HTMLElement>("[data-row-key^='perf-']");
-      const dataCell = row?.querySelector<HTMLElement>('[aria-label="Data"]');
+      const dataCell = row?.querySelector<HTMLElement>(
+        '[data-register-cell="data"]',
+      );
       if (
         row !== undefined &&
         row !== null &&
@@ -325,9 +327,11 @@ async function expectRowTriple(
 ): Promise<void> {
   const row = activeRow(page, key);
   await expect(row).toBeVisible({ timeout: 10_000 });
-  await expect(row.getByLabel("Name")).toHaveText(name);
-  await expect(row.getByLabel("Address", { exact: true })).toHaveText(address);
-  await expect(row.getByLabel("Data")).toHaveText(data);
+  await expect(row.locator('[data-register-cell="name"]')).toHaveText(name);
+  await expect(row.locator('[data-register-cell="address"]')).toHaveText(
+    address,
+  );
+  await expect(row.locator('[data-register-cell="data"]')).toHaveText(data);
   const height = await row.evaluate(
     (element) => element.getBoundingClientRect().height,
   );
@@ -393,9 +397,9 @@ async function commitDataCell(
   focusedTag: string;
 }> {
   const row = activeRow(page, key);
-  const dataCell = row.getByLabel("Data");
+  const dataCell = row.locator('[data-register-cell="data"]');
   await dataCell.click();
-  const input = row.locator('input[aria-label="Data"]');
+  const input = row.locator('input[data-register-cell="data"]');
   await input.fill(value);
   // fill 的 React onChange 渲染完成后再开始计时，确保被测对象是 Enter 提交本身。
   await page.evaluate(
@@ -417,10 +421,10 @@ async function commitDataCell(
           `.register-table-tabs .ant-tabs-content-active [data-row-key="${rowKey}"]`,
         );
         const currentInput = targetRow?.querySelector<HTMLInputElement>(
-          'input[aria-label="Data"]',
+          'input[data-register-cell="data"]',
         );
         const cell = targetRow?.querySelector<HTMLElement>(
-          '[aria-label="Data"]',
+          '[data-register-cell="data"]',
         );
         return (
           currentInput === null &&
@@ -681,7 +685,7 @@ test("1000 行普通表：虚拟滚动下编辑、选择、新增、切页与自
   const bottomCommit = await commitDataCell(page, rowId("main", 999), "BEEF");
   expect(bottomCommit.focusedRowKey).toBe(rowId("main", 999));
   await expect(
-    activeRow(page, rowId("main", 999)).getByLabel("Data"),
+    activeRow(page, rowId("main", 999)).locator('[data-register-cell="data"]'),
   ).toHaveText("BEEF");
   const bottomCommitRepeat1 = await commitDataCell(
     page,
@@ -759,9 +763,9 @@ test("1000 行普通表：虚拟滚动下编辑、选择、新增、切页与自
   const switchBackStarted = await pageNow(page);
   await page.getByRole("tab", { name: "Perf Main", exact: true }).click();
   await expect(activeRow(page, rowId("main", 0))).toBeVisible();
-  await expect(activeRow(page, rowId("main", 0)).getByLabel("Data")).toHaveText(
-    "CAFE",
-  );
+  await expect(
+    activeRow(page, rowId("main", 0)).locator('[data-register-cell="data"]'),
+  ).toHaveText("CAFE");
   const switchBackMs = (await pageNow(page)) - switchBackStarted;
 
   // 自动保存：轮询 IndexedDB，直到新增行数和两处单元格修改全部落盘。

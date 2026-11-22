@@ -45,6 +45,7 @@ describe("buildTreeRows", () => {
             __virtualChild: {
               index: number;
               address: number;
+              parentOrder: number;
               dataText: string | null;
             };
             cellText: string;
@@ -53,6 +54,8 @@ describe("buildTreeRows", () => {
       ).children ?? [];
     expect(children[0]?.__virtualChild.address).toBe(0);
     expect(children[1]?.__virtualChild.address).toBe(1);
+    expect(children[0]?.__virtualChild.parentOrder).toBe(row.order);
+    expect(children[1]?.__virtualChild.parentOrder).toBe(row.order);
     expect(children[0]?.__virtualChild.dataText).toBe("1234");
     expect(children[1]?.__virtualChild.dataText).toBe("ABCD");
   });

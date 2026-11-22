@@ -82,14 +82,17 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
     ).__mamepMock.setRegister(1, 0x1234);
   });
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("1");
   await address.press("Enter");
   await first
     .getByRole("button", { name: /^Read row / })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(first.getByLabel("Data")).toHaveText("1234", { timeout: 5000 });
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "1234",
+    { timeout: 5000 },
+  );
 
   // 通信日志出现 0x65 请求帧。
   await page
@@ -105,7 +108,7 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
     .getByRole("tab", { name: "Sheet 2" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  const dataInput = parentRow(page, 0).getByLabel("Data");
+  const dataInput = parentRow(page, 0).locator('[data-register-cell="data"]');
   await dataInput.click();
   await dataInput.fill("00AB");
   await dataInput.press("Enter");
@@ -131,7 +134,7 @@ test("插件 dataType 出现在 Type 下拉且可解析（scaled x0.1）", async
   await openApp(page);
   const first = parentRow(page, 0);
   // 打开 Type 下拉：可见内置选项 + 插件类型。
-  await first.getByLabel("Type").click();
+  await first.locator('[data-register-cell="type"]').click();
   await expect(
     page.locator(
       ".ant-select-dropdown:visible [title='Scaled (x0.1, example)']",
@@ -143,7 +146,7 @@ test("插件 dataType 出现在 Type 下拉且可解析（scaled x0.1）", async
     .click();
   await expect(first).toContainText("Scaled (x0.1, example)");
   // Data 输入 "12.5" → 提交后（未连接无法读，只验证解析不报错/保留）。
-  const dataInput = first.getByLabel("Data");
+  const dataInput = first.locator('[data-register-cell="data"]');
   await dataInput.click();
   await dataInput.fill("12.5");
   await dataInput.press("Enter");

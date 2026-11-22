@@ -188,7 +188,7 @@ test("TCP 连接 → 工具栏改 Unit ID → FC03 读断言请求帧 unitId 变
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
 
   // 4. 首行填入地址 0001。
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
@@ -201,9 +201,12 @@ test("TCP 连接 → 工具栏改 Unit ID → FC03 读断言请求帧 unitId 变
     .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByLabel("Data").first()).toHaveText("ABCD", {
-    timeout: 10000,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "ABCD",
+    {
+      timeout: 10000,
+    },
+  );
 
   // 6. 工具栏「Unit ID」（TCP 连接后 aria-label 切换为 Unit ID）改为 9：
   //    渲染端 setSlaveAddress → 按活动协议路由 session-set-unit-id → 主进程会话 setUnitId。
@@ -231,9 +234,12 @@ test("TCP 连接 → 工具栏改 Unit ID → FC03 读断言请求帧 unitId 变
     .poll(() => fakeSeenUnitIds.slice(before).some((id) => id === 9))
     .toBe(true);
   // 读值不受影响。
-  await expect(page.getByLabel("Data").first()).toHaveText("ABCD", {
-    timeout: 10000,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "ABCD",
+    {
+      timeout: 10000,
+    },
+  );
 
   // 8. 无 console 错误。
   expect(consoleErrors).toEqual([]);

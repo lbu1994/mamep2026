@@ -187,7 +187,7 @@ test("TCP 全表读取取消：Read All → 取消 → 汇总 cancelledCount > 0
   const rowCount = 8;
   for (let i = 0; i < rowCount; i++) {
     const address = (0x0100 + i).toString(16).padStart(4, "0");
-    const input = page.getByLabel("Address", { exact: true }).nth(i);
+    const input = page.locator('[data-register-cell="address"]').nth(i);
     await input.click();
     await input.fill(address);
     await input.press("Enter");

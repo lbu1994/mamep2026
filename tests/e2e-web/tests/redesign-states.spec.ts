@@ -53,7 +53,7 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
   ).toBeVisible();
 
   // 填写合法地址后控件恢复可用。
-  const addressInput = row.getByLabel("Address", { exact: true });
+  const addressInput = row.locator('[data-register-cell="address"]');
   await addressInput.click();
   await addressInput.fill("0005");
   await addressInput.press("Enter");
@@ -71,7 +71,7 @@ test("WP polling shows a non-color polling indicator while online", async ({
   await expect(page.locator(".register-table__wp-indicator")).toHaveCount(0);
 
   // 设置地址并开启 WP。
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("0006");
   await addressInput.press("Enter");

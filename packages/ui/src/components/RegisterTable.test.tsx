@@ -157,10 +157,14 @@ describe("RegisterTable 三态状态点", () => {
       document.querySelector(".register-table__status-dot--error"),
     ).toBeTruthy();
     // 编辑第一行 Data（点击 wrap 进入编辑态 → 第一行元素变为 Input）。
-    const cell = screen.getAllByLabelText("Data")[0];
+    const cell = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+    )[0];
     if (cell === undefined) throw new Error("missing data cell");
     fireEvent.click(cell);
-    const input = screen.getAllByLabelText("Data")[0];
+    const input = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+    )[0];
     if (input === undefined) throw new Error("missing data input");
     fireEvent.change(input, { target: { value: "42" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -186,7 +190,9 @@ describe("RegisterTable 三态状态点", () => {
     });
     render(<RegisterTable sheetId={sheetId()} />);
     // 每行一个 Data 单元格（aria-label 相同），取第一行。
-    const cell = screen.getAllByLabelText("Data")[0];
+    const cell = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+    )[0];
     if (cell === undefined) throw new Error("missing data cell");
     fireEvent.click(cell);
     await waitFor(() => {
@@ -194,7 +200,9 @@ describe("RegisterTable 三态状态点", () => {
       expect(
         document.querySelector(".register-table__status-dot--error"),
       ).toBeNull();
-      expect(document.querySelector('input[aria-label="Data"]')).toBeTruthy();
+      expect(
+        document.querySelector('input[data-register-cell="data"]'),
+      ).toBeTruthy();
     });
   });
 });
@@ -217,10 +225,14 @@ describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）
 
   /** 编辑第 index 行 Data 列提交指定值。 */
   async function commitDataCell(index: number, value: string): Promise<void> {
-    const cell = screen.getAllByLabelText("Data")[index];
+    const cell = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+    )[index];
     if (cell === undefined) throw new Error("missing data cell");
     fireEvent.click(cell);
-    const input = screen.getAllByLabelText("Data")[index];
+    const input = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+    )[index];
     if (input === undefined) throw new Error("missing data input");
     fireEvent.change(input, { target: { value } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -238,7 +250,11 @@ describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）
       ).toBeTruthy();
     });
     // 输入被保留（§23 校验失败不清空用户输入）。
-    expect(screen.getAllByLabelText("Data")[0]?.textContent).toBe("zz");
+    expect(
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+      )[0]?.textContent,
+    ).toBe("zz");
     // 非法值不产生编辑完成态（灰点）。
     expect(
       document.querySelector(".register-table__status-dot--dirty"),
@@ -269,10 +285,14 @@ describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）
     // 先给第一行提交合法地址（默认表 radix=dec，"100" 合法）。
     useAppStore.getState().commitRowAddress(firstRowId(), "100");
     render(<RegisterTable sheetId={sheetId()} />);
-    const cell = screen.getAllByLabelText("Address")[0];
+    const cell = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="address"]'),
+    )[0];
     if (cell === undefined) throw new Error("missing register cell");
     fireEvent.click(cell);
-    const input = screen.getAllByLabelText("Address")[0];
+    const input = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="address"]'),
+    )[0];
     if (input === undefined) throw new Error("missing register input");
     fireEvent.change(input, { target: { value: "xyz" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -284,7 +304,13 @@ describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）
       ).toBeTruthy();
     });
     // 非法输入被保留。
-    expect(screen.getAllByLabelText("Address")[0]?.textContent).toBe("xyz");
+    expect(
+      Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-register-cell="address"]',
+        ),
+      )[0]?.textContent,
+    ).toBe("xyz");
   });
 });
 
@@ -949,20 +975,28 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
     if (expandIcon === null) throw new Error("missing expand icon");
     fireEvent.click(expandIcon);
     // 展开后 2 个子行出现（各列 aria-label 数量 +2）。
-    expect(screen.getAllByLabelText("Data").length).toBeGreaterThanOrEqual(3);
+    expect(
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+      ).length,
+    ).toBeGreaterThanOrEqual(3);
   }
 
   it("子行 Name 可编辑并写回父行 registers[0].name", async () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandRangeRow();
     // Name 单元格：父行 1 + 子行 2；子行第一个是 index 1。
-    const cells = screen.getAllByLabelText("Name");
+    const cells = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="name"]'),
+    );
     expect(cells.length).toBeGreaterThanOrEqual(3);
     const childName = cells[1];
     if (childName === undefined) throw new Error("missing child name cell");
     expect(childName.textContent).toBe("Hi");
     fireEvent.click(childName);
-    const input = screen.getAllByLabelText("Name")[1];
+    const input = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="name"]'),
+    )[1];
     if (input === undefined) throw new Error("missing child name input");
     fireEvent.change(input, { target: { value: "H1" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -978,12 +1012,16 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandRangeRow();
     // 子行 0 显示自身 Type（hex）格式化的值 "0012"。
-    const cells = screen.getAllByLabelText("Data");
+    const cells = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+    );
     expect(cells.length).toBeGreaterThanOrEqual(3);
     const childData = cells[1];
     if (childData === undefined) throw new Error("missing child data cell");
     fireEvent.click(childData);
-    const input = screen.getAllByLabelText("Data")[1];
+    const input = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="data"]'),
+    )[1];
     if (input === undefined) throw new Error("missing child data input");
     fireEvent.change(input, { target: { value: "AB" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -997,13 +1035,17 @@ describe("RegisterTable 范围行子行可编辑化（2026-08-27）", () => {
   it("子行 Comment 可编辑并写回父行 registers[1].comment", async () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandRangeRow();
-    const cells = screen.getAllByLabelText("Comment");
+    const cells = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="comment"]'),
+    );
     expect(cells.length).toBeGreaterThanOrEqual(3);
     const childComment = cells[2];
     if (childComment === undefined) throw new Error("missing child comment");
     expect(childComment.textContent).toBe("low");
     fireEvent.click(childComment);
-    const input = screen.getAllByLabelText("Comment")[2];
+    const input = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="comment"]'),
+    )[2];
     if (input === undefined) throw new Error("missing child comment input");
     fireEvent.change(input, { target: { value: "L2" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -1074,6 +1116,14 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     fireEvent.click(expandIcon);
   }
 
+  function bitToggle(bit: number): HTMLElement {
+    const toggle = document.querySelector<HTMLElement>(
+      `[data-row-key$=":b${bit}"] [data-register-cell="data"]`,
+    );
+    if (toggle === null) throw new Error(`missing bit ${bit} toggle`);
+    return toggle;
+  }
+
   it("Address 列按「寄存器地址 + Bit 序号」渲染（bit15 → bit0），掩码作为 hover 提示", () => {
     setupBinaryRow();
     render(<RegisterTable sheetId={sheetId()} />);
@@ -1090,11 +1140,15 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
     // Name 单元格顺序：父行 1 + 位行 16（bit15 在前）。
-    const cells = screen.getAllByLabelText("Name");
+    const cells = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="name"]'),
+    );
     const bitName = cells[1];
     if (bitName === undefined) throw new Error("missing bit name cell");
     fireEvent.click(bitName);
-    const input = screen.getAllByLabelText("Name")[1];
+    const input = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="name"]'),
+    )[1];
     if (input === undefined) throw new Error("missing bit name input");
     fireEvent.change(input, { target: { value: "Alarm" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -1119,10 +1173,10 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
       document.querySelectorAll(".register-table__bit-value input").length,
     ).toBe(0);
     expect(
-      screen.getAllByLabelText(/^Toggle bit \d+, row \d+, address /),
+      document.querySelectorAll('[data-register-cell="data"].ant-switch'),
     ).toHaveLength(16);
     // 开关自带 1/0 文字（checkedChildren / unCheckedChildren）。
-    const bit15 = screen.getByLabelText(/^Toggle bit 15, row \d+, address /);
+    const bit15 = bitToggle(15);
     expect(bit15.querySelector(".ant-switch-inner-checked")?.textContent).toBe(
       "1",
     );
@@ -1131,11 +1185,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     ).toBe("0");
     // 开关状态与位值一致（0x8001：bit15 = 1、bit14 = 0）。
     expect(bit15.getAttribute("aria-checked")).toBe("true");
-    expect(
-      screen
-        .getByLabelText(/^Toggle bit 14, row \d+, address /)
-        .getAttribute("aria-checked"),
-    ).toBe("false");
+    expect(bitToggle(14).getAttribute("aria-checked")).toBe("false");
   });
 
   it("未读取时开关内显示 —（替代 0）且仍可切换（按全 0 基准）", () => {
@@ -1143,7 +1193,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
     // 未读取：未选中侧文字为 —（不再是 0），且不再使用开关外侧占位。
-    const bit0 = screen.getByLabelText(/^Toggle bit 0, row \d+, address /);
+    const bit0 = bitToggle(0);
     expect(bit0.getAttribute("aria-checked")).toBe("false");
     expect(bit0.querySelector(".ant-switch-inner-unchecked")?.textContent).toBe(
       "—",
@@ -1157,7 +1207,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     expect(row?.registerValues?.map((v) => v.value)).toEqual([0x0001]);
     expect(row?.cellText).toBe("00000000 00000001");
     // 已有当前值：未选中侧恢复为 0（该位此时为 1 → 显示在选中侧）。
-    const after = screen.getByLabelText(/^Toggle bit 0, row \d+, address /);
+    const after = bitToggle(0);
     expect(after.getAttribute("aria-checked")).toBe("true");
     expect(after.querySelector(".ant-switch-inner-checked")?.textContent).toBe(
       "1",
@@ -1171,10 +1221,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     setupBinaryRow();
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
-    const toggle = screen.getAllByLabelText(
-      /^Toggle bit 0, row \d+, address /,
-    )[0];
-    if (toggle === undefined) throw new Error("missing toggle");
+    const toggle = bitToggle(0);
     fireEvent.click(toggle);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
     expect(row?.registerValues?.[0]?.value).toBe(0x8000);
@@ -1191,12 +1238,16 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
     // 位行按 bit15 → bit0 渲染；第 1 个 Comment 单元格是父行，第 2 个是 bit15。
-    const cells = screen.getAllByLabelText("Comment");
+    const cells = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="comment"]'),
+    );
     const bitComment = cells[1];
     if (bitComment === undefined) throw new Error("missing bit comment cell");
     expect(bitComment.textContent).toBe("alarm");
     fireEvent.click(bitComment);
-    const input = screen.getAllByLabelText("Comment")[1];
+    const input = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="comment"]'),
+    )[1];
     if (input === undefined) throw new Error("missing bit comment input");
     fireEvent.change(input, { target: { value: "warning" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -1248,10 +1299,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     fireEvent.click(childIcon);
 
     // 第二层：寄存器 0 的 bit15（当前为 1）切为 0。
-    const toggle = screen.getAllByLabelText(
-      /^Toggle bit 15, row \d+, address /,
-    )[0];
-    if (toggle === undefined) throw new Error("missing toggle");
+    const toggle = bitToggle(15);
     fireEvent.click(toggle);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
     expect(row?.registerValues?.map((v) => v.value)).toEqual([0x0001, 0x0002]);
@@ -1263,19 +1311,20 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
     expect(screen.getByText("0 Bit 15")).toBeDefined();
-    const toggle = screen.getAllByLabelText(
-      /^Toggle bit 15, row \d+, address /,
-    )[0];
-    if (toggle === undefined) throw new Error("missing toggle");
+    const toggle = bitToggle(15);
     expect((toggle as HTMLButtonElement).disabled).toBe(true);
     // 只读表同样只有开关、无输入框。
     expect(
       document.querySelectorAll(".register-table__bit-value input").length,
     ).toBe(0);
     // 只读：Name/Comment 单元格不进入编辑（无 role=button）。
-    const bitComment = screen.getAllByLabelText("Comment")[1];
+    const bitComment = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="comment"]'),
+    )[1];
     expect(bitComment?.getAttribute("role")).toBeNull();
-    const bitName = screen.getAllByLabelText("Name")[1];
+    const bitName = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-register-cell="name"]'),
+    )[1];
     expect(bitName?.getAttribute("role")).toBeNull();
   });
 });

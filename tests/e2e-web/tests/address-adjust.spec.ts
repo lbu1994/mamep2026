@@ -75,7 +75,7 @@ test("Address Adjust ON：用户地址 1 发送到 0（comm log 帧地址 00 00�
 }) => {
   const errors = await openApp(page);
   // 给首行填地址 1（dec 默认）。
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("1");
   await addressInput.press("Enter");

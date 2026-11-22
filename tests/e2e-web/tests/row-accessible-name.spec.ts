@@ -23,7 +23,7 @@ function dataRows(page: Page): Locator {
 }
 
 async function setAddress(row: Locator, address: string): Promise<void> {
-  const input = row.getByLabel("Address", { exact: true });
+  const input = row.locator('[data-register-cell="address"]');
   await input.click();
   await input.fill(address);
   await input.press("Enter");
@@ -80,7 +80,7 @@ test("父行名称携带行号和地址，并在地址变化、重排后更新",
   await page.keyboard.press("Tab");
   await expect(read).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(first.getByLabel("Data", { exact: true })).toBeFocused();
+  await expect(first.locator('[data-register-cell="data"]')).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(
     first.getByRole("button", { name: "Write row 1, address 0" }),
@@ -156,12 +156,18 @@ test("范围父行与位明细的焦点顺序可区分，位开关携带地址",
   await expect(
     rangeChildren.first().getByRole("button", { name: /^Read row / }),
   ).toHaveCount(0);
+  await expect(
+    rangeChildren.first().locator('[data-register-cell="data"]'),
+  ).toHaveAttribute(
+    "aria-label",
+    "Data, row 1, address 0, table type HOLDING REGISTERS (R/W)",
+  );
 
   const bitParentRow = page.locator(
     `.register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key="${bitParentKey}"]`,
   );
   await setAddress(bitParentRow, "2");
-  await bitParentRow.getByLabel("Type").click();
+  await bitParentRow.locator('[data-register-cell="type"]').click();
   await page.locator(".ant-select-dropdown:visible [title='Binary']").click();
   await bitParentRow.locator('button[aria-label="Expand row"]').click();
 
@@ -170,10 +176,22 @@ test("范围父行与位明细的焦点顺序可区分，位开关携带地址",
       ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=':b15']",
     )
     .first();
-  const toggle = bit15.getByLabel("Toggle bit 15, row 2, address 2");
-  const bitName = bit15.getByLabel("Name");
-  const bitComment = bit15.getByLabel("Comment");
+  const toggle = bit15.locator('[data-register-cell="data"]');
+  const bitName = bit15.locator('[data-register-cell="name"]');
+  const bitComment = bit15.locator('[data-register-cell="comment"]');
   await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute(
+    "aria-label",
+    "Data, row 2, address 2 Bit 15, table type HOLDING REGISTERS (R/W)",
+  );
+  await expect(bitName).toHaveAttribute(
+    "aria-label",
+    "Name, row 2, address 2 Bit 15, table type HOLDING REGISTERS (R/W)",
+  );
+  await expect(bitComment).toHaveAttribute(
+    "aria-label",
+    "Comment, row 2, address 2 Bit 15, table type HOLDING REGISTERS (R/W)",
+  );
 
   // 位行内：Name → Data 位开关 → Comment，跳过的非交互列不制造焦点停靠点。
   await bitName.focus();

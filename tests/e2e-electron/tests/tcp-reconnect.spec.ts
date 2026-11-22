@@ -235,7 +235,7 @@ async function connectViaUi(autoReconnect: boolean): Promise<void> {
 
 /** 首行填入地址 0001 并 FC03 单行读，断言 Data = ABCD。 */
 async function readFirstRegister(): Promise<void> {
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
@@ -246,9 +246,12 @@ async function readFirstRegister(): Promise<void> {
     .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByLabel("Data").first()).toHaveText("ABCD", {
-    timeout: 10000,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "ABCD",
+    {
+      timeout: 10000,
+    },
+  );
 }
 
 test("断线后自动重连成功：新连接 + 回到 Online + FC03 读恢复", async () => {

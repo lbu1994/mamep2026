@@ -7,9 +7,7 @@ async function openApp(page: Page): Promise<void> {
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
-  await expect(
-    page.locator('[data-startup-hydrated="true"]'),
-  ).toHaveCount(1);
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
 }
 
 function parentRow(page: Page, index = 0) {
@@ -30,7 +28,7 @@ async function setAddress(
   row: ReturnType<typeof parentRow>,
   address: string,
 ): Promise<void> {
-  const input = row.getByLabel("Address", { exact: true });
+  const input = row.locator('[data-register-cell="address"]');
   await input.click();
   await input.fill(address);
   await input.press("Enter");
@@ -40,18 +38,12 @@ async function setBinaryType(
   page: Page,
   row: ReturnType<typeof parentRow>,
 ): Promise<void> {
-  await row.getByLabel("Type").click();
+  await row.locator('[data-register-cell="type"]').click();
   await page.locator(".ant-select-dropdown:visible [title='Binary']").click();
 }
 
-async function expectBit(
-  row: Locator,
-  bit: number,
-  value: "1" | "0",
-): Promise<void> {
-  const toggle = row.getByLabel(
-    new RegExp(`^Toggle bit ${bit}, row \\d+, address `),
-  );
+async function expectBit(row: Locator, value: "1" | "0"): Promise<void> {
+  const toggle = row.locator('[data-register-cell="data"]');
   await expect(toggle).toHaveAttribute(
     "aria-checked",
     value === "1" ? "true" : "false",
@@ -86,35 +78,46 @@ test("bit detail integrates device read, editing and workspace persistence", asy
     ).__mamepMock.setRegister(0, 0x8001),
   );
   await first.getByRole("button", { name: /^Read row / }).click();
-  await expect(first.getByLabel("Data")).toHaveText("10000000 00000001", {
-    timeout: 8000,
-  });
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "10000000 00000001",
+    {
+      timeout: 8000,
+    },
+  );
 
   await first.locator('button[aria-label="Expand row"]').click();
   await expect(bitRows(page)).toHaveCount(16);
   const bit15 = bitRows(page).nth(0);
   await expect(bit15).toContainText("0 Bit 15");
   await expect(bit15.locator("span[title='0x8000']")).toHaveCount(1);
-  await expectBit(bit15, 15, "1");
-  await expectBit(bitRows(page).nth(15), 0, "1");
+  await expectBit(bit15, "1");
+  await expectBit(bitRows(page).nth(15), "1");
   await expect(
     bitRows(page).locator(".register-table__bit-value input"),
   ).toHaveCount(0);
 
-  await bit15.getByLabel(/^Toggle bit 15, row 1, address 0$/).click();
-  await expectBit(bitRows(page).nth(0), 15, "0");
-  await expect(first.getByLabel("Data")).toHaveText("00000000 00000001");
+  await bit15.locator('[data-register-cell="data"]').click();
+  await expectBit(bitRows(page).nth(0), "0");
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "00000000 00000001",
+  );
 
-  const name = bitRows(page).nth(0).getByLabel("Name");
+  const name = bitRows(page).nth(0).locator('[data-register-cell="name"]');
   await name.click();
   await name.fill("Alarm bit");
   await name.press("Enter");
-  const comment = bitRows(page).nth(0).getByLabel("Comment");
+  const comment = bitRows(page)
+    .nth(0)
+    .locator('[data-register-cell="comment"]');
   await comment.click();
   await comment.fill("alarm");
   await comment.press("Enter");
-  await expect(bitRows(page).nth(0).getByLabel("Name")).toHaveText("Alarm bit");
-  await expect(bitRows(page).nth(0).getByLabel("Comment")).toHaveText("alarm");
+  await expect(
+    bitRows(page).nth(0).locator('[data-register-cell="name"]'),
+  ).toHaveText("Alarm bit");
+  await expect(
+    bitRows(page).nth(0).locator('[data-register-cell="comment"]'),
+  ).toHaveText("alarm");
 
   await page.waitForTimeout(1200);
   await page.reload();
@@ -123,8 +126,12 @@ test("bit detail integrates device read, editing and workspace persistence", asy
   });
   await parentRow(page).locator('button[aria-label="Expand row"]').click();
   await expect(bitRows(page)).toHaveCount(16);
-  await expect(bitRows(page).nth(0).getByLabel("Name")).toHaveText("Alarm bit");
-  await expect(bitRows(page).nth(0).getByLabel("Comment")).toHaveText("alarm");
+  await expect(
+    bitRows(page).nth(0).locator('[data-register-cell="name"]'),
+  ).toHaveText("Alarm bit");
+  await expect(
+    bitRows(page).nth(0).locator('[data-register-cell="comment"]'),
+  ).toHaveText("alarm");
   expect(errors).toEqual([]);
 });
 
@@ -153,7 +160,7 @@ test("coarse-pointer bit switches do not increase row height", async ({
       "29px",
     );
     const toggleHeight = await bit15
-      .getByLabel(/^Toggle bit 15, row 1, address 0$/)
+      .locator('[data-register-cell="data"]')
       .evaluate((element) => element.getBoundingClientRect().height);
     expect(toggleHeight).toBeLessThanOrEqual(24);
   } finally {

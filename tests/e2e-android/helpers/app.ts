@@ -96,9 +96,9 @@ export async function setRowAddress(
   address: string,
 ): Promise<void> {
   // 注意：不能用 /^Address/ 正则——会匹配到工具栏「Address format」进制切换控件与「Address Adjust」控件。
-  const cell = page.getByLabel("Address", { exact: true }).first();
+  const cell = page.locator('[data-register-cell="address"]').first();
   await cell.click();
-  const input = page.getByLabel("Address", { exact: true }).first();
+  const input = page.locator('[data-register-cell="address"]').first();
   await expect(input).toBeEditable({ timeout: 10_000 });
   // fill() 用原生 value setter 设置 DOM 值，React onChange 可能不触发（仓库既有踩坑）：
   // 用 pressSequentially 逐字符输入（真实键盘事件），确认受控值同步后再 Enter 提交。
@@ -118,9 +118,9 @@ export async function readRow(page: Page): Promise<void> {
 
 /** 首行填 Data（HEX）并点击 Write。 */
 export async function writeRow(page: Page, valueHex: string): Promise<void> {
-  const cell = page.getByLabel("Data", { exact: true }).first();
+  const cell = page.locator('[data-register-cell="data"]').first();
   await cell.click();
-  const input = page.getByLabel("Data", { exact: true }).first();
+  const input = page.locator('[data-register-cell="data"]').first();
   await expect(input).toBeEditable({ timeout: 10_000 });
   await input.fill("");
   await input.pressSequentially(valueHex, { delay: 10 });

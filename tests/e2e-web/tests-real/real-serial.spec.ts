@@ -204,12 +204,12 @@ async function setRtuTimeoutSelect(
 
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(p: Page, addressHex: string): Promise<void> {
-  const cell = p.getByLabel("Address", { exact: true }).first();
+  const cell = p.locator('[data-register-cell="address"]').first();
   await cell.click();
   // 等待进入编辑态：click 触发 React 重渲染渲染出 input（生产构建高负载下可能延迟，
   // 且前序读/写操作的行重渲染尚未 settle 时点击可能命中旧节点）。toBeEditable 自动
   // 重试直到 input 出现，比裸 waitForTimeout 可靠（real e2e 竞态）。
-  const input = p.getByLabel("Address", { exact: true }).first();
+  const input = p.locator('[data-register-cell="address"]').first();
   await expect(input).toBeEditable({ timeout: 5000 });
   // Playwright fill() 用原生 value setter 设置 DOM 值，偶发不触发 React onChange
   // （draftRef 未同步但 DOM value 已变，toHaveValue 可能假通过，Enter 提交读到旧 draft）。
@@ -231,7 +231,7 @@ async function readRow(p: Page): Promise<void> {
 
 /** 把首行 Type（进制列）切到指定选项（antd Select 选项按 title 定位）。 */
 async function setRowType(p: Page, optionTitle: string): Promise<void> {
-  await p.getByLabel("Type").first().click();
+  await p.locator('[data-register-cell="type"]').first().click();
   await p
     .locator(`.ant-select-dropdown:visible [title='${optionTitle}']`)
     .click();
@@ -280,11 +280,11 @@ async function setWriteVerify(p: Page, optionText: string): Promise<void> {
 
 /** 首行填 Data（HEX）并点击 Write。 */
 async function writeRow(p: Page, valueHex: string): Promise<void> {
-  const cell = p.getByLabel("Data").first();
+  const cell = p.locator('[data-register-cell="data"]').first();
   await cell.click();
   // 同 setRowAddress：等待编辑态 + pressSequentially 逐字符输入（fill 偶发不触发
   // React onChange 致提交短路）+ toHaveValue 确认受控值同步后再 Enter。
-  const data = p.getByLabel("Data").first();
+  const data = p.locator('[data-register-cell="data"]').first();
   await expect(data).toBeEditable({ timeout: 5000 });
   await data.fill("");
   await data.pressSequentially(valueHex, { delay: 10 });
@@ -342,13 +342,9 @@ test.beforeAll(async () => {
     .filter({ has: page.getByRole("button", { name: /Select serial port/i }) });
   let label: string | null = null;
   for (let attempt = 1; attempt <= 3 && label === null; attempt += 1) {
-    await modal
-      .getByRole("button", { name: /Select serial port/i })
-      .click();
+    await modal.getByRole("button", { name: /Select serial port/i }).click();
     const selection = selectSerialPortWithFlaUi(await page.title(), port);
-    console.log(
-      `[real-serial] FlaUI picker attempt ${attempt}: ${selection}`,
-    );
+    console.log(`[real-serial] FlaUI picker attempt ${attempt}: ${selection}`);
     try {
       // Web Serial 不保证暴露 COM 名；系统 picker 的目标选择是身份来源，页面侧
       // 只需确认 Port 字段出现了已选句柄。连接成功由随后的 Online 断言负责。
@@ -404,9 +400,12 @@ test("连接成功：顶栏 Online，连接属性 RTU", async () => {
 test("FC03 读正常区 0x0000 → 0x04D2（从站初始值 1234）", async () => {
   await setRowAddress(page, "0000");
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "04D2",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
 });
 
 test("FC0x10 写正常区 0x0001=0x12AB + 读回验证", async () => {
@@ -416,9 +415,12 @@ test("FC0x10 写正常区 0x0001=0x12AB + 读回验证", async () => {
     page.locator(".register-table__status-dot--success").first(),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("12AB", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "12AB",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
 });
 
 test("写值门控 0x0400：写 0x8000 被拒（异常 0x03），写 0x1234 成功", async () => {
@@ -436,9 +438,12 @@ test("写值门控 0x0400：写 0x8000 被拒（异常 0x03），写 0x1234 成�
     page.locator(".register-table__status-dot--success").first(),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("1234", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "1234",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
 });
 
 test("异常区：只读 0x0100 写 / 只写 0x0200 读 / 不存在 0x0300 读 / 不支持功能 0x0500 读", async () => {
@@ -483,32 +488,44 @@ test("no-response 0x0600：读超时错误，且不破坏后续请求", async ()
   // 后续正常区请求仍成功。
   await setRowAddress(page, "0000");
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "04D2",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
 });
 
 test("边界：地址 0 与最大地址 0xFFFF（规则外回退正常）", async () => {
   // 地址 0 = 0x0000（正常区）：读返回初始值。
   await setRowAddress(page, "0000");
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "04D2",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
   // 最大地址 0xFFFF：规则外 → 回退正常行为（读 0、写读回）。
   await setRowAddress(page, "FFFF");
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "0000",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
   await writeRow(page, "1234");
   await expect(
     page.locator(".register-table__status-dot--success").first(),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("1234", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "1234",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
 });
 
 test("扩展：分片响应 0x0800 读写成功（半包/粘包组帧健壮性）", async () => {
@@ -518,9 +535,12 @@ test("扩展：分片响应 0x0800 读写成功（半包/粘包组帧健壮性�
     page.locator(".register-table__status-dot--success").first(),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("1234", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "1234",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
 });
 
 test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", async () => {
@@ -540,7 +560,7 @@ test("扩展：延迟响应 0x0700 读超时（迟到丢弃），后续正常", 
     .poll(
       async () => {
         await readRow(page);
-        return expect(page.getByLabel("Data").first())
+        return expect(page.locator('[data-register-cell="data"]').first())
           .toHaveText("04D2", { timeout: 1000 })
           .then(() => true)
           .catch(() => false);
@@ -561,9 +581,12 @@ test("通信日志：请求/响应/异常帧字节", async () => {
   await writeRow(page, "0001");
   await setRowAddress(page, "0000");
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("04D2", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "04D2",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
   await page.waitForTimeout(200);
   const list = page.locator(".comm-log .ant-listy-holder");
   // Listy 虚拟列表默认停在底部（最新帧可见）；最早帧（写门控异常 01 90 03）可能被挤出
@@ -598,15 +621,23 @@ test("写后回读 Verify：默认 OFF，显式 ON 后写忽略区 0x0900 显示
     page.locator(".register-table__status-dot--error").first(),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
   // 关键断言：Data 列显示的是回读值（0000），而不是写入值（1234）。
-  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
-    timeout: CONNECTED_TIMEOUT,
-  });
-  await expect(page.getByLabel("Data").first()).not.toHaveText("1234");
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "0000",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
+  await expect(
+    page.locator('[data-register-cell="data"]').first(),
+  ).not.toHaveText("1234");
   // 手动读回仍为 0000（设备未落盘）。
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "0000",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
   await setWriteVerify(page, "OFF");
 });
 
@@ -620,14 +651,20 @@ test("写后回读 Verify=OFF（默认）：写忽略区 0x0900 写入后 Data �
   await expect(
     page.locator(".register-table__status-dot--success").first(),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });
-  await expect(page.getByLabel("Data").first()).toHaveText("1234", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "1234",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
   // 手动读回仍为 0000（设备未落盘）。
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText("0000", {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "0000",
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
 });
 
 test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Type=String → Data 显示字符串", async () => {
@@ -638,9 +675,12 @@ test("ASCII 字符串区：FC03 连续读 16 寄存器（0x0010–0x001F）+ Typ
   await setRowAddress(page, "0010-001F");
   await setRowType(page, "String");
   await readRow(page);
-  await expect(page.getByLabel("Data").first()).toHaveText(ascii.text, {
-    timeout: CONNECTED_TIMEOUT,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    ascii.text,
+    {
+      timeout: CONNECTED_TIMEOUT,
+    },
+  );
   await expect(
     page.locator(".register-table__status-dot--success").first(),
   ).toBeVisible({ timeout: CONNECTED_TIMEOUT });

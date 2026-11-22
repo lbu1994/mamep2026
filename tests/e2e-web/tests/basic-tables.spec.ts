@@ -110,7 +110,7 @@ test("侧边栏显示基础表分组并可新建线圈表", async ({ page }) => 
   await addBasicSheet(page, "COILS (R/W)");
   // 新建线圈表成为活动表；其行默认 Type=BOOL（antd Select 标签渲染在 selection-item，非 combobox 输入框）。
   const first = parentRow(page, 0);
-  await expect(first.getByLabel("Type")).toBeVisible();
+  await expect(first.locator('[data-register-cell="type"]')).toBeVisible();
   await expect(first).toContainText("Bool");
   await expect(first.getByLabel("Scale")).toBeDisabled();
 });
@@ -124,7 +124,7 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
   // 第一行地址 0，预置线圈 0 = 1。
   await setCoil(page, 0, 1);
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("0");
   await address.press("Enter");
@@ -133,7 +133,7 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
   await first
     .getByRole("button", { name: /^Read row / })
     .evaluate((el) => (el as HTMLElement).click());
-  const dataInput = first.getByLabel("Data");
+  const dataInput = first.locator('[data-register-cell="data"]');
   await expect(dataInput).toHaveText("1", { timeout: 5000 });
 
   // 通信日志出现 FC01 请求帧。
@@ -150,7 +150,7 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
     .getByRole("tab", { name: "Sheet 2" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  const dataInput2 = parentRow(page, 0).getByLabel("Data");
+  const dataInput2 = parentRow(page, 0).locator('[data-register-cell="data"]');
   await dataInput2.click();
   await dataInput2.fill("0");
   await dataInput2.press("Enter");
@@ -173,7 +173,7 @@ test("离散输入表（只读）：Write 禁用、FC02 读", async ({ page }) =
     );
   });
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("1");
   await address.press("Enter");
@@ -187,7 +187,10 @@ test("离散输入表（只读）：Write 禁用、FC02 读", async ({ page }) =
   await first
     .getByRole("button", { name: /^Read row / })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(first.getByLabel("Data")).toHaveText("0001", { timeout: 5000 });
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "0001",
+    { timeout: 5000 },
+  );
 
   // 通信日志出现 FC02 请求帧。
   await page
@@ -211,7 +214,7 @@ test("输入寄存器表（只读）：FC04 读 16 位值", async ({ page }) => 
     ).__mamepMock.setInputRegister(2, 0x1234);
   });
   const first = parentRow(page, 0);
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("2");
   await address.press("Enter");
@@ -224,7 +227,10 @@ test("输入寄存器表（只读）：FC04 读 16 位值", async ({ page }) => 
     .getByRole("button", { name: /^Read row / })
     .evaluate((el) => (el as HTMLElement).click());
   // 输入寄存器默认 hex：显示 1234。
-  await expect(first.getByLabel("Data")).toHaveText("1234", { timeout: 5000 });
+  await expect(first.locator('[data-register-cell="data"]')).toHaveText(
+    "1234",
+    { timeout: 5000 },
+  );
 
   await page
     .getByRole("tab", { name: "Comm Log" })

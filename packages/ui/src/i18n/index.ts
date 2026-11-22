@@ -129,6 +129,10 @@ export const en = {
     traceAction: "Trace",
     rowControlLabel: "{{action}} row {{row}}, address {{address}}",
     rowControlLabelNoAddress: "{{action}} row {{row}}",
+    editableCellLabel:
+      "{{column}}, row {{row}}, address {{address}}, table type {{tableType}}",
+    editableCellLabelNoAddress:
+      "{{column}}, row {{row}}, table type {{tableType}}",
     wpHint: "Poll this register continuously while online.",
     wpStateOff: "Polling off",
     wpStatePaused: "Polling paused while offline or without a valid address",
@@ -728,6 +732,10 @@ export const zh: TranslationResources = {
     traceAction: "追踪",
     rowControlLabel: "{{action}}第 {{row}} 行，地址 {{address}}",
     rowControlLabelNoAddress: "{{action}}第 {{row}} 行",
+    editableCellLabel:
+      "{{column}}，第 {{row}} 行，地址 {{address}}，表类型：{{tableType}}",
+    editableCellLabelNoAddress:
+      "{{column}}，第 {{row}} 行，表类型：{{tableType}}",
     wpHint: "在线时持续周期读取该寄存器。",
     wpStateOff: "轮询已关闭",
     wpStatePaused: "离线或地址无效时暂停轮询",

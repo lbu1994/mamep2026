@@ -118,18 +118,18 @@ test("宽表行状态、区域层级和范围子行在深浅主题下保持清�
   // Address / Data 继续使用数据字体角色。
   const addressFont = await rows
     .nth(0)
-    .getByLabel("Address", { exact: true })
+    .locator('[data-register-cell="address"]')
     .evaluate((el) => getComputedStyle(el).fontFamily);
   const dataFont = await rows
     .nth(0)
-    .getByLabel("Data", { exact: true })
+    .locator('[data-register-cell="data"]')
     .evaluate((el) => getComputedStyle(el).fontFamily);
   expect(addressFont.toLowerCase()).toContain("monospace");
   expect(dataFont.toLowerCase()).toContain("monospace");
 
   // 范围行展开后，子行使用独立从属底色与树状竖轨，行高不漂移。
   const first = rows.nth(0);
-  const address = first.getByLabel("Address", { exact: true });
+  const address = first.locator('[data-register-cell="address"]');
   await address.click();
   await address.fill("0-1");
   await address.press("Enter");

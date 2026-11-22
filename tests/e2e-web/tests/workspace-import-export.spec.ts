@@ -28,7 +28,7 @@ function row(page: Page, index: number) {
 
 /** 点击进入 Name 单元格编辑态，填入新名字并提交。 */
 async function setName(page: Page, index: number, name: string): Promise<void> {
-  const nameInput = row(page, index).getByLabel("Name");
+  const nameInput = row(page, index).locator('[data-register-cell="name"]');
   await nameInput.click();
   await nameInput.fill(name);
   await nameInput.press("Enter");
@@ -134,7 +134,9 @@ test("导出→导入 roundtrip：导入后工作区恢复导出内容", async (
 
   // 修改工作区（与导出内容不同）。
   await setName(page, 0, "ChangedName");
-  await expect(row(page, 0).getByLabel("Name")).toHaveText("ChangedName");
+  await expect(row(page, 0).locator('[data-register-cell="name"]')).toHaveText(
+    "ChangedName",
+  );
 
   // 打开 Settings 后导入导出文件：预览摘要 → 确认。
   await openSettings(page);
@@ -143,9 +145,12 @@ test("导出→导入 roundtrip：导入后工作区恢复导出内容", async (
   await closeSettings(page);
 
   // 工作区被替换：行名恢复为导出时的值。
-  await expect(row(page, 0).getByLabel("Name")).toHaveText("ExportedName", {
-    timeout: 5000,
-  });
+  await expect(row(page, 0).locator('[data-register-cell="name"]')).toHaveText(
+    "ExportedName",
+    {
+      timeout: 5000,
+    },
+  );
 });
 
 test("导入预览取消不替换当前工作区", async ({ page }) => {
@@ -169,7 +174,9 @@ test("导入预览取消不替换当前工作区", async ({ page }) => {
   await closeSettings(page);
 
   // 工作区未被替换：行名保持。
-  await expect(row(page, 0).getByLabel("Name")).toHaveText("KeepMe");
+  await expect(row(page, 0).locator('[data-register-cell="name"]')).toHaveText(
+    "KeepMe",
+  );
 });
 
 test("坏文件（非法 JSON）报错且不破坏当前工作区", async ({ page }) => {
@@ -180,7 +187,9 @@ test("坏文件（非法 JSON）报错且不破坏当前工作区", async ({ pag
   await importWorkspaceFile(page, "bad.json", "not-json{{{");
   await expect(page.getByText("Import failed.")).toBeVisible();
   await closeSettings(page);
-  await expect(row(page, 0).getByLabel("Name")).toHaveText("KeepMe");
+  await expect(row(page, 0).locator('[data-register-cell="name"]')).toHaveText(
+    "KeepMe",
+  );
 });
 
 test("导入含 connectionProfiles 的工作区：Connection Settings 恢复连接参数（替代原 Import JSON 路径）", async ({

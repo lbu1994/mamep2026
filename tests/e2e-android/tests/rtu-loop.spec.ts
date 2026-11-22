@@ -79,7 +79,7 @@ test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）�
   // FC03：首行读回 4 位 HEX（真实从站返回值）。
   await setRowAddress(page, "0");
   await readRow(page);
-  const dataInput = page.getByLabel("Data", { exact: true }).first();
+  const dataInput = page.locator('[data-register-cell="data"]').first();
   await expect(dataInput).toHaveText(/^[0-9A-F]{4}$/, { timeout: 30_000 });
 
   // FC10 + 写后回读（显式 ON）：写入 1234 后回读一致。

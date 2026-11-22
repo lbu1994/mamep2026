@@ -84,7 +84,11 @@ import type {
   RowId,
   SheetId,
 } from "@mamep2026/domain";
-import { defaultConfig, sheetTypeWritable } from "@mamep2026/domain";
+import {
+  coreTableTypeMeta,
+  defaultConfig,
+  sheetTypeWritable,
+} from "@mamep2026/domain";
 import { formatRegisterAddress } from "@mamep2026/data-conversion";
 import {
   applyColumnOrder,
@@ -120,6 +124,7 @@ import { usePluginContributions } from "../plugin/use-contributions";
 import type {
   AddressTransformContribution,
   DataTypeContribution,
+  TableTypeContribution,
   ToolbarActionContribution,
 } from "../plugin/plugin-registries";
 import { clampColumnWidth } from "./column-resize";
@@ -420,6 +425,8 @@ function writeVerifyOptionMs(value: WriteVerifyOptionValue): number | null {
 interface EditableCellValueProps {
   /** 单元格值：非编辑态显示；进入编辑态时作为初始草稿。 */
   value: string;
+  /** 稳定列身份：供跨语言测试和自动化定位，不随显示文案变化。 */
+  columnKey: EditableCellColumnKey;
   /** 编辑态 Input 与非编辑态按钮共用 aria-label（两状态互斥，getByLabel 不会重复匹配）。 */
   ariaLabel: string;
   /** 校验错误：非编辑态错误样式 + Tooltip，编辑态 Input error 状态。 */
@@ -438,6 +445,7 @@ interface EditableCellValueProps {
 
 function EditableCellValue({
   value,
+  columnKey,
   ariaLabel,
   error = false,
   errorTip,
@@ -527,6 +535,7 @@ function EditableCellValue({
         variant="filled"
         style={{ width: "100%" }}
         value={draft}
+        data-register-cell={columnKey}
         aria-label={ariaLabel}
         {...(error ? { status: "error" as const } : {})}
         onChange={(e) => {
@@ -565,6 +574,7 @@ function EditableCellValue({
             },
           })}
       aria-label={ariaLabel}
+      data-register-cell={columnKey}
       data-committed-value={value}
     >
       <span className="register-table__editable-cell-value-wrap__text">
@@ -609,6 +619,61 @@ function rowControlAriaLabel(
   return address === ""
     ? t("table.rowControlLabelNoAddress", { action, row: rowNumber })
     : t("table.rowControlLabel", { action, row: rowNumber, address });
+}
+
+type EditableCellColumnKey = "name" | "address" | "data" | "comment";
+
+/** 可编辑单元格名称：表头 + 行号 + 当前地址 + 本地化表类型。 */
+function editableCellAriaLabel(
+  t: TFunction,
+  column: string,
+  rowNumber: number,
+  addressText: string,
+  tableType: string,
+): string {
+  const address = addressText.trim();
+  return address === ""
+    ? t("table.editableCellLabelNoAddress", {
+        column,
+        row: rowNumber,
+        tableType,
+      })
+    : t("table.editableCellLabel", {
+        column,
+        row: rowNumber,
+        address,
+        tableType,
+      });
+}
+
+function editableCellRowContext(
+  row: RegisterRow,
+  radix: RegisterRadix,
+  t: TFunction,
+): { rowNumber: number; addressText: string } {
+  if (isVirtualBitRow(row)) {
+    const address =
+      row.addressValue === null
+        ? ""
+        : formatRegisterAddress(row.__virtualBit.address, radix);
+    return {
+      rowNumber: row.__virtualBit.parentOrder,
+      addressText:
+        address === ""
+          ? ""
+          : `${address} ${t("table.bitLabel", { bit: row.__virtualBit.bit })}`,
+    };
+  }
+  if (isVirtualChildRow(row)) {
+    return {
+      rowNumber: row.__virtualChild.parentOrder,
+      addressText:
+        row.addressValue === null
+          ? ""
+          : formatRegisterAddress(row.__virtualChild.address, radix),
+    };
+  }
+  return { rowNumber: row.order, addressText: row.addressDraft };
 }
 
 interface TmCellProps {
@@ -684,6 +749,7 @@ function TmControl({
 interface NameCellProps {
   rowId: RowId;
   name: string;
+  ariaLabel: string;
 }
 
 const NameCell = memo(function NameCell(props: NameCellProps) {
@@ -695,13 +761,18 @@ const NameCell = memo(function NameCell(props: NameCellProps) {
   );
 });
 
-function NameControl({ rowId, name }: NameCellProps): React.ReactNode {
+function NameControl({
+  rowId,
+  name,
+  ariaLabel,
+}: NameCellProps): React.ReactNode {
   // 可撤销（TECH_DESIGN §24.4）：改名经 store.setRowName 入撤销栈。
   const setRowName = useAppStore((s) => s.setRowName);
   return (
     <EditableCellValue
       value={name}
-      ariaLabel="Name"
+      columnKey="name"
+      ariaLabel={ariaLabel}
       onCommit={(value) => setRowName(rowId, value)}
     />
   );
@@ -710,6 +781,7 @@ function NameControl({ rowId, name }: NameCellProps): React.ReactNode {
 interface RegisterCellProps {
   rowId: RowId;
   addressDraft: string;
+  ariaLabel: string;
   /** 地址校验错误（store 记录）：有值时红框 + Tooltip 显示具体原因。 */
   error?: RowFailure | undefined;
 }
@@ -726,6 +798,7 @@ const RegisterCell = memo(function RegisterCell(props: RegisterCellProps) {
 function RegisterControl({
   rowId,
   addressDraft,
+  ariaLabel,
   error,
 }: RegisterCellProps): React.ReactNode {
   const { t, i18n } = useTranslation();
@@ -739,7 +812,8 @@ function RegisterControl({
   return (
     <EditableCellValue
       value={addressDraft}
-      ariaLabel="Address"
+      columnKey="address"
+      ariaLabel={ariaLabel}
       error={error !== undefined}
       {...(errorTip !== undefined ? { errorTip } : {})}
       onCommit={(value) => {
@@ -971,6 +1045,7 @@ function ReadControl({
 interface DataCellProps {
   rowId: RowId;
   cellText: string;
+  ariaLabel: string;
   /** Data 校验错误（store 记录）：有值时红框 + Tooltip 显示具体原因。 */
   error?: RowFailure | undefined;
 }
@@ -989,6 +1064,7 @@ const DataCell = memo(function DataCell(props: DataCellProps) {
 function DataControl({
   rowId,
   cellText,
+  ariaLabel,
   error,
 }: DataCellProps): React.ReactNode {
   const { t, i18n } = useTranslation();
@@ -1016,7 +1092,8 @@ function DataControl({
   return (
     <EditableCellValue
       value={cellText}
-      ariaLabel="Data"
+      columnKey="data"
+      ariaLabel={ariaLabel}
       // 空值占位「—」：区分「尚未读取/无值」与「有值」，纯 UI 派生，不进入草稿。
       emptyText="—"
       error={error !== undefined}
@@ -1245,6 +1322,7 @@ function TypeControl({
         size="small"
         style={{ width: "100%" }}
         value={selectValue}
+        data-register-cell="type"
         aria-label="Type"
         placement="bottomLeft"
         variant="borderless"
@@ -1319,6 +1397,7 @@ function ScaleControl({ rowId, dataType }: ScaleCellProps): React.ReactNode {
 interface CommentCellProps {
   rowId: RowId;
   comment: string;
+  ariaLabel: string;
 }
 
 const CommentCell = memo(function CommentCell(props: CommentCellProps) {
@@ -1330,13 +1409,18 @@ const CommentCell = memo(function CommentCell(props: CommentCellProps) {
   );
 });
 
-function CommentControl({ rowId, comment }: CommentCellProps): React.ReactNode {
+function CommentControl({
+  rowId,
+  comment,
+  ariaLabel,
+}: CommentCellProps): React.ReactNode {
   // 可撤销（TECH_DESIGN §24.4）：改备注经 store.setRowComment 入撤销栈。
   const setRowComment = useAppStore((s) => s.setRowComment);
   return (
     <EditableCellValue
       value={comment}
-      ariaLabel="Comment"
+      columnKey="comment"
+      ariaLabel={ariaLabel}
       onCommit={(value) => setRowComment(rowId, value)}
     />
   );
@@ -1365,14 +1449,17 @@ const ChildAddressCell = memo(function ChildAddressCell({
 /** 子行 Name 列：可编辑（写回父行 registers[i].name）。 */
 const ChildNameCell = memo(function ChildNameCell({
   row,
+  ariaLabel,
 }: {
   row: VirtualChildRow;
+  ariaLabel: string;
 }) {
   const setChildMeta = useAppStore((s) => s.setChildMeta);
   return (
     <EditableCellValue
       value={row.name}
-      ariaLabel="Name"
+      columnKey="name"
+      ariaLabel={ariaLabel}
       onCommit={(value) =>
         setChildMeta(row.__virtualChild.parentRowId, row.__virtualChild.index, {
           name: value,
@@ -1385,14 +1472,17 @@ const ChildNameCell = memo(function ChildNameCell({
 /** 子行 Data 列：可编辑（按子行自身 Type 解析，回写父行 registerValues[i] 并同步组合文本）。 */
 const ChildDataCell = memo(function ChildDataCell({
   row,
+  ariaLabel,
 }: {
   row: VirtualChildRow;
+  ariaLabel: string;
 }) {
   const commitChildCellText = useAppStore((s) => s.commitChildCellText);
   return (
     <EditableCellValue
       value={row.cellText}
-      ariaLabel="Data"
+      columnKey="data"
+      ariaLabel={ariaLabel}
       // 空值占位「—」：区分「尚未读取/无值」与「有值」。
       emptyText="—"
       onCommit={(value) =>
@@ -1421,6 +1511,7 @@ const ChildTypeCell = memo(function ChildTypeCell({
       size="small"
       style={{ width: "100%" }}
       value={radix}
+      data-register-cell="type"
       aria-label="Type"
       placement="bottomLeft"
       variant="borderless"
@@ -1480,14 +1571,17 @@ const ChildScaleCell = memo(function ChildScaleCell({
 /** 子行 Comment 列：可编辑（写回父行 registers[i].comment）。 */
 const ChildCommentCell = memo(function ChildCommentCell({
   row,
+  ariaLabel,
 }: {
   row: VirtualChildRow;
+  ariaLabel: string;
 }) {
   const setChildMeta = useAppStore((s) => s.setChildMeta);
   return (
     <EditableCellValue
       value={row.comment}
-      ariaLabel="Comment"
+      columnKey="comment"
+      ariaLabel={ariaLabel}
       onCommit={(value) =>
         setChildMeta(row.__virtualChild.parentRowId, row.__virtualChild.index, {
           comment: value,
@@ -1508,16 +1602,19 @@ const ChildCommentCell = memo(function ChildCommentCell({
 const BitNameCell = memo(function BitNameCell({
   row,
   writable,
+  ariaLabel,
 }: {
   row: VirtualBitRow;
   /** 本表可写（只读表禁用编辑）。 */
   writable: boolean;
+  ariaLabel: string;
 }) {
   const setBitName = useAppStore((s) => s.setBitName);
   return (
     <EditableCellValue
       value={row.name}
-      ariaLabel="Name"
+      columnKey="name"
+      ariaLabel={ariaLabel}
       disabled={!writable}
       onCommit={(value) =>
         setBitName(
@@ -1565,14 +1662,13 @@ const BitRegisterCell = memo(function BitRegisterCell({
 const BitDataCell = memo(function BitDataCell({
   row,
   writable,
-  radix,
+  ariaLabel,
 }: {
   row: VirtualBitRow;
   /** 本表可写（只读表禁用切换）。 */
   writable: boolean;
-  radix: RegisterRadix;
+  ariaLabel: string;
 }) {
-  const { t } = useTranslation();
   const setRegisterBitValue = useAppStore((s) => s.setRegisterBitValue);
   const value = row.__virtualBit.value;
   return (
@@ -1584,15 +1680,8 @@ const BitDataCell = memo(function BitDataCell({
         unCheckedChildren={value === null ? "—" : "0"}
         disabled={!writable}
         checked={value === 1}
-        aria-label={
-          row.__virtualBit.parentOrder > 0
-            ? t("table.bitToggleLabel", {
-                bit: row.__virtualBit.bit,
-                row: row.__virtualBit.parentOrder,
-                address: formatRegisterAddress(row.__virtualBit.address, radix),
-              })
-            : t("table.bitToggle", { bit: row.__virtualBit.bit })
-        }
+        data-register-cell="data"
+        aria-label={ariaLabel}
         onChange={(checked) => {
           if (!writable) return;
           setRegisterBitValue(
@@ -1612,16 +1701,19 @@ const BitDataCell = memo(function BitDataCell({
 const BitCommentCell = memo(function BitCommentCell({
   row,
   writable,
+  ariaLabel,
 }: {
   row: VirtualBitRow;
   /** 本表可写（只读表禁用编辑）。 */
   writable: boolean;
+  ariaLabel: string;
 }) {
   const setBitComment = useAppStore((s) => s.setBitComment);
   return (
     <EditableCellValue
       value={row.comment}
-      ariaLabel="Comment"
+      columnKey="comment"
+      ariaLabel={ariaLabel}
       disabled={!writable}
       onCommit={(value) =>
         setBitComment(
@@ -1912,6 +2004,21 @@ const RegisterTableContent = memo(function RegisterTableContent({
   );
   // 本表可写（位明细）：只读表（discrete-input/input-register）位切换与位注释编辑禁用。
   const sheetWritable = sheetTypeWritable(sheetType);
+  const tableTypeContributions = usePluginContributions<TableTypeContribution>(
+    host,
+    "tableType",
+  );
+  const tableTypeTitle = useMemo(() => {
+    const core = coreTableTypeMeta(sheetType);
+    if (core !== null) return t(core.titleKey);
+    const pluginTable = tableTypeContributions.find(
+      (contribution) =>
+        `${contribution.pluginId}:${contribution.payload.id}` === sheetType,
+    );
+    return pluginTable === undefined
+      ? sheetType
+      : t(pluginTable.payload.titleKey);
+  }, [sheetType, t, tableTypeContributions]);
   const toolbarActions = usePluginContributions<ToolbarActionContribution[]>(
     host,
     "toolbarAction",
@@ -2761,14 +2868,32 @@ const RegisterTableContent = memo(function RegisterTableContent({
         width: 150,
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
-        render: (_, row) =>
-          isVirtualBitRow(row) ? (
-            <BitNameCell row={row} writable={sheetWritable} />
+        render: (_, row) => {
+          const columnLabel = t("table.name");
+          const { rowNumber, addressText } = editableCellRowContext(
+            row,
+            registerRadix,
+            t,
+          );
+          const ariaLabel = editableCellAriaLabel(
+            t,
+            columnLabel,
+            rowNumber,
+            addressText,
+            tableTypeTitle,
+          );
+          return isVirtualBitRow(row) ? (
+            <BitNameCell
+              row={row}
+              writable={sheetWritable}
+              ariaLabel={ariaLabel}
+            />
           ) : isVirtualChildRow(row) ? (
-            <ChildNameCell row={row} />
+            <ChildNameCell row={row} ariaLabel={ariaLabel} />
           ) : (
-            <NameCell rowId={row.rowId} name={row.name} />
-          ),
+            <NameCell rowId={row.rowId} name={row.name} ariaLabel={ariaLabel} />
+          );
+        },
       },
       {
         title:
@@ -2783,20 +2908,33 @@ const RegisterTableContent = memo(function RegisterTableContent({
         className: "register-table__cell--center register-table__cell--mono",
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
-        render: (_, row) =>
-          isVirtualBitRow(row) ? (
-            <BitRegisterCell row={row} radix={registerRadix} />
-          ) : isVirtualChildRow(row) ? (
-            <ChildAddressCell row={row} radix={registerRadix} />
-          ) : (
+        render: (_, row) => {
+          if (isVirtualBitRow(row)) {
+            return <BitRegisterCell row={row} radix={registerRadix} />;
+          }
+          if (isVirtualChildRow(row)) {
+            return <ChildAddressCell row={row} radix={registerRadix} />;
+          }
+          const ariaLabel = editableCellAriaLabel(
+            t,
+            registerRadix === "hex"
+              ? t("table.addressHex")
+              : t("table.addressDec"),
+            row.order,
+            row.addressDraft,
+            tableTypeTitle,
+          );
+          return (
             <RegisterCell
               rowId={row.rowId}
               addressDraft={row.addressDraft}
+              ariaLabel={ariaLabel}
               {...(cellValidationErrors[`${row.rowId}:address`] !== undefined
                 ? { error: cellValidationErrors[`${row.rowId}:address`] }
                 : {})}
             />
-          ),
+          );
+        },
       },
       {
         title: t("table.wp"),
@@ -2840,24 +2978,38 @@ const RegisterTableContent = memo(function RegisterTableContent({
         className: "register-table__cell--center register-table__cell--mono",
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
-        render: (_, row) =>
-          isVirtualBitRow(row) ? (
+        render: (_, row) => {
+          const { rowNumber, addressText } = editableCellRowContext(
+            row,
+            registerRadix,
+            t,
+          );
+          const ariaLabel = editableCellAriaLabel(
+            t,
+            t("table.data"),
+            rowNumber,
+            addressText,
+            tableTypeTitle,
+          );
+          return isVirtualBitRow(row) ? (
             <BitDataCell
               row={row}
               writable={sheetWritable}
-              radix={registerRadix}
+              ariaLabel={ariaLabel}
             />
           ) : isVirtualChildRow(row) ? (
-            <ChildDataCell row={row} />
+            <ChildDataCell row={row} ariaLabel={ariaLabel} />
           ) : (
             <DataCell
               rowId={row.rowId}
               cellText={row.cellText}
+              ariaLabel={ariaLabel}
               {...(cellValidationErrors[`${row.rowId}:data`] !== undefined
                 ? { error: cellValidationErrors[`${row.rowId}:data`] }
                 : {})}
             />
-          ),
+          );
+        },
       },
       {
         title: t("table.write"),
@@ -2917,14 +3069,35 @@ const RegisterTableContent = memo(function RegisterTableContent({
         key: "comment",
         // 单行不换行 + 超长省略 + hover title（框架列级 ellipsis，表头/正文统一生效）。
         ellipsis: true,
-        render: (_, row) =>
-          isVirtualBitRow(row) ? (
-            <BitCommentCell row={row} writable={sheetWritable} />
+        render: (_, row) => {
+          const { rowNumber, addressText } = editableCellRowContext(
+            row,
+            registerRadix,
+            t,
+          );
+          const ariaLabel = editableCellAriaLabel(
+            t,
+            t("table.comment"),
+            rowNumber,
+            addressText,
+            tableTypeTitle,
+          );
+          return isVirtualBitRow(row) ? (
+            <BitCommentCell
+              row={row}
+              writable={sheetWritable}
+              ariaLabel={ariaLabel}
+            />
           ) : isVirtualChildRow(row) ? (
-            <ChildCommentCell row={row} />
+            <ChildCommentCell row={row} ariaLabel={ariaLabel} />
           ) : (
-            <CommentCell rowId={row.rowId} comment={row.comment} />
-          ),
+            <CommentCell
+              rowId={row.rowId}
+              comment={row.comment}
+              ariaLabel={ariaLabel}
+            />
+          );
+        },
       },
       {
         title: "",
@@ -2953,6 +3126,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
       sheetId,
       maxOrder,
       sheetWritable,
+      tableTypeTitle,
       communicationReasonId,
     ],
   );

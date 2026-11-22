@@ -145,7 +145,7 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("1");
   await addressInput.press("Enter");
@@ -170,7 +170,7 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
     .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  const dataInput = page.getByLabel("Data", { exact: true }).first();
+  const dataInput = page.locator('[data-register-cell="data"]').first();
   await expect(dataInput).toHaveText("00AB");
 
   // Write: entering 12AB updates the mock device register.
@@ -224,7 +224,7 @@ test("read all updates eligible rows and reports a summary message", async ({
       .getByRole("button", { name: "Add Row" })
       .evaluate((el) => (el as HTMLElement).click());
   }
-  const addressInputs = page.getByLabel("Address", { exact: true });
+  const addressInputs = page.locator('[data-register-cell="address"]');
   await addressInputs.nth(0).click();
   await addressInputs.nth(0).fill("0001");
   await addressInputs.nth(0).press("Enter");
@@ -235,7 +235,7 @@ test("read all updates eligible rows and reports a summary message", async ({
   await page
     .getByRole("button", { name: "Read All" })
     .evaluate((el) => (el as HTMLElement).click());
-  const dataInputs = page.getByLabel("Data", { exact: true });
+  const dataInputs = page.locator('[data-register-cell="data"]');
   await expect(dataInputs.nth(0)).toHaveText("0102", { timeout: 8000 });
   await expect(dataInputs.nth(1)).toHaveText("0304", { timeout: 8000 });
 });
@@ -248,7 +248,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
   await page
     .getByRole("button", { name: "Add Row" })
     .evaluate((el) => (el as HTMLElement).click());
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("0003");
   await addressInput.press("Enter");
@@ -265,7 +265,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 
-  const dataInput = page.getByLabel("Data", { exact: true }).first();
+  const dataInput = page.locator('[data-register-cell="data"]').first();
   await expect(dataInput).toHaveText("0007", { timeout: 8000 });
 
   // Changing the device value is picked up by polling (forced overwrite).

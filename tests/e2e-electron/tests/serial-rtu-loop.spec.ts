@@ -301,36 +301,34 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
 
   // 首行填入地址 0001。
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("0001");
   await addressInput.press("Enter");
   await expect(
-    page.getByLabel("Address", { exact: true }).first(),
+    page.locator('[data-register-cell="address"]').first(),
   ).toHaveAttribute("data-committed-value", "1");
 
   // FC03 单行读：Data 显示 ABCD（hex）。
-  const readButton = page
-    .getByRole("button", { name: /^Read row / })
-    .first();
+  const readButton = page.getByRole("button", { name: /^Read row / }).first();
   await expect(readButton).toBeEnabled();
   await readButton.click();
-  await expect(page.getByLabel("Data").first()).toHaveText("ABCD", {
-    timeout: 8000,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "ABCD",
+    {
+      timeout: 8000,
+    },
+  );
 
   // FC10 单行写：12AB 写入设备寄存器（写后由 fake 设备寄存器回读确认）。
-  const dataInput = page.getByLabel("Data").first();
+  const dataInput = page.locator('[data-register-cell="data"]').first();
   await dataInput.click();
   await dataInput.fill("12AB");
   await dataInput.press("Enter");
-  await expect(page.getByLabel("Data").first()).toHaveAttribute(
-    "data-committed-value",
-    "12AB",
-  );
-  const writeButton = page
-    .getByRole("button", { name: /^Write row / })
-    .first();
+  await expect(
+    page.locator('[data-register-cell="data"]').first(),
+  ).toHaveAttribute("data-committed-value", "12AB");
+  const writeButton = page.getByRole("button", { name: /^Write row / }).first();
   await expect(writeButton).toBeEnabled();
   await writeButton.click();
   await expect
@@ -354,12 +352,12 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
   });
 
   // 首行地址改为范围 "0001-0002"（DEC 表），展开箭头出现。
-  const addressInput = page.getByLabel("Address", { exact: true }).first();
+  const addressInput = page.locator('[data-register-cell="address"]').first();
   await addressInput.click();
   await addressInput.fill("0001-0002");
   await addressInput.press("Enter");
   await expect(
-    page.getByLabel("Address", { exact: true }).first(),
+    page.locator('[data-register-cell="address"]').first(),
   ).toHaveAttribute("data-committed-value", "1-2");
   const firstRow = page
     .locator(
@@ -376,34 +374,33 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
     .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByLabel("Data").first()).toHaveText("1111 2222", {
-    timeout: 8000,
-  });
+  await expect(page.locator('[data-register-cell="data"]').first()).toHaveText(
+    "1111 2222",
+    {
+      timeout: 8000,
+    },
+  );
   const childDatas = await page.$$eval(
     '.register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key*=":c"]',
     (trs) =>
       trs.map((tr) =>
         (
           Array.from(tr.querySelectorAll(".ant-table-cell"))[7] as
-            | HTMLElement
-            | undefined
+            HTMLElement | undefined
         )?.textContent?.trim(),
       ),
   );
   expect(childDatas).toEqual(["1111", "2222"]);
 
   // 多寄存器写（FC0x10 quantity=2 + 写后回读）：写入 fake 设备寄存器。
-  const dataInput = page.getByLabel("Data").first();
+  const dataInput = page.locator('[data-register-cell="data"]').first();
   await dataInput.click();
   await dataInput.fill("AAAA BBBB");
   await dataInput.press("Enter");
-  await expect(page.getByLabel("Data").first()).toHaveAttribute(
-    "data-committed-value",
-    "AAAA BBBB",
-  );
-  const writeButton = page
-    .getByRole("button", { name: /^Write row / })
-    .first();
+  await expect(
+    page.locator('[data-register-cell="data"]').first(),
+  ).toHaveAttribute("data-committed-value", "AAAA BBBB");
+  const writeButton = page.getByRole("button", { name: /^Write row / }).first();
   await expect(writeButton).toBeEnabled();
   await writeButton.click();
   await expect

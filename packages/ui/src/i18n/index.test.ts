@@ -97,4 +97,18 @@ describe("紧凑控件标签与动作术语", () => {
       zhWriteSelected: "写入选中行",
     });
   });
+
+  it("可编辑单元格名称同时包含列头、行号、地址和表类型", () => {
+    expect({
+      en: en.table.editableCellLabel,
+      enNoAddress: en.table.editableCellLabelNoAddress,
+      zh: zh.table.editableCellLabel,
+      zhNoAddress: zh.table.editableCellLabelNoAddress,
+    }).toEqual({
+      en: "{{column}}, row {{row}}, address {{address}}, table type {{tableType}}",
+      enNoAddress: "{{column}}, row {{row}}, table type {{tableType}}",
+      zh: "{{column}}，第 {{row}} 行，地址 {{address}}，表类型：{{tableType}}",
+      zhNoAddress: "{{column}}，第 {{row}} 行，表类型：{{tableType}}",
+    });
+  });
 });

@@ -29,7 +29,7 @@ function row(page: Page, index: number) {
 
 /** 点击进入 Name 单元格编辑态，填入新名字并提交。 */
 async function setName(page: Page, index: number, name: string): Promise<void> {
-  const nameInput = row(page, index).getByLabel("Name");
+  const nameInput = row(page, index).locator('[data-register-cell="name"]');
   await nameInput.click();
   await nameInput.fill(name);
   await nameInput.press("Enter");
