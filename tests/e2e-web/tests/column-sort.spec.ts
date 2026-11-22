@@ -44,13 +44,13 @@ const HEADER_TO_KEY: Record<string, string> = {
 /** body 首行各列 cell 的定位标识（与 firstRowCellLabels 提取规则一致：优先 [aria-label]，否则文本）。 */
 const BODY_LABEL_BY_COLUMN: Record<string, string> = {
   no: "1",
-  tm: "TM",
+  tm: "Trace row 1, address 0",
   name: "Name",
   address: "Address",
-  wp: "WP",
-  read: "Read",
+  wp: "Poll row 1, address 0",
+  read: "Read row 1, address 0",
   data: "Data",
-  write: "Write",
+  write: "Write row 1, address 0",
   type: "Type",
   scale: "Scale",
   comment: "Comment",

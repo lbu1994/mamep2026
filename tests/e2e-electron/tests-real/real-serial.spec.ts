@@ -187,7 +187,7 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
 /** 首行点击 Read。 */
 async function readRow(p: Page): Promise<void> {
   const button = activeTable(p)
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first();
   // Enter 提交到 Store/轮询目标映射是异步宏任务；按钮变为 enabled 才表示首行地址与
   // 连接路由均已就绪，避免在提交完成前点击禁用按钮。
@@ -255,7 +255,7 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
     valueHex,
   );
   const writeButton = activeTable(p)
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .first();
   await expect(writeButton).toBeEnabled({ timeout: 5000 });
   await writeButton.click();

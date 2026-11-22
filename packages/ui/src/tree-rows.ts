@@ -39,6 +39,8 @@ export interface VirtualBitInfo {
   registerRowId: RowId;
   /** 该寄存器的主行 rowId（**store 中的真实行 id**）：位值/位注释编辑一律经它 + registerIndex 路由。 */
   parentRowId: RowId;
+  /** 该寄存器所属真实父行的界面行号；位开关可访问名称使用。 */
+  parentOrder: number;
   /** 位掩码文本（如 `0x8000`）。 */
   maskText: string;
   /** 该位所在寄存器的实际地址（父行起始地址 + registerIndex）；Address 列展示用。 */
@@ -119,6 +121,7 @@ function buildBitRows(
       registerIndex,
       registerRowId,
       parentRowId: row.rowId,
+      parentOrder: row.order,
       maskText: entry.maskText,
       address: baseAddress + registerIndex,
       value: entry.value,

@@ -24,14 +24,15 @@
     ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, Menlo,
     "PingFang SC", "Microsoft YaHei", monospace;
 
-  /* 背景层级：应用 / 导航(顶栏) / 侧栏 / 内容面板 / 浮层 / 悬停 / 选中（Light） */
-  --mamep-bg-app: #f2f3f5;
-  --mamep-bg-nav: #ffffff;
-  --mamep-bg-sidebar: #ffffff;
+  /* 背景层级：应用 / 导航(顶栏) / 侧栏 / 内容面板 / 底部面板 / 浮层 / 悬停 / 选中（Light） */
+  --mamep-bg-app: #eef0f3;
+  --mamep-bg-nav: #f8f9fb;
+  --mamep-bg-sidebar: #f6f8fa;
   --mamep-bg-panel: #ffffff;
+  --mamep-bg-bottom: #f7f8fa;
   --mamep-bg-elevated: #ffffff;
-  --mamep-bg-hover: rgba(0, 0, 0, 0.06);
-  --mamep-bg-selected: #e6f4ff;
+  --mamep-bg-hover: rgba(20, 36, 56, 0.06);
+  --mamep-bg-selected: #e5f1ff;
 
   /* 文字灰阶（Light，AA 校准：tertiary 4.74:1、disabled 3.03:1） */
   --mamep-text-primary: rgba(0, 0, 0, 0.88);
@@ -43,6 +44,22 @@
   --mamep-border-subtle: rgba(5, 5, 5, 0.06);
   --mamep-border-default: #d9d9d9;
   --mamep-border-strong: rgba(0, 0, 0, 0.15);
+  --mamep-border-region: #dce1e7;
+
+  /* 表格扫描层级（Light）：表头 > 斑马纹 < hover < 选中；子行保持从属感。 */
+  --mamep-table-border: #e4e8ec;
+  --mamep-table-header-bg: #eef1f5;
+  --mamep-table-header-hover-bg: #e7ebf1;
+  --mamep-table-row-bg: #ffffff;
+  --mamep-table-row-striped-bg: #f7f9fb;
+  --mamep-table-row-hover-bg: #edf3f9;
+  --mamep-table-row-selected-bg: #e6f2ff;
+  --mamep-table-row-selected-hover-bg: #deedfd;
+  --mamep-table-child-bg: #f3f6f8;
+  --mamep-table-child-hover-bg: #e9eff5;
+  --mamep-table-tree-rail: #a8b4c2;
+  --mamep-table-sticky-divider: #cbd3dc;
+  --mamep-table-sticky-shadow: rgba(27, 43, 61, 0.14);
 
   /* 状态（Light）：品牌/信息色与默认主题色由 .ant-app 作用域映射 antd cssVar */
   --mamep-status-success: #389e0d;
@@ -65,15 +82,16 @@
   --mamep-scrollbar-track: transparent;
 }
 
-/* 暗黑模式：独立设计，不简单反色。四级深灰背景（应用/导航/面板/浮层）+ 低饱和选中 + 亮化文字 */
+/* 暗黑模式：独立设计，不简单反色。多级深灰表面 + 低饱和选中 + 亮化文字 */
 [data-mamep-theme="dark"] {
-  --mamep-bg-app: #101014;
-  --mamep-bg-nav: #141414;
-  --mamep-bg-sidebar: #141414;
-  --mamep-bg-panel: #16161c;
+  --mamep-bg-app: #0e0f13;
+  --mamep-bg-nav: #17181d;
+  --mamep-bg-sidebar: #131419;
+  --mamep-bg-panel: #18191f;
+  --mamep-bg-bottom: #14151a;
   --mamep-bg-elevated: #1f1f1f;
   --mamep-bg-hover: rgba(255, 255, 255, 0.08);
-  --mamep-bg-selected: #152d50;
+  --mamep-bg-selected: #193454;
 
   --mamep-text-primary: rgba(255, 255, 255, 0.85);
   --mamep-text-secondary: rgba(255, 255, 255, 0.65);
@@ -83,6 +101,22 @@
   --mamep-border-subtle: rgba(255, 255, 255, 0.12);
   --mamep-border-default: #424242;
   --mamep-border-strong: rgba(255, 255, 255, 0.2);
+  --mamep-border-region: #2b2d35;
+
+  /* 表格扫描层级（Dark）：避免斑马纹与 hover 相近，同时保持低饱和。 */
+  --mamep-table-border: #292c34;
+  --mamep-table-header-bg: #20232a;
+  --mamep-table-header-hover-bg: #272b34;
+  --mamep-table-row-bg: #18191f;
+  --mamep-table-row-striped-bg: #1c1e25;
+  --mamep-table-row-hover-bg: #252b35;
+  --mamep-table-row-selected-bg: #193556;
+  --mamep-table-row-selected-hover-bg: #1c3b60;
+  --mamep-table-child-bg: #15171d;
+  --mamep-table-child-hover-bg: #222832;
+  --mamep-table-tree-rail: #586575;
+  --mamep-table-sticky-divider: #3b3f49;
+  --mamep-table-sticky-shadow: rgba(0, 0, 0, 0.4);
 
   --mamep-status-success: #49aa19;
   --mamep-status-warning: #d89614;
@@ -200,8 +234,8 @@ body {
   height: 40px;
   line-height: 40px;
   padding: 0 10px;
-  background: var(--ant-color-bg-container);
-  border-bottom: 1px solid var(--ant-color-split);
+  background: var(--mamep-bg-nav);
+  border-bottom: 1px solid var(--mamep-border-region);
 }
 
 .mamep-header__brand {
@@ -308,14 +342,14 @@ body {
   flex-direction: column;
   height: 100%;
   min-width: 0;
-  background: var(--ant-color-bg-container);
-  border-right: 1px solid var(--mamep-border-subtle);
+  background: var(--mamep-bg-sidebar);
+  border-right: 1px solid var(--mamep-border-region);
 }
 
 /* 侧边栏现为 Splitter 面板并保留 .ant-layout-sider 类（供 e2e 选择器兼容）；
    覆盖 antd Sider 注入的 siderBg 背景与 transition:all（避免拖拽 flex-basis 抖动）。 */
 .sheet-sidebar.ant-layout-sider {
-  background: var(--ant-color-bg-container);
+  background: var(--mamep-bg-sidebar);
   transition: none;
 }
 
@@ -682,7 +716,7 @@ body {
   overflow: hidden;
   /* 内容面板背景（暗色下与导航/侧栏形成灰阶层次） */
   background: var(--mamep-bg-panel);
-  border: 1px solid var(--mamep-border-subtle);
+  border: 1px solid var(--mamep-border-region);
   border-radius: 4px;
 }
 
@@ -1076,26 +1110,25 @@ body {
   border-color: transparent;
 }
 
-/* ---------------- 位明细行 ----------------
-   位行 = 二进制寄存器展开出的 16 行（bit15 → bit0）：弱化前景色 + 等宽文本，
-   与范围行子行一起形成「父行 > 寄存器/位」的视觉层级。
+/* ---------------- 位明细行 / 范围子行 ----------------
+   派生行共享同一套从属背景与树状轨道；位行再弱化前景色。
    Row 高沿用桌面 29px / 移动 44px（与 TS 常量一致，虚拟滚动按行高固定）。 */
 .register-table-tabs
   .ant-table-wrapper
   .ant-table-tbody
-  tr.register-table__row--bit
-  .ant-table-cell {
-  color: var(--ant-color-text-secondary);
-  background: var(--ant-color-fill-quaternary);
-}
-
-/* 位行 hover 仍给到明确反馈（覆盖上面的弱化底色） */
+  .ant-table-row.register-table__row--bit,
 .register-table-tabs
   .ant-table-wrapper
   .ant-table-tbody
-  tr.register-table__row--bit:hover
-  .ant-table-cell {
-  background: var(--ant-table-row-hover-bg);
+  .ant-table-row.register-table__row--child {
+  --register-table-row-fill: var(--mamep-table-child-bg);
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-row.register-table__row--bit {
+  color: var(--mamep-text-secondary);
 }
 
 /* 位行 Data 列：仅一个开关（1/0），未读取时开关内显示「—」代替 0（起在开关**内部**，
@@ -1336,40 +1369,129 @@ body {
 
 .register-table-tabs .ant-table-wrapper .ant-table-thead > tr > th {
   height: 26px;
-  background: var(--ant-color-fill-secondary);
+  color: var(--mamep-text-secondary);
+  background: var(--mamep-table-header-bg);
+  border-bottom: 1px solid var(--mamep-table-sticky-divider);
+  font-weight: 600;
+  letter-spacing: 0.015em;
 }
 
-/* 斑马纹：交替行浅底色（antd colorFillQuaternary 官方语义即斑马纹用色，浅/深主题
-   自动适配）。类由 RegisterTable 的 rowClassName 按行号奇偶注入。
-   单元格统一用 .ant-table-cell（普通模式为 td、虚拟滚动模式下为 div，二者都有该类），
-   并用后代选择器覆盖虚拟滚动容器结构。规则顺序保证状态优先级：斑马纹 < hover < 选中。 */
+/* 行状态通过行容器上的变量下传，单元格只消费最终变量。这样普通表格、虚拟滚动和
+   sticky 单元格不会各自计算底色，横向滚动时固定列也能与整行状态保持一致。
+   优先级：基础行 < 斑马纹/子行 < hover < 选中。 */
+.register-table-tabs .ant-table-wrapper .ant-table-tbody .ant-table-row {
+  --register-table-row-fill: var(--mamep-table-row-bg);
+}
+
 .register-table-tabs
   .ant-table-wrapper
   .ant-table-tbody
-  tr.register-table__row--striped
-  .ant-table-cell {
-  background: var(--ant-color-fill-quaternary);
+  .ant-table-row.register-table__row--striped {
+  --register-table-row-fill: var(--mamep-table-row-striped-bg);
 }
 
-/* 行 hover 覆盖斑马纹：使用 antd 行悬停同款 token（--ant-table-row-hover-bg，
-   与 antd 默认悬停色一致，深浅主题自适应）。置于选中规则之前，避免悬停时
-   覆盖选中行的品牌浅底。 */
+.register-table-tabs .ant-table-wrapper .ant-table-tbody .ant-table-row:hover {
+  --register-table-row-fill: var(--mamep-table-row-hover-bg);
+}
+
 .register-table-tabs
   .ant-table-wrapper
   .ant-table-tbody
-  tr:hover
-  .ant-table-cell {
-  background: var(--ant-table-row-hover-bg);
-}
-
-/* 行选中：品牌浅底 + 复选框（不只依赖复选框；与侧栏/页签选中语义一致）；
-   置于 hover 规则之后，选中优先级最高（含选中行悬停保持品牌浅底）。 */
+  .ant-table-row.register-table__row--child:hover,
 .register-table-tabs
   .ant-table-wrapper
   .ant-table-tbody
-  tr.ant-table-row-selected
+  .ant-table-row.register-table__row--bit:hover {
+  --register-table-row-fill: var(--mamep-table-child-hover-bg);
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-row.ant-table-row-selected {
+  --register-table-row-fill: var(--mamep-table-row-selected-bg);
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-row.ant-table-row-selected:hover {
+  --register-table-row-fill: var(--mamep-table-row-selected-hover-bg);
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-row
   .ant-table-cell {
-  background: var(--ant-color-primary-bg);
+  background: var(--register-table-row-fill, var(--mamep-table-row-bg));
+  border-color: var(--mamep-table-border);
+}
+
+/* 派生行以窄竖轨标示父子关系；选中行使用唯一品牌标线，避免在每个单元格重复描边。 */
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-row.register-table__row--child
+  > .ant-table-cell:first-child,
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-row.register-table__row--bit
+  > .ant-table-cell:first-child {
+  box-shadow: inset 2px 0 0 var(--mamep-table-tree-rail);
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-row.ant-table-row-selected
+  > .ant-table-cell:first-child {
+  box-shadow: inset 3px 0 0 var(--mamep-brand-primary);
+}
+
+/* 固定列沿用行级底色，并在冻结边界给出一条低对比阴影；不改变 antd 的 sticky 定位。 */
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-cell.ant-table-cell-fix-left,
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-cell.ant-table-cell-fix-right {
+  background: var(--register-table-row-fill, var(--mamep-table-row-bg));
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-cell.ant-table-cell-fix-left-last {
+  box-shadow: 8px 0 10px -10px var(--mamep-table-sticky-shadow);
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-tbody
+  .ant-table-cell.ant-table-cell-fix-right-first {
+  box-shadow: -8px 0 10px -10px var(--mamep-table-sticky-shadow);
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-thead
+  .ant-table-cell.ant-table-cell-fix-left,
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-thead
+  .ant-table-cell.ant-table-cell-fix-right {
+  background: var(--mamep-table-header-bg);
+}
+
+.register-table-tabs
+  .ant-table-wrapper
+  .ant-table-thead
+  .ant-table-cell.ant-table-cell-fix-left-last {
+  box-shadow: 8px 0 10px -10px var(--mamep-table-sticky-shadow);
 }
 
 .register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td {
@@ -1383,8 +1505,8 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--mamep-bg-panel);
-  border-top: 1px solid var(--mamep-border-subtle);
+  background: var(--mamep-bg-bottom);
+  border-top: 1px solid var(--mamep-border-region);
 }
 
 /* Splitter 拖拽条（经 classNames={{ dragger }} 映射，光标与 hover 对齐原分隔条） */
@@ -1416,6 +1538,8 @@ body {
 
 .bottom-panel .ant-tabs-nav {
   padding: 0 6px;
+  background: var(--mamep-bg-bottom);
+  border-bottom: 1px solid var(--mamep-border-subtle);
 }
 
 .bottom-panel .ant-tabs-content-holder {
@@ -1879,6 +2003,8 @@ textarea:focus-visible {
 .mamep-header.ant-layout-header {
   gap: 10px;
   padding-inline: 12px;
+  box-shadow: inset 0 -1px 0
+    color-mix(in srgb, var(--mamep-border-region) 65%, transparent);
 }
 
 .mamep-header .ant-btn {
@@ -1934,11 +2060,11 @@ textarea:focus-visible {
 
 /* 表头：背景分层 + 底部强调线，与正文形成清晰分界 */
 .register-table-tabs .ant-table-wrapper .ant-table-thead > tr > th {
-  border-bottom: 1px solid var(--ant-color-split);
+  border-bottom: 1px solid var(--mamep-table-sticky-divider);
 }
 
 .register-table-tabs .ant-table-wrapper .ant-table-thead > tr > th:hover {
-  background: var(--ant-color-fill);
+  background: var(--mamep-table-header-hover-bg);
 }
 
 /* 正文行：hover/选中背景平滑过渡 */

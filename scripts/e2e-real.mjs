@@ -71,7 +71,29 @@ async function checkRtuPorts() {
   if (!names.has(String(slavePort()).toUpperCase())) {
     missing.push(`${slavePort()}（从站，来自 modbus-slave.config.json）`);
   }
+  if (missing.length > 0) return missing;
+
+  // 端口存在不等于可执行：用户浏览器/终端可能仍占用主站口。按项目门控约定，
+  // 这种环境不可用状态应 SKIP，不能继续启动从站后产生一组级联 E2E 失败。
+  for (const port of [masterPort(), slavePort()]) {
+    const error = await probeSerialPort(port);
+    if (error !== null) missing.push(`${port}（${error}）`);
+  }
   return missing;
+}
+
+/** 打开后立即关闭串口，确认当前进程可取得独占访问。 */
+function probeSerialPort(path) {
+  return new Promise((resolve) => {
+    const port = new SerialPort({ path, baudRate: 9600, autoOpen: false });
+    port.open((openError) => {
+      if (openError) {
+        resolve(`无法打开：${openError.message}`);
+        return;
+      }
+      port.close(() => resolve(null));
+    });
+  });
 }
 
 /** 探测指定 TCP 目标是否为可应答的 Modbus TCP 从站（FC03 读 0x0000）。 */

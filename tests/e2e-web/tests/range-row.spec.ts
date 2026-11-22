@@ -114,7 +114,7 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await expect(childRows.nth(1)).toContainText("1");
   // 子行只读：无 Read/Write 按钮、无拖拽手柄、复选框禁用。
   await expect(
-    childRows.nth(0).getByRole("button", { name: "Read" }),
+    childRows.nth(0).getByRole("button", { name: /^Read row / }),
   ).toHaveCount(0);
   await expect(
     childRows.nth(0).locator('[aria-label="Drag to reorder"]'),
@@ -126,7 +126,7 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   // 预置寄存器并多寄存器读：父行 Data 组合值 + 子行各值。
   await mockSet(page, 0x0000, 0x1111);
   await mockSet(page, 0x0001, 0x2222);
-  await first.getByRole("button", { name: "Read", exact: true }).click();
+  await first.getByRole("button", { name: /^Read row / }).click();
   await expect(first.getByLabel("Data")).toHaveText("1111 2222");
   await expect(
     childRows.nth(0).locator(".ant-table-cell").nth(7),
@@ -140,7 +140,7 @@ test("范围行：输入范围→展开子行→多寄存器读→多值写→�
   await data.click();
   await data.fill("AAAA BBBB");
   await data.press("Enter");
-  await first.getByRole("button", { name: "Write", exact: true }).click();
+  await first.getByRole("button", { name: /^Write row / }).click();
   await expect(
     first.locator(".register-table__status-dot--success"),
   ).toBeVisible();
@@ -168,7 +168,7 @@ test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", as
   // 先读取（registerValues 非空：1111 / 2222）并展开子行。
   await mockSet(page, 0x0000, 0x1111);
   await mockSet(page, 0x0001, 0x2222);
-  await first.getByRole("button", { name: "Read", exact: true }).click();
+  await first.getByRole("button", { name: /^Read row / }).click();
   await expect(first.getByLabel("Data")).toHaveText("1111 2222");
   await first.locator('button[aria-label="Expand row"]').click();
   const childRows = page.locator(
@@ -195,7 +195,7 @@ test("范围行父行 Data 编辑后子行同步（2026-09-11 bug 修复）", as
   ).toHaveText("0000");
 
   // 改后写入的是父行文本解析值（FFFF / 0000），证明原始值同步未影响待写值语义。
-  await first.getByRole("button", { name: "Write", exact: true }).click();
+  await first.getByRole("button", { name: /^Write row / }).click();
   await expect(
     first.locator(".register-table__status-dot--success"),
   ).toBeVisible();
@@ -230,7 +230,9 @@ test("范围行子行可编辑化：Name/Data/Type/Scale/Comment 编辑 + 重启
   // 子行 Name/Data/Type/Scale/Comment 可编辑（其余列维持不可用：无 Read/Write、无拖拽、复选框禁用）。
   const child0 = childRows.nth(0);
   const child1 = childRows.nth(1);
-  await expect(child0.getByRole("button", { name: "Read" })).toHaveCount(0);
+  await expect(
+    child0.getByRole("button", { name: /^Read row / }),
+  ).toHaveCount(0);
   await expect(child0.locator("input[type='checkbox']")).toBeDisabled();
 
   // 子行 0 Name / Data / Comment。
@@ -295,7 +297,7 @@ test("must-multi 区：单读/单写异常，多读/多写正常", async ({ page
     hasText: "MustMulti_01",
   });
   await mockSet(page, 0x0800, 0x1234);
-  await mustRow.getByRole("button", { name: "Read", exact: true }).click();
+  await mustRow.getByRole("button", { name: /^Read row / }).click();
   await expect(
     mustRow.locator(".register-table__status-dot--error"),
   ).toBeVisible();
@@ -312,7 +314,7 @@ test("must-multi 区：单读/单写异常，多读/多写正常", async ({ page
     mustRow.locator('button[aria-label="Expand row"]'),
   ).toBeVisible();
   await mockSet(page, 0x0801, 0x5678);
-  await mustRow.getByRole("button", { name: "Read", exact: true }).click();
+  await mustRow.getByRole("button", { name: /^Read row / }).click();
   await expect(mustRow.getByLabel("Data")).toHaveText("1234 5678");
   await expect(
     mustRow.locator(".register-table__status-dot--success"),
@@ -323,7 +325,7 @@ test("must-multi 区：单读/单写异常，多读/多写正常", async ({ page
   await data.click();
   await data.fill("CAFE BEEF");
   await data.press("Enter");
-  await mustRow.getByRole("button", { name: "Write", exact: true }).click();
+  await mustRow.getByRole("button", { name: /^Write row / }).click();
   await expect(
     mustRow.locator(".register-table__status-dot--success"),
   ).toBeVisible();
@@ -354,10 +356,10 @@ test("范围长度 × 类型合法集校验：unsigned 非法数量在类型列�
     .click();
   await expect(first.locator(".ant-select-status-error")).toBeVisible();
   await expect(
-    first.getByRole("button", { name: "Read", exact: true }),
+    first.getByRole("button", { name: /^Read row / }),
   ).toBeDisabled();
   await expect(
-    first.getByRole("button", { name: "Write", exact: true }),
+    first.getByRole("button", { name: /^Write row / }),
   ).toBeDisabled();
 
   // 改回合法数量（2 寄存器）：错误消失，读写恢复。
@@ -367,7 +369,7 @@ test("范围长度 × 类型合法集校验：unsigned 非法数量在类型列�
   await address2.press("Enter");
   await expect(first.locator(".ant-select-status-error")).toHaveCount(0);
   await expect(
-    first.getByRole("button", { name: "Read", exact: true }),
+    first.getByRole("button", { name: /^Read row / }),
   ).toBeEnabled();
 });
 

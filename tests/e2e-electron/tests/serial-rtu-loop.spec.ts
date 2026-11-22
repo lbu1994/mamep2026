@@ -311,7 +311,7 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
 
   // FC03 单行读：Data 显示 ABCD（hex）。
   const readButton = page
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first();
   await expect(readButton).toBeEnabled();
   await readButton.click();
@@ -329,7 +329,7 @@ test("串口下拉选择 + FC03 读 + FC10 写闭环（enumerated）", async () 
     "12AB",
   );
   const writeButton = page
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .first();
   await expect(writeButton).toBeEnabled();
   await writeButton.click();
@@ -373,7 +373,7 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
 
   // 多寄存器读（FC03 quantity=2）：父行组合值 + 子行各值。
   await page
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByLabel("Data").first()).toHaveText("1111 2222", {
@@ -402,7 +402,7 @@ test("范围行：多寄存器读/写闭环（ADR-030）", async () => {
     "AAAA BBBB",
   );
   const writeButton = page
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .first();
   await expect(writeButton).toBeEnabled();
   await writeButton.click();

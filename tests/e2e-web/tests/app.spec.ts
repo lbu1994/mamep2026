@@ -167,7 +167,7 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
 
   // Read: Data shows 00AB (hex).
   await page
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   const dataInput = page.getByLabel("Data", { exact: true }).first();
@@ -179,7 +179,7 @@ test("disconnect and reconnect via Connection Settings, then read/write", async 
   await dataInput.fill("12AB");
   await dataInput.press("Enter");
   await page
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect
@@ -261,7 +261,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
     ).__mamepMock.setRegister(0x0003, 0x0007),
   );
   await page
-    .getByLabel("WP")
+    .getByLabel(/^Poll row /)
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 
@@ -279,7 +279,7 @@ test("WP polling refreshes the data cell at the Rx Delay interval", async ({
   await expect(dataInput).toHaveText("00FF", { timeout: 8000 });
 
   await page
-    .getByLabel("WP")
+    .getByLabel(/^Poll row /)
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 });

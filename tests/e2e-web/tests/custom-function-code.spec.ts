@@ -87,7 +87,7 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
   await address.fill("1");
   await address.press("Enter");
   await first
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(first.getByLabel("Data")).toHaveText("1234", { timeout: 5000 });
 
@@ -110,7 +110,7 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
   await dataInput.fill("00AB");
   await dataInput.press("Enter");
   await parentRow(page, 0)
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .evaluate((el) => (el as HTMLElement).click());
   await expect
     .poll(() =>

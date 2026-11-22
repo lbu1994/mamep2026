@@ -107,14 +107,14 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
   await expect(input).toHaveValue(addressHex);
   await input.press("Enter");
   await expect(
-    p.getByRole("button", { name: "Read", exact: true }).first(),
+    p.getByRole("button", { name: /^Read row / }).first(),
   ).toBeEnabled({ timeout: 5000 });
 }
 
 /** 首行点击 Read。 */
 async function readRow(p: Page): Promise<void> {
   await p
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 }
@@ -167,7 +167,7 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
     ).toBeVisible({ timeout: 5000 });
   }
   await p
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 }

@@ -234,7 +234,7 @@ async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
 async function readRow(frame: Frame): Promise<void> {
   const button = frame
     .locator(".register-table-tabs .ant-tabs-content-active")
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first();
   await expect(button).toBeEnabled({ timeout: 5000 });
   await button.click();
@@ -258,7 +258,7 @@ async function writeRow(frame: Frame, valueHex: string): Promise<void> {
     valueHex,
   );
   const writeButton = table
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .first();
   await expect(writeButton).toBeEnabled({ timeout: 5000 });
   await writeButton.click();

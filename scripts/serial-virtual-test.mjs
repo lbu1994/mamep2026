@@ -6,8 +6,44 @@
  * 用法：pnpm test:serial:virtual
  */
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { SerialPort } from "serialport";
+import { findConnection, ROOT } from "./lib/connection-config.mjs";
 
 process.env.MAMEP_SERIAL_PROTO = "1";
+
+const masterPort = findConnection("rtu-com4-master").port;
+const slaveConfig = JSON.parse(
+  readFileSync(
+    join(ROOT, "scripts", "modbus-slave", "modbus-slave.config.json"),
+    "utf8",
+  ),
+);
+const slavePort = slaveConfig.port;
+
+const listed = new Set(
+  (await SerialPort.list()).map((port) =>
+    String(port.path ?? port.comName ?? "").toUpperCase(),
+  ),
+);
+const unavailable = [];
+for (const port of [masterPort, slavePort]) {
+  if (!listed.has(String(port).toUpperCase())) {
+    unavailable.push(`${port}（未枚举）`);
+    continue;
+  }
+  const error = await probeSerialPort(port);
+  if (error !== null) unavailable.push(`${port}（${error}）`);
+}
+if (unavailable.length > 0) {
+  console.log(
+    "[serial-virtual] SKIP（环境未就绪，不失败）：" +
+      `未检测到可用的 ${unavailable.join("、")}。` +
+      `请确认 com0com ${masterPort} ↔ ${slavePort} 回环对未被占用。`,
+  );
+  process.exit(0);
+}
 
 const result = spawnSync(
   "pnpm",
@@ -19,3 +55,16 @@ const result = spawnSync(
 );
 
 process.exit(result.status ?? 1);
+
+function probeSerialPort(path) {
+  return new Promise((resolve) => {
+    const port = new SerialPort({ path, baudRate: 9600, autoOpen: false });
+    port.open((openError) => {
+      if (openError) {
+        resolve(`无法打开：${openError.message}`);
+        return;
+      }
+      port.close(() => resolve(null));
+    });
+  });
+}

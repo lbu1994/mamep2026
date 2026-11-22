@@ -318,6 +318,88 @@ describe("RegisterTable 斑马纹（rowClassName 按行号奇偶交替）", () =
   });
 });
 
+describe("RegisterTable 行级可访问名称", () => {
+  beforeEach(() => {
+    initI18n();
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet !== undefined) {
+      const firstAddress = RegisterAddress.create(0);
+      const secondAddress = RegisterAddress.create(1000);
+      sheet.rows = sheet.rows.slice(0, 3).map((row, index) => ({
+        ...row,
+        addressDraft:
+          index === 0 ? "0" : index === 1 ? "1000" : row.addressDraft,
+        addressValue:
+          index === 0
+            ? firstAddress.ok
+              ? firstAddress.value
+              : null
+            : index === 1
+              ? secondAddress.ok
+                ? secondAddress.value
+                : null
+              : null,
+        registerCount: 1,
+        registers: null,
+      }));
+    }
+    useAppStore.setState({
+      host: null,
+      workspace,
+      connectionState: "connected",
+      rowResults: {},
+      rowDirty: {},
+      rowSuccess: {},
+      pollingOutcomes: {},
+      cellValidationErrors: {},
+    });
+  });
+
+  it("TM/WP/Read/Write 名称携带行号和地址，空地址退回行号", () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+
+    expect(
+      screen.getByRole("switch", { name: "Poll row 1, address 0" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Read row 1, address 0" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Write row 1, address 0" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("checkbox", { name: "Trace row 1, address 0" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("switch", { name: "Poll row 2, address 1000" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Poll row 3" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Read row 3" })).toBeTruthy();
+  });
+
+  it("地址和行序变化后名称同步重算", async () => {
+    render(<RegisterTable sheetId={sheetId()} />);
+
+    useAppStore.getState().commitRowAddress(firstRowId(), "2000");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Read row 1, address 2000" }),
+      ).toBeTruthy();
+    });
+
+    useAppStore.getState().moveRow(sheetId(), firstRowId(), "down");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Read row 2, address 2000" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Read row 1, address 1000" }),
+      ).toBeTruthy();
+    });
+  });
+});
+
 describe("RegisterTable 全表读取取消（ADR-025）", () => {
   beforeEach(() => {
     initI18n();
@@ -1030,9 +1112,11 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     expect(
       document.querySelectorAll(".register-table__bit-value input").length,
     ).toBe(0);
-    expect(screen.getAllByLabelText(/^Toggle bit \d+$/)).toHaveLength(16);
+    expect(
+      screen.getAllByLabelText(/^Toggle bit \d+, row \d+, address /),
+    ).toHaveLength(16);
     // 开关自带 1/0 文字（checkedChildren / unCheckedChildren）。
-    const bit15 = screen.getByLabelText("Toggle bit 15");
+    const bit15 = screen.getByLabelText(/^Toggle bit 15, row \d+, address /);
     expect(bit15.querySelector(".ant-switch-inner-checked")?.textContent).toBe(
       "1",
     );
@@ -1042,7 +1126,9 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     // 开关状态与位值一致（0x8001：bit15 = 1、bit14 = 0）。
     expect(bit15.getAttribute("aria-checked")).toBe("true");
     expect(
-      screen.getByLabelText("Toggle bit 14").getAttribute("aria-checked"),
+      screen
+        .getByLabelText(/^Toggle bit 14, row \d+, address /)
+        .getAttribute("aria-checked"),
     ).toBe("false");
   });
 
@@ -1051,7 +1137,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
     // 未读取：未选中侧文字为 —（不再是 0），且不再使用开关外侧占位。
-    const bit0 = screen.getByLabelText("Toggle bit 0");
+    const bit0 = screen.getByLabelText(/^Toggle bit 0, row \d+, address /);
     expect(bit0.getAttribute("aria-checked")).toBe("false");
     expect(bit0.querySelector(".ant-switch-inner-unchecked")?.textContent).toBe(
       "—",
@@ -1065,7 +1151,7 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     expect(row?.registerValues?.map((v) => v.value)).toEqual([0x0001]);
     expect(row?.cellText).toBe("00000000 00000001");
     // 已有当前值：未选中侧恢复为 0（该位此时为 1 → 显示在选中侧）。
-    const after = screen.getByLabelText("Toggle bit 0");
+    const after = screen.getByLabelText(/^Toggle bit 0, row \d+, address /);
     expect(after.getAttribute("aria-checked")).toBe("true");
     expect(after.querySelector(".ant-switch-inner-checked")?.textContent).toBe(
       "1",
@@ -1079,7 +1165,9 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     setupBinaryRow();
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
-    const toggle = screen.getAllByLabelText("Toggle bit 0")[0];
+    const toggle = screen.getAllByLabelText(
+      /^Toggle bit 0, row \d+, address /,
+    )[0];
     if (toggle === undefined) throw new Error("missing toggle");
     fireEvent.click(toggle);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
@@ -1154,7 +1242,9 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     fireEvent.click(childIcon);
 
     // 第二层：寄存器 0 的 bit15（当前为 1）切为 0。
-    const toggle = screen.getAllByLabelText("Toggle bit 15")[0];
+    const toggle = screen.getAllByLabelText(
+      /^Toggle bit 15, row \d+, address /,
+    )[0];
     if (toggle === undefined) throw new Error("missing toggle");
     fireEvent.click(toggle);
     const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
@@ -1167,7 +1257,9 @@ describe("RegisterTable 位明细展开（ADR-052，2026-09-11）", () => {
     render(<RegisterTable sheetId={sheetId()} />);
     expandBitRow();
     expect(screen.getByText("0 Bit 15")).toBeDefined();
-    const toggle = screen.getAllByLabelText("Toggle bit 15")[0];
+    const toggle = screen.getAllByLabelText(
+      /^Toggle bit 15, row \d+, address /,
+    )[0];
     if (toggle === undefined) throw new Error("missing toggle");
     expect((toggle as HTMLButtonElement).disabled).toBe(true);
     // 只读表同样只有开关、无输入框。
@@ -1526,7 +1618,9 @@ describe("RegisterTable 基础表（ADR-043 E-2）", () => {
       cellValidationErrors: {},
     });
     render(<RegisterTable sheetId={sheetId()} />);
-    const writeButtons = screen.getAllByRole("button", { name: "Write" });
+    const writeButtons = screen.getAllByRole("button", {
+      name: /^Write row /,
+    });
     expect(writeButtons.length).toBeGreaterThan(0);
     for (const button of writeButtons) {
       expect((button as HTMLButtonElement).disabled).toBe(true);
@@ -1561,7 +1655,9 @@ describe("RegisterTable 基础表（ADR-043 E-2）", () => {
       cellValidationErrors: {},
     });
     render(<RegisterTable sheetId={sheetId()} />);
-    const writeButtons = screen.getAllByRole("button", { name: "Write" });
+    const writeButtons = screen.getAllByRole("button", {
+      name: /^Write row /,
+    });
     expect(writeButtons.length).toBeGreaterThan(0);
     // 首行有合法地址：按钮可用。
     expect((writeButtons[0] as HTMLButtonElement).disabled).toBe(false);
@@ -1589,8 +1685,8 @@ describe("RegisterTable 行操作视觉权重", () => {
     render(<RegisterTable sheetId={sheetId()} />);
 
     const rowActions = [
-      ...screen.getAllByRole("button", { name: "Read" }),
-      ...screen.getAllByRole("button", { name: "Write" }),
+      ...screen.getAllByRole("button", { name: /^Read row / }),
+      ...screen.getAllByRole("button", { name: /^Write row / }),
     ];
     expect(rowActions.length).toBeGreaterThan(0);
     for (const action of rowActions) {
@@ -1790,9 +1886,9 @@ describe("RegisterTable 离线通信操作门控", () => {
       useAppStore.setState({ connectionModalOpen: false });
 
       const communicationControls = [
-        ...screen.getAllByRole("button", { name: "Read" }),
-        ...screen.getAllByRole("button", { name: "Write" }),
-        ...screen.getAllByRole("switch", { name: "WP" }),
+        ...screen.getAllByRole("button", { name: /^Read row / }),
+        ...screen.getAllByRole("button", { name: /^Write row / }),
+        ...screen.getAllByRole("switch", { name: /^Poll row / }),
       ];
       expect(communicationControls.length).toBeGreaterThan(0);
       const descriptions = new Set<string>();
@@ -1808,8 +1904,12 @@ describe("RegisterTable 离线通信操作门控", () => {
       }
       expect(descriptions.size).toBe(1);
 
-      fireEvent.click(screen.getAllByRole("button", { name: "Read" })[0]!);
-      fireEvent.click(screen.getAllByRole("button", { name: "Write" })[0]!);
+      fireEvent.click(
+        screen.getAllByRole("button", { name: /^Read row / })[0]!,
+      );
+      fireEvent.click(
+        screen.getAllByRole("button", { name: /^Write row / })[0]!,
+      );
       fireEvent.keyDown(window, { key: "F9" });
       fireEvent.keyDown(window, { key: "F8" });
       fireEvent.keyDown(window, {
@@ -1829,13 +1929,15 @@ describe("RegisterTable 离线通信操作门控", () => {
     });
     expect(screen.queryByRole("button", { name: /Connect device/ })).toBeNull();
     for (const control of [
-      ...screen.getAllByRole("button", { name: "Read" }),
-      ...screen.getAllByRole("button", { name: "Write" }),
+      ...screen.getAllByRole("button", { name: /^Read row / }),
+      ...screen.getAllByRole("button", { name: /^Write row / }),
     ]) {
       expect((control as HTMLButtonElement).disabled).toBe(false);
       expect(control.getAttribute("aria-describedby")).toBeNull();
     }
-    for (const control of screen.getAllByRole("switch", { name: "WP" })) {
+    for (const control of screen.getAllByRole("switch", {
+      name: /^Poll row /,
+    })) {
       expect((control as HTMLButtonElement).disabled).toBe(false);
       expect(
         document.getElementById(control.getAttribute("aria-describedby") ?? "")

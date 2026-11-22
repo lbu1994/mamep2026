@@ -224,7 +224,7 @@ async function setRowAddress(p: Page, addressHex: string): Promise<void> {
 /** 首行点击 Read。 */
 async function readRow(p: Page): Promise<void> {
   await p
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 }
@@ -291,7 +291,7 @@ async function writeRow(p: Page, valueHex: string): Promise<void> {
   await expect(data).toHaveValue(valueHex);
   await data.press("Enter");
   await p
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 }
@@ -337,7 +337,9 @@ test.beforeAll(async () => {
   // 用户选择串口：系统 picker 偶发关闭但未回传选择，允许重新打开并重试。
   const modal = page.locator(".ant-modal-container:visible");
   const port = process.env.MAMEP_REAL_SERIAL_PORT ?? "COM4";
-  const portLabel = new RegExp(`\\(${port}\\)|^USB `, "i");
+  const serialPortField = modal
+    .locator(".connection-settings__field")
+    .filter({ has: page.getByRole("button", { name: /Select serial port/i }) });
   let label: string | null = null;
   for (let attempt = 1; attempt <= 3 && label === null; attempt += 1) {
     await modal
@@ -348,9 +350,11 @@ test.beforeAll(async () => {
       `[real-serial] FlaUI picker attempt ${attempt}: ${selection}`,
     );
     try {
-      const selected = modal.getByText(portLabel);
+      // Web Serial 不保证暴露 COM 名；系统 picker 的目标选择是身份来源，页面侧
+      // 只需确认 Port 字段出现了已选句柄。连接成功由随后的 Online 断言负责。
+      const selected = serialPortField.locator(".ant-tag").first();
       await selected.waitFor({ timeout: 10_000 });
-      label = (await selected.first().innerText()).trim();
+      label = (await selected.innerText()).trim();
     } catch (error) {
       if (attempt === 3) throw error;
       console.log(

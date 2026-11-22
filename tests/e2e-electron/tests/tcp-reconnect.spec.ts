@@ -240,10 +240,10 @@ async function readFirstRegister(): Promise<void> {
   await addressInput.fill("0001");
   await addressInput.press("Enter");
   await expect(
-    page.getByRole("button", { name: "Read", exact: true }).first(),
+    page.getByRole("button", { name: /^Read row / }).first(),
   ).toBeEnabled({ timeout: 5000 });
   await page
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByLabel("Data").first()).toHaveText("ABCD", {

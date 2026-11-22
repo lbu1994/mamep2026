@@ -88,7 +88,7 @@ test("Address Adjust ON：用户地址 1 发送到 0（comm log 帧地址 00 00�
 
   // 读取首行：ON 时发送地址 = 用户地址 − 1 = 0。
   await page
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
 

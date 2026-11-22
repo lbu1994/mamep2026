@@ -542,31 +542,41 @@ function median(values: number[]): number {
   return (previous + current) / 2;
 }
 
-async function collectRuntimeMetrics(page: Page): Promise<{
+async function collectRuntimeMetrics(
+  page: Page,
+  sampleCount = 1,
+): Promise<{
   heapBytes: number;
   nodes: number;
 }> {
   const cdp = await page.context().newCDPSession(page);
   try {
     await cdp.send("Performance.enable");
-    // 虚拟表切页后仍有 useAfterFirstPaint 延迟挂载的单元格控件。先等待两帧让
-    // React 提交这些节点，再 GC；否则新挂载的节点会被误判成两轮采样间的泄漏。
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-        ),
-    );
-    await cdp.send("HeapProfiler.collectGarbage");
-    const response = (await cdp.send("Performance.getMetrics")) as {
-      metrics: CdpPerformanceMetric[];
-    };
-    const value = (name: string): number =>
-      response.metrics.find((metric) => metric.name === name)?.value ?? 0;
-    return {
-      heapBytes: value("JSHeapUsedSize"),
-      nodes: value("Nodes"),
-    };
+    let best: { heapBytes: number; nodes: number } | null = null;
+    for (let sample = 0; sample < sampleCount; sample += 1) {
+      // 虚拟表切页后仍有 useAfterFirstPaint 延迟挂载的单元格控件。每个样本都等待
+      // 两帧让 React 提交，再 GC；多次取最小值可过滤单帧节点池扩张，同时保留对
+      // 稳态持续增长的检测能力。
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      await cdp.send("HeapProfiler.collectGarbage");
+      const response = (await cdp.send("Performance.getMetrics")) as {
+        metrics: CdpPerformanceMetric[];
+      };
+      const value = (name: string): number =>
+        response.metrics.find((metric) => metric.name === name)?.value ?? 0;
+      const current = {
+        heapBytes: value("JSHeapUsedSize"),
+        nodes: value("Nodes"),
+      };
+      if (best === null || current.nodes < best.nodes) best = current;
+    }
+    if (best === null) throw new Error("no runtime metrics collected");
+    return best;
   } finally {
     await cdp.detach();
   }
@@ -775,7 +785,7 @@ test("1000 行普通表：虚拟滚动下编辑、选择、新增、切页与自
   const autosaveMs = (await pageNow(page)) - autosaveStarted;
 
   // 反复滚动+切页后强制 GC，检查堆和 DOM 节点没有持续累积。
-  const memoryBefore = await collectRuntimeMetrics(page);
+  const memoryBefore = await collectRuntimeMetrics(page, 3);
   for (let cycle = 0; cycle < 6; cycle += 1) {
     await scrollToRow(page, rowId("main", 999), true);
     await scrollToRow(page, rowId("main", 0), false);
@@ -784,7 +794,7 @@ test("1000 行普通表：虚拟滚动下编辑、选择、新增、切页与自
     await page.getByRole("tab", { name: "Perf Main", exact: true }).click();
     await expect(activeRow(page, rowId("main", 0))).toBeVisible();
   }
-  const memoryAfterWarmCycles = await collectRuntimeMetrics(page);
+  const memoryAfterWarmCycles = await collectRuntimeMetrics(page, 3);
   // 第二组循环用于区分虚拟列表一次性节点池扩张与持续泄漏。
   for (let cycle = 0; cycle < 6; cycle += 1) {
     await scrollToRow(page, rowId("main", 999), true);
@@ -794,7 +804,7 @@ test("1000 行普通表：虚拟滚动下编辑、选择、新增、切页与自
     await page.getByRole("tab", { name: "Perf Main", exact: true }).click();
     await expect(activeRow(page, rowId("main", 0))).toBeVisible();
   }
-  const memoryAfter = await collectRuntimeMetrics(page);
+  const memoryAfter = await collectRuntimeMetrics(page, 3);
   const renderedRowsAfterCycles = await activeWorkspace(page)
     .locator("[data-row-key]")
     .count();

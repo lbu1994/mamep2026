@@ -15,6 +15,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { flushSync } from "react-dom";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { App as AntApp } from "antd";
 import Button from "antd/es/button";
@@ -594,8 +595,26 @@ const NoCell = memo(function NoCell({ order }: { order: number }) {
   return <>{order}</>;
 });
 
+/**
+ * 逐行重复控件的可访问名称：动作 + 行号 + 当前地址。
+ * 行号随重排更新；地址取可见 draft 文本，兼容范围写法并在地址提交后同步更新。
+ */
+function rowControlAriaLabel(
+  t: TFunction,
+  action: string,
+  rowNumber: number,
+  addressText: string,
+): string {
+  const address = addressText.trim();
+  return address === ""
+    ? t("table.rowControlLabelNoAddress", { action, row: rowNumber })
+    : t("table.rowControlLabel", { action, row: rowNumber, address });
+}
+
 interface TmCellProps {
   rowId: RowId;
+  rowNumber: number;
+  addressDraft: string;
   traceEnabled: boolean;
   /** 多寄存器字符串行：Trace 对组合数值采样，字符串行禁用。 */
   dataType: DataType;
@@ -615,10 +634,13 @@ const TmCell = memo(function TmCell(props: TmCellProps) {
 
 function TmControl({
   rowId,
+  rowNumber,
+  addressDraft,
   traceEnabled,
   dataType,
   registerCount,
 }: TmCellProps): React.ReactNode {
+  const { t } = useTranslation();
   const updateRow = useAppStore((s) => s.updateRow);
   const openTraceWindow = useAppStore((s) => s.openTraceWindow);
   const closeTraceWindow = useAppStore((s) => s.closeTraceWindow);
@@ -632,7 +654,12 @@ function TmControl({
     <Checkbox
       checked={traceEnabled}
       disabled={traceDisabled}
-      aria-label="TM"
+      aria-label={rowControlAriaLabel(
+        t,
+        t("table.traceAction"),
+        rowNumber,
+        addressDraft,
+      )}
       onChange={(e) => {
         if (!e.target.checked && traceWindowOpen) {
           // 窗口打开时取消勾选无效：不更新状态、不关闭窗口，保持勾选。
@@ -725,6 +752,8 @@ function RegisterControl({
 
 interface WpCellProps {
   rowId: RowId;
+  rowNumber: number;
+  addressDraft: string;
   pollingEnabled: boolean;
   hasAddress: boolean;
   communicationReasonId: string;
@@ -745,6 +774,8 @@ const WpCell = memo(function WpCell(props: WpCellProps) {
 
 function WpControl({
   rowId,
+  rowNumber,
+  addressDraft,
   pollingEnabled,
   hasAddress,
   communicationReasonId,
@@ -803,7 +834,12 @@ function WpControl({
           <Switch
             size="small"
             className="register-table__wp-switch"
-            aria-label="WP"
+            aria-label={rowControlAriaLabel(
+              t,
+              t("table.pollAction"),
+              rowNumber,
+              addressDraft,
+            )}
             checked={pollingEnabled}
             disabled={disabled}
             aria-describedby={describedBy}
@@ -841,6 +877,8 @@ function WpControl({
 
 interface ReadCellProps {
   rowId: RowId;
+  rowNumber: number;
+  addressDraft: string;
   hasAddress: boolean;
   /** 范围长度与类型合法集匹配：不匹配时禁用读写。 */
   typeCountValid: boolean;
@@ -858,6 +896,8 @@ const ReadCell = memo(function ReadCell(props: ReadCellProps) {
 
 function ReadControl({
   rowId,
+  rowNumber,
+  addressDraft,
   hasAddress,
   typeCountValid,
   communicationReasonId,
@@ -901,6 +941,12 @@ function ReadControl({
       type="default"
       className="register-table__row-action register-table__row-action--read"
       disabled={disabled}
+      aria-label={rowControlAriaLabel(
+        t,
+        t("table.read"),
+        rowNumber,
+        addressDraft,
+      )}
       aria-describedby={describedBy}
       onClick={handleRead}
     >
@@ -1025,6 +1071,8 @@ function RowStatusDot({
 interface WriteCellProps {
   sheetId: SheetId;
   rowId: RowId;
+  rowNumber: number;
+  addressDraft: string;
   hasAddress: boolean;
   /** 范围长度与类型合法集匹配：不匹配时禁用读写。 */
   typeCountValid: boolean;
@@ -1045,6 +1093,8 @@ const WriteCell = memo(function WriteCell(props: WriteCellProps) {
 function WriteControl({
   sheetId,
   rowId,
+  rowNumber,
+  addressDraft,
   hasAddress,
   typeCountValid,
   communicationReasonId,
@@ -1104,6 +1154,12 @@ function WriteControl({
       type="default"
       className="register-table__row-action register-table__row-action--write"
       disabled={disabled}
+      aria-label={rowControlAriaLabel(
+        t,
+        t("table.write"),
+        rowNumber,
+        addressDraft,
+      )}
       aria-describedby={describedBy}
       onClick={handleWrite}
     >
@@ -1509,10 +1565,12 @@ const BitRegisterCell = memo(function BitRegisterCell({
 const BitDataCell = memo(function BitDataCell({
   row,
   writable,
+  radix,
 }: {
   row: VirtualBitRow;
   /** 本表可写（只读表禁用切换）。 */
   writable: boolean;
+  radix: RegisterRadix;
 }) {
   const { t } = useTranslation();
   const setRegisterBitValue = useAppStore((s) => s.setRegisterBitValue);
@@ -1526,7 +1584,15 @@ const BitDataCell = memo(function BitDataCell({
         unCheckedChildren={value === null ? "—" : "0"}
         disabled={!writable}
         checked={value === 1}
-        aria-label={t("table.bitToggle", { bit: row.__virtualBit.bit })}
+        aria-label={
+          row.__virtualBit.parentOrder > 0
+            ? t("table.bitToggleLabel", {
+                bit: row.__virtualBit.bit,
+                row: row.__virtualBit.parentOrder,
+                address: formatRegisterAddress(row.__virtualBit.address, radix),
+              })
+            : t("table.bitToggle", { bit: row.__virtualBit.bit })
+        }
         onChange={(checked) => {
           if (!writable) return;
           setRegisterBitValue(
@@ -2681,6 +2747,8 @@ const RegisterTableContent = memo(function RegisterTableContent({
           isVirtualRow(row) ? null : (
             <TmCell
               rowId={row.rowId}
+              rowNumber={row.order}
+              addressDraft={row.addressDraft}
               traceEnabled={row.traceEnabled}
               dataType={row.dataType}
               registerCount={row.registerCount}
@@ -2739,6 +2807,8 @@ const RegisterTableContent = memo(function RegisterTableContent({
           isVirtualRow(row) ? null : (
             <WpCell
               rowId={row.rowId}
+              rowNumber={row.order}
+              addressDraft={row.addressDraft}
               pollingEnabled={row.pollingEnabled}
               hasAddress={row.addressValue !== null}
               communicationReasonId={communicationReasonId}
@@ -2754,6 +2824,8 @@ const RegisterTableContent = memo(function RegisterTableContent({
           isVirtualRow(row) ? null : (
             <ReadCell
               rowId={row.rowId}
+              rowNumber={row.order}
+              addressDraft={row.addressDraft}
               hasAddress={row.addressValue !== null}
               typeCountValid={isRowTypeCountValid(row)}
               communicationReasonId={communicationReasonId}
@@ -2770,7 +2842,11 @@ const RegisterTableContent = memo(function RegisterTableContent({
         ellipsis: true,
         render: (_, row) =>
           isVirtualBitRow(row) ? (
-            <BitDataCell row={row} writable={sheetWritable} />
+            <BitDataCell
+              row={row}
+              writable={sheetWritable}
+              radix={registerRadix}
+            />
           ) : isVirtualChildRow(row) ? (
             <ChildDataCell row={row} />
           ) : (
@@ -2793,6 +2869,8 @@ const RegisterTableContent = memo(function RegisterTableContent({
             <WriteCell
               sheetId={sheetId}
               rowId={row.rowId}
+              rowNumber={row.order}
+              addressDraft={row.addressDraft}
               hasAddress={row.addressValue !== null}
               typeCountValid={isRowTypeCountValid(row)}
               communicationReasonId={communicationReasonId}

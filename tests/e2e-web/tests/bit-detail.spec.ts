@@ -49,7 +49,9 @@ async function expectBit(
   bit: number,
   value: "1" | "0",
 ): Promise<void> {
-  const toggle = row.getByLabel(`Toggle bit ${bit}`);
+  const toggle = row.getByLabel(
+    new RegExp(`^Toggle bit ${bit}, row \\d+, address `),
+  );
   await expect(toggle).toHaveAttribute(
     "aria-checked",
     value === "1" ? "true" : "false",
@@ -83,7 +85,7 @@ test("bit detail integrates device read, editing and workspace persistence", asy
       }
     ).__mamepMock.setRegister(0, 0x8001),
   );
-  await first.getByRole("button", { name: "Read", exact: true }).click();
+  await first.getByRole("button", { name: /^Read row / }).click();
   await expect(first.getByLabel("Data")).toHaveText("10000000 00000001", {
     timeout: 8000,
   });
@@ -99,7 +101,7 @@ test("bit detail integrates device read, editing and workspace persistence", asy
     bitRows(page).locator(".register-table__bit-value input"),
   ).toHaveCount(0);
 
-  await bit15.getByLabel("Toggle bit 15").click();
+  await bit15.getByLabel(/^Toggle bit 15, row 1, address 0$/).click();
   await expectBit(bitRows(page).nth(0), 15, "0");
   await expect(first.getByLabel("Data")).toHaveText("00000000 00000001");
 
@@ -151,7 +153,7 @@ test("coarse-pointer bit switches do not increase row height", async ({
       "29px",
     );
     const toggleHeight = await bit15
-      .getByLabel("Toggle bit 15")
+      .getByLabel(/^Toggle bit 15, row 1, address 0$/)
       .evaluate((element) => element.getBoundingClientRect().height);
     expect(toggleHeight).toBeLessThanOrEqual(24);
   } finally {

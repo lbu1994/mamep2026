@@ -28,12 +28,12 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
       element.scrollTop = element.scrollHeight;
     });
   const row = page.locator(".ant-table-tbody [data-row-key]").last();
-  const readBtn = row.getByRole("button", { name: "Read", exact: true });
-  const writeBtn = row.getByRole("button", { name: "Write", exact: true });
+  const readBtn = row.getByRole("button", { name: /^Read row / });
+  const writeBtn = row.getByRole("button", { name: /^Write row / });
   await expect(readBtn).toBeDisabled();
   await expect(writeBtn).toBeDisabled();
   // WP 开关禁用（无合法地址）。
-  await expect(row.getByLabel("WP")).toBeDisabled();
+  await expect(row.getByLabel(/^Poll row /)).toBeDisabled();
 
   // 禁用控件提供说明 Tooltip（悬停 Read 所在单元格）。
   const readCell = row.locator(".ant-table-cell").filter({ hasText: "Read" });
@@ -59,7 +59,7 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
   await addressInput.press("Enter");
   await expect(readBtn).toBeEnabled();
   await expect(writeBtn).toBeEnabled();
-  await expect(row.getByLabel("WP")).toBeEnabled();
+  await expect(row.getByLabel(/^Poll row /)).toBeEnabled();
 });
 
 test("WP polling shows a non-color polling indicator while online", async ({
@@ -68,22 +68,37 @@ test("WP polling shows a non-color polling indicator while online", async ({
   await openApp(page);
 
   // 开启 WP 前：无轮询指示。
-  await expect(page.getByLabel("Polling continuously")).toHaveCount(0);
+  await expect(page.locator(".register-table__wp-indicator")).toHaveCount(0);
 
   // 设置地址并开启 WP。
   const addressInput = page.getByLabel("Address", { exact: true }).first();
   await addressInput.click();
   await addressInput.fill("0006");
   await addressInput.press("Enter");
-  await page.getByLabel("WP").first().click();
+  await page
+    .getByLabel(/^Poll row /)
+    .first()
+    .click();
 
-  // 已连接 + 合法地址 + WP 开启 → 轮询指示出现（非颜色表达，配 aria-label/Tooltip）。
-  const indicator = page.getByLabel("Polling continuously");
-  await expect(indicator).toBeVisible();
+  // 已连接 + 合法地址 + WP 开启 → 等待态图标出现，辅助文本同步表达状态。
+  const wp = page.locator(".register-table__wp").first();
+  await expect(wp).not.toHaveAttribute("data-polling-state", "off");
+  await expect(wp.locator(".register-table__wp-indicator")).toBeVisible();
+  const statusId = await wp
+    .getByRole("switch")
+    .getAttribute("aria-describedby");
+  expect(statusId).not.toBeNull();
+  await expect(page.locator(`[id="${statusId}"]`)).toHaveText(
+    /^Polling (on|failed)/,
+  );
 
   // 关闭 WP 后指示消失。
-  await page.getByLabel("WP").first().click();
-  await expect(page.getByLabel("Polling continuously")).toHaveCount(0);
+  await page
+    .getByLabel(/^Poll row /)
+    .first()
+    .click();
+  await expect(wp).toHaveAttribute("data-polling-state", "off");
+  await expect(page.locator(".register-table__wp-indicator")).toHaveCount(0);
 });
 
 test("narrow viewport moves secondary header actions into a More menu", async ({

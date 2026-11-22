@@ -36,3 +36,23 @@ describe("连接状态、动作与设置文案", () => {
     });
   });
 });
+
+describe("逐行控件可访问名称模板", () => {
+  it("中英文都同时表达动作、行号与地址，并保留无地址回退", () => {
+    expect({
+      en: en.table.rowControlLabel,
+      enNoAddress: en.table.rowControlLabelNoAddress,
+      enBit: en.table.bitToggleLabel,
+      zh: zh.table.rowControlLabel,
+      zhNoAddress: zh.table.rowControlLabelNoAddress,
+      zhBit: zh.table.bitToggleLabel,
+    }).toEqual({
+      en: "{{action}} row {{row}}, address {{address}}",
+      enNoAddress: "{{action}} row {{row}}",
+      enBit: "Toggle bit {{bit}}, row {{row}}, address {{address}}",
+      zh: "{{action}}第 {{row}} 行，地址 {{address}}",
+      zhNoAddress: "{{action}}第 {{row}} 行",
+      zhBit: "切换第 {{bit}} 位，第 {{row}} 行，地址 {{address}}",
+    });
+  });
+});

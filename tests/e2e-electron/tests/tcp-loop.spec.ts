@@ -190,12 +190,12 @@ test("TCP 配置连接 + FC03 读 + FC10 写闭环（主进程会话）", async 
   await addressInput.fill("0001");
   await addressInput.press("Enter");
   await expect(
-    page.getByRole("button", { name: "Read", exact: true }).first(),
+    page.getByRole("button", { name: /^Read row / }).first(),
   ).toBeEnabled({ timeout: 5000 });
 
   // 5. FC03 单行读：Data 显示 ABCD（hex）。
   await page
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.getByLabel("Data").first()).toHaveText("ABCD", {
@@ -211,7 +211,7 @@ test("TCP 配置连接 + FC03 读 + FC10 写闭环（主进程会话）", async 
     page.locator(".register-table__status-dot--dirty").first(),
   ).toBeVisible({ timeout: 5000 });
   await page
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await expect

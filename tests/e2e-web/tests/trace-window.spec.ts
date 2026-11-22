@@ -40,7 +40,7 @@ test("TM opens Memory Trace and Play keeps the page responsive", async ({
   await address.fill("1");
   await address.press("Enter");
 
-  await firstRow(page).getByLabel("TM").click();
+  await firstRow(page).getByLabel(/^Trace row /).click();
   const traceWindow = page.locator(".trace-window");
   await expect(traceWindow).toBeVisible({ timeout: 15_000 });
   await expect(traceWindow).toContainText("M@MEp2006 Advance [Memory Trace]");
@@ -65,15 +65,15 @@ test("TM opens Memory Trace and Play keeps the page responsive", async ({
   await expect(traceWindow).toContainText("0010");
 
   // 窗口打开期间取消 TM 不会关闭追踪窗。
-  await firstRow(page).getByLabel("TM").click();
+  await firstRow(page).getByLabel(/^Trace row /).click();
   await expect(traceWindow).toBeVisible();
-  await expect(firstRow(page).getByLabel("TM")).toBeChecked();
+  await expect(firstRow(page).getByLabel(/^Trace row /)).toBeChecked();
 
   await traceWindow.getByRole("button", { name: "Stop" }).click();
   await expect(traceWindow.getByLabel("Average")).not.toHaveValue("");
 
   await traceWindow.getByRole("button", { name: "Close" }).click();
   await expect(traceWindow).toBeHidden();
-  await expect(firstRow(page).getByLabel("TM")).not.toBeChecked();
+  await expect(firstRow(page).getByLabel(/^Trace row /)).not.toBeChecked();
   expect(errors).toEqual([]);
 });

@@ -131,7 +131,7 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
 
   // FC01 读：Data 显示 1。
   await first
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .evaluate((el) => (el as HTMLElement).click());
   const dataInput = first.getByLabel("Data");
   await expect(dataInput).toHaveText("1", { timeout: 5000 });
@@ -155,7 +155,7 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
   await dataInput2.fill("0");
   await dataInput2.press("Enter");
   await parentRow(page, 0)
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row / })
     .evaluate((el) => (el as HTMLElement).click());
   await expect.poll(() => getCoil(page, 0)).toBe(0);
 });
@@ -180,12 +180,12 @@ test("离散输入表（只读）：Write 禁用、FC02 读", async ({ page }) =
 
   // 只读：Write 按钮禁用。
   await expect(
-    first.getByRole("button", { name: "Write", exact: true }),
+    first.getByRole("button", { name: /^Write row / }),
   ).toBeDisabled();
 
   // FC02 读：Data 显示 1（离散输入默认 hex，0x0001）。
   await first
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(first.getByLabel("Data")).toHaveText("0001", { timeout: 5000 });
 
@@ -217,11 +217,11 @@ test("输入寄存器表（只读）：FC04 读 16 位值", async ({ page }) => 
   await address.press("Enter");
 
   await expect(
-    first.getByRole("button", { name: "Write", exact: true }),
+    first.getByRole("button", { name: /^Write row / }),
   ).toBeDisabled();
 
   await first
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .evaluate((el) => (el as HTMLElement).click());
   // 输入寄存器默认 hex：显示 1234。
   await expect(first.getByLabel("Data")).toHaveText("1234", { timeout: 5000 });

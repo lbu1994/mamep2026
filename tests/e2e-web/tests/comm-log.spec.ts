@@ -38,7 +38,7 @@ async function openCommLogTab(page: Page): Promise<void> {
 
 async function readOnce(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row / })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await page.waitForTimeout(30);
