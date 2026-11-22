@@ -1609,6 +1609,93 @@ describe("RegisterTable 行操作视觉权重", () => {
   });
 });
 
+describe("RegisterTable WP 轮询状态", () => {
+  beforeEach(() => {
+    initI18n();
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    if (sheet !== undefined) {
+      sheet.rows = sheet.rows.slice(0, 3);
+      const first = sheet.rows[0];
+      const address = RegisterAddress.create(0);
+      if (first !== undefined && address.ok) {
+        sheet.rows[0] = {
+          ...first,
+          addressDraft: "0",
+          addressValue: address.value,
+          pollingEnabled: true,
+        };
+      }
+    }
+    useAppStore.setState({
+      host: null,
+      workspace,
+      connectionState: "connected",
+      pollingOutcomes: {},
+      rowResults: {},
+    });
+  });
+
+  it("关闭、等待、成功、失败使用不同视觉状态，并由辅助文本读出", async () => {
+    const first = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    if (first === undefined) throw new Error("missing first row");
+    const { container } = render(<RegisterTable sheetId={sheetId()} />);
+    const wp = container.querySelector<HTMLElement>(".register-table__wp");
+    if (wp === null) throw new Error("missing WP cell");
+
+    expect(wp.dataset.pollingState).toBe("waiting");
+    expect(
+      wp.querySelector(".register-table__wp-indicator--waiting"),
+    ).toBeTruthy();
+    const wpSwitch = wp.querySelector<HTMLButtonElement>('[role="switch"]');
+    expect(wpSwitch).not.toBeNull();
+    expect(
+      document.getElementById(wpSwitch?.getAttribute("aria-describedby") ?? "")
+        ?.textContent,
+    ).toBe("Polling on, waiting for response");
+
+    useAppStore.setState({
+      pollingOutcomes: { [first.rowId]: "success" },
+    });
+    await waitFor(() => {
+      expect(wp.dataset.pollingState).toBe("success");
+    });
+    expect(
+      wp.querySelector(".register-table__wp-indicator--success"),
+    ).toBeTruthy();
+
+    useAppStore.setState({
+      pollingOutcomes: { [first.rowId]: "failure" },
+      rowResults: {
+        [first.rowId]: {
+          messageKey: "errors.requestTimeout",
+          detail: null,
+        },
+      },
+    });
+    await waitFor(() => {
+      expect(wp.dataset.pollingState).toBe("failure");
+    });
+    expect(
+      wp.querySelector(".register-table__wp-indicator--failure"),
+    ).toBeTruthy();
+    expect(
+      document.getElementById(wpSwitch?.getAttribute("aria-describedby") ?? "")
+        ?.textContent,
+    ).toBe("Polling failed: No response from the device within the timeout.");
+
+    useAppStore.getState().setPollingEnabled(first.rowId, false);
+    await waitFor(() => {
+      expect(wp.dataset.pollingState).toBe("off");
+    });
+    expect(wp.querySelector(".register-table__wp-indicator")).toBeNull();
+    expect(
+      document.getElementById(wpSwitch?.getAttribute("aria-describedby") ?? "")
+        ?.textContent,
+    ).toBe("Polling off");
+  }, 30_000);
+});
+
 describe("RegisterTable 离线通信操作门控", () => {
   const offlineStates: ConnectionState[] = [
     "disconnected",
@@ -1744,10 +1831,16 @@ describe("RegisterTable 离线通信操作门控", () => {
     for (const control of [
       ...screen.getAllByRole("button", { name: "Read" }),
       ...screen.getAllByRole("button", { name: "Write" }),
-      ...screen.getAllByRole("switch", { name: "WP" }),
     ]) {
       expect((control as HTMLButtonElement).disabled).toBe(false);
       expect(control.getAttribute("aria-describedby")).toBeNull();
+    }
+    for (const control of screen.getAllByRole("switch", { name: "WP" })) {
+      expect((control as HTMLButtonElement).disabled).toBe(false);
+      expect(
+        document.getElementById(control.getAttribute("aria-describedby") ?? "")
+          ?.textContent,
+      ).toBe("Polling off");
     }
   }, 30_000);
 });

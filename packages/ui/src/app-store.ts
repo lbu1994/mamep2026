@@ -211,6 +211,8 @@ export interface AppStoreState {
   commLog: CommunicationLogEntry[];
   traceWindows: Record<string, TraceWindowModel>;
   pollingKeys: Record<string, string>;
+  /** 当前会话中每行最近一次轮询结果；不持久化，加载工作区或重新开启 WP 时清除。 */
+  pollingOutcomes: Record<RowId, "success" | "failure" | undefined>;
   /** 行操作结果三态状态点（纯 UI 会话状态，不持久化，§19.2 同 selectedRowIds）。 */
   rowResults: Record<RowId, RowFailure | undefined>;
   rowDirty: Record<RowId, boolean>;
@@ -659,6 +661,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   commLog: [],
   traceWindows: {},
   pollingKeys: {},
+  pollingOutcomes: {},
   selectedRowIds: [],
   clipboardPayload: null,
   clipboardSourceSheetType: null,
@@ -707,6 +710,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       // 加载/重置工作区后撤销历史无意义（新上下文），清空（会话状态不持久化，§24.4）。
       undoStack: [],
       redoStack: [],
+      pollingOutcomes: {},
     }));
   },
   setLoaded: () => set({ loaded: true }),
@@ -919,12 +923,19 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       comment,
       updatedAt: Date.now(),
     })),
-  setPollingEnabled: (rowId, enabled) =>
+  setPollingEnabled: (rowId, enabled) => {
+    const current = get().pollingOutcomes;
+    if (current[rowId] !== undefined) {
+      const pollingOutcomes = { ...current };
+      delete pollingOutcomes[rowId];
+      set({ pollingOutcomes });
+    }
     commitRowEdit(get, set, rowId, (row) => ({
       ...row,
       pollingEnabled: enabled,
       updatedAt: Date.now(),
-    })),
+    }));
+  },
 
   commitRowAddress: (rowId, draft) => {
     // 按 rowId 在全部表中定位所属表，取该表的地址进制（每表独立）。
@@ -2144,10 +2155,16 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         rowId,
         result,
       );
+      const outcome = result.ok ? "success" : "failure";
+      const pollingOutcomes =
+        state.pollingOutcomes[rowId] === outcome
+          ? state.pollingOutcomes
+          : { ...state.pollingOutcomes, [rowId]: outcome };
       if (
         next.rowResults === state.rowResults &&
         next.rowDirty === state.rowDirty &&
-        next.rowSuccess === state.rowSuccess
+        next.rowSuccess === state.rowSuccess &&
+        pollingOutcomes === state.pollingOutcomes
       ) {
         return state;
       }
@@ -2155,6 +2172,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         rowResults: next.rowResults,
         rowDirty: next.rowDirty,
         rowSuccess: next.rowSuccess,
+        pollingOutcomes,
       };
     }),
   recordRowEdit: (rowId, before, after) =>

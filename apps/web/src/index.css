@@ -656,7 +656,8 @@ body {
 
 /* 系统减少动画偏好：关闭脉冲/过渡动画 */
 @media (prefers-reduced-motion: reduce) {
-  .register-table__wp-indicator {
+  .register-table__wp-indicator,
+  .register-table__wp-indicator .anticon-spin {
     animation: none;
   }
 
@@ -1224,21 +1225,59 @@ body {
   white-space: nowrap;
 }
 
-/* WP 开关 + 轮询指示：无合法地址时禁用；开启且在线时显示品牌色脉冲点
-   （非纯颜色状态，配 Tooltip 与 aria-label 表达「正在轮询」）。 */
+/* WP 开关 + 轮询指示：关闭/暂停使用中性轨道；等待、成功、失败分别使用
+   品牌色、成功色、错误色，并配合不同图标与无障碍状态文本，不仅依赖颜色。 */
 .register-table__wp {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  --register-table-wp-track: var(--ant-color-fill-secondary);
+}
+
+.register-table__wp[data-polling-state="waiting"] {
+  --register-table-wp-track: var(--ant-color-primary);
+}
+
+.register-table__wp[data-polling-state="success"] {
+  --register-table-wp-track: var(--ant-color-success);
+}
+
+.register-table__wp[data-polling-state="failure"] {
+  --register-table-wp-track: var(--ant-color-error);
+}
+
+.register-table__wp[data-polling-state] .ant-switch,
+.register-table__wp[data-polling-state]
+  .ant-switch:hover:not(.ant-switch-disabled) {
+  background-color: var(--register-table-wp-track);
 }
 
 .register-table__wp-indicator {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mamep-brand-primary);
-  animation: mamep-pulse 1.6s ease-in-out infinite;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+.register-table__wp-indicator--waiting {
+  color: var(--ant-color-primary);
+}
+
+.register-table__wp-indicator--success {
+  color: var(--ant-color-success);
+}
+
+.register-table__wp-indicator--failure {
+  color: var(--ant-color-error);
+}
+
+@media (forced-colors: active) {
+  .register-table__wp-indicator {
+    color: CanvasText;
+  }
 }
 
 @keyframes mamep-pulse {

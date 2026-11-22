@@ -22,6 +22,7 @@ beforeEach(() => {
     activeSheetId: null,
     pendingDeleteSheetId: null,
     workspaceImportDraft: null,
+    pollingOutcomes: {},
   });
 });
 
@@ -1355,10 +1356,15 @@ describe("row 状态点 actions", () => {
       messageKey: "errors.requestTimeout",
       detail: null,
     });
+    expect(useAppStore.getState().pollingOutcomes["r1" as RowId]).toBe(
+      "failure",
+    );
     // 同因子失败再次写入：rowResults 引用不变（zustand 零更新）。
     const before = useAppStore.getState().rowResults;
+    const outcomesBefore = useAppStore.getState().pollingOutcomes;
     store.recordPollResult("r1" as RowId, timeoutResult());
     expect(useAppStore.getState().rowResults).toBe(before);
+    expect(useAppStore.getState().pollingOutcomes).toBe(outcomesBefore);
   });
 
   it("recordPollResult：轮询成功清除失败态与编辑完成态", () => {
@@ -1369,6 +1375,19 @@ describe("row 状态点 actions", () => {
     const state = useAppStore.getState();
     expect(state.rowResults["r1" as RowId]).toBeUndefined();
     expect(state.rowDirty["r1" as RowId]).toBeUndefined();
+    expect(state.pollingOutcomes["r1" as RowId]).toBe("success");
+  });
+
+  it("setPollingEnabled：切换 WP 时清除上一轮轮询结果，重新进入等待态", () => {
+    const row = useAppStore.getState().workspace.sheets[0]?.rows[0];
+    if (row === undefined) throw new Error("missing row");
+    useAppStore.setState({
+      pollingOutcomes: { [row.rowId]: "failure" },
+    });
+
+    useAppStore.getState().setPollingEnabled(row.rowId, true);
+
+    expect(useAppStore.getState().pollingOutcomes[row.rowId]).toBeUndefined();
   });
 
   it("recordRowEdit：值变化置编辑完成态并覆盖成功点", () => {

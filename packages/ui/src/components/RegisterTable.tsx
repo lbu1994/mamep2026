@@ -38,9 +38,11 @@ import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import {
   ApiOutlined,
+  CheckOutlined,
   CloseOutlined,
   ColumnWidthOutlined,
   HolderOutlined,
+  LoadingOutlined,
   PlusOutlined,
   RedoOutlined,
   ReloadOutlined,
@@ -728,6 +730,8 @@ interface WpCellProps {
   communicationReasonId: string;
 }
 
+type WpVisualState = "off" | "paused" | "waiting" | "success" | "failure";
+
 const WpCell = memo(function WpCell(props: WpCellProps) {
   const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:wp`);
   return placeholder ? (
@@ -745,11 +749,14 @@ function WpControl({
   hasAddress,
   communicationReasonId,
 }: WpCellProps): React.ReactNode {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const statusId = useId();
   const localReasonId = useId();
   const communicationAvailable = useAppStore((s) =>
     isCommunicationAvailable(s.connectionState),
   );
+  const pollingOutcome = useAppStore((s) => s.pollingOutcomes[rowId]);
+  const failure = useAppStore((s) => s.rowResults[rowId]);
   // 可撤销（§24.4「修改轮询设置」）：经 store.setPollingEnabled 入撤销栈。
   const setPollingEnabled = useAppStore((s) => s.setPollingEnabled);
   const reason = !communicationAvailable
@@ -760,35 +767,69 @@ function WpControl({
   const disabled = reason !== null;
   const describedBy =
     reason === null
-      ? undefined
+      ? statusId
       : communicationAvailable
         ? localReasonId
         : communicationReasonId;
-  // 纯 UI 派生轮询指示：已连接 + 有合法地址 + WP 开启 = 正在轮询。
-  const polling = communicationAvailable && hasAddress && pollingEnabled;
+  const pollingState: WpVisualState = !pollingEnabled
+    ? "off"
+    : !communicationAvailable || !hasAddress
+      ? "paused"
+      : (pollingOutcome ?? "waiting");
+  const failureDetail =
+    failure === undefined
+      ? null
+      : i18n.exists(failure.messageKey)
+        ? t(failure.messageKey)
+        : failure.messageKey;
+  const statusLabel =
+    pollingState === "off"
+      ? t("table.wpStateOff")
+      : pollingState === "paused"
+        ? t("table.wpStatePaused")
+        : pollingState === "waiting"
+          ? t("table.wpStateWaiting")
+          : pollingState === "success"
+            ? t("table.wpStateSuccess")
+            : failureDetail === null
+              ? t("table.wpStateFailure")
+              : t("table.wpStateFailureDetail", { detail: failureDetail });
+  const tooltipTitle =
+    reason ?? (pollingState === "off" ? t("table.wpHint") : statusLabel);
   return (
     <>
-      <Tooltip title={reason ?? t("table.wpHint")}>
-        <span className="register-table__wp">
+      <Tooltip title={tooltipTitle}>
+        <span className="register-table__wp" data-polling-state={pollingState}>
           <Switch
             size="small"
+            className="register-table__wp-switch"
             aria-label="WP"
             checked={pollingEnabled}
             disabled={disabled}
             aria-describedby={describedBy}
             onChange={(checked) => setPollingEnabled(rowId, checked)}
           />
-          {polling ? (
-            <Tooltip title={t("table.pollingActive")}>
-              <span
-                className="register-table__wp-indicator"
-                role="img"
-                aria-label={t("table.pollingActive")}
-              />
-            </Tooltip>
+          {pollingState === "waiting" ||
+          pollingState === "success" ||
+          pollingState === "failure" ? (
+            <span
+              className={`register-table__wp-indicator register-table__wp-indicator--${pollingState}`}
+              aria-hidden="true"
+            >
+              {pollingState === "waiting" ? (
+                <LoadingOutlined spin />
+              ) : pollingState === "success" ? (
+                <CheckOutlined />
+              ) : (
+                <CloseOutlined />
+              )}
+            </span>
           ) : null}
         </span>
       </Tooltip>
+      <span id={statusId} className="register-table__sr-only">
+        {statusLabel}
+      </span>
       {reason !== null && communicationAvailable ? (
         <span id={localReasonId} className="register-table__sr-only">
           {reason}
