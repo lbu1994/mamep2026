@@ -1066,14 +1066,112 @@ body {
   transition: border-color 0.15s ease-in-out;
 }
 
-/* 虚拟滚动跳转窗口的轻量占位：与完整控件同高，滚动停止后原位升级。 */
+/* 虚拟列表高成本单元格占位：控件外观保持相同几何尺寸，降低滚动/替换时的挂载开销。 */
 .register-table__virtual-placeholder {
-  display: inline-flex;
+  display: flex;
   min-height: 20px;
   align-items: center;
   justify-content: center;
+  margin-inline: auto;
   color: var(--ant-color-text-tertiary);
   pointer-events: none;
+}
+
+.register-table__virtual-placeholder--text {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 24px;
+  align-items: center;
+  gap: 2px;
+  justify-content: flex-start;
+  padding: 0 7px;
+  overflow: hidden;
+  color: var(--ant-color-text);
+  line-height: 22px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.register-table__virtual-placeholder--error {
+  color: var(--ant-color-error);
+}
+
+.register-table__virtual-placeholder--button {
+  box-sizing: border-box;
+  width: 100%;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+}
+
+.register-table__virtual-placeholder--select {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 24px;
+  justify-content: space-between;
+  /* 与 antd size="small" Select 的 --ant-select-padding-horizontal 一致（7px），
+     保证占位/正式控件切换时选中值横向位置不跳。 */
+  padding-inline: calc(var(--ant-padding-xs) - var(--ant-line-width));
+  color: var(--ant-color-text);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.register-table__virtual-placeholder-select-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.register-table__virtual-placeholder-select-arrow {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-quaternary);
+  /* 与 .ant-select-suffix 一致：不写死盒子尺寸，随图标自然收缩（10px），
+     避免 12px 盒把图标居中后产生 1px 水平/垂直偏移。 */
+  font-size: var(--ant-font-size-icon);
+  line-height: 1;
+}
+
+/* 占位内已包真实 Switch/Checkbox：外层透传（display:contents），让控件与真实单元格
+   完全同层同流，消除 24px 盒把 14px 开关 / 16px 复选框垂直居中造成的上跳。 */
+.register-table__virtual-placeholder--checkbox {
+  display: contents;
+}
+
+.register-table__virtual-placeholder--switch {
+  display: contents;
+}
+
+.register-table__virtual-placeholder--icon {
+  width: 100%;
+  height: 24px;
+  min-height: 24px;
+  justify-content: center;
+}
+
+.register-table__virtual-placeholder--disabled {
+  color: var(--ant-color-text-disabled);
+}
+
+.register-table__virtual-placeholder--disabled
+  .register-table__virtual-placeholder-select-arrow {
+  color: var(--ant-color-text-quaternary);
+}
+
+.register-table__virtual-placeholder--select.register-table__virtual-placeholder--disabled {
+  background: var(--ant-color-bg-container-disabled);
+  opacity: 1;
 }
 
 /* 可编辑单元格值文本：flex 内撑满剩余空间，长文本省略（ellipsis 移到此处，
@@ -1502,6 +1600,19 @@ body {
 
 .register-table-tabs .ant-table-wrapper .ant-table-tbody > tr > td {
   height: 29px;
+}
+
+/* 虚拟表使用 div/role=gridcell，不会命中上面的 tr/td 规则。
+   rc-table 以固定 listItemHeight=29 计算滚动范围，因此行/单元格必须锁定为同一
+   内容高度；否则占位/正式控件切换时的 1px 行盒差异会被虚拟列表放大成滚动抖动。 */
+.register-table-tabs .ant-table-tbody-virtual-holder .ant-table-row {
+  height: 29px;
+}
+
+.register-table-tabs .ant-table-tbody-virtual-holder .ant-table-cell {
+  height: 29px;
+  padding-block: 2px;
+  overflow: hidden;
 }
 
 /* ---------------- 底部面板 ---------------- */

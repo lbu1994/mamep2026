@@ -34,7 +34,7 @@ import type {
   SelectProps,
 } from "antd/es/select";
 import Switch from "antd/es/switch";
-import Table from "antd/es/table";
+import Table, { type TableRef } from "antd/es/table";
 import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import {
@@ -42,6 +42,7 @@ import {
   CheckOutlined,
   CloseOutlined,
   ColumnWidthOutlined,
+  DownOutlined,
   HolderOutlined,
   LoadingOutlined,
   PlusOutlined,
@@ -97,6 +98,7 @@ import {
 import {
   combineRadixScale,
   dataTypeToRadix,
+  dataTypeLabelKey,
   dataTypeToScale,
   isScaleApplicable,
   RADIX_LABEL_KEYS,
@@ -118,7 +120,7 @@ import { useIsMobileLayout } from "../layout/breakpoints";
 import { useAfterFirstPaint } from "../after-first-paint";
 import { scheduleAfterInput } from "../defer-user-commit";
 import { markUiStartup } from "../startup-marks";
-import type { RowFailure } from "../row-result";
+import type { RowFailure, RowSuccess } from "../row-result";
 import { computeNoColumnWidth } from "../no-column-width";
 import { usePluginContributions } from "../plugin/use-contributions";
 import type {
@@ -154,20 +156,24 @@ const Select = lazy(
 ) as unknown as DeferredSelectComponent;
 const MobileNativeSelectContext = createContext(false);
 
-interface VirtualScrollActivityStore {
-  getSnapshot(): VirtualScrollActivitySnapshot;
+interface DeferredCellRenderStore {
+  getSnapshot(): DeferredCellRenderSnapshot;
   subscribe(listener: () => void): () => void;
+  setDeferred(deferred: boolean): void;
+  setDeferredForRender(deferred: boolean): void;
   setScrolling(scrolling: boolean): void;
   setScrollingForRender(scrolling: boolean): void;
 }
 
-interface VirtualScrollActivitySnapshot {
+interface DeferredCellRenderSnapshot {
+  deferred: boolean;
   scrolling: boolean;
   version: number;
 }
 
-function createVirtualScrollActivityStore(): VirtualScrollActivityStore {
-  let snapshot: VirtualScrollActivitySnapshot = {
+function createDeferredCellRenderStore(): DeferredCellRenderStore {
+  let snapshot: DeferredCellRenderSnapshot = {
+    deferred: false,
     scrolling: false,
     version: 0,
   };
@@ -188,38 +194,64 @@ function createVirtualScrollActivityStore(): VirtualScrollActivityStore {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    setScrolling: (next) => {
-      if (snapshot.scrolling === next) return;
-      snapshot = { scrolling: next, version: snapshot.version + 1 };
+    setDeferred: (next) => {
+      if (snapshot.deferred === next) return;
+      snapshot = {
+        ...snapshot,
+        deferred: next,
+        version: snapshot.version + 1,
+      };
       if (next) {
         for (const listener of listeners) listener();
         return;
       }
-      // 停止滚动时把订阅者分批唤醒：每批只升级少量单元格，避免“通知所有单元格”
+      // 恢复真实控件时把订阅者分批唤醒：每批只升级少量单元格，避免“通知所有单元格”
       // 本身形成一个超过单帧预算的同步 React 提交。
+      notifyGeneration += 1;
+      pendingNotifications = [...listeners];
+      setTimeout(() => notifyInBatches(notifyGeneration), 0);
+    },
+    setDeferredForRender: (next) => {
+      if (snapshot.deferred === next) return;
+      snapshot = {
+        ...snapshot,
+        deferred: next,
+        version: snapshot.version + 1,
+      };
+    },
+    setScrolling: (next) => {
+      if (snapshot.scrolling === next) return;
+      snapshot = { ...snapshot, scrolling: next };
+      if (next) {
+        for (const listener of listeners) listener();
+        return;
+      }
+      // 滚动停下时只唤醒新挂载的占位单元格；已有真实控件的 settledVersion 不变，
+      // 因此不会在停止滚动时整窗切换样式。
       notifyGeneration += 1;
       pendingNotifications = [...listeners];
       setTimeout(() => notifyInBatches(notifyGeneration), 0);
     },
     setScrollingForRender: (next) => {
       if (snapshot.scrolling === next) return;
-      snapshot = { scrolling: next, version: snapshot.version + 1 };
+      snapshot = { ...snapshot, scrolling: next };
     },
   };
 }
 
-const VirtualScrollActivityContext =
-  createContext<VirtualScrollActivityStore | null>(null);
-const fallbackVirtualScrollActivity = createVirtualScrollActivityStore();
+const DeferredCellRenderContext = createContext<DeferredCellRenderStore | null>(
+  null,
+);
+const fallbackDeferredCellRenderStore = createDeferredCellRenderStore();
 
-function useVirtualScrollActivityStore(): VirtualScrollActivityStore {
+function useDeferredCellRenderStore(): DeferredCellRenderStore {
   return (
-    useContext(VirtualScrollActivityContext) ?? fallbackVirtualScrollActivity
+    useContext(DeferredCellRenderContext) ?? fallbackDeferredCellRenderStore
   );
 }
 
-function useVirtualScrollActivity(): VirtualScrollActivitySnapshot {
-  const store = useVirtualScrollActivityStore();
+function useDeferredCellRenderSnapshot(): DeferredCellRenderSnapshot {
+  const store = useDeferredCellRenderStore();
   return useSyncExternalStore(
     store.subscribe,
     store.getSnapshot,
@@ -227,27 +259,26 @@ function useVirtualScrollActivity(): VirtualScrollActivitySnapshot {
   );
 }
 
-function VirtualScrollActivityProvider({
+function DeferredCellRenderProvider({
   children,
 }: {
   children: React.ReactNode;
 }): React.ReactNode {
-  const [store] = useState(createVirtualScrollActivityStore);
+  const [store] = useState(createDeferredCellRenderStore);
   const importReplacementPending = useAppStore(
     (state) =>
       state.workspaceImportDraft !== null &&
       state.workspace === state.workspaceImportDraft.workspace,
   );
-  // 导入替换的首次 render 直接读轻量快照；草稿在下一任务关闭后由 effect 分批
-  // 唤醒已挂载单元格并错峰恢复控件。
-  if (importReplacementPending) store.setScrollingForRender(true);
+  // 工作区导入替换时先使用轻量快照；草稿关闭后分批恢复真实单元格控件。
+  if (importReplacementPending) store.setDeferredForRender(true);
   useEffect(() => {
-    if (!importReplacementPending) store.setScrolling(false);
+    if (!importReplacementPending) store.setDeferred(false);
   }, [importReplacementPending, store]);
   return (
-    <VirtualScrollActivityContext.Provider value={store}>
+    <DeferredCellRenderContext.Provider value={store}>
       {children}
-    </VirtualScrollActivityContext.Provider>
+    </DeferredCellRenderContext.Provider>
   );
 }
 
@@ -260,33 +291,42 @@ function scatterDelayMs(key: string): number {
 }
 
 /**
- * 滚动窗口内不挂载高成本控件；滚动停止后按行列错峰升级，避免 20 多行、每行
- * 多列的表单控件在同一宏任务中集中初始化。
+ * 工作区导入替换期间延迟所有高成本控件；滚动期间仅新进入虚拟窗口的行使用轻量占位。
+ * 已挂载控件不因开始/停止滚动切换样式，停止后新行再按行列错峰升级。
  */
-function useVirtualScrollPlaceholder(key: string): boolean {
-  const { scrolling, version } = useVirtualScrollActivity();
-  const [settledVersion, setSettledVersion] = useState(() =>
-    scrolling ? -1 : version,
-  );
+function useDeferredCellPlaceholder(key: string): boolean {
+  const { deferred, scrolling, version } = useDeferredCellRenderSnapshot();
+  const [settledCell, setSettledCell] = useState(() => ({
+    key,
+    version: deferred || scrolling ? -1 : version,
+  }));
+  const settled = settledCell.key === key && settledCell.version === version;
   useEffect(() => {
-    if (scrolling) return;
+    if (deferred || scrolling || settled) return;
     const timer = setTimeout(
-      () => setSettledVersion(version),
+      () => setSettledCell({ key, version }),
       scatterDelayMs(key),
     );
     return () => clearTimeout(timer);
-  }, [key, scrolling, version]);
-  return scrolling || settledVersion !== version;
+  }, [key, deferred, scrolling, settled, version]);
+  return deferred || !settled;
 }
 
-/** 跳转期间的高频重型控件占位；滚动停止后由同一单元格原位升级为完整控件。 */
-function VirtualScrollPlaceholder({
+/** 工作区导入替换及滚动窗口扩充期间的轻量单元格占位。 */
+function DeferredCellPlaceholder({
   children,
+  className,
 }: {
   children?: React.ReactNode;
+  className?: string;
 }): React.ReactNode {
   return (
-    <span className="register-table__virtual-placeholder" aria-hidden>
+    <span
+      className={`register-table__virtual-placeholder${
+        className === undefined ? "" : ` ${className}`
+      }`}
+      aria-hidden
+    >
       {children}
     </span>
   );
@@ -687,11 +727,15 @@ interface TmCellProps {
 }
 
 const TmCell = memo(function TmCell(props: TmCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:tm`);
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:tm`);
   return placeholder ? (
-    <VirtualScrollPlaceholder>
-      {props.traceEnabled ? "1" : "0"}
-    </VirtualScrollPlaceholder>
+    <DeferredCellPlaceholder className="register-table__virtual-placeholder--checkbox">
+      <Checkbox
+        checked={props.traceEnabled}
+        disabled={props.registerCount > 1 && props.dataType === "string"}
+        tabIndex={-1}
+      />
+    </DeferredCellPlaceholder>
   ) : (
     <TmControl {...props} />
   );
@@ -753,9 +797,13 @@ interface NameCellProps {
 }
 
 const NameCell = memo(function NameCell(props: NameCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:name`);
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:name`);
   return placeholder ? (
-    <VirtualScrollPlaceholder>{props.name}</VirtualScrollPlaceholder>
+    <DeferredCellPlaceholder className="register-table__virtual-placeholder--text">
+      <span className="register-table__editable-cell-value-wrap__text">
+        {props.name}
+      </span>
+    </DeferredCellPlaceholder>
   ) : (
     <NameControl {...props} />
   );
@@ -787,9 +835,19 @@ interface RegisterCellProps {
 }
 
 const RegisterCell = memo(function RegisterCell(props: RegisterCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:address`);
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:address`);
   return placeholder ? (
-    <VirtualScrollPlaceholder>{props.addressDraft}</VirtualScrollPlaceholder>
+    <DeferredCellPlaceholder
+      className={`register-table__virtual-placeholder--text${
+        props.error === undefined
+          ? ""
+          : " register-table__virtual-placeholder--error"
+      }`}
+    >
+      <span className="register-table__editable-cell-value-wrap__text">
+        {props.addressDraft}
+      </span>
+    </DeferredCellPlaceholder>
   ) : (
     <RegisterControl {...props} />
   );
@@ -836,15 +894,45 @@ interface WpCellProps {
 type WpVisualState = "off" | "paused" | "waiting" | "success" | "failure";
 
 const WpCell = memo(function WpCell(props: WpCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:wp`);
+  const communicationAvailable = useAppStore((s) =>
+    isCommunicationAvailable(s.connectionState),
+  );
+  const pollingOutcome = useAppStore((s) => s.pollingOutcomes[props.rowId]);
+  const pollingState: WpVisualState = !props.pollingEnabled
+    ? "off"
+    : !communicationAvailable || !props.hasAddress
+      ? "paused"
+      : (pollingOutcome ?? "waiting");
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:wp`);
   return placeholder ? (
-    <VirtualScrollPlaceholder>
-      {props.pollingEnabled ? "1" : "0"}
-    </VirtualScrollPlaceholder>
+    <DeferredCellPlaceholder className="register-table__virtual-placeholder--switch">
+      <span
+        className="register-table__wp"
+        data-polling-state={pollingState}
+      >
+        <Switch
+          size="small"
+          className="register-table__wp-switch"
+          checked={props.pollingEnabled}
+          disabled={!communicationAvailable || !props.hasAddress}
+          tabIndex={-1}
+        />
+        <WpStatusIndicator state={pollingState} />
+      </span>
+    </DeferredCellPlaceholder>
   ) : (
-    <WpControl {...props} />
+    <WpControl
+      {...props}
+      communicationAvailable={communicationAvailable}
+      pollingOutcome={pollingOutcome}
+    />
   );
 });
+
+interface WpControlProps extends WpCellProps {
+  communicationAvailable: boolean;
+  pollingOutcome: "success" | "failure" | undefined;
+}
 
 function WpControl({
   rowId,
@@ -853,14 +941,12 @@ function WpControl({
   pollingEnabled,
   hasAddress,
   communicationReasonId,
-}: WpCellProps): React.ReactNode {
+  communicationAvailable,
+  pollingOutcome,
+}: WpControlProps): React.ReactNode {
   const { t, i18n } = useTranslation();
   const statusId = useId();
   const localReasonId = useId();
-  const communicationAvailable = useAppStore((s) =>
-    isCommunicationAvailable(s.connectionState),
-  );
-  const pollingOutcome = useAppStore((s) => s.pollingOutcomes[rowId]);
   const failure = useAppStore((s) => s.rowResults[rowId]);
   // 可撤销（§24.4「修改轮询设置」）：经 store.setPollingEnabled 入撤销栈。
   const setPollingEnabled = useAppStore((s) => s.setPollingEnabled);
@@ -922,18 +1008,7 @@ function WpControl({
           {pollingState === "waiting" ||
           pollingState === "success" ||
           pollingState === "failure" ? (
-            <span
-              className={`register-table__wp-indicator register-table__wp-indicator--${pollingState}`}
-              aria-hidden="true"
-            >
-              {pollingState === "waiting" ? (
-                <LoadingOutlined spin />
-              ) : pollingState === "success" ? (
-                <CheckOutlined />
-              ) : (
-                <CloseOutlined />
-              )}
-            </span>
+            <WpStatusIndicator state={pollingState} />
           ) : null}
         </span>
       </Tooltip>
@@ -949,6 +1024,34 @@ function WpControl({
   );
 }
 
+function WpStatusIndicator({
+  state,
+}: {
+  state: WpVisualState;
+}): React.ReactNode {
+  if (
+    state !== "waiting" &&
+    state !== "success" &&
+    state !== "failure"
+  ) {
+    return null;
+  }
+  return (
+    <span
+      className={`register-table__wp-indicator register-table__wp-indicator--${state}`}
+      aria-hidden="true"
+    >
+      {state === "waiting" ? (
+        <LoadingOutlined spin />
+      ) : state === "success" ? (
+        <CheckOutlined />
+      ) : (
+        <CloseOutlined />
+      )}
+    </span>
+  );
+}
+
 interface ReadCellProps {
   rowId: RowId;
   rowNumber: number;
@@ -960,13 +1063,33 @@ interface ReadCellProps {
 }
 
 const ReadCell = memo(function ReadCell(props: ReadCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:read`);
+  const { t } = useTranslation();
+  const communicationAvailable = useAppStore((s) =>
+    isCommunicationAvailable(s.connectionState),
+  );
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:read`);
   return placeholder ? (
-    <VirtualScrollPlaceholder />
+    <DeferredCellPlaceholder className="register-table__virtual-placeholder--button">
+      <Button
+        size="small"
+        type="default"
+        className="register-table__row-action register-table__row-action--read"
+        disabled={
+          !communicationAvailable || !props.hasAddress || !props.typeCountValid
+        }
+        tabIndex={-1}
+      >
+        {t("table.read")}
+      </Button>
+    </DeferredCellPlaceholder>
   ) : (
-    <ReadControl {...props} />
+    <ReadControl {...props} communicationAvailable={communicationAvailable} />
   );
 });
+
+interface ReadControlProps extends ReadCellProps {
+  communicationAvailable: boolean;
+}
 
 function ReadControl({
   rowId,
@@ -975,12 +1098,10 @@ function ReadControl({
   hasAddress,
   typeCountValid,
   communicationReasonId,
-}: ReadCellProps): React.ReactNode {
+  communicationAvailable,
+}: ReadControlProps): React.ReactNode {
   const { t } = useTranslation();
   const localReasonId = useId();
-  const communicationAvailable = useAppStore((s) =>
-    isCommunicationAvailable(s.connectionState),
-  );
   const host = useAppStore((s) => s.host);
   const updateRow = useAppStore((s) => s.updateRow);
   const recordManualResult = useAppStore((s) => s.recordManualResult);
@@ -1050,30 +1171,61 @@ interface DataCellProps {
   error?: RowFailure | undefined;
 }
 
+interface DataStatusProps {
+  failure: RowFailure | undefined;
+  dirty: boolean;
+  success: RowSuccess | undefined;
+}
+
 const DataCell = memo(function DataCell(props: DataCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:data`);
+  const failure = useAppStore((s) => s.rowResults[props.rowId]);
+  const dirty = useAppStore((s) => s.rowDirty[props.rowId] ?? false);
+  const success = useAppStore((s) => s.rowSuccess[props.rowId]);
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:data`);
+  const status =
+    failure !== undefined ? "error" : dirty ? "dirty" : success ? "success" : null;
   return placeholder ? (
-    <VirtualScrollPlaceholder>
-      {props.cellText === "" ? "—" : props.cellText}
-    </VirtualScrollPlaceholder>
+    <DeferredCellPlaceholder
+      className={`register-table__virtual-placeholder--text${
+        props.error === undefined
+          ? ""
+          : " register-table__virtual-placeholder--error"
+      }`}
+    >
+      <span className="register-table__editable-cell-value-wrap__text">
+        {props.cellText === "" ? (
+          <span className="register-table__editable-cell-value-placeholder">
+            —
+          </span>
+        ) : (
+          props.cellText
+        )}
+      </span>
+      {status === null ? null : (
+        <span
+          className={`register-table__status-dot register-table__status-dot--${status}`}
+          aria-hidden="true"
+        />
+      )}
+    </DeferredCellPlaceholder>
   ) : (
-    <DataControl {...props} />
+    <DataControl {...props} failure={failure} dirty={dirty} success={success} />
   );
 });
+
+interface DataControlProps extends DataCellProps, DataStatusProps {}
 
 function DataControl({
   rowId,
   cellText,
   ariaLabel,
   error,
-}: DataCellProps): React.ReactNode {
+  failure,
+  dirty,
+  success,
+}: DataControlProps): React.ReactNode {
   const { t, i18n } = useTranslation();
   const commitCellText = useAppStore((s) => s.commitCellText);
-  // 三态状态点选择器：返回原语/undefined，memo 只在该行状态变化时重渲染
-  // （轮询值更新只改 cellText，rowResults/rowDirty/rowSuccess 引用不变则跳过）。
-  const failure = useAppStore((s) => s.rowResults[rowId]);
-  const dirty = useAppStore((s) => s.rowDirty[rowId] ?? false);
-  const success = useAppStore((s) => s.rowSuccess[rowId]);
   // 显示优先级：失败态 > 编辑完成态 > 成功态（§row-result）。
   const dot =
     failure !== undefined ? (
@@ -1157,15 +1309,35 @@ interface WriteCellProps {
 }
 
 const WriteCell = memo(function WriteCell(props: WriteCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(
+  const { t } = useTranslation();
+  const communicationAvailable = useAppStore((s) =>
+    isCommunicationAvailable(s.connectionState),
+  );
+  const placeholder = useDeferredCellPlaceholder(
     `${props.sheetId}:${props.rowId}:write`,
   );
   return placeholder ? (
-    <VirtualScrollPlaceholder />
+    <DeferredCellPlaceholder className="register-table__virtual-placeholder--button">
+      <Button
+        size="small"
+        type="default"
+        className="register-table__row-action register-table__row-action--write"
+        disabled={
+          !communicationAvailable || !props.hasAddress || !props.typeCountValid
+        }
+        tabIndex={-1}
+      >
+        {t("table.write")}
+      </Button>
+    </DeferredCellPlaceholder>
   ) : (
-    <WriteControl {...props} />
+    <WriteControl {...props} communicationAvailable={communicationAvailable} />
   );
 });
+
+interface WriteControlProps extends WriteCellProps {
+  communicationAvailable: boolean;
+}
 
 function WriteControl({
   sheetId,
@@ -1175,12 +1347,10 @@ function WriteControl({
   hasAddress,
   typeCountValid,
   communicationReasonId,
-}: WriteCellProps): React.ReactNode {
+  communicationAvailable,
+}: WriteControlProps): React.ReactNode {
   const { t } = useTranslation();
   const localReasonId = useId();
-  const communicationAvailable = useAppStore((s) =>
-    isCommunicationAvailable(s.connectionState),
-  );
   const host = useAppStore((s) => s.host);
   const appendMessage = useAppStore((s) => s.appendMessage);
   const recordManualResult = useAppStore((s) => s.recordManualResult);
@@ -1265,11 +1435,28 @@ interface TypeCellProps {
 }
 
 const TypeCell = memo(function TypeCell(props: TypeCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:type`);
-  return placeholder ? (
-    <VirtualScrollPlaceholder>
-      {dataTypeToRadix(props.dataType)}
-    </VirtualScrollPlaceholder>
+  const { t } = useTranslation();
+  const useNativeSelect = useContext(MobileNativeSelectContext);
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:type`);
+  const labelKey = dataTypeLabelKey(props.dataType);
+  const label = labelKey === null ? String(props.dataType) : t(labelKey);
+  // 移动端渲染原生 select（廉价控件），无需滚动占位：自绘 span 与原生 select
+  // 外观不同，升级瞬间会“变脸”，故移动端直接渲染真实控件。
+  return placeholder && !useNativeSelect ? (
+    <DeferredCellPlaceholder
+      className={`register-table__virtual-placeholder--select${
+        props.error === undefined
+          ? ""
+          : " register-table__virtual-placeholder--error"
+      }`}
+    >
+      <span className="register-table__virtual-placeholder-select-value">
+        {label}
+      </span>
+      <span className="register-table__virtual-placeholder-select-arrow">
+        <DownOutlined />
+      </span>
+    </DeferredCellPlaceholder>
   ) : (
     <TypeControl {...props} />
   );
@@ -1323,7 +1510,7 @@ function TypeControl({
         style={{ width: "100%" }}
         value={selectValue}
         data-register-cell="type"
-        aria-label="Type"
+        aria-label={t("table.type")}
         placement="bottomLeft"
         variant="borderless"
         {...(error !== undefined ? { status: "error" as const } : {})}
@@ -1355,11 +1542,24 @@ interface ScaleCellProps {
 }
 
 const ScaleCell = memo(function ScaleCell(props: ScaleCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:scale`);
-  return placeholder ? (
-    <VirtualScrollPlaceholder>
-      {dataTypeToScale(props.dataType)}
-    </VirtualScrollPlaceholder>
+  const useNativeSelect = useContext(MobileNativeSelectContext);
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:scale`);
+  // 移动端渲染原生 select（廉价控件），无需滚动占位（同 TypeCell）。
+  return placeholder && !useNativeSelect ? (
+    <DeferredCellPlaceholder
+      className={`register-table__virtual-placeholder--select${
+        isScaleApplicable(dataTypeToRadix(props.dataType))
+          ? ""
+          : " register-table__virtual-placeholder--disabled"
+      }`}
+    >
+      <span className="register-table__virtual-placeholder-select-value">
+        {dataTypeToScale(props.dataType)}
+      </span>
+      <span className="register-table__virtual-placeholder-select-arrow">
+        <DownOutlined />
+      </span>
+    </DeferredCellPlaceholder>
   ) : (
     <ScaleControl {...props} />
   );
@@ -1381,7 +1581,7 @@ function ScaleControl({ rowId, dataType }: ScaleCellProps): React.ReactNode {
         size="small"
         style={{ width: "100%" }}
         value={scale}
-        aria-label="Scale"
+        aria-label={t("table.scale")}
         placement="bottomLeft"
         variant="borderless"
         disabled={!applicable}
@@ -1401,9 +1601,13 @@ interface CommentCellProps {
 }
 
 const CommentCell = memo(function CommentCell(props: CommentCellProps) {
-  const placeholder = useVirtualScrollPlaceholder(`${props.rowId}:comment`);
+  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:comment`);
   return placeholder ? (
-    <VirtualScrollPlaceholder>{props.comment}</VirtualScrollPlaceholder>
+    <DeferredCellPlaceholder className="register-table__virtual-placeholder--text">
+      <span className="register-table__editable-cell-value-wrap__text">
+        {props.comment}
+      </span>
+    </DeferredCellPlaceholder>
   ) : (
     <CommentControl {...props} />
   );
@@ -1512,7 +1716,7 @@ const ChildTypeCell = memo(function ChildTypeCell({
       style={{ width: "100%" }}
       value={radix}
       data-register-cell="type"
-      aria-label="Type"
+      aria-label={t("table.type")}
       placement="bottomLeft"
       variant="borderless"
       onChange={(value: DataRadix) =>
@@ -1549,7 +1753,7 @@ const ChildScaleCell = memo(function ChildScaleCell({
         size="small"
         style={{ width: "100%" }}
         value={scale}
-        aria-label="Scale"
+        aria-label={t("table.scale")}
         placement="bottomLeft"
         variant="borderless"
         disabled={!applicable}
@@ -1745,11 +1949,17 @@ const DragHandle = memo(function DragHandle({
   rowId: RowId;
   ariaLabel: string;
 }) {
-  const placeholder = useVirtualScrollPlaceholder(`${rowId}:drag`);
+  const placeholder = useDeferredCellPlaceholder(`${rowId}:drag`);
   return placeholder ? (
-    <VirtualScrollPlaceholder>
-      <HolderOutlined />
-    </VirtualScrollPlaceholder>
+    <DeferredCellPlaceholder className="register-table__virtual-placeholder--icon">
+      <Button
+        type="text"
+        size="small"
+        icon={<HolderOutlined />}
+        style={{ cursor: "move" }}
+        tabIndex={-1}
+      />
+    </DeferredCellPlaceholder>
   ) : (
     <DragHandleControl ariaLabel={ariaLabel} />
   );
@@ -1949,6 +2159,17 @@ interface MemoTableRowProps {
   _colOrder: string;
 }
 
+/**
+ * 行级 memo 的样式签名。
+ *
+ * antd 虚拟表会为同一行传入新的绝对定位样式；只比较对象引用会因每次 render
+ * 都新建对象而失去 memo，忽略样式又会让重叠行停留在旧 `top`。这里比较样式值，
+ * 既保留普通表的引用级优化，又能在虚拟滚动窗口变化时及时重绘行位置。
+ */
+function memoRowStyleSignature(style: React.CSSProperties | undefined): string {
+  return JSON.stringify(style ?? null);
+}
+
 interface RegisterTableProps {
   sheetId: SheetId;
   /** 生产启动时先提交工具栏，下一帧挂载表体；组件单测默认即时挂载。 */
@@ -1959,6 +2180,9 @@ interface RegisterTableProps {
 const ROW_HEIGHT = 29;
 /** 移动布局行高（触摸目标 ≥44dp）：与 apps/web/src/mobile.css 的 td height 同源。 */
 const MOBILE_ROW_HEIGHT = 44;
+/** 一次 wheel 跨越多行时拆成小步，避免虚拟窗口短暂没有可绘制行。 */
+const WHEEL_JUMP_THRESHOLD = ROW_HEIGHT * 4;
+const WHEEL_SCROLL_STEP = ROW_HEIGHT * 3;
 /** 移动布局横向滚动下限（列总宽之和小于该值时仍可横向滑动，避免列被挤压换行）。 */
 const MOBILE_SCROLL_X = 960;
 /**
@@ -2144,6 +2368,177 @@ const RegisterTableContent = memo(function RegisterTableContent({
   const [tableSettingsOpen, setTableSettingsOpen] = useState(false);
   const tableSettingsTitleId = useId();
   const tableSettingsPanelId = useId();
+  const tableRef = useRef<TableRef | null>(null);
+  const tableKeyboardScrollRef = useRef(false);
+  const pendingWheelDeltaRef = useRef(0);
+  const wheelFrameRef = useRef<number | null>(null);
+  const queueTableScrollRef = useRef<(delta: number) => boolean>(() => false);
+  const deferredCellRenderStore = useDeferredCellRenderStore();
+
+  useEffect(() => {
+    const flexEl = flexRef.current;
+    if (flexEl === null) return;
+    const markTableKeyboardScroll = (): void => {
+      tableKeyboardScrollRef.current = true;
+    };
+    const clearTableKeyboardScrollOutside = (event: PointerEvent): void => {
+      const target = event.target;
+      if (!(target instanceof Node) || !flexEl.contains(target)) {
+        tableKeyboardScrollRef.current = false;
+      }
+    };
+    flexEl.addEventListener("pointerdown", markTableKeyboardScroll, true);
+    document.addEventListener(
+      "pointerdown",
+      clearTableKeyboardScrollOutside,
+      true,
+    );
+    return () => {
+      flexEl.removeEventListener("pointerdown", markTableKeyboardScroll, true);
+      document.removeEventListener(
+        "pointerdown",
+        clearTableKeyboardScrollOutside,
+        true,
+      );
+      tableKeyboardScrollRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const flexEl = flexRef.current;
+    if (flexEl === null) return;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let expectedScrollTop: number | null = null;
+    let lastScrollTop =
+      flexEl.querySelector<HTMLElement>(".ant-table-tbody-virtual-holder")
+        ?.scrollTop ?? 0;
+    const findVirtualHolder = (): HTMLElement | null =>
+      flexEl.querySelector<HTMLElement>(".ant-table-tbody-virtual-holder");
+    const markScrolling = (): void => {
+      deferredCellRenderStore.setScrollingForRender(true);
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        deferredCellRenderStore.setScrolling(false);
+      }, 48);
+    };
+    const stepQueuedScroll = (): void => {
+      wheelFrameRef.current = null;
+      const holder = findVirtualHolder();
+      const table = tableRef.current;
+      const pending = pendingWheelDeltaRef.current;
+      if (holder === null || table === null) {
+        if (pending !== 0 || expectedScrollTop !== null) {
+          wheelFrameRef.current = requestAnimationFrame(stepQueuedScroll);
+        }
+        return;
+      }
+      if (
+        expectedScrollTop !== null &&
+        Math.abs(holder.scrollTop - expectedScrollTop) > 0.5
+      ) {
+        wheelFrameRef.current = requestAnimationFrame(stepQueuedScroll);
+        return;
+      }
+      expectedScrollTop = null;
+      if (pending === 0) return;
+      const direction = pending > 0 ? 1 : -1;
+      const step = direction * Math.min(Math.abs(pending), WHEEL_SCROLL_STEP);
+      pendingWheelDeltaRef.current -= step;
+      const maxScrollTop = Math.max(0, holder.scrollHeight - holder.clientHeight);
+      const nextScrollTop = Math.min(
+        maxScrollTop,
+        Math.max(0, holder.scrollTop + step),
+      );
+      markScrolling();
+      expectedScrollTop = nextScrollTop;
+      table.scrollTo({ top: nextScrollTop });
+      if (pendingWheelDeltaRef.current !== 0 || expectedScrollTop !== null) {
+        wheelFrameRef.current = requestAnimationFrame(stepQueuedScroll);
+      }
+    };
+    const queueTableScroll = (delta: number): boolean => {
+      if (
+        !Number.isFinite(delta) ||
+        delta === 0 ||
+        findVirtualHolder() === null ||
+        tableRef.current === null
+      ) {
+        return false;
+      }
+      pendingWheelDeltaRef.current += delta;
+      markScrolling();
+      if (wheelFrameRef.current === null) {
+        wheelFrameRef.current = requestAnimationFrame(stepQueuedScroll);
+      }
+      return true;
+    };
+    queueTableScrollRef.current = queueTableScroll;
+    const handleWheel = (event: WheelEvent): void => {
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      const holder = findVirtualHolder();
+      if (
+        holder === null ||
+        !(event.target instanceof Node) ||
+        !holder.contains(event.target)
+      ) {
+        return;
+      }
+      tableKeyboardScrollRef.current = true;
+      // 在 rc-virtual-list 更新窗口前写入快照；大幅滚轮用公开 TableRef 分帧滚动，
+      // 小幅滚轮仍走原生路径，避免虚拟窗口整页替换时短暂空白。
+      if (Math.abs(event.deltaY) <= WHEEL_JUMP_THRESHOLD) {
+        markScrolling();
+        return;
+      }
+      if (!queueTableScroll(event.deltaY)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const handleScroll = (event: Event): void => {
+      const holder = event.target;
+      if (
+        !(holder instanceof HTMLElement) ||
+        !holder.classList.contains("ant-table-tbody-virtual-holder")
+      ) {
+        return;
+      }
+      const nextScrollTop = holder.scrollTop;
+      const delta = Math.abs(nextScrollTop - lastScrollTop);
+      lastScrollTop = nextScrollTop;
+      if (delta < ROW_HEIGHT) return;
+      markScrolling();
+    };
+    flexEl.addEventListener("scroll", handleScroll, {
+      capture: true,
+      passive: true,
+    });
+    flexEl.addEventListener("wheel", handleWheel, {
+      capture: true,
+      passive: false,
+    });
+    return () => {
+      flexEl.removeEventListener("scroll", handleScroll, true);
+      flexEl.removeEventListener("wheel", handleWheel, true);
+      queueTableScrollRef.current = () => false;
+      pendingWheelDeltaRef.current = 0;
+      expectedScrollTop = null;
+      if (wheelFrameRef.current !== null) {
+        cancelAnimationFrame(wheelFrameRef.current);
+        wheelFrameRef.current = null;
+      }
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      deferredCellRenderStore.setScrolling(false);
+    };
+  }, [deferredCellRenderStore]);
 
   useEffect(() => {
     // 直接订阅活动表变化，避免所有已挂载表的组件都因 activeSheetId 变化重渲染。
@@ -2215,43 +2610,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
     },
     [closeTableSettings],
   );
-  const virtualScrollActivity = useVirtualScrollActivityStore();
   const [tableBodyHeight, setTableBodyHeight] = useState(0);
-  useEffect(() => {
-    const flexEl = flexRef.current;
-    if (flexEl === null) return;
-    let settleTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastScrollTop =
-      flexEl.querySelector<HTMLElement>(".ant-table-tbody-virtual-holder")
-        ?.scrollTop ?? 0;
-    const handleScroll = (event: Event): void => {
-      const holder = event.target;
-      if (!(holder instanceof HTMLElement)) return;
-      const nextScrollTop = holder.scrollTop;
-      const delta = Math.abs(nextScrollTop - lastScrollTop);
-      lastScrollTop = nextScrollTop;
-      // 聚焦/浏览器 scrollIntoView 造成的小幅校正不应触发整窗降级；用户滚动和跳转
-      // 会跨越至少一行。
-      if (delta < ROW_HEIGHT) return;
-      // 捕获阶段先于 rc-table 的滚动状态更新。此处只写快照、不通知现有单元格：
-      // 新进入虚拟窗口的行会直接挂载轻量占位，避免滚动手势前再同步重渲染一整套
-      // 仍在视口中的完整控件。停止滚动时再统一通知并错峰升级。
-      virtualScrollActivity.setScrollingForRender(true);
-      if (settleTimer !== null) clearTimeout(settleTimer);
-      settleTimer = setTimeout(() => {
-        settleTimer = null;
-        virtualScrollActivity.setScrolling(false);
-      }, 48);
-    };
-    flexEl.addEventListener("scroll", handleScroll, {
-      capture: true,
-      passive: true,
-    });
-    return () => {
-      flexEl.removeEventListener("scroll", handleScroll, true);
-      if (settleTimer !== null) clearTimeout(settleTimer);
-    };
-  }, [virtualScrollActivity]);
   // 虚拟滚动需要确定的可视高度：表格可视区 = Flex 高度 − 工具栏高度；
   // 用 ResizeObserver 监听窗口缩放/面板拖拽引起的尺寸变化。
   useEffect(() => {
@@ -2627,6 +2986,41 @@ const RegisterTableContent = memo(function RegisterTableContent({
     // 复选框/开关/按钮等选择控件不拦截快捷键（选中后可直接 Delete/Ctrl+C 等）。
     if (isTextInputTarget(target)) {
       return;
+    }
+    if (
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      (event.key === "PageUp" || event.key === "PageDown")
+    ) {
+      const targetNode = target instanceof Node ? target : null;
+      const targetInTable =
+        targetNode !== null && flexRef.current?.contains(targetNode) === true;
+      const targetIsDocument =
+        target === document.body || target === document.documentElement;
+      const holder = flexRef.current?.querySelector<HTMLElement>(
+        ".ant-table-tbody-virtual-holder",
+      );
+      const table = tableRef.current;
+      if (
+        (targetInTable ||
+          (targetIsDocument && tableKeyboardScrollRef.current)) &&
+        holder !== null &&
+        holder !== undefined &&
+        table !== null
+      ) {
+        tableKeyboardScrollRef.current = true;
+        const pageDistance = Math.max(
+          ROW_HEIGHT,
+          holder.clientHeight - ROW_HEIGHT,
+        );
+        const direction = event.key === "PageDown" ? 1 : -1;
+        if (queueTableScrollRef.current(direction * pageDistance)) {
+          event.preventDefault();
+          return;
+        }
+      }
     }
     if (event.key === "Escape") {
       setMenuRowId(null);
@@ -3445,8 +3839,10 @@ const RegisterTableContent = memo(function RegisterTableContent({
         prev._selection === next._selection &&
         // 列顺序变化时全行重渲染（body 单元格顺序必须跟随表头；列宽拖拽不改变签名）。
         prev._colOrder === next._colOrder &&
-        // 注意：不能比较 style —— rc-table 每次渲染都会新建 style 对象引用；
-        // 本表不设置行样式，且选中/悬停类通过 className（字符串按值比较）传递。
+        // 虚拟表会复用记录并改变绝对定位样式；必须比较值，不能比较对象引用。
+        memoRowStyleSignature(prev.style) ===
+          memoRowStyleSignature(next.style) &&
+        // 选中/悬停类通过 className（字符串按值比较）传递。
         prev.className === next.className,
     );
     MemoizedTr.displayName = "RegisterTableRow";
@@ -3876,6 +4272,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
                   MemoRow 的 memo 比较器已按字符串值比较 className，不会破坏行级性能优化。
                   样式见 apps/web/src/index.css 的 register-table__row--striped 规则。 */}
                   <Table<RegisterRow>
+                    ref={tableRef}
                     size="small"
                     rowKey="rowId"
                     columns={columns}
@@ -4040,8 +4437,8 @@ export const RegisterTable = memo(function RegisterTable(
     );
   }
   return (
-    <VirtualScrollActivityProvider>
+    <DeferredCellRenderProvider>
       <RegisterTableContent {...props} />
-    </VirtualScrollActivityProvider>
+    </DeferredCellRenderProvider>
   );
 });

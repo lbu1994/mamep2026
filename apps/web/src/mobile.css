@@ -61,6 +61,13 @@
   .register-table-wrap
     .register-table-tabs
     .ant-table-tbody-virtual-holder
+    .ant-table-row {
+    height: 44px;
+  }
+
+  .register-table-wrap
+    .register-table-tabs
+    .ant-table-tbody-virtual-holder
     .ant-table-cell {
     height: 44px;
     padding-block: 4px;

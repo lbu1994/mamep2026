@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   combineRadixScale,
+  dataTypeLabelKey,
   dataTypeToRadix,
   dataTypeToScale,
   isScaleApplicable,
@@ -43,6 +44,20 @@ describe("dataTypeToScale", () => {
     expect(dataTypeToScale("unsigned-0.001")).toBe("0.001");
     expect(dataTypeToScale("unsigned-0.0001")).toBe("0.0001");
     expect(dataTypeToScale("signed-0.1")).toBe("0.1");
+  });
+});
+
+describe("dataTypeLabelKey", () => {
+  it("maps built-in and scaled types to the localized Type label", () => {
+    expect(dataTypeLabelKey("hex")).toBe("table.hex");
+    expect(dataTypeLabelKey("binary")).toBe("table.binary");
+    expect(dataTypeLabelKey("unsigned-0.01")).toBe("table.unsigned");
+    expect(dataTypeLabelKey("signed-0.0001")).toBe("table.signed");
+    expect(dataTypeLabelKey("bool")).toBe("table.bool");
+  });
+
+  it("does not mislabel plugin types as a built-in radix", () => {
+    expect(dataTypeLabelKey("vendor:float32")).toBeNull();
   });
 });
 

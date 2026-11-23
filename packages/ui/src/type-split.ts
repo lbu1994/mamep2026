@@ -5,7 +5,7 @@
  * - hex/binary/string 的 scale 恒为 1（下拉禁用）；
  * - 纯函数，便于 jsdom 单测。
  */
-import type { DataType } from "@mamep2026/domain";
+import { isBuiltinDataType, type DataType } from "@mamep2026/domain";
 
 /** 进制列取值（与 domain DataType 前缀对应）。bool 为基础表位值类型。 */
 export type DataRadix =
@@ -50,6 +50,18 @@ export function dataTypeToRadix(type: DataType): DataRadix {
   if (type === "unsigned" || type.startsWith("unsigned-")) return "unsigned";
   if (type.startsWith("signed-")) return "signed";
   return "signed";
+}
+
+/**
+ * 内置类型在滚动占位态使用的 i18n key。
+ *
+ * 占位态必须与正式 Select 使用同一显示文案，不能把内部 DataType/radix 代码
+ *（如 `hex`、`signed`）直接暴露给用户；插件类型没有通用内置 key，调用方
+ *应保留其 id 或由插件贡献提供标题。
+ */
+export function dataTypeLabelKey(type: DataType): string | null {
+  if (!isBuiltinDataType(type)) return null;
+  return RADIX_LABEL_KEYS[dataTypeToRadix(type)];
 }
 
 /** DataType → scale（无后缀 = 1）。 */
