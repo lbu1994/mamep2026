@@ -1114,7 +1114,7 @@ body {
   width: 100%;
   height: 24px;
   justify-content: space-between;
-  /* 与 antd size="small" Select 的 --ant-select-padding-horizontal 一致（7px），
+  /* 与 antd Select 的 --ant-select-padding-horizontal（calc(4px - 1px)=3px）一致，
      保证占位/正式控件切换时选中值横向位置不跳。 */
   padding-inline: calc(var(--ant-padding-xs) - var(--ant-line-width));
   color: var(--ant-color-text);
@@ -1129,6 +1129,10 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 与 antd v6 .ant-select-content 的 margin-inline-end 对齐：
+     max(showArrowPaddingInlineEnd − fontSizeIcon, 0) = ceil(13×1.25) − 10 = 7px。
+     缺失时占位值盒比真实选中值宽 7px，升级瞬间居中文本/省略号横移（抖动）。 */
+  margin-inline-end: 7px;
 }
 
 .register-table__virtual-placeholder-select-arrow {
@@ -1143,13 +1147,9 @@ body {
   line-height: 1;
 }
 
-/* 占位内已包真实 Switch/Checkbox：外层透传（display:contents），让控件与真实单元格
-   完全同层同流，消除 24px 盒把 14px 开关 / 16px 复选框垂直居中造成的上跳。 */
+/* 占位内已包真实 Checkbox：外层透传（display:contents），让控件与真实单元格
+   完全同层同流，消除 24px 盒把 16px 复选框垂直居中造成的上跳。 */
 .register-table__virtual-placeholder--checkbox {
-  display: contents;
-}
-
-.register-table__virtual-placeholder--switch {
   display: contents;
 }
 
@@ -1172,6 +1172,11 @@ body {
 .register-table__virtual-placeholder--select.register-table__virtual-placeholder--disabled {
   background: var(--ant-color-bg-container-disabled);
   opacity: 1;
+}
+
+/* 校验错误态占位与真实 status="error" Select 一致：红字 + 红色边框。 */
+.register-table__virtual-placeholder--select.register-table__virtual-placeholder--error {
+  border-color: var(--ant-color-error);
 }
 
 /* 可编辑单元格值文本：flex 内撑满剩余空间，长文本省略（ellipsis 移到此处，

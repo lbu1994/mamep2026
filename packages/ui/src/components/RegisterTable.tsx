@@ -898,29 +898,10 @@ const WpCell = memo(function WpCell(props: WpCellProps) {
     isCommunicationAvailable(s.connectionState),
   );
   const pollingOutcome = useAppStore((s) => s.pollingOutcomes[props.rowId]);
-  const pollingState: WpVisualState = !props.pollingEnabled
-    ? "off"
-    : !communicationAvailable || !props.hasAddress
-      ? "paused"
-      : (pollingOutcome ?? "waiting");
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:wp`);
-  return placeholder ? (
-    <DeferredCellPlaceholder className="register-table__virtual-placeholder--switch">
-      <span
-        className="register-table__wp"
-        data-polling-state={pollingState}
-      >
-        <Switch
-          size="small"
-          className="register-table__wp-switch"
-          checked={props.pollingEnabled}
-          disabled={!communicationAvailable || !props.hasAddress}
-          tabIndex={-1}
-        />
-        <WpStatusIndicator state={pollingState} />
-      </span>
-    </DeferredCellPlaceholder>
-  ) : (
+  // WP 开关为廉价完整控件（Switch + 状态图标），滚动期也直接渲染：
+  // 占位↔完整控件交换会重建节点并重置内部状态（如等待态旋转动画相位），
+  // 造成可见抖动，而占位本身并不节省 Switch 挂载成本。
+  return (
     <WpControl
       {...props}
       communicationAvailable={communicationAvailable}
