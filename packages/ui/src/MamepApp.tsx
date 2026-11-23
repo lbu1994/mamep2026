@@ -178,6 +178,21 @@ function sidebarGroupIcon(sheetType: SheetType): ReactNode {
   }
 }
 
+/** 分组标题 Tooltip：同时响应悬停与键盘焦点提示完整名称。 */
+function SidebarGroupTitle({ title }: { title: string }): ReactNode {
+  return (
+    <Tooltip title={title} trigger={["hover", "focus"]}>
+      <span
+        className="sheet-sidebar__group-title"
+        tabIndex={0}
+        aria-label={title}
+      >
+        {title}
+      </span>
+    </Tooltip>
+  );
+}
+
 export interface MamepAppProps {
   /** 生产组合根启用分阶段首屏；组件测试默认直接渲染完整界面。 */
   deferStartupContent?: boolean;
@@ -932,15 +947,7 @@ function MamepAppContent({
             data-sheet-group={group.key}
           >
             {/* 标题可聚焦：截断时仍可通过悬停、键盘焦点和辅助技术取得完整名称。 */}
-            <Tooltip title={groupTitle}>
-              <span
-                className="sheet-sidebar__group-title"
-                tabIndex={0}
-                aria-label={groupTitle}
-              >
-                {groupTitle}
-              </span>
-            </Tooltip>
+            <SidebarGroupTitle title={groupTitle} />
             <Tooltip title={t("sidebar.newTable")}>
               <Button
                 type="text"

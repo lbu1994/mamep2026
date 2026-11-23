@@ -41,22 +41,6 @@ const HEADER_TO_KEY: Record<string, string> = {
   Comment: "comment",
 };
 
-/** body 首行各列 cell 的定位标识（与 firstRowCellLabels 提取规则一致：优先 [aria-label]，否则文本）。 */
-const BODY_LABEL_BY_COLUMN: Record<string, string> = {
-  no: "1",
-  tm: "Trace row 1, address 0",
-  name: "Name",
-  address: "Address",
-  wp: "Poll row 1, address 0",
-  read: "Read row 1, address 0",
-  data: "Data",
-  write: "Write row 1, address 0",
-  type: "Type",
-  scale: "Scale",
-  comment: "Comment",
-  drag: "Drag to reorder",
-};
-
 /** 连续拖拽序列（用于守住多次拖拽后的列序一致性）。 */
 const DRAG_SEQUENCE: ReadonlyArray<readonly [string, string]> = [
   ["Name", "No"],
@@ -87,9 +71,7 @@ async function openApp(page: Page): Promise<string[]> {
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
-  await expect(
-    page.locator('[data-startup-hydrated="true"]'),
-  ).toHaveCount(1);
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
   return errors;
 }
 
@@ -115,13 +97,8 @@ async function columnHeaders(page: Page): Promise<string[]> {
     );
 }
 
-/**
- * 读取 body 第一行各 td 的顺序标识：优先取单元格内 [aria-label]，否则取文本。
- * 用于断言「列拖拽后数据列同步跟随表头」（表头/数据不错位）。
- * 注意：必须限定 tr.ant-table-row（真实数据行），antd 的 rowSelection 表头行
- * （含 Custom selection 下拉）也在 .ant-table-tbody 内，直接取第一个 tr 会误匹配表头。
- */
-async function firstRowCellLabels(page: Page): Promise<string[]> {
+/** 读取 body 第一行各 td 的稳定列 key；selection 列无 key，drag 列固定为 drag。 */
+async function firstRowColumnKeys(page: Page): Promise<string[]> {
   return page
     .locator(
       ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
@@ -129,12 +106,7 @@ async function firstRowCellLabels(page: Page): Promise<string[]> {
     .first()
     .locator(".ant-table-cell")
     .evaluateAll((tds) =>
-      tds.map((td) => {
-        const labeled = td.querySelector("[aria-label]");
-        const label = labeled?.getAttribute("aria-label") ?? "";
-        const text = (td.textContent ?? "").trim();
-        return label || text;
-      }),
+      tds.map((td) => td.getAttribute("data-column-key") ?? ""),
     );
 }
 
@@ -189,10 +161,10 @@ test("dragging a column header reorders the columns", async ({ page }) => {
       "Comment",
     ]);
   // body 数据列必须同步跟随表头（不允许表头/数据错位）。
-  const labels = await firstRowCellLabels(page);
-  expect(labels.indexOf("Name")).toBe(1);
-  expect(labels.indexOf("1")).toBe(2);
-  expect(labels.indexOf("Address")).toBe(4);
+  const keys = await firstRowColumnKeys(page);
+  expect(keys.indexOf("name")).toBe(1);
+  expect(keys.indexOf("no")).toBe(2);
+  expect(keys.indexOf("address")).toBe(4);
   // 拖拽不产生 console 错误。
   expect(errors).toEqual([]);
 });
@@ -252,9 +224,7 @@ test("column order persists across a page reload", async ({ page }) => {
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
-  await expect(
-    page.locator('[data-startup-hydrated="true"]'),
-  ).toHaveCount(1);
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
   // 刷新后列顺序恢复（workspace 恢复），不回默认顺序。
   expect(await columnHeaders(page)).toEqual([
     "Name",
@@ -342,14 +312,11 @@ test("repeated column drags (15×) keep the exact order and sync body rows", asy
   // 最终 body 数据行列顺序与表头同步（不允许表头/数据错位）。
   // 注意：body 首行首列为 rowSelection 复选框（antd 生成 aria-label="Select row 1"），
   // 最右为 drag 列手柄（label="Drag to reorder"），本序列未拖它、恒在末尾。
-  const bodyLabels = await firstRowCellLabels(page);
-  expect(bodyLabels).toEqual([
-    "Select row 1",
-    ...expected.map((header) => {
-      const key = HEADER_TO_KEY[header];
-      return key === undefined ? "" : (BODY_LABEL_BY_COLUMN[key] ?? "");
-    }),
-    "Drag to reorder",
+  const bodyKeys = await firstRowColumnKeys(page);
+  expect(bodyKeys).toEqual([
+    "",
+    ...expected.map((header) => HEADER_TO_KEY[header] ?? ""),
+    "drag",
   ]);
   // 拖拽全程无 console 错误。
   expect(errors).toEqual([]);

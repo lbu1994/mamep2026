@@ -238,6 +238,8 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
   // jsdom 下首次动态 import 需按需转换整条依赖链（实测 HelpDrawer 链路约 4–5s），
   // 默认 1s 等待不够——并行全量测试下会误报；这里显式放宽。
   const LAZY_MOUNT_TIMEOUT = { timeout: 20_000 } as const;
+  // 用例级上限必须高于异步查询上限，并为并行转换/CPU 争抢预留余量。
+  const LAZY_TEST_TIMEOUT_MS = 30_000;
   beforeEach(() => {
     useAppStore.setState({
       connectionModalOpen: false,
@@ -262,55 +264,71 @@ describe("键盘快捷键（PRD §8.3 P1，2026-08-30）", () => {
     });
   }
 
-  it("Ctrl+/ 打开帮助抽屉并渲染快捷键总览（app/table 两组）", async () => {
-    render(<MamepApp />);
-    fireAppKey("/", { ctrl: true });
-    expect(useAppStore.getState().helpModalOpen).toBe(true);
-    // 懒加载：抽屉首次打开时才下载/挂载 → 异步等待。
-    await screen.findByText(
-      "Keyboard Shortcuts",
-      undefined,
-      LAZY_MOUNT_TIMEOUT,
-    );
-    // 抽屉默认「快速上手」页签，需切换到「键盘快捷键」页签后才挂载表格。
-    fireEvent.click(screen.getByText("Keyboard Shortcuts"));
-    await waitFor(() => {
-      expect(
-        document.querySelectorAll(".keyboard-shortcuts__table").length,
-      ).toBe(2);
-    }, LAZY_MOUNT_TIMEOUT);
-  });
+  it(
+    "Ctrl+/ 打开帮助抽屉并渲染快捷键总览（app/table 两组）",
+    async () => {
+      render(<MamepApp />);
+      fireAppKey("/", { ctrl: true });
+      expect(useAppStore.getState().helpModalOpen).toBe(true);
+      // 懒加载：抽屉首次打开时才下载/挂载 → 异步等待。
+      await screen.findByText(
+        "Keyboard Shortcuts",
+        undefined,
+        LAZY_MOUNT_TIMEOUT,
+      );
+      // 抽屉默认「快速上手」页签，需切换到「键盘快捷键」页签后才挂载表格。
+      fireEvent.click(screen.getByText("Keyboard Shortcuts"));
+      await waitFor(() => {
+        expect(
+          document.querySelectorAll(".keyboard-shortcuts__table").length,
+        ).toBe(2);
+      }, LAZY_MOUNT_TIMEOUT);
+    },
+    LAZY_TEST_TIMEOUT_MS,
+  );
 
-  it("? 打开帮助弹窗（别名 = Shift+/）", async () => {
-    render(<MamepApp />);
-    fireAppKey("?", { shift: true });
-    await screen.findByText(
-      "Keyboard Shortcuts",
-      undefined,
-      LAZY_MOUNT_TIMEOUT,
-    );
-    expect(useAppStore.getState().helpModalOpen).toBe(true);
-  });
+  it(
+    "? 打开帮助弹窗（别名 = Shift+/）",
+    async () => {
+      render(<MamepApp />);
+      fireAppKey("?", { shift: true });
+      await screen.findByText(
+        "Keyboard Shortcuts",
+        undefined,
+        LAZY_MOUNT_TIMEOUT,
+      );
+      expect(useAppStore.getState().helpModalOpen).toBe(true);
+    },
+    LAZY_TEST_TIMEOUT_MS,
+  );
 
-  it("Ctrl+, 打开设置抽屉（容器为 Drawer）", async () => {
-    render(<MamepApp />);
-    fireAppKey(",", { ctrl: true });
-    await screen.findByText("Theme", undefined, LAZY_MOUNT_TIMEOUT);
-    expect(useAppStore.getState().settingsModalOpen).toBe(true);
-    // 容器为 Drawer（store 字段名保留 settingsModalOpen）。
-    expect(document.querySelector(".settings-drawer")).not.toBeNull();
-  });
+  it(
+    "Ctrl+, 打开设置抽屉（容器为 Drawer）",
+    async () => {
+      render(<MamepApp />);
+      fireAppKey(",", { ctrl: true });
+      await screen.findByText("Theme", undefined, LAZY_MOUNT_TIMEOUT);
+      expect(useAppStore.getState().settingsModalOpen).toBe(true);
+      // 容器为 Drawer（store 字段名保留 settingsModalOpen）。
+      expect(document.querySelector(".settings-drawer")).not.toBeNull();
+    },
+    LAZY_TEST_TIMEOUT_MS,
+  );
 
-  it("Ctrl+Enter 未连接时打开连接设置弹窗", async () => {
-    render(<MamepApp />);
-    fireAppKey("Enter", { ctrl: true });
-    await screen.findByText(
-      "Connection Settings",
-      undefined,
-      LAZY_MOUNT_TIMEOUT,
-    );
-    expect(useAppStore.getState().connectionModalOpen).toBe(true);
-  });
+  it(
+    "Ctrl+Enter 未连接时打开连接设置弹窗",
+    async () => {
+      render(<MamepApp />);
+      fireAppKey("Enter", { ctrl: true });
+      await screen.findByText(
+        "Connection Settings",
+        undefined,
+        LAZY_MOUNT_TIMEOUT,
+      );
+      expect(useAppStore.getState().connectionModalOpen).toBe(true);
+    },
+    LAZY_TEST_TIMEOUT_MS,
+  );
 
   it("帮助弹窗打开后快捷键被抑制（Ctrl+, 不再触发）", () => {
     render(<MamepApp />);

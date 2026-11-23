@@ -3196,6 +3196,10 @@ const RegisterTableContent = memo(function RegisterTableContent({
           ...col,
           ...(width !== undefined ? { width } : {}),
           onHeaderCell,
+          onCell: (record, index) => ({
+            ...col.onCell?.(record, index),
+            "data-column-key": key,
+          }),
         };
       }),
     [

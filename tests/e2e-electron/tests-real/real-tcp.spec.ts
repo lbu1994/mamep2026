@@ -137,16 +137,56 @@ async function openTableSettings(p: Page) {
 async function setWriteVerify(p: Page, optionText: string): Promise<void> {
   const panel = await openTableSettings(p);
   const verify = panel.locator(".table-toolbar__verify");
-  await verify.locator(".ant-select").first().click({ force: true });
-  const option = p
-    .locator(".ant-select-dropdown:visible .ant-select-item-option")
-    .filter({ hasText: new RegExp(`^${optionText}$`) })
-    .first();
-  await expect(option).toBeVisible({ timeout: 5000 });
-  await option.evaluate((el) => (el as HTMLElement).click());
-  await expect(verify).toContainText(optionText, { timeout: 5000 });
-  await p.keyboard.press("Escape");
-  await expect(panel).toBeHidden({ timeout: 5000 });
+  const control = verify.getByRole("combobox", {
+    name: "Write verification",
+  });
+  await expect(control).toBeVisible();
+
+  let opened = false;
+  for (let attempt = 0; attempt < 3 && !opened; attempt += 1) {
+    await control.click({ force: true });
+    opened = await p
+      .locator(".ant-select-dropdown:visible")
+      .waitFor({ state: "visible", timeout: 1500 })
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!opened) {
+      // Click can race the Popover animation or a previous dropdown close.
+      // Keyboard open is deterministic once the combobox owns focus.
+      await control.focus();
+      await p.keyboard.press("ArrowDown");
+      opened = await p
+        .locator(".ant-select-dropdown:visible")
+        .waitFor({ state: "visible", timeout: 1500 })
+        .then(
+          () => true,
+          () => false,
+        );
+    }
+  }
+  expect(opened).toBe(true);
+
+  try {
+    const option = p
+      .locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: new RegExp(`^${optionText}$`) })
+      .first();
+    await expect(option).toBeVisible({ timeout: 5000 });
+    await option.evaluate((el) => (el as HTMLElement).click());
+    await expect(verify).toContainText(optionText, { timeout: 5000 });
+  } finally {
+    // Always close the popup/panel so a failed assertion cannot poison the
+    // shared Electron application state for the following test.
+    await p.keyboard.press("Escape");
+    if (await panel.isVisible().catch(() => false)) {
+      await p.keyboard.press("Escape");
+    }
+    await panel
+      .waitFor({ state: "hidden", timeout: 2000 })
+      .catch(() => undefined);
+  }
 }
 
 /** 首行填 Data（HEX）并点击 Write。 */

@@ -32,22 +32,6 @@ const HEADER_TO_KEY: Record<string, string> = {
   Comment: "comment",
 };
 
-/** body 首行各列 cell 的定位标识（与 firstRowCellLabels 提取规则一致：优先 [aria-label]，否则文本）。 */
-const BODY_LABEL_BY_COLUMN: Record<string, string> = {
-  no: "1",
-  tm: "Trace row 1, address 0",
-  name: "Name",
-  address: "Address",
-  wp: "Poll row 1, address 0",
-  read: "Read row 1, address 0",
-  data: "Data",
-  write: "Write row 1, address 0",
-  type: "Type",
-  scale: "Scale",
-  comment: "Comment",
-  drag: "Drag to reorder",
-};
-
 async function openApp(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
@@ -164,11 +148,8 @@ async function dragHeaderHandle(
   await page.mouse.up();
 }
 
-/**
- * 读取 body 第一行各 td 的顺序标识：优先取单元格内 [aria-label]，否则取文本。
- * 必须限定 tr.ant-table-row（真实数据行），antd 的 rowSelection 表头行也在 .ant-table-tbody 内。
- */
-async function firstRowCellLabels(page: Page): Promise<string[]> {
+/** 读取 body 第一行各 td 的稳定列 key；selection 列无 key，drag 列固定为 drag。 */
+async function firstRowColumnKeys(page: Page): Promise<string[]> {
   return page
     .locator(
       ".register-table-tabs .ant-tabs-content-active .ant-table-tbody [data-row-key]",
@@ -176,12 +157,7 @@ async function firstRowCellLabels(page: Page): Promise<string[]> {
     .first()
     .locator(".ant-table-cell")
     .evaluateAll((tds) =>
-      tds.map((td) => {
-        const labeled = td.querySelector("[aria-label]");
-        const label = labeled?.getAttribute("aria-label") ?? "";
-        const text = (td.textContent ?? "").trim();
-        return label || text;
-      }),
+      tds.map((td) => td.getAttribute("data-column-key") ?? ""),
     );
 }
 
@@ -234,14 +210,11 @@ test("clicking restore resets column order and widths for the current sheet", as
   await expect(await restoreButton(page)).toBeDisabled();
   // body 数据列与表头同步（恢复后首行列序与 DEFAULT_ORDER 一致）。
   // 注意：首列为 rowSelection 复选框（aria-label="Select row 1"），最右为 drag 列手柄（label="Drag to reorder"）。
-  const labels = await firstRowCellLabels(page);
-  expect(labels).toEqual([
-    "Select row 1",
-    ...DEFAULT_ORDER.map((header) => {
-      const key = HEADER_TO_KEY[header];
-      return key === undefined ? "" : (BODY_LABEL_BY_COLUMN[key] ?? "");
-    }),
-    "Drag to reorder",
+  const keys = await firstRowColumnKeys(page);
+  expect(keys).toEqual([
+    "",
+    ...DEFAULT_ORDER.map((header) => HEADER_TO_KEY[header] ?? ""),
+    "drag",
   ]);
   expect(errors).toEqual([]);
 });

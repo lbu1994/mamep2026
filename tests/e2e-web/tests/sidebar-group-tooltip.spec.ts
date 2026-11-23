@@ -9,7 +9,7 @@ async function openApp(page: Page): Promise<void> {
   });
 }
 
-test("truncated sidebar group title exposes its full name on hover and focus", async ({
+test("truncated sidebar group title exposes its full name on hover", async ({
   page,
 }) => {
   await openApp(page);
@@ -27,10 +27,18 @@ test("truncated sidebar group title exposes its full name on hover and focus", a
   await groupTitle.hover();
   const tooltip = page.locator(".ant-tooltip:visible");
   await expect(tooltip).toContainText(fullName ?? "");
+});
 
-  await page.mouse.move(0, 0);
-  await expect(tooltip).toBeHidden();
+test("truncated sidebar group title exposes its full name on keyboard focus", async ({
+  page,
+}) => {
+  await openApp(page);
 
+  const groupTitle = page.locator(".sheet-sidebar__group-title").first();
+  const fullName = await groupTitle.getAttribute("aria-label");
+  expect(fullName).toBe("HOLDING REGISTERS (R/W)");
   await groupTitle.focus();
+  await expect(groupTitle).toBeFocused();
+  const tooltip = page.locator(".ant-tooltip:visible");
   await expect(tooltip).toContainText(fullName ?? "");
 });

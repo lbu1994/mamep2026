@@ -32,10 +32,14 @@ async function columnWidth(page: Page, label: string): Promise<number> {
   const header = headerCell(page, label);
   // Tabs 切换会短暂保留隐藏面板；等待活动表头完成布局后再读取，避免把过渡帧的 0
   // 误判为列宽被重置。
+  let width = 0;
   await expect
-    .poll(() => header.evaluate((el) => (el as HTMLElement).offsetWidth))
+    .poll(async () => {
+      width = await header.evaluate((el) => (el as HTMLElement).offsetWidth);
+      return width;
+    })
     .toBeGreaterThan(0);
-  return header.evaluate((el) => (el as HTMLElement).offsetWidth);
+  return width;
 }
 
 /** 拖动某列表头右侧 react-resizable 手柄 deltaX 像素（向右为正）。 */
