@@ -176,6 +176,13 @@ export const workspaceSchema = z.object({
   updatedAt: z.number(),
   activeSheetId: z.string().nullable(),
   sheets: z.array(sheetSchema),
+  // Older workspaces derive their counters from sheet names in the UI.
+  sheetNameCounters: z
+    .record(
+      z.string(),
+      z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    )
+    .default({}),
   connectionProfiles: z.array(
     z.discriminatedUnion("protocol", [rtuProfileSchema, tcpProfileSchema]),
   ),
@@ -233,6 +240,7 @@ function schemaInvalidError(technicalMessage: string) {
 function workspaceDataFromWorkspace(workspace: Workspace): WorkspaceData {
   const data: WorkspaceData = {
     ...workspace,
+    sheetNameCounters: workspace.sheetNameCounters ?? {},
     sheets: workspace.sheets.map((sheet) => ({
       ...sheet,
       rows: sheet.rows.map((row) => ({

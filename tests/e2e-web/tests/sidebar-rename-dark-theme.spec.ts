@@ -62,7 +62,9 @@ test("暗黑模式侧边栏 Rename 输入框跟随主题（非白底黑字）", 
   await switchToDarkTheme(page);
 
   // 侧边栏右键 Sheet 1 → Rename → 内联输入框出现。
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Rename" })
     .evaluate((el) => (el as HTMLElement).click());

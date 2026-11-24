@@ -161,15 +161,17 @@ test("修改工作区 → 主进程自动保存落盘为 userData/workspace.json
     await page.getByRole("button", { name: "New Table", exact: true }).click();
     await expect(
       page.locator(".register-table-tabs .ant-tabs-tab-active"),
-    ).toContainText("Sheet 2", { timeout: 5000 });
+    ).toContainText("HOLDING REGISTERS Sheet 2", { timeout: 5000 });
     // 自动保存落盘（debounce 500ms）→ 主文件包含新表名。
-    await waitForWorkspaceFile(userDataDir, '"Sheet 2"');
+    await waitForWorkspaceFile(userDataDir, '"HOLDING REGISTERS Sheet 2"');
     const content = await readFile(
       path.join(userDataDir, "workspace.json"),
       "utf8",
     );
     const parsed = JSON.parse(content) as { sheets: Array<{ name: string }> };
-    expect(parsed.sheets.map((s) => s.name)).toContain("Sheet 2");
+    expect(parsed.sheets.map((s) => s.name)).toContain(
+      "HOLDING REGISTERS Sheet 2",
+    );
   } finally {
     await app.close();
   }
@@ -186,8 +188,8 @@ test("关闭后同 userData 重启 → 会话恢复（新表仍在）", async ()
       .click();
     await expect(
       first.page.locator(".register-table-tabs .ant-tabs-tab-active"),
-    ).toContainText("Sheet 2", { timeout: 5000 });
-    await waitForWorkspaceFile(userDataDir, '"Sheet 2"');
+    ).toContainText("HOLDING REGISTERS Sheet 2", { timeout: 5000 });
+    await waitForWorkspaceFile(userDataDir, '"HOLDING REGISTERS Sheet 2"');
   } finally {
     await first.app.close();
   }
@@ -198,12 +200,12 @@ test("关闭后同 userData 重启 → 会话恢复（新表仍在）", async ()
   const second = await launchApp(userDataDir);
   try {
     await expect(second.page.locator(".ant-layout-sider")).toContainText(
-      "Sheet 2",
+      "HOLDING REGISTERS Sheet 2",
       { timeout: 5000 },
     );
     await expect(
       second.page.locator(".register-table-tabs .ant-tabs-tab-active"),
-    ).toContainText("Sheet 2");
+    ).toContainText("HOLDING REGISTERS Sheet 2");
     expect(firstConsoleErrors).toEqual([]);
     expect(second.consoleErrors).toEqual([]);
   } finally {
@@ -216,7 +218,7 @@ test("损坏主文件 + 合法备份 → 启动从备份恢复（自愈写回）
   // 第一会话：等待应用自身自动保存落盘（生成合法工作区 JSON 作为备份基础）。
   const first = await launchApp(userDataDir);
   try {
-    await waitForWorkspaceFile(userDataDir, '"Sheet 1"');
+    await waitForWorkspaceFile(userDataDir, '"HOLDING REGISTERS Sheet 1"');
   } finally {
     await first.app.close();
   }

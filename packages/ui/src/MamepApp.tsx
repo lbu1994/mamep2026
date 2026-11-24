@@ -963,7 +963,10 @@ function MamepAppContent({
                 icon={<PlusOutlined />}
                 onClick={(event) => {
                   event.stopPropagation();
-                  addSheet(group.sheetType);
+                  addSheet(
+                    group.sheetType,
+                    t(group.titleKey, { lng: "en-US" }),
+                  );
                 }}
               />
             </Tooltip>

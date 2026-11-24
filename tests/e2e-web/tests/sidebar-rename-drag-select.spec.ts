@@ -41,10 +41,14 @@ test("侧边栏 Rename 编辑态：正在编辑的 sheet 项不可拖拽，其�
 }) => {
   const errors = await openApp(page);
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
 
   // 侧边栏右键 Sheet 1 → Rename → 内联输入框出现。
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Rename" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -57,7 +61,7 @@ test("侧边栏 Rename 编辑态：正在编辑的 sheet 项不可拖拽，其�
   await expect(renamingLi).toHaveAttribute("draggable", "false");
 
   // 其余 sheet 项仍可拖拽排序（不因某个重命名而失效）。
-  const otherLi = sidebarItem(page, "Sheet 2");
+  const otherLi = sidebarItem(page, "HOLDING REGISTERS Sheet 2");
   await expect(otherLi).toHaveAttribute("draggable", "true");
 
   expect(errors).toEqual([]);

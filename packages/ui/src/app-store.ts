@@ -20,7 +20,6 @@ import {
   createDefaultRtuProfile,
   createDefaultTcpProfile,
   createEmptyRow,
-  createEmptyWorkspace,
   createRegisterSheet,
   newRowId,
 } from "@mamep2026/domain";
@@ -90,6 +89,12 @@ import type { AppHost } from "./host";
 import { hasPlatformCapability } from "./host-contracts";
 import type { PersistedConnectionSettings } from "./components/connection-settings-model";
 import { applyLanguage } from "./i18n";
+import {
+  copySheetName,
+  createNamedSheet,
+  createNamedWorkspace,
+  initializeSheetNameCounters,
+} from "./sheet-naming";
 
 export type BufferSizeOption =
   "continue" | "100" | "500" | "1000" | "1500" | "2000" | "3000";
@@ -356,8 +361,8 @@ export interface AppStoreState {
   cutSelectedRows: (sheetId: SheetId) => void;
   /** 粘贴到 afterRowId 之后；afterRowId 为 null 时追加到表尾。 */
   pasteRows: (sheetId: SheetId, afterRowId: RowId | null) => Promise<void>;
-  /** 新建表：type 缺省 holding-register；插件表类型（如安川表）由分组头新建入口传入。 */
-  addSheet: (type?: SheetType) => void;
+  /** Create a typed sheet; plugin callers may supply their English group title. */
+  addSheet: (type?: SheetType, englishTitle?: string) => void;
   renameSheet: (sheetId: SheetId, name: string) => void;
   /** 关闭一张表（非破坏性）：表仍保留在工作区（侧边栏可见），仅从页签栏隐藏。 */
   closeSheet: (sheetId: SheetId) => void;
@@ -562,11 +567,17 @@ function removeSheetFromWorkspace(
   workspace: Workspace,
   sheetId: SheetId,
 ): { workspace: Workspace; activeSheetId: SheetId | null } {
-  const without = workspace.sheets.filter((s) => s.sheetId !== sheetId);
+  const initialized = initializeSheetNameCounters(workspace);
+  const without = initialized.sheets.filter((s) => s.sheetId !== sheetId);
+  const fallback = without.length === 0 ? createNamedSheet(initialized) : null;
   const sheets =
-    without.length === 0 ? [createRegisterSheet("Sheet 1", 0)] : without;
+    fallback === null ? without : [{ ...fallback.sheet, order: 0 }];
   return {
-    workspace: { ...workspace, sheets, updatedAt: Date.now() },
+    workspace: {
+      ...(fallback?.workspace ?? initialized),
+      sheets,
+      updatedAt: Date.now(),
+    },
     activeSheetId: fixActiveSheetId(sheets, workspace.activeSheetId),
   };
 }
@@ -633,7 +644,7 @@ function isPersistedConnectionSettings(
 
 export const useAppStore = create<AppStoreState>()((set, get) => ({
   host: null,
-  workspace: createEmptyWorkspace(),
+  workspace: createNamedWorkspace(),
   loaded: false,
   hostStatus: "ready",
   connectionState: "disconnected",
@@ -688,6 +699,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }
   },
   setWorkspace: (workspace) => {
+    workspace = initializeSheetNameCounters(workspace);
     // 加载/重置工作区时恢复持久化的语言偏好（刷新后保持上次选择）。
     applyLanguage(workspace.preferences.language);
     // 失效指向兜底：仅在确有修正时新建对象（否则不产生多余的自动保存）。
@@ -1540,18 +1552,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }
   },
 
-  addSheet: (type) => {
+  addSheet: (type, englishTitle) => {
     const beforeSheets = get().workspace.sheets;
     set((state) => {
-      const order = state.workspace.sheets.length;
-      const sheet = createRegisterSheet(
-        `Sheet ${order + 1}`,
-        order,
-        type ?? "holding-register",
+      const { sheet, workspace } = createNamedSheet(
+        state.workspace,
+        type,
+        englishTitle,
       );
       return {
         workspace: {
-          ...state.workspace,
+          ...workspace,
           sheets: [...state.workspace.sheets, sheet],
           activeSheetId: sheet.sheetId,
           updatedAt: Date.now(),
@@ -1573,13 +1584,13 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     if (before === undefined) return;
     const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
-      workspace: {
-        ...state.workspace,
+      workspace: initializeSheetNameCounters({
+        ...initializeSheetNameCounters(state.workspace),
         sheets: state.workspace.sheets.map((sheet) =>
           sheet.sheetId === sheetId ? { ...sheet, name } : sheet,
         ),
         updatedAt: Date.now(),
-      },
+      }),
     }));
     const after = findSheetById(get().workspace, sheetId);
     if (after !== undefined) {
@@ -1655,13 +1666,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     // 删除唯一表时 UI 会重建默认空表：撤销删除时需移除该保底表。
     const wasOnlySheet = get().workspace.sheets.length === 1;
     set((state) => {
-      const remaining = state.workspace.sheets.filter(
-        (sheet) => sheet.sheetId !== sheetId,
-      );
-      const sheets =
-        remaining.length === 0
-          ? [createRegisterSheet("Sheet 1", 0)]
-          : remaining;
+      const removed = removeSheetFromWorkspace(state.workspace, sheetId);
+      const sheets = removed.workspace.sheets;
       const nextActive =
         state.activeSheetId === sheetId ||
         sheets.every((s) => s.sheetId !== state.activeSheetId)
@@ -1669,7 +1675,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           : state.activeSheetId;
       return {
         workspace: {
-          ...state.workspace,
+          ...removed.workspace,
           sheets,
           activeSheetId: nextActive,
           updatedAt: Date.now(),
@@ -1748,7 +1754,11 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       );
       const source = state.workspace.sheets[sourceIndex];
       if (source === undefined) return state;
-      const copy = createRegisterSheet(`${source.name} Copy`, sourceIndex + 1);
+      const copy = createRegisterSheet(
+        copySheetName(state.workspace, source.name),
+        sourceIndex + 1,
+        source.type,
+      );
       // 副本继承源表的 Register 地址进制、列宽与列顺序（结构偏好随复制保留）。
       copy.registerRadix = source.registerRadix;
       copy.columnWidths = { ...source.columnWidths };

@@ -379,6 +379,8 @@ export interface Workspace {
   updatedAt: number;
   activeSheetId: SheetId | null;
   sheets: RegisterSheet[];
+  /** Next default-name number per sheet type; absent in older workspaces. */
+  sheetNameCounters?: Record<string, number>;
   connectionProfiles: (RtuConnectionProfile | TcpConnectionProfile)[];
   activeConnectionProfileId: ConnectionProfileId | null;
   pollingSettings: PollingSettings;
@@ -544,11 +546,17 @@ export function createRegisterSheet(
   };
 }
 
-/** 创建空工作区：包含一个默认标签页与默认 RTU 连接配置；应用启动保持离线。 */
-export function createEmptyWorkspace(): Workspace {
+/**
+ * Create an offline workspace with one sheet and a default RTU profile.
+ * UI callers may supply the initial name from their English table-type resource.
+ * Host callers use the same default name without importing UI resources.
+ */
+export function createEmptyWorkspace(
+  initialSheetName = "HOLDING REGISTERS Sheet 1",
+): Workspace {
   const now = Date.now();
   const profile = createDefaultRtuProfile();
-  const sheet = createRegisterSheet("Sheet 1", 0);
+  const sheet = createRegisterSheet(initialSheetName, 0);
   return {
     schemaVersion: workspaceSchemaVersion,
     workspaceId: newWorkspaceId(),
@@ -557,6 +565,7 @@ export function createEmptyWorkspace(): Workspace {
     updatedAt: now,
     activeSheetId: sheet.sheetId,
     sheets: [sheet],
+    sheetNameCounters: { "holding-register": 2 },
     connectionProfiles: [profile],
     activeConnectionProfileId: profile.id,
     pollingSettings: {

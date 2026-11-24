@@ -34,7 +34,9 @@ test("collapsed sidebar pops up group submenu and switches table", async ({
 
   // 准备第二张表（展开态新建）。
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
 
   // 折叠侧边栏到 36px 窄条。
   await page
@@ -54,18 +56,18 @@ test("collapsed sidebar pops up group submenu and switches table", async ({
   // 悬停 holding-register 分组 -> 弹出子菜单列出该组表项。
   await collapsedMenu.locator(".ant-menu-submenu-title").first().hover();
   const popup = page.locator(".ant-menu-submenu-popup:visible");
-  await expect(popup).toContainText("Sheet 1");
-  await expect(popup).toContainText("Sheet 2");
+  await expect(popup).toContainText("HOLDING REGISTERS Sheet 1");
+  await expect(popup).toContainText("HOLDING REGISTERS Sheet 2");
 
-  // 点击「Sheet 1」（此时活动表为新建的 Sheet 2）切换到该表（页签栏活动表跟随）。
+  // 点击「HOLDING REGISTERS Sheet 1」（此时活动表为新建的 Sheet 2）切换到该表（页签栏活动表跟随）。
   const sheetOne = popup
-    .locator(".sheet-item", { hasText: "Sheet 1" })
+    .locator(".sheet-item", { hasText: "HOLDING REGISTERS Sheet 1" })
     .first();
   await expect(sheetOne).toBeVisible();
   await sheetOne.evaluate((el) => (el as HTMLElement).click());
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
-  ).toContainText("Sheet 1");
+  ).toContainText("HOLDING REGISTERS Sheet 1");
 
   // 全程无 console 错误。
   expect(errors).toEqual([]);

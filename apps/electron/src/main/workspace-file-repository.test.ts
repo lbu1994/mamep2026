@@ -132,7 +132,7 @@ describe("WorkspaceFileRepository", () => {
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
       expect(loaded.value.schemaVersion).toBe(workspaceSchemaVersion);
-      expect(loaded.value.sheets[0]?.name).toBe("Sheet 1");
+      expect(loaded.value.sheets[0]?.name).toBe("HOLDING REGISTERS Sheet 1");
       // 全局 readVerifySettings 已迁移删除（v1→v2）。
       expect(
         (loaded.value as unknown as { readVerifySettings?: unknown })

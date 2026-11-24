@@ -811,9 +811,9 @@ test("基础表与自定义功能码（真实端口）：FC01/FC02/FC04/FC0F + F
   await page.waitForTimeout(300);
   await expect(list).toContainText("01 66 00 03 00 01", { timeout: 5000 });
 
-  // 恢复保持寄存器表（Sheet 1）连接，避免后续「断开连接/重连」用例以自定义功能码协议重连。
+  // 恢复保持寄存器表（HOLDING REGISTERS Sheet 1）连接，避免后续「断开连接/重连」用例以自定义功能码协议重连。
   await page
-    .getByRole("tab", { name: "Sheet 1" })
+    .getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   await reconnectAsActiveSheet(page);

@@ -22,6 +22,43 @@ function firstRtuProfile(
   return profile;
 }
 
+describe("sheet name counter persistence", () => {
+  it("round-trips counters including types with no remaining sheets", () => {
+    const workspace = createEmptyWorkspace();
+    workspace.sheetNameCounters = {
+      "holding-register": 24,
+      coil: 8,
+      "vendor:table": 5,
+    };
+    const parsed = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheetNameCounters).toEqual(workspace.sheetNameCounters);
+  });
+
+  it("accepts older workspaces without counters and preserves their names", () => {
+    const workspace = createEmptyWorkspace("Sheet 7");
+    delete workspace.sheetNameCounters;
+    const parsed = parseWorkspace(workspace);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.sheetNameCounters).toEqual({});
+    expect(parsed.value.sheets[0]?.name).toBe("Sheet 7");
+  });
+
+  it.each([0, -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1, "2"])(
+    "rejects invalid next numbers: %s",
+    (counter) => {
+      expect(
+        workspaceSchema.safeParse({
+          ...createEmptyWorkspace(),
+          sheetNameCounters: { coil: counter },
+        }).success,
+      ).toBe(false);
+    },
+  );
+});
+
 describe("connection profile persistence", () => {
   it("persists port parameters and non-port settings across a round-trip", () => {
     const workspace = mutate(createEmptyWorkspace(), (w) => {

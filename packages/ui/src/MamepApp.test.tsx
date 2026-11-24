@@ -97,14 +97,14 @@ it("syncs the session address only after the active sheet value changes", async 
 describe("Sheet 名重命名编辑态隔离", () => {
   it("页签头进入编辑态时，侧边栏对应项不渲染输入框", () => {
     render(<MamepApp />);
-    expect(tabLabelText()).toBe("Sheet 1");
+    expect(tabLabelText()).toBe("HOLDING REGISTERS Sheet 1");
 
     fireEvent.doubleClick(tabLabel()!);
 
     expect(tabRenameInput()).toBeTruthy();
     expect(sidebarRenameInput()).toBeNull();
     // 侧边栏仍显示普通名称。
-    expect(sidebarItemName("Sheet 1")).toBeTruthy();
+    expect(sidebarItemName("HOLDING REGISTERS Sheet 1")).toBeTruthy();
   });
 
   // 复现测试（Bug：页签重命名输入框焦点未落位）。
@@ -133,7 +133,7 @@ describe("Sheet 名重命名编辑态隔离", () => {
     expect(tabRenameInput()).toBeNull();
     expect(tabLabelText()).toBe("Inverter A");
     expect(sidebarItemName("Inverter A")).toBeTruthy();
-    expect(sidebarItemName("Sheet 1")).toBeNull();
+    expect(sidebarItemName("HOLDING REGISTERS Sheet 1")).toBeNull();
   });
 
   it("页签头失焦提交重命名并同步到侧边栏", () => {
@@ -158,7 +158,7 @@ describe("Sheet 名重命名编辑态隔离", () => {
     fireEvent.keyDown(input, { key: "Escape" });
 
     expect(tabRenameInput()).toBeNull();
-    expect(tabLabelText()).toBe("Sheet 1");
+    expect(tabLabelText()).toBe("HOLDING REGISTERS Sheet 1");
     expect(sidebarItemName("Not Applied")).toBeNull();
   });
 
@@ -177,7 +177,7 @@ describe("Sheet 名重命名编辑态隔离", () => {
       document.querySelectorAll(".sheet-sidebar__list .sheet-item--closed")
         .length,
     ).toBe(0);
-    expect(sidebarItemName("Sheet 1")).toBeTruthy();
+    expect(sidebarItemName("HOLDING REGISTERS Sheet 1")).toBeTruthy();
   });
 });
 

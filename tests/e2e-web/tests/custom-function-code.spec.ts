@@ -105,7 +105,7 @@ test("侧边栏显示自定义功能码分组并可新建表；FC65 读 / FC66 �
 
   // FC66 写：mock 寄存器更新。
   await page
-    .getByRole("tab", { name: "Sheet 2" })
+    .getByRole("tab", { name: "Custom FC 65H/66H (example plugin) Sheet 1" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   const dataInput = parentRow(page, 0).locator('[data-register-cell="data"]');

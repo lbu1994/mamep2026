@@ -111,7 +111,11 @@ describe("moveSheetTo", () => {
     store.addSheet(); // Sheet 2
     store.addSheet(); // Sheet 3
     useAppStore.getState().moveSheetTo(firstSheetId(), 2);
-    expect(sheetNames()).toEqual(["Sheet 2", "Sheet 3", "Sheet 1"]);
+    expect(sheetNames()).toEqual([
+      "HOLDING REGISTERS Sheet 2",
+      "HOLDING REGISTERS Sheet 3",
+      "HOLDING REGISTERS Sheet 1",
+    ]);
     expect(useAppStore.getState().workspace.sheets.map((s) => s.order)).toEqual(
       [0, 1, 2],
     );
@@ -124,14 +128,20 @@ describe("moveSheetTo", () => {
     const last = sheets[sheets.length - 1];
     if (last === undefined) throw new Error("missing sheet");
     useAppStore.getState().moveSheetTo(last.sheetId, 99);
-    expect(sheetNames()).toEqual(["Sheet 1", "Sheet 2"]);
+    expect(sheetNames()).toEqual([
+      "HOLDING REGISTERS Sheet 1",
+      "HOLDING REGISTERS Sheet 2",
+    ]);
     useAppStore.getState().moveSheetTo(last.sheetId, -3);
-    expect(sheetNames()).toEqual(["Sheet 2", "Sheet 1"]);
+    expect(sheetNames()).toEqual([
+      "HOLDING REGISTERS Sheet 2",
+      "HOLDING REGISTERS Sheet 1",
+    ]);
   });
 
   it("无效 sheetId 不改变状态", () => {
     useAppStore.getState().moveSheetTo("missing" as SheetId, 0);
-    expect(sheetNames()).toEqual(["Sheet 1"]);
+    expect(sheetNames()).toEqual(["HOLDING REGISTERS Sheet 1"]);
   });
 });
 
@@ -143,9 +153,9 @@ describe("duplicateSheet", () => {
     useAppStore.getState().duplicateSheet(sourceId);
     const after = useAppStore.getState();
     expect(after.workspace.sheets.map((s) => s.name)).toEqual([
-      "Sheet 1",
-      "Sheet 1 Copy",
-      "Sheet 2",
+      "HOLDING REGISTERS Sheet 1",
+      "HOLDING REGISTERS Sheet 1 Copy",
+      "HOLDING REGISTERS Sheet 2",
     ]);
     expect(after.activeSheetId).toBe(after.workspace.sheets[1]?.sheetId);
     expect(after.workspace.activeSheetId).toBe(
@@ -274,7 +284,9 @@ describe("deleteSheet", () => {
     const first = firstSheetId();
     useAppStore.getState().deleteSheet(first);
     const after = useAppStore.getState();
-    expect(after.workspace.sheets.map((s) => s.name)).toEqual(["Sheet 2"]);
+    expect(after.workspace.sheets.map((s) => s.name)).toEqual([
+      "HOLDING REGISTERS Sheet 2",
+    ]);
     expect(after.activeSheetId).toBe(after.workspace.sheets[0]?.sheetId);
   });
 
@@ -283,7 +295,7 @@ describe("deleteSheet", () => {
     store.deleteSheet(firstSheetId());
     const after = useAppStore.getState();
     expect(after.workspace.sheets).toHaveLength(1);
-    expect(after.workspace.sheets[0]?.name).toBe("Sheet 1");
+    expect(after.workspace.sheets[0]?.name).toBe("HOLDING REGISTERS Sheet 2");
     expect(after.workspace.sheets[0]?.rows).toHaveLength(
       defaultConfig.registerTable.defaultRowCount,
     );
@@ -320,7 +332,7 @@ describe("closeOtherSheets", () => {
     useAppStore.getState().closeOtherSheets(firstSheetId());
     const after = useAppStore.getState();
     expect(after.workspace.sheets).toHaveLength(1);
-    expect(after.workspace.sheets[0]?.name).toBe("Sheet 1");
+    expect(after.workspace.sheets[0]?.name).toBe("HOLDING REGISTERS Sheet 1");
     expect(after.workspace.sheets[0]?.open).toBe(true);
     expect(after.activeSheetId).toBeNull();
     expect(after.workspace.updatedAt).toBe(before);
@@ -398,8 +410,8 @@ describe("closeSheetsToRight", () => {
     useAppStore.getState().closeSheetsToRight(last.sheetId);
     const after = useAppStore.getState();
     expect(after.workspace.sheets.map((s) => s.name)).toEqual([
-      "Sheet 1",
-      "Sheet 2",
+      "HOLDING REGISTERS Sheet 1",
+      "HOLDING REGISTERS Sheet 2",
     ]);
     expect(after.workspace.updatedAt).toBe(before);
   });
@@ -1726,11 +1738,11 @@ describe("commitCellText（Data 单元格提交校验）", () => {
       const store = useAppStore.getState();
       const before = sheetNames();
       store.addSheet();
-      expect(sheetNames()).toContain("Sheet 2");
+      expect(sheetNames()).toContain("HOLDING REGISTERS Sheet 2");
       store.undo();
       expect(sheetNames()).toEqual(before);
       store.redo();
-      expect(sheetNames()).toContain("Sheet 2");
+      expect(sheetNames()).toContain("HOLDING REGISTERS Sheet 2");
     });
 
     it("重命名表可撤销/重做", () => {
@@ -1739,7 +1751,7 @@ describe("commitCellText（Data 单元格提交校验）", () => {
       store.renameSheet(sheetId, "Renamed");
       expect(sheetNames()).toEqual(["Renamed"]);
       store.undo();
-      expect(sheetNames()).toEqual(["Sheet 1"]);
+      expect(sheetNames()).toEqual(["HOLDING REGISTERS Sheet 1"]);
       store.redo();
       expect(sheetNames()).toEqual(["Renamed"]);
     });
@@ -1749,23 +1761,23 @@ describe("commitCellText（Data 单元格提交校验）", () => {
       const sheetId = firstSheetId();
       store.addSheet();
       store.deleteSheet(sheetId);
-      expect(sheetNames()).not.toContain("Sheet 1");
+      expect(sheetNames()).not.toContain("HOLDING REGISTERS Sheet 1");
       store.undo();
-      expect(sheetNames()).toContain("Sheet 1");
+      expect(sheetNames()).toContain("HOLDING REGISTERS Sheet 1");
       store.redo();
-      expect(sheetNames()).not.toContain("Sheet 1");
+      expect(sheetNames()).not.toContain("HOLDING REGISTERS Sheet 1");
     });
 
     it("删除唯一表后撤销恢复原表并移除保底默认表", () => {
       const store = useAppStore.getState();
       const sheetId = firstSheetId();
-      expect(sheetNames()).toEqual(["Sheet 1"]);
+      expect(sheetNames()).toEqual(["HOLDING REGISTERS Sheet 1"]);
       store.deleteSheet(sheetId);
-      // 删除唯一表后 UI 保底重建默认空表。
-      expect(sheetNames()).toEqual(["Sheet 1"]);
+      // The fallback keeps the next allocated number.
+      expect(sheetNames()).toEqual(["HOLDING REGISTERS Sheet 2"]);
       store.undo();
       // 撤销后应只有被恢复的原表（默认空表被移除）；原表带默认行。
-      expect(sheetNames()).toEqual(["Sheet 1"]);
+      expect(sheetNames()).toEqual(["HOLDING REGISTERS Sheet 1"]);
       expect(store.workspace.sheets[0]?.rows.length).toBeGreaterThan(0);
     });
 
@@ -1774,11 +1786,23 @@ describe("commitCellText（Data 单元格提交校验）", () => {
       store.addSheet(); // Sheet 2
       store.addSheet(); // Sheet 3
       store.moveSheetTo(firstSheetId(), 2);
-      expect(sheetNames()).toEqual(["Sheet 2", "Sheet 3", "Sheet 1"]);
+      expect(sheetNames()).toEqual([
+        "HOLDING REGISTERS Sheet 2",
+        "HOLDING REGISTERS Sheet 3",
+        "HOLDING REGISTERS Sheet 1",
+      ]);
       store.undo();
-      expect(sheetNames()).toEqual(["Sheet 1", "Sheet 2", "Sheet 3"]);
+      expect(sheetNames()).toEqual([
+        "HOLDING REGISTERS Sheet 1",
+        "HOLDING REGISTERS Sheet 2",
+        "HOLDING REGISTERS Sheet 3",
+      ]);
       store.redo();
-      expect(sheetNames()).toEqual(["Sheet 2", "Sheet 3", "Sheet 1"]);
+      expect(sheetNames()).toEqual([
+        "HOLDING REGISTERS Sheet 2",
+        "HOLDING REGISTERS Sheet 3",
+        "HOLDING REGISTERS Sheet 1",
+      ]);
     });
 
     it("撤销历史为会话状态：setWorkspace 加载时清空", () => {

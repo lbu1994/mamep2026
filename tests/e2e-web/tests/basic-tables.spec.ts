@@ -147,7 +147,7 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
 
   // 写 0（FC0F）：mock 线圈回读为 0。
   await page
-    .getByRole("tab", { name: "Sheet 2" })
+    .getByRole("tab", { name: "COILS Sheet 1" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   const dataInput2 = parentRow(page, 0).locator('[data-register-cell="data"]');

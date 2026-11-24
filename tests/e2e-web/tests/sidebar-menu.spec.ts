@@ -31,7 +31,7 @@ test("sidebar shows workspace and register-table sections plus footer", async ({
   const sider = page.locator(".ant-layout-sider");
   await expect(sider).toContainText("Workspace");
   await expect(sider).toContainText("Tables");
-  await expect(sider).toContainText("Sheet 1");
+  await expect(sider).toContainText("HOLDING REGISTERS Sheet 1");
   // 版本信息（跟随根 package.json 版本，不断言具体版本号）。
   await expect(sider).toContainText(/Browser v\d+\.\d+\.\d+/);
 });
@@ -63,10 +63,10 @@ test("register table tab bar shows the active sheet tab", async ({ page }) => {
 
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
-  ).toContainText("Sheet 1");
+  ).toContainText("HOLDING REGISTERS Sheet 1");
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab").first(),
-  ).toContainText("Sheet 1");
+  ).toContainText("HOLDING REGISTERS Sheet 1");
 });
 
 test("sidebar context menu duplicates, moves and deletes sheets", async ({
@@ -74,10 +74,14 @@ test("sidebar context menu duplicates, moves and deletes sheets", async ({
 }) => {
   await openApp(page);
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
 
-  // 右键 "Sheet 1"：菜单包含全部五项。
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  // 右键 "HOLDING REGISTERS Sheet 1"：菜单包含全部五项。
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   const menu = page.locator(".ant-dropdown:visible");
   await expect(menu).toContainText("Rename");
   await expect(menu).toContainText("Duplicate");
@@ -91,31 +95,39 @@ test("sidebar context menu duplicates, moves and deletes sheets", async ({
   await page.keyboard.press("Escape");
 
   // Duplicate：副本插入源表之后并激活，标题栏跟随。
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Duplicate" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 1 Copy");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 1 Copy",
+  );
   await expect(page.locator("li.sheet-item--active")).toContainText(
-    "Sheet 1 Copy",
+    "HOLDING REGISTERS Sheet 1 Copy",
   );
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
-  ).toContainText("Sheet 1 Copy");
+  ).toContainText("HOLDING REGISTERS Sheet 1 Copy");
 
-  // Move Down：Sheet 1 → 第二位。
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  // Move Down：HOLDING REGISTERS Sheet 1 → 第二位。
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Move Down" })
     .evaluate((el) => (el as HTMLElement).click());
   const names = page.locator(
     ".ant-layout-sider li.sheet-item .sheet-item__name",
   );
-  await expect(names.nth(0)).toHaveText("Sheet 1 Copy");
-  await expect(names.nth(1)).toHaveText("Sheet 1");
+  await expect(names.nth(0)).toHaveText("HOLDING REGISTERS Sheet 1 Copy");
+  await expect(names.nth(1)).toHaveText("HOLDING REGISTERS Sheet 1");
 
-  // Delete "Sheet 2"：确认弹窗后删除。
-  await sidebarItem(page, "Sheet 2").click({ button: "right" });
+  // Delete "HOLDING REGISTERS Sheet 2"：确认弹窗后删除。
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 2").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Delete" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -127,7 +139,7 @@ test("sidebar context menu duplicates, moves and deletes sheets", async ({
   await expect(
     page
       .locator(".ant-layout-sider li.sheet-item")
-      .filter({ hasText: "Sheet 2" }),
+      .filter({ hasText: "HOLDING REGISTERS Sheet 2" }),
   ).toHaveCount(0);
 });
 
@@ -136,9 +148,13 @@ test("sidebar context menu shows Close Others and Close to the Right", async ({
 }) => {
   await openApp(page);
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
 
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   const menu = page.locator(".ant-dropdown:visible");
   await expect(menu).toContainText("Close Others");
   await expect(menu).toContainText("Close to the Right");
@@ -149,7 +165,9 @@ test("Close Others is disabled on a single table", async ({ page }) => {
   await openApp(page);
 
   // 单表：Close Others 与 Close to the Right 均禁用。
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   await expect(
     page.getByRole("menuitem", { name: "Close Others" }),
   ).toHaveClass(/ant-dropdown-menu-item-disabled/);
@@ -161,10 +179,14 @@ test("Close Others is disabled on a single table", async ({ page }) => {
 test("Close to the Right is disabled on the last table", async ({ page }) => {
   await openApp(page);
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
 
   // 两张表：末位表的 Close to the Right 禁用，Close Others 可用。
-  await sidebarItem(page, "Sheet 2").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 2").click({
+    button: "right",
+  });
   await expect(
     page.getByRole("menuitem", { name: "Close to the Right" }),
   ).toHaveClass(/ant-dropdown-menu-item-disabled/);
@@ -179,10 +201,14 @@ test("Close Others keeps only the target table and activates it", async ({
   await openApp(page);
   await addSheet(page);
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 3");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 3",
+  );
 
-  // 右键 "Sheet 2" → Close Others → 确认弹窗。
-  await sidebarItem(page, "Sheet 2").click({ button: "right" });
+  // 右键 "HOLDING REGISTERS Sheet 2" → Close Others → 确认弹窗。
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 2").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Close Others" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -196,15 +222,21 @@ test("Close Others keeps only the target table and activates it", async ({
   // 非破坏性：侧边栏仍保留全部表，仅目标打开且激活，其余为关闭态。
   const items = page.locator(".ant-layout-sider li.sheet-item");
   await expect(items).toHaveCount(3);
-  await expect(page.locator("li.sheet-item--active")).toContainText("Sheet 2");
+  await expect(page.locator("li.sheet-item--active")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
   await expect(
     page.locator(".ant-layout-sider li.sheet-item--closed"),
   ).toHaveCount(2);
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
-  ).toContainText("Sheet 2");
-  await expect(page.getByRole("tab", { name: "Sheet 1" })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "Sheet 3" })).toHaveCount(0);
+  ).toContainText("HOLDING REGISTERS Sheet 2");
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 3" }),
+  ).toHaveCount(0);
 });
 
 test("Close to the Right keeps left tables and activates the target", async ({
@@ -213,10 +245,14 @@ test("Close to the Right keeps left tables and activates the target", async ({
   await openApp(page);
   await addSheet(page);
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 3");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 3",
+  );
 
-  // 右键 "Sheet 2" → Close to the Right → 确认弹窗。
-  await sidebarItem(page, "Sheet 2").click({ button: "right" });
+  // 右键 "HOLDING REGISTERS Sheet 2" → Close to the Right → 确认弹窗。
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 2").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Close to the Right" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -227,22 +263,26 @@ test("Close to the Right keeps left tables and activates the target", async ({
     .locator(".ant-btn-primary")
     .evaluate((el) => (el as HTMLElement).click());
 
-  // 非破坏性：侧边栏仍保留 3 张表，Sheet 3 关闭，Sheet 1/2 打开，目标 Sheet 2 激活。
+  // 非破坏性：侧边栏仍保留 3 张表，HOLDING REGISTERS Sheet 3 关闭，HOLDING REGISTERS Sheet 1/2 打开，目标 Sheet 2 激活。
   const names = page.locator(
     ".ant-layout-sider li.sheet-item .sheet-item__name",
   );
   await expect(names).toHaveCount(3);
-  await expect(names.nth(0)).toHaveText("Sheet 1");
-  await expect(names.nth(1)).toHaveText("Sheet 2");
-  await expect(names.nth(2)).toHaveText("Sheet 3");
-  await expect(page.locator("li.sheet-item--active")).toContainText("Sheet 2");
+  await expect(names.nth(0)).toHaveText("HOLDING REGISTERS Sheet 1");
+  await expect(names.nth(1)).toHaveText("HOLDING REGISTERS Sheet 2");
+  await expect(names.nth(2)).toHaveText("HOLDING REGISTERS Sheet 3");
+  await expect(page.locator("li.sheet-item--active")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
   await expect(
     page.locator(".ant-layout-sider li.sheet-item--closed"),
   ).toHaveCount(1);
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
-  ).toContainText("Sheet 2");
-  await expect(page.getByRole("tab", { name: "Sheet 3" })).toHaveCount(0);
+  ).toContainText("HOLDING REGISTERS Sheet 2");
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 3" }),
+  ).toHaveCount(0);
 });
 
 test("Close Others confirm cancels without effect and applies on OK", async ({
@@ -251,10 +291,14 @@ test("Close Others confirm cancels without effect and applies on OK", async ({
   await openApp(page);
   await addSheet(page);
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 3");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 3",
+  );
 
   // Cancel：不生效。
-  await sidebarItem(page, "Sheet 2").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 2").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Close Others" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -267,7 +311,9 @@ test("Close Others confirm cancels without effect and applies on OK", async ({
   await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(3);
 
   // OK：生效。
-  await sidebarItem(page, "Sheet 2").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 2").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Close Others" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -283,10 +329,14 @@ test("Close Others confirm cancels without effect and applies on OK", async ({
   ).toHaveCount(2);
 });
 
-test("deleting the last sheet recreates an empty Sheet 1", async ({ page }) => {
+test("deleting the last sheet creates the next numbered empty sheet", async ({
+  page,
+}) => {
   await openApp(page);
 
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Delete" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -297,7 +347,9 @@ test("deleting the last sheet recreates an empty Sheet 1", async ({ page }) => {
     .evaluate((el) => (el as HTMLElement).click());
 
   await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(1);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 1");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
 });
 
 test("menu rename enters inline edit and updates title bar", async ({
@@ -305,7 +357,9 @@ test("menu rename enters inline edit and updates title bar", async ({
 }) => {
   await openApp(page);
 
-  await sidebarItem(page, "Sheet 1").click({ button: "right" });
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
+    button: "right",
+  });
   await page
     .getByRole("menuitem", { name: "Rename" })
     .evaluate((el) => (el as HTMLElement).click());
@@ -323,7 +377,9 @@ test("tab bar context menu opens the sheet menu", async ({ page }) => {
   await openApp(page);
 
   // 右键标签页：打开与侧栏相同的表格菜单（标题栏无三点按钮）。
-  await page.getByRole("tab", { name: "Sheet 1" }).click({ button: "right" });
+  await page
+    .getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" })
+    .click({ button: "right" });
   const menu = page.locator(".ant-dropdown:not(.ant-dropdown-hidden)");
   await expect(menu).toContainText("Rename");
   await expect(menu).toContainText("Duplicate");
@@ -338,16 +394,18 @@ test("tab bar context menu opens the sheet menu", async ({ page }) => {
     .evaluate((el) => (el as HTMLElement).click());
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
-  ).toContainText("Sheet 1 Copy");
+  ).toContainText("HOLDING REGISTERS Sheet 1 Copy");
   await expect(page.locator("li.sheet-item--active")).toContainText(
-    "Sheet 1 Copy",
+    "HOLDING REGISTERS Sheet 1 Copy",
   );
 });
 
 test("sidebar items can be reordered by drag and drop", async ({ page }) => {
   await openApp(page);
   await addSheet(page);
-  await expect(page.locator(".ant-layout-sider")).toContainText("Sheet 2");
+  await expect(page.locator(".ant-layout-sider")).toContainText(
+    "HOLDING REGISTERS Sheet 2",
+  );
 
   await page.evaluate(() => {
     const items = Array.from(
@@ -381,18 +439,17 @@ test("sidebar items can be reordered by drag and drop", async ({ page }) => {
   const names = page.locator(
     ".ant-layout-sider li.sheet-item .sheet-item__name",
   );
-  await expect(names.nth(0)).toHaveText("Sheet 2");
-  await expect(names.nth(1)).toHaveText("Sheet 1");
+  await expect(names.nth(0)).toHaveText("HOLDING REGISTERS Sheet 2");
+  await expect(names.nth(1)).toHaveText("HOLDING REGISTERS Sheet 1");
 });
 
 test("tabs add, switch and close register table sheets", async ({ page }) => {
   await openApp(page);
 
   // 每个 Sheet 一个页签，初始激活 Sheet 1。
-  await expect(page.getByRole("tab", { name: "Sheet 1" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" }),
+  ).toHaveAttribute("aria-selected", "true");
 
   // 页签栏不提供 "+" 新建入口（新建走侧边栏，避免与未来多表类型添加入口冲突）。
   await expect(
@@ -404,38 +461,41 @@ test("tabs add, switch and close register table sheets", async ({ page }) => {
     .getByRole("button", { name: "New Table", exact: true })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByRole("tab", { name: "Sheet 2" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 2" }),
+  ).toHaveAttribute("aria-selected", "true");
 
   // 点击页签切换回 Sheet 1。
   await page
-    .getByRole("tab", { name: "Sheet 1" })
+    .getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" })
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByRole("tab", { name: "Sheet 1" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" }),
+  ).toHaveAttribute("aria-selected", "true");
 
   // 页签 "×" 关闭 Sheet 2：非破坏性关闭，无确认弹窗。
   await page
-    .locator(".register-table-tabs .ant-tabs-tab", { hasText: "Sheet 2" })
+    .locator(".register-table-tabs .ant-tabs-tab", {
+      hasText: "HOLDING REGISTERS Sheet 2",
+    })
     .locator(".ant-tabs-tab-remove")
     .evaluate((el) => (el as HTMLElement).click());
-  await expect(page.getByRole("tab", { name: "Sheet 2" })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "Sheet 1" })).toHaveCount(1);
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 2" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" }),
+  ).toHaveCount(1);
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
 
   // 侧边栏仍保留 Sheet 2（关闭态），点击后重新打开并激活。
   await expect(
     page.locator(".ant-layout-sider li.sheet-item.sheet-item--closed"),
-  ).toContainText("Sheet 2");
-  await sidebarItem(page, "Sheet 2").click();
-  await expect(page.getByRole("tab", { name: "Sheet 2" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  ).toContainText("HOLDING REGISTERS Sheet 2");
+  await sidebarItem(page, "HOLDING REGISTERS Sheet 2").click();
+  await expect(
+    page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 2" }),
+  ).toHaveAttribute("aria-selected", "true");
   await expect(
     page.locator(".ant-layout-sider li.sheet-item--closed"),
   ).toHaveCount(0);
