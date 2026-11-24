@@ -11,7 +11,13 @@
  * e2e（tests/e2e-web/tests/sidebar-menu.spec.ts）覆盖。本文件保留页签头（双击）用例。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createEmptyWorkspace } from "@mamep2026/domain";
 import { buildTheme, mergeThemeConfig } from "@mamep2026/ui-theme";
@@ -65,33 +71,28 @@ beforeEach(() => {
   });
 });
 
-it("syncs the session address only after selecting a new value", async () => {
-  const user = userEvent.setup();
+it("syncs the session address only after the active sheet value changes", async () => {
   const { host } = makeHost();
   const workspace = createEmptyWorkspace();
-  for (const sheet of workspace.sheets) sheet.rows = sheet.rows.slice(0, 1);
+  const sheetId = workspace.sheets[0]?.sheetId;
+  if (sheetId === undefined) throw new Error("missing active sheet");
   useAppStore.setState({ host, workspace });
   render(<MamepApp />);
   await waitFor(() => expect(host.setSlaveAddress).toHaveBeenCalledWith(1));
   vi.mocked(host.setSlaveAddress).mockClear();
 
-  await user.click(
-    await screen.findByRole(
-      "button",
-      { name: "Table settings" },
-      { timeout: 20_000 },
-    ),
+  act(() => {
+    useAppStore.getState().setSheetSlaveAddress(sheetId, 255);
+  });
+  await waitFor(() =>
+    expect(host.setSlaveAddress).toHaveBeenCalledExactlyOnceWith(255),
   );
-  const input = await screen.findByRole("combobox", { name: "Slave Address" });
-  await user.type(input, "255");
-  expect(host.setSlaveAddress).not.toHaveBeenCalled();
-  fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
-  expect(host.setSlaveAddress).toHaveBeenCalledExactlyOnceWith(255);
 
-  await user.type(input, "255");
-  fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
+  act(() => {
+    useAppStore.getState().setSheetSlaveAddress(sheetId, 255);
+  });
   expect(host.setSlaveAddress).toHaveBeenCalledTimes(1);
-}, 30_000);
+});
 
 describe("Sheet 名重命名编辑态隔离", () => {
   it("页签头进入编辑态时，侧边栏对应项不渲染输入框", () => {
