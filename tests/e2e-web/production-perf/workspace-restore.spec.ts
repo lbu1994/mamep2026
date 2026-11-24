@@ -8,33 +8,12 @@ import {
   type BudgetCheck,
 } from "./performance-report";
 
-const ROW_COUNT = 1000;
-
-interface StoredRow {
-  rowId: string;
-  order: number;
-  name: string;
-  comment: string;
-  addressDraft: string;
-  addressValue: number | null;
-  cellText: string;
-  registerValues: number[] | null;
-  createdAt: number;
-  updatedAt: number;
-  [key: string]: unknown;
-}
-
-interface StoredWorkspace {
-  activeSheetId: string | null;
-  sheets: Array<{
-    sheetId: string;
-    rows: StoredRow[];
-    [key: string]: unknown;
-  }>;
-  [key: string]: unknown;
-}
+import { ROW_COUNT, buildRows, seedWorkspace } from "./workspace-fixture";
 
 interface ProductionPerfState {
+  eventTimingSupported: boolean;
+  longTaskTimingSupported: boolean;
+  keyPaintSamples: Array<{ startTime: number; duration: number }>;
   longTasks: Array<{ startTime: number; duration: number }>;
   interactionEvents: Array<{
     name: string;
@@ -53,108 +32,6 @@ declare global {
   interface Window {
     __mamepProductionPerf: ProductionPerfState;
   }
-}
-
-async function readWorkspace(page: Page): Promise<StoredWorkspace> {
-  const raw = await page.evaluate(
-    () =>
-      new Promise<unknown>((resolve, reject) => {
-        const open = indexedDB.open("mamep2026", 1);
-        open.onupgradeneeded = () => open.result.createObjectStore("kv");
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-          const db = open.result;
-          const request = db
-            .transaction("kv", "readonly")
-            .objectStore("kv")
-            .get("workspace");
-          request.onsuccess = () => {
-            db.close();
-            resolve(request.result);
-          };
-          request.onerror = () => {
-            db.close();
-            reject(request.error);
-          };
-        };
-      }),
-  );
-  if (typeof raw !== "object" || raw === null) {
-    throw new Error("persisted workspace missing");
-  }
-  return raw as StoredWorkspace;
-}
-
-async function writeWorkspace(
-  page: Page,
-  workspace: StoredWorkspace,
-): Promise<void> {
-  await page.evaluate(
-    (next: StoredWorkspace) =>
-      new Promise<void>((resolve, reject) => {
-        const open = indexedDB.open("mamep2026", 1);
-        open.onupgradeneeded = () => open.result.createObjectStore("kv");
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-          const db = open.result;
-          const tx = db.transaction("kv", "readwrite");
-          tx.objectStore("kv").put(next, "workspace");
-          tx.objectStore("kv").delete("workspace-backup");
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
-          };
-          tx.onerror = () => {
-            db.close();
-            reject(tx.error);
-          };
-        };
-      }),
-    workspace,
-  );
-}
-
-function buildRows(template: StoredRow, prefix: string): StoredRow[] {
-  const now = Date.now();
-  return Array.from({ length: ROW_COUNT }, (_, index) => ({
-    ...template,
-    rowId: `perf-${prefix}-${String(index + 1).padStart(4, "0")}`,
-    order: index + 1,
-    name: `Perf ${prefix} ${String(index + 1).padStart(4, "0")}`,
-    comment: "",
-    addressDraft: String(index),
-    addressValue: index,
-    cellText: (index % 0x10000).toString(16).padStart(4, "0").toUpperCase(),
-    registerValues: [index],
-    createdAt: now,
-    updatedAt: now,
-  }));
-}
-
-async function seedWorkspace(page: Page): Promise<StoredWorkspace> {
-  await page.goto("http://localhost:4173/");
-  await page.locator(".register-table-tabs [data-row-key]").first().waitFor({
-    state: "visible",
-    timeout: 15_000,
-  });
-  await expect
-    .poll(async () => {
-      try {
-        return (await readWorkspace(page)).sheets.length > 0;
-      } catch {
-        return false;
-      }
-    })
-    .toBe(true);
-  const workspace = await readWorkspace(page);
-  const sheet = workspace.sheets[0];
-  if (sheet === undefined || sheet.rows[0] === undefined) {
-    throw new Error("default workspace has no sheet/row template");
-  }
-  sheet.rows = buildRows(sheet.rows[0], "");
-  workspace.activeSheetId = sheet.sheetId;
-  await writeWorkspace(page, workspace);
-  return workspace;
 }
 
 async function settleFrames(page: Page): Promise<void> {
@@ -189,10 +66,36 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
 }, testInfo) => {
   await page.addInitScript(() => {
     const state: ProductionPerfState = {
+      eventTimingSupported: false,
+      longTaskTimingSupported: false,
+      keyPaintSamples: [],
       longTasks: [],
       interactionEvents: [],
     };
     window.__mamepProductionPerf = state;
+    // The second animation frame follows the first paint after the real key event.
+    // Keep this conservative duration when Event Timing suppresses a fast entry.
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          event.key !== "Enter" ||
+          !(event.target instanceof HTMLInputElement) ||
+          event.target.dataset.registerCell !== "data"
+        )
+          return;
+        const startTime = event.timeStamp;
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            state.keyPaintSamples.push({
+              startTime,
+              duration: performance.now() - startTime,
+            });
+          }),
+        );
+      },
+      true,
+    );
     try {
       new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
@@ -202,8 +105,10 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
           });
         }
       }).observe({ type: "longtask", buffered: true });
+      state.longTaskTimingSupported =
+        PerformanceObserver.supportedEntryTypes.includes("longtask");
     } catch {
-      // 浏览器不支持 longtask 时保留其余性能断言。
+      // The scroll probe rejects unsupported timing instead of reporting zero.
     }
     try {
       new PerformanceObserver((list) => {
@@ -220,6 +125,8 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
         buffered: true,
         durationThreshold: 16,
       } as PerformanceObserverInit & { durationThreshold: number });
+      state.eventTimingSupported =
+        PerformanceObserver.supportedEntryTypes.includes("event");
     } catch {
       // 后续 Event Timing 断言会失败，不能用 0ms 伪造支持。
     }
@@ -339,7 +246,11 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
       const close = connectionModal
         .getByRole("button", { name: /Cancel|Close/i })
         .first();
-      if (await close.isVisible()) await close.click();
+      if (await close.isVisible()) {
+        await close.click();
+        // Exclude the closing animation and focus restoration from scrolling.
+        await expect(connectionModal).toBeHidden();
+      }
     }
   }
   const hotRestoreMs = median(hotRestoreSamples);
@@ -358,6 +269,9 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
 
   const scrollMetrics = await page.evaluate(async () => {
     const state = window.__mamepProductionPerf;
+    if (!state.longTaskTimingSupported) {
+      throw new Error("Long Task timing is not supported");
+    }
     const holder = document.querySelector(
       ".register-table-tabs .ant-tabs-content-active .ant-table-tbody-virtual-holder",
     );
@@ -383,18 +297,24 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
       requestAnimationFrame(tick);
     });
     const scrollMs = performance.now() - started;
-    await new Promise<void>((resolve) => {
-      let previousCount = -1;
+    await new Promise<void>((resolve, reject) => {
+      const deadline = started + 3000;
       let quietFrames = 0;
       const tick = (): void => {
-        if (state.longTasks.length === previousCount) {
+        // Include every deferred control upgrade, not only the first row paint.
+        if (
+          holder.querySelector(".register-table__virtual-placeholder") === null
+        ) {
           quietFrames += 1;
         } else {
-          previousCount = state.longTasks.length;
           quietFrames = 0;
         }
         if (quietFrames >= 2) {
           resolve();
+          return;
+        }
+        if (performance.now() > deadline) {
+          reject(new Error("scroll controls did not settle"));
           return;
         }
         requestAnimationFrame(tick);
@@ -403,6 +323,11 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
     });
     return {
       scrollMs,
+      controlsReadyMs: performance.now() - started,
+      longTasks: state.longTasks.map((entry) => ({
+        startMs: entry.startTime - started,
+        durationMs: entry.duration,
+      })),
       longTaskMaxMs: Math.max(
         0,
         ...state.longTasks.map((entry) => entry.duration),
@@ -411,6 +336,10 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
   });
 
   const settingsStart = await interactionMark(page);
+  await testInfo.attach("scroll-timings.json", {
+    body: JSON.stringify(scrollMetrics),
+    contentType: "application/json",
+  });
   await page
     .locator(".mamep-header")
     .getByRole("button", { name: /^Settings$/ })
@@ -427,6 +356,8 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
   await expect(settings.locator(".ant-drawer-content-wrapper")).toBeHidden();
 
   const cellEditDurations: number[] = [];
+  const cellEditEventSamples: Array<number | null> = [];
+  const cellEditPaintSamples: number[] = [];
   const activeRow = page
     .locator(".register-table-tabs .ant-tabs-content-active")
     .locator('[data-row-key="perf--0001"]');
@@ -448,11 +379,25 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
       value,
     );
     const durations = await eventDurationsSince(page, editStart);
-    const eventDuration = Math.max(0, ...durations);
-    if (eventDuration === 0) {
-      throw new Error(`cell edit ${index + 1}: no Event Timing entry`);
-    }
-    cellEditDurations.push(eventDuration);
+    const eventDuration = durations.length > 0 ? Math.max(...durations) : null;
+    const paintDuration = await page.evaluate((start) => {
+      const state = window.__mamepProductionPerf;
+      if (!state.eventTimingSupported)
+        throw new Error("Event Timing is unavailable");
+      const sample = state.keyPaintSamples.find(
+        (entry) => entry.startTime >= start,
+      );
+      if (sample === undefined)
+        throw new Error("Real Enter-to-paint sample missing");
+      return sample.duration;
+    }, editStart);
+    expect(
+      paintDuration,
+      `cell edit ${index + 1}: measured paint duration`,
+    ).toBeGreaterThan(0);
+    cellEditEventSamples.push(eventDuration);
+    cellEditPaintSamples.push(paintDuration);
+    cellEditDurations.push(Math.max(eventDuration ?? 0, paintDuration));
   }
 
   await page
@@ -548,15 +493,19 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
     startupLongTaskMaxMs,
     firstScreen,
     scrollJumpMs: scrollMetrics.scrollMs,
+    scrollControlsReadyMs: scrollMetrics.controlsReadyMs,
     scrollLongTaskMaxMs: scrollMetrics.longTaskMaxMs,
+    scrollLongTasks: scrollMetrics.longTasks,
     settings: {
       firstOpenWallMs: settingsWallMs,
       eventTimingMs: settingsEventMs,
       eventSampleCount: settingsEventDurations.length,
     },
     cellEdit: {
-      eventTimingSamplesMs: cellEditDurations,
-      eventTimingMedianMs: cellEditMedianMs,
+      eventTimingSamplesMs: cellEditEventSamples,
+      keyToPaintUpperBoundSamplesMs: cellEditPaintSamples,
+      budgetSamplesMs: cellEditDurations,
+      responseMedianMs: cellEditMedianMs,
     },
     import: {
       parseEventTimingMs: importParseEventMs,
@@ -662,7 +611,8 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
       ...metrics,
       inpApprox: {
         valueMs: interactionApproxInpMs,
-        method: "max of measured Event Timing durations",
+        method:
+          "Event Timing with measured Enter-to-paint upper bounds for cell edits",
         isFieldData: false,
       },
     },
@@ -670,6 +620,7 @@ test("1000 行恢复、导入、滚动与编辑达到生产性能预算", async 
     notes: [
       "测试工作区由本地确定性构造的 1000 行配置组成，不包含设备报文或真实用户工作区。",
       "INP 为 Playwright 实验室 Event Timing 近似值，不是字段数据。",
+      "Cell edits also measure real Enter-to-paint upper bounds. The budget uses the larger measured duration; null Event Timing samples are never treated as zero.",
     ],
   });
 });

@@ -36,6 +36,36 @@
 
 > Android 端：`build:android`（web `--mode android` → `cap sync` → `gradlew assembleDebug`，需 JDK ≤24，详见 `apps/android/README.md`）与 `test:e2e:android`（真机 TCP e2e，需 USB 调试 + 解锁屏幕，**不进 `test:all`**）；不提供 `dev:android`。
 
+### 寄存器表格专项性能检查
+
+```powershell
+pnpm --filter @mamep2026/e2e-web test:perf:production workspace-restore.spec.ts scroll-visual.spec.ts
+pnpm --filter @mamep2026/e2e-web exec playwright test tests/table-scroll-flicker.spec.ts
+```
+
+生产计时测试测量目标行首次渲染的耗时，并持续采集长任务，直到所有延迟渲染的控件就绪。
+滚动计时在启动对话框关闭后开始，现有时间预算保持不变。
+使用 `--repeat-each 3` 可保留三次独立采样，包括失败样本。汇总报告包含全部样本。
+`scroll-timings.json` 记录从滚动开始到控件恢复完成期间的长任务起始时间和持续时间。
+
+计时测试关闭 Playwright trace 录制。`retain-on-failure` 仍会录制每次运行，增加截图和
+DOM 快照工作，详见
+[Playwright 录制说明](https://playwright.dev/docs/best-practices#debugging-on-ci)。
+视觉测试保留 `retain-on-failure`，不判定时间预算。诊断时可使用 `--trace on` 运行计时测试；
+比较测量结果前，先核对报告中记录的 trace 模式。计时报告还会保留观测到的全部滚动长任务。
+
+独立的视觉测试逐帧采集控件恢复过程，以稳定后的行作为参考，比较行高、文字和图标位置、
+控件尺寸与位置、颜色、边框及阴影。场景覆盖 1000 行、上下两个滚动方向、英文浅色与中文
+深色布局，以及 125% CSS 缩放。CSS 缩放不等同于真实浏览器缩放测试。
+逐帧 JSON 文件和稳定后的截图保存在 Playwright 输出目录中。读取布局会增加采样开销，
+因此几何信息采样与性能计时分开执行。
+
+[Event Timing](https://www.w3.org/TR/event-timing/) 不会上报低于 16 ms 最小上报阈值的条目。
+单元格编辑报告将缺失条目保留为 `null`，并通过第二次动画帧回调，实测从按下 Enter 到绘制
+完成的耗时上界。100 ms 门槛采用两种实测值中的较大值。浏览器不支持 Event Timing 或
+缺少真实按键样本时，测试仍然失败。这些浏览器检查不能证明 Electron、VSCode、Android
+或真实硬件的性能。
+
 ## 环境要点与坑
 
 - 包管理 **pnpm 11**；原生依赖构建白名单在 `pnpm-workspace.yaml` 的 `allowBuilds`。pnpm 会自动往该文件追加占位键，修改时必须检查 YAML 键是否重复。

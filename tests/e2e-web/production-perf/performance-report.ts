@@ -109,10 +109,13 @@ export async function finishPerformanceReport(
   const report = {
     schemaVersion: 1,
     runId: performanceRunId(),
+    repeatEachIndex: testInfo.repeatEachIndex,
+    retry: testInfo.retry,
     generatedAt: new Date().toISOString(),
     environment: baselineEnvironment({
       project: testInfo.project.name,
       browser: "Microsoft Edge",
+      trace: testInfo.project.use.trace ?? "off",
     }),
     status: payload.budgetChecks.every((check) => check.passed)
       ? "passed"
@@ -121,9 +124,14 @@ export async function finishPerformanceReport(
   };
   const directory = performanceReportDirectory();
   mkdirSync(directory, { recursive: true });
+  // Keep every repeated sample, including failures, in the aggregate report.
+  const sampleSuffix =
+    testInfo.repeatEachIndex > 0 || testInfo.retry > 0
+      ? `-sample-${testInfo.repeatEachIndex}-retry-${testInfo.retry}`
+      : "";
   const file = path.join(
     directory,
-    `${REPORT_PREFIX}${performanceRunId()}-${slug(payload.name)}.json`,
+    `${REPORT_PREFIX}${performanceRunId()}-${slug(payload.name)}${sampleSuffix}.json`,
   );
   writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
   console.log(`[web-performance:${payload.name}] ${JSON.stringify(report)}`);

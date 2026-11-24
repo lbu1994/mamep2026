@@ -995,7 +995,61 @@ body {
 }
 
 /* 行级 READ/WRITE 使用默认描边按钮，主色只留给批量操作与当前键盘焦点。 */
-.register-table__row-action:focus-visible {
+/* Row buttons share native markup during deferred and active rendering.
+   Theme tokens preserve the compact control geometry without per-cell style hooks. */
+.register-table__row-action,
+.register-table__drag-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 9px;
+  gap: 4px;
+  font-family: var(--mamep-font-ui);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: normal;
+  white-space: nowrap;
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border);
+  border-radius: 4px;
+  box-shadow: var(--ant-button-default-shadow, 0 2px 0 rgb(0 0 0 / 2%));
+  cursor: pointer;
+}
+
+.register-table__row-action:disabled {
+  color: var(--ant-color-text-disabled);
+  background: var(--ant-color-bg-container-disabled);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.register-table__row-action:not(:disabled):hover {
+  color: var(--ant-color-primary-hover);
+  border-color: var(--ant-color-primary-hover);
+}
+
+.register-table__row-action:not(:disabled):active {
+  color: var(--ant-color-primary-active);
+  border-color: var(--ant-color-primary-active);
+}
+
+.register-table__drag-button {
+  width: 24px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.register-table__drag-button:hover {
+  background: var(--ant-color-bg-text-hover);
+}
+
+.register-table__row-action:focus-visible,
+.register-table__drag-button:focus-visible {
   outline: 2px solid var(--mamep-focus-ring);
   outline-offset: 1px;
 }
@@ -1377,6 +1431,18 @@ body {
   --register-table-wp-track: var(--ant-color-fill-secondary);
 }
 
+.register-table__wp-hint {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.register-table__wp-hint-anchor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .register-table__wp[data-polling-state="waiting"] {
   --register-table-wp-track: var(--ant-color-primary);
 }
@@ -1389,10 +1455,63 @@ body {
   --register-table-wp-track: var(--ant-color-error);
 }
 
-.register-table__wp[data-polling-state] .ant-switch,
-.register-table__wp[data-polling-state]
-  .ant-switch:hover:not(.ant-switch-disabled) {
+.register-table__wp-switch {
+  position: relative;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 28px;
+  min-width: 28px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 100px;
   background-color: var(--register-table-wp-track);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.register-table__wp-switch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ant-color-white, #fff);
+  box-shadow: 0 2px 4px 0 rgb(0 35 11 / 20%);
+  transition: inset-inline-start var(--ant-motion-duration-mid, 0.2s)
+    ease-in-out;
+}
+
+.register-table__wp-switch[aria-checked="true"]::before {
+  inset-inline-start: 14px;
+}
+
+.register-table__wp-switch:disabled {
+  cursor: not-allowed;
+  opacity: var(--ant-opacity-loading, 0.65);
+}
+
+.register-table__wp-switch:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .register-table__wp-switch::before {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .register-table__wp-switch {
+    outline: 1px solid ButtonText;
+  }
+
+  .register-table__wp-switch::before {
+    background: ButtonText;
+  }
 }
 
 .register-table__wp-indicator {
@@ -1612,6 +1731,8 @@ body {
    内容高度；否则占位/正式控件切换时的 1px 行盒差异会被虚拟列表放大成滚动抖动。 */
 .register-table-tabs .ant-table-tbody-virtual-holder .ant-table-row {
   height: 29px;
+  /* Fixed row geometry isolates control layout from neighboring virtual rows. */
+  contain: layout style;
 }
 
 .register-table-tabs .ant-table-tbody-virtual-holder .ant-table-cell {

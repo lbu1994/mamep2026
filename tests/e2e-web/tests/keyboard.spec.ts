@@ -111,7 +111,7 @@ test("↑/↓ 移动选中行，Alt+P 切换选中行轮询", async ({ page }) =
   await expect(rowCheckbox(page, 1)).toBeChecked();
   await expect(rowCheckbox(page, 0)).not.toBeChecked();
   // Alt+P：切换选中行（第 2 行）的 WP 轮询开关。
-  const wpSwitch = row(page, 1).locator(".ant-switch");
+  const wpSwitch = row(page, 1).locator(".register-table__wp-switch");
   const before = await wpSwitch.getAttribute("aria-checked");
   await page.keyboard.press("Alt+p");
   await expect(wpSwitch).toHaveAttribute(

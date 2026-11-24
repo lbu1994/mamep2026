@@ -156,6 +156,17 @@ const Select = lazy(
 ) as unknown as DeferredSelectComponent;
 const MobileNativeSelectContext = createContext(false);
 
+type TableTranslation = Pick<ReturnType<typeof useTranslation>, "t" | "i18n">;
+const TableTranslationContext = createContext<TableTranslation | null>(null);
+
+/** Share one language subscription across the virtual table's cells. */
+function useTableTranslation(): TableTranslation {
+  const translation = useContext(TableTranslationContext);
+  if (translation === null)
+    throw new Error("Register table translation provider missing");
+  return translation;
+}
+
 interface DeferredCellRenderStore {
   getSnapshot(): DeferredCellRenderSnapshot;
   subscribe(listener: () => void): () => void;
@@ -182,8 +193,10 @@ function createDeferredCellRenderStore(): DeferredCellRenderStore {
   let pendingNotifications: Array<() => void> = [];
   const notifyInBatches = (generation: number): void => {
     if (generation !== notifyGeneration) return;
-    const batch = pendingNotifications.splice(0, 4);
-    for (const listener of batch) listener();
+    const batch = pendingNotifications.splice(0, 1);
+    for (const listener of batch) {
+      if (listeners.has(listener)) listener();
+    }
     if (pendingNotifications.length > 0) {
       setTimeout(() => notifyInBatches(generation), 0);
     }
@@ -205,8 +218,7 @@ function createDeferredCellRenderStore(): DeferredCellRenderStore {
         for (const listener of listeners) listener();
         return;
       }
-      // 恢复真实控件时把订阅者分批唤醒：每批只升级少量单元格，避免“通知所有单元格”
-      // 本身形成一个超过单帧预算的同步 React 提交。
+      // Notify one row per task so restoring controls does not commit the full window at once.
       notifyGeneration += 1;
       pendingNotifications = [...listeners];
       setTimeout(() => notifyInBatches(notifyGeneration), 0);
@@ -226,8 +238,8 @@ function createDeferredCellRenderStore(): DeferredCellRenderStore {
         for (const listener of listeners) listener();
         return;
       }
-      // 滚动停下时只唤醒新挂载的占位单元格；已有真实控件的 settledVersion 不变，
-      // 因此不会在停止滚动时整窗切换样式。
+      // Ready rows return a stable snapshot and ignore this notification.
+      // New rows restore all their cells together after scrolling stops.
       notifyGeneration += 1;
       pendingNotifications = [...listeners];
       setTimeout(() => notifyInBatches(notifyGeneration), 0);
@@ -247,15 +259,6 @@ const fallbackDeferredCellRenderStore = createDeferredCellRenderStore();
 function useDeferredCellRenderStore(): DeferredCellRenderStore {
   return (
     useContext(DeferredCellRenderContext) ?? fallbackDeferredCellRenderStore
-  );
-}
-
-function useDeferredCellRenderSnapshot(): DeferredCellRenderSnapshot {
-  const store = useDeferredCellRenderStore();
-  return useSyncExternalStore(
-    store.subscribe,
-    store.getSnapshot,
-    store.getSnapshot,
   );
 }
 
@@ -290,26 +293,49 @@ function scatterDelayMs(key: string): number {
   return (Math.abs(hash) % 192) * 2;
 }
 
-/**
- * 工作区导入替换期间延迟所有高成本控件；滚动期间仅新进入虚拟窗口的行使用轻量占位。
- * 已挂载控件不因开始/停止滚动切换样式，停止后新行再按行列错峰升级。
- */
-function useDeferredCellPlaceholder(key: string): boolean {
-  const { deferred, scrolling, version } = useDeferredCellRenderSnapshot();
-  const [settledCell, setSettledCell] = useState(() => ({
-    key,
-    version: deferred || scrolling ? -1 : version,
-  }));
-  const settled = settledCell.key === key && settledCell.version === version;
+const DeferredRowContext = createContext(false);
+
+/** Subscribe once per row so its cells enter the interactive state together. */
+function useDeferredRowPlaceholder(key: string): boolean {
+  const store = useDeferredCellRenderStore();
+  const [settledRow, setSettledRow] = useState(() => {
+    const { deferred, scrolling, version } = store.getSnapshot();
+    return { key, version: deferred || scrolling ? -1 : version };
+  });
+  const getPendingSnapshot = useCallback(() => {
+    const snapshot = store.getSnapshot();
+    // Ready rows ignore scroll notifications; an import version still invalidates them.
+    return !snapshot.deferred &&
+      settledRow.key === key &&
+      settledRow.version === snapshot.version
+      ? null
+      : snapshot;
+  }, [key, settledRow, store]);
+  const pending = useSyncExternalStore(
+    store.subscribe,
+    getPendingSnapshot,
+    getPendingSnapshot,
+  );
   useEffect(() => {
-    if (deferred || scrolling || settled) return;
-    const timer = setTimeout(
-      () => setSettledCell({ key, version }),
-      scatterDelayMs(key),
-    );
+    if (pending === null || pending.deferred || pending.scrolling) return;
+    const timer = setTimeout(() => {
+      const current = store.getSnapshot();
+      // A new wheel event or import can supersede this scheduled upgrade.
+      if (
+        current.deferred ||
+        current.scrolling ||
+        current.version !== pending.version
+      )
+        return;
+      setSettledRow({ key, version: pending.version });
+    }, scatterDelayMs(key));
     return () => clearTimeout(timer);
-  }, [key, deferred, scrolling, settled, version]);
-  return deferred || !settled;
+  }, [key, pending, store]);
+  return pending !== null;
+}
+
+function useDeferredCellPlaceholder(): boolean {
+  return useContext(DeferredRowContext);
 }
 
 /** 工作区导入替换及滚动窗口扩充期间的轻量单元格占位。 */
@@ -727,7 +753,7 @@ interface TmCellProps {
 }
 
 const TmCell = memo(function TmCell(props: TmCellProps) {
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:tm`);
+  const placeholder = useDeferredCellPlaceholder();
   return placeholder ? (
     <DeferredCellPlaceholder className="register-table__virtual-placeholder--checkbox">
       <Checkbox
@@ -749,7 +775,7 @@ function TmControl({
   dataType,
   registerCount,
 }: TmCellProps): React.ReactNode {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const updateRow = useAppStore((s) => s.updateRow);
   const openTraceWindow = useAppStore((s) => s.openTraceWindow);
   const closeTraceWindow = useAppStore((s) => s.closeTraceWindow);
@@ -797,7 +823,7 @@ interface NameCellProps {
 }
 
 const NameCell = memo(function NameCell(props: NameCellProps) {
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:name`);
+  const placeholder = useDeferredCellPlaceholder();
   return placeholder ? (
     <DeferredCellPlaceholder className="register-table__virtual-placeholder--text">
       <span className="register-table__editable-cell-value-wrap__text">
@@ -835,7 +861,7 @@ interface RegisterCellProps {
 }
 
 const RegisterCell = memo(function RegisterCell(props: RegisterCellProps) {
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:address`);
+  const placeholder = useDeferredCellPlaceholder();
   return placeholder ? (
     <DeferredCellPlaceholder
       className={`register-table__virtual-placeholder--text${
@@ -859,7 +885,7 @@ function RegisterControl({
   ariaLabel,
   error,
 }: RegisterCellProps): React.ReactNode {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTableTranslation();
   const commitRowAddress = useAppStore((s) => s.commitRowAddress);
   const errorTip =
     error !== undefined
@@ -898,9 +924,8 @@ const WpCell = memo(function WpCell(props: WpCellProps) {
     isCommunicationAvailable(s.connectionState),
   );
   const pollingOutcome = useAppStore((s) => s.pollingOutcomes[props.rowId]);
-  // WP 开关为廉价完整控件（Switch + 状态图标），滚动期也直接渲染：
-  // 占位↔完整控件交换会重建节点并重置内部状态（如等待态旋转动画相位），
-  // 造成可见抖动，而占位本身并不节省 Switch 挂载成本。
+  // Keep the native switch and status icon mounted throughout scrolling.
+  // Replacing them would reset focus and the waiting indicator's animation.
   return (
     <WpControl
       {...props}
@@ -915,6 +940,31 @@ interface WpControlProps extends WpCellProps {
   pollingOutcome: "success" | "failure" | undefined;
 }
 
+/** Mount tooltip positioning only while the user points at the polling control. */
+function PollingTooltip({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}): React.ReactNode {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className="register-table__wp-hint"
+      onPointerEnter={() => setOpen(true)}
+      onPointerLeave={() => setOpen(false)}
+    >
+      {children}
+      {open ? (
+        <Tooltip title={title} open trigger={[]}>
+          <span className="register-table__wp-hint-anchor" aria-hidden />
+        </Tooltip>
+      ) : null}
+    </span>
+  );
+}
+
 function WpControl({
   rowId,
   rowNumber,
@@ -925,7 +975,7 @@ function WpControl({
   communicationAvailable,
   pollingOutcome,
 }: WpControlProps): React.ReactNode {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTableTranslation();
   const statusId = useId();
   const localReasonId = useId();
   const failure = useAppStore((s) => s.rowResults[rowId]);
@@ -970,10 +1020,11 @@ function WpControl({
     reason ?? (pollingState === "off" ? t("table.wpHint") : statusLabel);
   return (
     <>
-      <Tooltip title={tooltipTitle}>
+      <PollingTooltip title={tooltipTitle}>
         <span className="register-table__wp" data-polling-state={pollingState}>
-          <Switch
-            size="small"
+          <button
+            type="button"
+            role="switch"
             className="register-table__wp-switch"
             aria-label={rowControlAriaLabel(
               t,
@@ -981,10 +1032,16 @@ function WpControl({
               rowNumber,
               addressDraft,
             )}
-            checked={pollingEnabled}
+            aria-checked={pollingEnabled}
             disabled={disabled}
             aria-describedby={describedBy}
-            onChange={(checked) => setPollingEnabled(rowId, checked)}
+            onClick={() => setPollingEnabled(rowId, !pollingEnabled)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                event.preventDefault();
+                setPollingEnabled(rowId, event.key === "ArrowRight");
+              }
+            }}
           />
           {pollingState === "waiting" ||
           pollingState === "success" ||
@@ -992,7 +1049,7 @@ function WpControl({
             <WpStatusIndicator state={pollingState} />
           ) : null}
         </span>
-      </Tooltip>
+      </PollingTooltip>
       <span id={statusId} className="register-table__sr-only">
         {statusLabel}
       </span>
@@ -1010,11 +1067,7 @@ function WpStatusIndicator({
 }: {
   state: WpVisualState;
 }): React.ReactNode {
-  if (
-    state !== "waiting" &&
-    state !== "success" &&
-    state !== "failure"
-  ) {
+  if (state !== "waiting" && state !== "success" && state !== "failure") {
     return null;
   }
   return (
@@ -1044,16 +1097,15 @@ interface ReadCellProps {
 }
 
 const ReadCell = memo(function ReadCell(props: ReadCellProps) {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const communicationAvailable = useAppStore((s) =>
     isCommunicationAvailable(s.connectionState),
   );
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:read`);
+  const placeholder = useDeferredCellPlaceholder();
   return placeholder ? (
     <DeferredCellPlaceholder className="register-table__virtual-placeholder--button">
-      <Button
-        size="small"
-        type="default"
+      <button
+        type="button"
         className="register-table__row-action register-table__row-action--read"
         disabled={
           !communicationAvailable || !props.hasAddress || !props.typeCountValid
@@ -1061,7 +1113,7 @@ const ReadCell = memo(function ReadCell(props: ReadCellProps) {
         tabIndex={-1}
       >
         {t("table.read")}
-      </Button>
+      </button>
     </DeferredCellPlaceholder>
   ) : (
     <ReadControl {...props} communicationAvailable={communicationAvailable} />
@@ -1081,7 +1133,7 @@ function ReadControl({
   communicationReasonId,
   communicationAvailable,
 }: ReadControlProps): React.ReactNode {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const localReasonId = useId();
   const host = useAppStore((s) => s.host);
   const updateRow = useAppStore((s) => s.updateRow);
@@ -1112,9 +1164,8 @@ function ReadControl({
     void readRowById(host, rowId, { updateRow, recordManualResult });
   };
   const button = (
-    <Button
-      size="small"
-      type="default"
+    <button
+      type="button"
       className="register-table__row-action register-table__row-action--read"
       disabled={disabled}
       aria-label={rowControlAriaLabel(
@@ -1127,7 +1178,7 @@ function ReadControl({
       onClick={handleRead}
     >
       {t("table.read")}
-    </Button>
+    </button>
   );
   // 禁用元素不触发 Tooltip，需包一层 span；文本原因同时供 aria-describedby 读取。
   return (
@@ -1162,9 +1213,15 @@ const DataCell = memo(function DataCell(props: DataCellProps) {
   const failure = useAppStore((s) => s.rowResults[props.rowId]);
   const dirty = useAppStore((s) => s.rowDirty[props.rowId] ?? false);
   const success = useAppStore((s) => s.rowSuccess[props.rowId]);
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:data`);
+  const placeholder = useDeferredCellPlaceholder();
   const status =
-    failure !== undefined ? "error" : dirty ? "dirty" : success ? "success" : null;
+    failure !== undefined
+      ? "error"
+      : dirty
+        ? "dirty"
+        : success
+          ? "success"
+          : null;
   return placeholder ? (
     <DeferredCellPlaceholder
       className={`register-table__virtual-placeholder--text${
@@ -1205,7 +1262,7 @@ function DataControl({
   dirty,
   success,
 }: DataControlProps): React.ReactNode {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTableTranslation();
   const commitCellText = useAppStore((s) => s.commitCellText);
   // 显示优先级：失败态 > 编辑完成态 > 成功态（§row-result）。
   const dot =
@@ -1253,7 +1310,7 @@ function RowStatusDot({
   kind?: "read" | "write";
   failure?: { messageKey: string; detail: string | null };
 }): React.ReactNode {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTableTranslation();
   let tip: string;
   if (status === "error") {
     // 失败态：承载原因（§20 简短原因），messageKey 不存在时回退显示原文。
@@ -1280,6 +1337,7 @@ function RowStatusDot({
 
 interface WriteCellProps {
   sheetId: SheetId;
+  writable: boolean;
   rowId: RowId;
   rowNumber: number;
   addressDraft: string;
@@ -1290,26 +1348,26 @@ interface WriteCellProps {
 }
 
 const WriteCell = memo(function WriteCell(props: WriteCellProps) {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const communicationAvailable = useAppStore((s) =>
     isCommunicationAvailable(s.connectionState),
   );
-  const placeholder = useDeferredCellPlaceholder(
-    `${props.sheetId}:${props.rowId}:write`,
-  );
+  const placeholder = useDeferredCellPlaceholder();
   return placeholder ? (
     <DeferredCellPlaceholder className="register-table__virtual-placeholder--button">
-      <Button
-        size="small"
-        type="default"
+      <button
+        type="button"
         className="register-table__row-action register-table__row-action--write"
         disabled={
-          !communicationAvailable || !props.hasAddress || !props.typeCountValid
+          !communicationAvailable ||
+          !props.hasAddress ||
+          !props.typeCountValid ||
+          !props.writable
         }
         tabIndex={-1}
       >
         {t("table.write")}
-      </Button>
+      </button>
     </DeferredCellPlaceholder>
   ) : (
     <WriteControl {...props} communicationAvailable={communicationAvailable} />
@@ -1322,6 +1380,7 @@ interface WriteControlProps extends WriteCellProps {
 
 function WriteControl({
   sheetId,
+  writable,
   rowId,
   rowNumber,
   addressDraft,
@@ -1330,26 +1389,20 @@ function WriteControl({
   communicationReasonId,
   communicationAvailable,
 }: WriteControlProps): React.ReactNode {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const localReasonId = useId();
   const host = useAppStore((s) => s.host);
   const appendMessage = useAppStore((s) => s.appendMessage);
   const recordManualResult = useAppStore((s) => s.recordManualResult);
   const updateRow = useAppStore((s) => s.updateRow);
-  // 只读表：discrete-input/input-register 按表类型禁用写（WriteCell 守卫）。
-  const sheetType = useAppStore(
-    (s) =>
-      s.workspace.sheets.find((sh) => sh.sheetId === sheetId)?.type ??
-      "holding-register",
-  );
-  const readOnly = !sheetTypeWritable(sheetType);
+  // Use the same table capability in deferred and active button states.
   const reason = !communicationAvailable
     ? t("table.connectBeforeCommunication")
     : !hasAddress
       ? t("table.emptyAddressTooltip")
       : !typeCountValid
         ? t("table.typeCountMismatchTooltip")
-        : readOnly
+        : !writable
           ? t("table.readOnlyTable")
           : null;
   const disabled = reason !== null;
@@ -1377,9 +1430,8 @@ function WriteControl({
     });
   };
   const button = (
-    <Button
-      size="small"
-      type="default"
+    <button
+      type="button"
       className="register-table__row-action register-table__row-action--write"
       disabled={disabled}
       aria-label={rowControlAriaLabel(
@@ -1392,7 +1444,7 @@ function WriteControl({
       onClick={handleWrite}
     >
       {t("table.write")}
-    </Button>
+    </button>
   );
   return (
     <>
@@ -1416,9 +1468,9 @@ interface TypeCellProps {
 }
 
 const TypeCell = memo(function TypeCell(props: TypeCellProps) {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const useNativeSelect = useContext(MobileNativeSelectContext);
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:type`);
+  const placeholder = useDeferredCellPlaceholder();
   const labelKey = dataTypeLabelKey(props.dataType);
   const label = labelKey === null ? String(props.dataType) : t(labelKey);
   // 移动端渲染原生 select（廉价控件），无需滚动占位：自绘 span 与原生 select
@@ -1448,7 +1500,7 @@ function TypeControl({
   dataType,
   error,
 }: TypeCellProps): React.ReactNode {
-  const { t, i18n } = useTranslation();
+  const { t, i18n } = useTableTranslation();
   const setRowDataType = useAppStore((s) => s.setRowDataType);
   const host = useAppStore((s) => s.host);
   // 插件数据类型：贡献点声明（id/titleKey）+ 已注册运行时（resolver.list）。
@@ -1524,7 +1576,7 @@ interface ScaleCellProps {
 
 const ScaleCell = memo(function ScaleCell(props: ScaleCellProps) {
   const useNativeSelect = useContext(MobileNativeSelectContext);
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:scale`);
+  const placeholder = useDeferredCellPlaceholder();
   // 移动端渲染原生 select（廉价控件），无需滚动占位（同 TypeCell）。
   return placeholder && !useNativeSelect ? (
     <DeferredCellPlaceholder
@@ -1547,7 +1599,7 @@ const ScaleCell = memo(function ScaleCell(props: ScaleCellProps) {
 });
 
 function ScaleControl({ rowId, dataType }: ScaleCellProps): React.ReactNode {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const setRowDataType = useAppStore((s) => s.setRowDataType);
   const radix = dataTypeToRadix(dataType);
   const scale = dataTypeToScale(dataType);
@@ -1582,7 +1634,7 @@ interface CommentCellProps {
 }
 
 const CommentCell = memo(function CommentCell(props: CommentCellProps) {
-  const placeholder = useDeferredCellPlaceholder(`${props.rowId}:comment`);
+  const placeholder = useDeferredCellPlaceholder();
   return placeholder ? (
     <DeferredCellPlaceholder className="register-table__virtual-placeholder--text">
       <span className="register-table__editable-cell-value-wrap__text">
@@ -1687,7 +1739,7 @@ const ChildTypeCell = memo(function ChildTypeCell({
 }: {
   row: VirtualChildRow;
 }) {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const setChildMeta = useAppStore((s) => s.setChildMeta);
   const radix = dataTypeToRadix(row.dataType);
   const scale = dataTypeToScale(row.dataType);
@@ -1719,7 +1771,7 @@ const ChildScaleCell = memo(function ChildScaleCell({
 }: {
   row: VirtualChildRow;
 }) {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   const setChildMeta = useAppStore((s) => s.setChildMeta);
   const radix = dataTypeToRadix(row.dataType);
   const scale = dataTypeToScale(row.dataType);
@@ -1824,7 +1876,7 @@ const BitRegisterCell = memo(function BitRegisterCell({
   row: VirtualBitRow;
   radix: RegisterRadix;
 }) {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   return (
     <span
       className="register-table__cell--mono"
@@ -1924,22 +1976,21 @@ interface RowContextProps {
 const RowContext = createContext<RowContextProps>({});
 
 const DragHandle = memo(function DragHandle({
-  rowId,
   ariaLabel,
 }: {
-  rowId: RowId;
   ariaLabel: string;
 }) {
-  const placeholder = useDeferredCellPlaceholder(`${rowId}:drag`);
+  const placeholder = useDeferredCellPlaceholder();
   return placeholder ? (
     <DeferredCellPlaceholder className="register-table__virtual-placeholder--icon">
-      <Button
-        type="text"
-        size="small"
-        icon={<HolderOutlined />}
+      <button
+        type="button"
+        className="register-table__drag-button"
         style={{ cursor: "move" }}
         tabIndex={-1}
-      />
+      >
+        <HolderOutlined />
+      </button>
     </DeferredCellPlaceholder>
   ) : (
     <DragHandleControl ariaLabel={ariaLabel} />
@@ -1953,15 +2004,16 @@ function DragHandleControl({
 }): React.ReactNode {
   const { setActivatorNodeRef, listeners } = useContext(RowContext);
   return (
-    <Button
-      type="text"
-      size="small"
-      icon={<HolderOutlined />}
+    <button
+      type="button"
+      className="register-table__drag-button"
       style={{ cursor: "move" }}
       ref={setActivatorNodeRef}
       aria-label={ariaLabel}
       {...listeners}
-    />
+    >
+      <HolderOutlined />
+    </button>
   );
 }
 
@@ -2193,7 +2245,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
   sheetId,
   deferBody = false,
 }: RegisterTableProps): React.ReactNode {
-  const { t } = useTranslation();
+  const { t } = useTableTranslation();
   // antd 全局 message（App.useApp）：Read All 完成结果富内容提示；
   // modal：ROM/RAM 确定指令安全确认（EEPROM 寿命提示）。
   // 应用已在 MamepApp 用 <AntApp> 包裹（测试须包 <AntApp>，见 BottomPanel.test.tsx）。
@@ -2426,7 +2478,10 @@ const RegisterTableContent = memo(function RegisterTableContent({
       const direction = pending > 0 ? 1 : -1;
       const step = direction * Math.min(Math.abs(pending), WHEEL_SCROLL_STEP);
       pendingWheelDeltaRef.current -= step;
-      const maxScrollTop = Math.max(0, holder.scrollHeight - holder.clientHeight);
+      const maxScrollTop = Math.max(
+        0,
+        holder.scrollHeight - holder.clientHeight,
+      );
       const nextScrollTop = Math.min(
         maxScrollTop,
         Math.max(0, holder.scrollTop + step),
@@ -2497,6 +2552,9 @@ const RegisterTableContent = memo(function RegisterTableContent({
       lastScrollTop = nextScrollTop;
       if (delta < ROW_HEIGHT) return;
       markScrolling();
+      // Native scrollbar jumps move the holder before the virtual window updates.
+      // Commit the public scrollTo result in this event, before the next paint.
+      flushSync(() => tableRef.current?.scrollTo({ top: nextScrollTop }));
     };
     flexEl.addEventListener("scroll", handleScroll, {
       capture: true,
@@ -3395,6 +3453,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
           isVirtualRow(row) ? null : (
             <WriteCell
               sheetId={sheetId}
+              writable={sheetWritable}
               rowId={row.rowId}
               rowNumber={row.order}
               addressDraft={row.addressDraft}
@@ -3490,7 +3549,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
         }),
         render: (_, row) =>
           isVirtualRow(row) ? null : (
-            <DragHandle rowId={row.rowId} ariaLabel={t("table.dragHandle")} />
+            <DragHandle ariaLabel={t("table.dragHandle")} />
           ),
       },
     ],
@@ -3806,11 +3865,18 @@ const RegisterTableContent = memo(function RegisterTableContent({
     const MemoizedTr = memo(
       forwardRef<HTMLElement, MemoTableRowProps>(
         function RegisterTableRow(props, ref) {
-          // 虚拟子行/位明细行：普通 <tr>（无 useSortable）；普通行走对应行实现。
-          if (isVirtualRow(props._record)) {
-            return <ChildRow {...props} ref={ref} />;
-          }
-          return <SortableRow {...props} ref={ref} />;
+          const placeholder = useDeferredRowPlaceholder(
+            props._record?.rowId ?? "__mamep_empty_row__",
+          );
+          return (
+            <DeferredRowContext.Provider value={placeholder}>
+              {isVirtualRow(props._record) ? (
+                <ChildRow {...props} ref={ref} />
+              ) : (
+                <SortableRow {...props} ref={ref} />
+              )}
+            </DeferredRowContext.Provider>
+          );
         },
       ),
       (prev, next) =>
@@ -4404,7 +4470,8 @@ const RegisterTableContent = memo(function RegisterTableContent({
 export const RegisterTable = memo(function RegisterTable(
   props: RegisterTableProps,
 ) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const translation = useMemo(() => ({ t, i18n }), [t, i18n]);
   const staged = useAfterFirstPaint(props.deferBody === true);
   if (props.deferBody === true && !staged) {
     return (
@@ -4418,8 +4485,10 @@ export const RegisterTable = memo(function RegisterTable(
     );
   }
   return (
-    <DeferredCellRenderProvider>
-      <RegisterTableContent {...props} />
-    </DeferredCellRenderProvider>
+    <TableTranslationContext.Provider value={translation}>
+      <DeferredCellRenderProvider>
+        <RegisterTableContent {...props} />
+      </DeferredCellRenderProvider>
+    </TableTranslationContext.Provider>
   );
 });

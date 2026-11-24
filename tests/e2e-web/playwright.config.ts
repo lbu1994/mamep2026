@@ -48,7 +48,7 @@ export default defineConfig({
   use: {
     ...(edgeExecutable === undefined
       ? { channel: "msedge" as const }
-      : { executablePath: edgeExecutable }),
+      : { launchOptions: { executablePath: edgeExecutable } }),
     viewport: { width: 1600, height: 900 },
     trace: "retain-on-failure",
   },

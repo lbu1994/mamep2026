@@ -45,7 +45,7 @@ interface ScrollFrame {
   selectArrowPlaceholderVisuals: ControlVisual[];
   selectValuePlaceholderVisuals: ControlVisual[];
   switchPlaceholderCount: number;
-  switchPlaceholderComponentCount: number;
+  visibleSwitchCount: number;
   checkboxPlaceholderCount: number;
   checkboxPlaceholderComponentCount: number;
   /** 各可见行内开关相对行顶的偏移（px）；占位与真实开关应一致，防止垂直上跳。 */
@@ -138,11 +138,11 @@ test("大型滚轮翻页时已有行不降级且新行占位尺寸一致", async
           ),
         );
       const switchRow = rows.find(
-        (row) => row.querySelector(".register-table__wp .ant-switch") !== null,
+        (row) => row.querySelector(".register-table__wp-switch") !== null,
       );
       const switchEl =
         switchRow?.querySelector<HTMLElement>(
-          ".register-table__wp .ant-switch",
+          ".register-table__wp-switch",
         ) ?? null;
       const switchRowOffset =
         switchRow === undefined || switchEl === null
@@ -291,7 +291,7 @@ test("大型滚轮翻页时已有行不降级且新行占位尺寸一致", async
                 ".register-table__virtual-placeholder--button",
               ).length,
               buttonPlaceholderComponentCount: holder.querySelectorAll(
-                ".register-table__virtual-placeholder--button .ant-btn",
+                ".register-table__virtual-placeholder--button button",
               ).length,
               selectPlaceholderVisuals: selectPlaceholders
                 .filter(
@@ -319,9 +319,10 @@ test("大型滚轮翻页时已有行不降级且新行占位尺寸一致", async
               switchPlaceholderCount: holder.querySelectorAll(
                 ".register-table__virtual-placeholder--switch",
               ).length,
-              switchPlaceholderComponentCount: holder.querySelectorAll(
-                ".register-table__virtual-placeholder--switch .ant-switch",
-              ).length,
+              visibleSwitchCount: visibleRows.reduce(
+                (count, row) => count + row.querySelectorAll(".register-table__wp-switch").length,
+                0,
+              ),
               checkboxPlaceholderCount: holder.querySelectorAll(
                 ".register-table__virtual-placeholder--checkbox",
               ).length,
@@ -330,7 +331,7 @@ test("大型滚轮翻页时已有行不降级且新行占位尺寸一致", async
               ).length,
               switchRowOffsets: visibleRows.flatMap((row) => {
                 const switches = Array.from(
-                  row.querySelectorAll<HTMLElement>(".ant-switch"),
+                  row.querySelectorAll<HTMLElement>(".register-table__wp-switch"),
                 );
                 return switches.map(
                   (sw) =>
@@ -435,16 +436,10 @@ test("大型滚轮翻页时已有行不降级且新行占位尺寸一致", async
     ),
   ).toEqual(valueTextSignatures(controlVisuals.selectValue));
   expect(samples.some((sample) => sample.switchPlaceholderCount > 0)).toBe(
-    true,
+    false,
   );
   expect(
-    samples
-      .filter((sample) => sample.switchPlaceholderCount > 0)
-      .every(
-        (sample) =>
-          sample.switchPlaceholderComponentCount ===
-          sample.switchPlaceholderCount,
-      ),
+    samples.every((sample) => sample.visibleSwitchCount === sample.visibleRows),
   ).toBe(true);
   expect(samples.some((sample) => sample.checkboxPlaceholderCount > 0)).toBe(
     true,

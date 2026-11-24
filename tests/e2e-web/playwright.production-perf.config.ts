@@ -14,7 +14,9 @@ export default defineConfig({
     viewport: { width: 1600, height: 900 },
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
-    trace: "retain-on-failure",
+    // Measure application work without trace screenshots and DOM serialization.
+    // The visual suite opts into trace recording separately.
+    trace: "off",
   },
   webServer: {
     command:

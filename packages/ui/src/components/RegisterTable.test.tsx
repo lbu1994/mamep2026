@@ -1787,6 +1787,30 @@ describe("RegisterTable WP 轮询状态", () => {
     });
   });
 
+  it("keeps polling switch keyboard actions and focus after toggling", async () => {
+    const user = userEvent.setup();
+    render(<RegisterTable sheetId={sheetId()} />);
+    const control = screen.getByRole("switch", {
+      name: "Poll row 1, address 0",
+    });
+    await user.hover(control);
+    expect(await screen.findByRole("tooltip")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Poll row 1, address 0" })).toBe(
+      control,
+    );
+    await user.unhover(control);
+    control.focus();
+    await user.keyboard(" ");
+    expect(control.getAttribute("aria-checked")).toBe("false");
+    await user.keyboard("{Enter}");
+    expect(control.getAttribute("aria-checked")).toBe("true");
+    await user.keyboard("{ArrowLeft}");
+    expect(control.getAttribute("aria-checked")).toBe("false");
+    await user.keyboard("{ArrowRight}");
+    expect(control.getAttribute("aria-checked")).toBe("true");
+    expect(document.activeElement).toBe(control);
+  });
+
   it("关闭、等待、成功、失败使用不同视觉状态，并由辅助文本读出", async () => {
     const first = useAppStore.getState().workspace.sheets[0]?.rows[0];
     if (first === undefined) throw new Error("missing first row");
