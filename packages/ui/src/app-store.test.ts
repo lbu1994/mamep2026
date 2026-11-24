@@ -1290,6 +1290,32 @@ describe("setConnectionSettings", () => {
 });
 
 describe("setSheetSlaveAddress", () => {
+  it.each([-1, 256, 1.5, NaN, Infinity])(
+    "rejects invalid address %s without changing state",
+    (address) => {
+      const before = useAppStore.getState();
+      before.setSheetSlaveAddress(firstSheetId(), address);
+      expect(useAppStore.getState()).toBe(before);
+    },
+  );
+
+  it("keeps the same state and history when selecting the current address", () => {
+    const id = firstSheetId();
+    useAppStore.getState().setSheetSlaveAddress(id, 7);
+    const before = useAppStore.getState();
+    before.setSheetSlaveAddress(id, 7);
+    expect(useAppStore.getState()).toBe(before);
+    before.undo();
+    expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(1);
+  });
+
+  it.each([0, 255])("accepts boundary address %s", (address) => {
+    useAppStore.getState().setSheetSlaveAddress(firstSheetId(), address);
+    expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(
+      address,
+    );
+  });
+
   it("sets the sheet-level slave address independently per sheet", () => {
     const firstId = useAppStore.getState().workspace.sheets[0]?.sheetId;
     if (firstId === undefined) throw new Error("missing first sheet");

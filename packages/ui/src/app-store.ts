@@ -1881,8 +1881,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   },
 
   setSheetSlaveAddress: (sheetId, slave) => {
+    if (!Number.isInteger(slave) || slave < 0 || slave > 255) return;
     const before = findSheetById(get().workspace, sheetId);
-    if (before === undefined) return;
+    if (before === undefined || before.slaveAddress === slave) return;
     const beforeSnapshot = snapshotSheet(before);
     set((state) => ({
       workspace: {

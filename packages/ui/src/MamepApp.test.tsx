@@ -65,6 +65,34 @@ beforeEach(() => {
   });
 });
 
+it("syncs the session address only after selecting a new value", async () => {
+  const user = userEvent.setup();
+  const { host } = makeHost();
+  const workspace = createEmptyWorkspace();
+  for (const sheet of workspace.sheets) sheet.rows = sheet.rows.slice(0, 1);
+  useAppStore.setState({ host, workspace });
+  render(<MamepApp />);
+  await waitFor(() => expect(host.setSlaveAddress).toHaveBeenCalledWith(1));
+  vi.mocked(host.setSlaveAddress).mockClear();
+
+  await user.click(
+    await screen.findByRole(
+      "button",
+      { name: "Table settings" },
+      { timeout: 20_000 },
+    ),
+  );
+  const input = await screen.findByRole("combobox", { name: "Slave Address" });
+  await user.type(input, "255");
+  expect(host.setSlaveAddress).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
+  expect(host.setSlaveAddress).toHaveBeenCalledExactlyOnceWith(255);
+
+  await user.type(input, "255");
+  fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
+  expect(host.setSlaveAddress).toHaveBeenCalledTimes(1);
+}, 30_000);
+
 describe("Sheet 名重命名编辑态隔离", () => {
   it("页签头进入编辑态时，侧边栏对应项不渲染输入框", () => {
     render(<MamepApp />);

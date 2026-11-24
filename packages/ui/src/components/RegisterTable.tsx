@@ -25,7 +25,6 @@ import Empty from "antd/es/empty";
 import Flex from "antd/es/flex";
 import Input from "antd/es/input";
 import type { InputRef } from "antd/es/input";
-import InputNumber from "antd/es/input-number";
 import Popover from "antd/es/popover";
 import Segmented from "antd/es/segmented";
 import type {
@@ -155,6 +154,11 @@ const Select = lazy(
   () => import("antd/es/select"),
 ) as unknown as DeferredSelectComponent;
 const MobileNativeSelectContext = createContext(false);
+
+const SLAVE_ADDRESS_OPTIONS = Array.from({ length: 256 }, (_, value) => ({
+  value,
+  label: String(value),
+}));
 
 type TableTranslation = Pick<ReturnType<typeof useTranslation>, "t" | "i18n">;
 const TableTranslationContext = createContext<TableTranslation | null>(null);
@@ -3981,19 +3985,22 @@ const RegisterTableContent = memo(function RegisterTableContent({
                   ? t("table.unitIdLabel")
                   : t("table.slaveAddressLabel")}
               </span>
-              <InputNumber
-                size="small"
-                aria-label={
-                  activeProtocol === "tcp"
-                    ? t("table.unitId")
-                    : t("table.slaveAddress")
-                }
-                min={0}
-                max={255}
-                value={slaveAddress}
-                onChange={(v) => setSheetSlaveAddress(sheetId, v ?? 1)}
-                style={{ width: 64 }}
-              />
+              <Suspense fallback={null}>
+                <Select<number>
+                  key={sheetId}
+                  size="small"
+                  aria-label={
+                    activeProtocol === "tcp"
+                      ? t("table.unitId")
+                      : t("table.slaveAddress")
+                  }
+                  showSearch={{ optionFilterProp: "label" }}
+                  options={SLAVE_ADDRESS_OPTIONS}
+                  value={slaveAddress}
+                  onChange={(value) => setSheetSlaveAddress(sheetId, value)}
+                  style={{ width: 88 }}
+                />
+              </Suspense>
             </span>
           </Tooltip>
         </div>

@@ -560,7 +560,7 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
     return workspace;
   }
 
-  it("TCP 连接时设置面板 label 显示 Unit ID（InputNumber aria-label 同步）", async () => {
+  it("shows the TCP Unit ID label and accessible Select name", async () => {
     const workspace = smallWorkspace();
     useAppStore.setState({ host: makeHost("tcp"), workspace });
     render(<RegisterTable sheetId={sheetId()} />);
@@ -568,7 +568,9 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
     expect(screen.getByText("Address:")).toBeTruthy();
     expect(screen.getByText("Unit ID:")).toBeTruthy();
     expect(screen.getByText("Verify:")).toBeTruthy();
-    expect(screen.getByLabelText("Unit ID")).toBeTruthy();
+    expect(
+      await screen.findByRole("combobox", { name: "Unit ID" }),
+    ).toBeTruthy();
     expect(screen.queryByLabelText("Slave Address")).toBeNull();
   });
 
@@ -582,6 +584,58 @@ describe("RegisterTable 工具栏地址 label（2026-08-25 TCP Unit ID 会话内
     expect(screen.getByText("Verify:")).toBeTruthy();
     expect(screen.getByLabelText("Slave Address")).toBeTruthy();
     expect(screen.queryByLabelText("Unit ID")).toBeNull();
+  });
+
+  it("keeps offline search local and commits one selected address", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({
+      workspace: smallWorkspace(),
+      connectionState: "disconnected",
+    });
+    render(<RegisterTable sheetId={sheetId()} />);
+    await openTableSettings();
+    const input = await screen.findByRole<HTMLInputElement>("combobox", {
+      name: "Slave Address",
+    });
+    const before = useAppStore.getState();
+    const workspaceChanged = vi.fn();
+    const unsubscribe = useAppStore.subscribe((state, previous) => {
+      if (state.workspace !== previous.workspace) workspaceChanged();
+    });
+    try {
+      await user.type(input, "255");
+      expect(input.value).toBe("255");
+      expect(useAppStore.getState()).toBe(before);
+      expect(workspaceChanged).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
+      expect(useAppStore.getState().workspace.sheets[0]?.slaveAddress).toBe(
+        255,
+      );
+      expect(workspaceChanged).toHaveBeenCalledTimes(1);
+
+      await user.type(input, "255");
+      fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
+      expect(workspaceChanged).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("discards an unmatched search without changing the saved address", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({ workspace: smallWorkspace() });
+    render(<RegisterTable sheetId={sheetId()} />);
+    await openTableSettings();
+    const input = await screen.findByRole<HTMLInputElement>("combobox", {
+      name: "Slave Address",
+    });
+    const before = useAppStore.getState();
+    await user.type(input, "999");
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
+    await user.tab();
+    expect(useAppStore.getState()).toBe(before);
+    expect(input.value).toBe("");
   });
 });
 
