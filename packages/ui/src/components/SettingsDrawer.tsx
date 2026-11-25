@@ -41,6 +41,7 @@ import Tabs from "antd/es/tabs";
 import Typography from "antd/es/typography";
 import type { AppHost } from "../host";
 import { useAppStore } from "../app-store";
+import { ensureCoreSheets } from "../sheet-naming";
 import type {
   FieldPerformanceNetworkProfile,
   FieldPerformanceSettings,
@@ -126,7 +127,8 @@ export function SettingsDrawer({
     if (host === null || host === undefined) return;
     void host.resetWorkspace().then((result) => {
       if (result.ok) {
-        setWorkspace(result.value);
+        // Publish the reset workspace with all core types in one update.
+        setWorkspace(ensureCoreSheets(result.value));
         appendMessage({
           timestamp: Date.now(),
           level: "info",

@@ -17,6 +17,7 @@ import type {
   WorkspaceRecoveryInfo,
 } from "@mamep2026/domain";
 import {
+  isCoreSheetType,
   createDefaultRtuProfile,
   createDefaultTcpProfile,
   createEmptyRow,
@@ -93,6 +94,7 @@ import {
   copySheetName,
   createNamedSheet,
   createNamedWorkspace,
+  ensureCoreSheets,
   initializeSheetNameCounters,
 } from "./sheet-naming";
 
@@ -246,6 +248,7 @@ export interface AppStoreState {
     expectedDraft?: WorkspaceImportDraft,
     options?: WorkspaceImportApplyOptions,
   ) => void;
+  /** Complete startup with all core sheet types in the same state update. */
   setLoaded: () => void;
   setConnectionState: (state: ConnectionState) => void;
   setConnectionModalOpen: (open: boolean) => void;
@@ -562,23 +565,88 @@ function applySheetSnapshotToWorkspace(
   };
 }
 
-/** 从工作区移除一张表并修复活动表；移除后无表时重建默认空表（与 deleteSheet 行为一致）。 */
+type SheetRemoval = NonNullable<
+  Extract<UndoEntry, { kind: "sheet" }>["removal"]
+>;
+
+/** Remove a sheet, retaining one sheet of its core type and recording the result. */
 function removeSheetFromWorkspace(
   workspace: Workspace,
   sheetId: SheetId,
-): { workspace: Workspace; activeSheetId: SheetId | null } {
+  saved?: SheetRemoval,
+): {
+  workspace: Workspace;
+  activeSheetId: SheetId | null;
+  removal: SheetRemoval;
+} {
   const initialized = initializeSheetNameCounters(workspace);
+  const original = findSheetById(initialized, sheetId);
+  if (original === undefined) throw new Error("Cannot remove a missing sheet.");
   const without = initialized.sheets.filter((s) => s.sheetId !== sheetId);
-  const fallback = without.length === 0 ? createNamedSheet(initialized) : null;
-  const sheets =
-    fallback === null ? without : [{ ...fallback.sheet, order: 0 }];
+  const lastOfCoreType =
+    isCoreSheetType(original.type) &&
+    !without.some((sheet) => sheet.type === original.type);
+  // Allocate only on the first removal. Keep the existing empty-workspace fallback for plugins.
+  const fallback =
+    saved === undefined && (lastOfCoreType || without.length === 0)
+      ? createNamedSheet(
+          initialized,
+          lastOfCoreType ? original.type : "holding-register",
+        )
+      : null;
+  const replacement =
+    saved !== undefined
+      ? saved.replacement
+      : fallback === null
+        ? null
+        : { ...fallback.sheet, order: original.order };
+  const index =
+    saved?.index ??
+    initialized.sheets.findIndex((sheet) => sheet.sheetId === sheetId);
+  const sheets = [...without];
+  if (replacement !== null) sheets.splice(index, 0, replacement);
+  const activeSheetId =
+    saved !== undefined
+      ? saved.activeAfter
+      : (replacement?.sheetId ??
+        fixActiveSheetId(sheets, workspace.activeSheetId));
+  const removal = saved ?? {
+    original,
+    replacement,
+    index,
+    activeBefore: workspace.activeSheetId,
+    activeAfter: activeSheetId,
+  };
   return {
     workspace: {
       ...(fallback?.workspace ?? initialized),
       sheets,
+      activeSheetId,
       updatedAt: Date.now(),
     },
-    activeSheetId: fixActiveSheetId(sheets, workspace.activeSheetId),
+    activeSheetId,
+    removal,
+  };
+}
+
+/** Restore the complete removed sheet and remove only its recorded replacement. */
+function restoreRemovedSheet(
+  workspace: Workspace,
+  removal: SheetRemoval,
+): { workspace: Workspace; activeSheetId: SheetId | null } {
+  const sheets = workspace.sheets.filter(
+    (sheet) =>
+      sheet.sheetId !== removal.replacement?.sheetId &&
+      sheet.sheetId !== removal.original.sheetId,
+  );
+  sheets.splice(removal.index, 0, removal.original);
+  const activeSheetId =
+    removal.activeBefore === null
+      ? null
+      : fixActiveSheetId(sheets, removal.activeBefore);
+  return {
+    workspace: { ...workspace, sheets, activeSheetId, updatedAt: Date.now() },
+    activeSheetId,
   };
 }
 
@@ -725,7 +793,11 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       pollingOutcomes: {},
     }));
   },
-  setLoaded: () => set({ loaded: true }),
+  setLoaded: () =>
+    set((state) => ({
+      workspace: ensureCoreSheets(state.workspace),
+      loaded: true,
+    })),
   setConnectionState: (connectionState) => set({ connectionState }),
   setConnectionModalOpen: (connectionModalOpen) => set({ connectionModalOpen }),
   setSerialSelection: (selectedSerialHandle, selectedSerialPortId) =>
@@ -764,16 +836,25 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       redoStack: state.redoStack,
     });
     if (popped.entry === null) return;
-    const entry = popped.entry;
+    let entry = popped.entry;
     let workspace = state.workspace;
     let activeSheetId = state.activeSheetId;
     if (entry.kind === "sheet") {
       const { sheetId, before } = entry;
       if (before === null) {
         // 编辑前表不存在（新增/复制表）：撤销 = 删除该表。
-        const removed = removeSheetFromWorkspace(workspace, sheetId);
+        const removed = removeSheetFromWorkspace(
+          workspace,
+          sheetId,
+          entry.removal,
+        );
         workspace = removed.workspace;
         activeSheetId = removed.activeSheetId;
+        entry = { ...entry, removal: removed.removal };
+      } else if (entry.removal !== undefined) {
+        const restored = restoreRemovedSheet(workspace, entry.removal);
+        workspace = restored.workspace;
+        activeSheetId = restored.activeSheetId;
       } else {
         const applied = applySheetSnapshotToWorkspace(
           workspace,
@@ -783,16 +864,6 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         );
         workspace = applied.workspace;
         activeSheetId = applied.activeSheetId;
-        // 删除唯一表时 UI 重建的默认空表：撤销删除后应移除（只保留被恢复的表）。
-        if (entry.removeFallback === true) {
-          const sheets = workspace.sheets.filter((s) => s.sheetId === sheetId);
-          workspace = {
-            ...workspace,
-            sheets,
-            updatedAt: Date.now(),
-          };
-          activeSheetId = fixActiveSheetId(sheets, workspace.activeSheetId);
-        }
       }
     } else {
       // 表顺序重排：恢复到编辑前顺序（activeSheetId 不变，表均存在）。
@@ -820,9 +891,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       const { sheetId, after } = entry;
       if (after === null) {
         // 编辑后表不存在（删除表）：重做 = 再次删除。
-        const removed = removeSheetFromWorkspace(workspace, sheetId);
+        const removed = removeSheetFromWorkspace(
+          workspace,
+          sheetId,
+          entry.removal,
+        );
         workspace = removed.workspace;
         activeSheetId = removed.activeSheetId;
+      } else if (entry.removal !== undefined) {
+        const restored = restoreRemovedSheet(workspace, entry.removal);
+        workspace = restored.workspace;
+        activeSheetId = restored.activeSheetId;
       } else {
         const applied = applySheetSnapshotToWorkspace(
           workspace,
@@ -1660,42 +1739,26 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }),
 
   deleteSheet: (sheetId) => {
-    const before = findSheetById(get().workspace, sheetId);
+    const state = get();
+    const before = findSheetById(state.workspace, sheetId);
     if (before === undefined) return;
-    const beforeSnapshot = snapshotSheet(before);
-    // 删除唯一表时 UI 会重建默认空表：撤销删除时需移除该保底表。
-    const wasOnlySheet = get().workspace.sheets.length === 1;
-    set((state) => {
-      const removed = removeSheetFromWorkspace(state.workspace, sheetId);
-      const sheets = removed.workspace.sheets;
-      const nextActive =
-        state.activeSheetId === sheetId ||
-        sheets.every((s) => s.sheetId !== state.activeSheetId)
-          ? (sheets[0]?.sheetId ?? null)
-          : state.activeSheetId;
-      return {
-        workspace: {
-          ...removed.workspace,
-          sheets,
-          activeSheetId: nextActive,
-          updatedAt: Date.now(),
-        },
-        activeSheetId: nextActive,
-      };
+    const removed = removeSheetFromWorkspace(state.workspace, sheetId);
+    const history = pushEntry(
+      { undoStack: state.undoStack, redoStack: state.redoStack },
+      {
+        kind: "sheet",
+        sheetId,
+        before: snapshotSheet(before),
+        after: null,
+        removal: removed.removal,
+      },
+    );
+    // Publish deletion, replacement, selection and history as one state change.
+    set({
+      workspace: removed.workspace,
+      activeSheetId: removed.activeSheetId,
+      ...history,
     });
-    // 入栈：before=被删表快照，after=null（表编辑后不存在）。
-    pushSheetEntry(get, set, sheetId, beforeSnapshot, null);
-    if (wasOnlySheet) {
-      const entry = get().undoStack[get().undoStack.length - 1];
-      if (entry !== undefined && entry.kind === "sheet") {
-        set({
-          undoStack: [
-            ...get().undoStack.slice(0, -1),
-            { ...entry, removeFallback: true },
-          ],
-        });
-      }
-    }
   },
 
   closeOtherSheets: (sheetId) =>

@@ -6,10 +6,6 @@
 
 > 核对范围：原第 25–86 行，共 54 项。以下只保留未完成部分；整项已完成的已删除。依据为当前源码、测试定义和架构文档，未执行全量回归、四端 E2E 或真机验收。“建议方案”不表示已批准改变产品范围、协议、插件 API 或持久化格式。PRD §8.4 的增强能力及 §8.5 的探索能力实施前仍需确认范围并同步设计。
 
-- [X] [feat] **调整新建表的默认命名**：已接入 [UI 命名服务](packages/ui/src/sheet-naming.ts)，按英文表类型生成 `HOLDING REGISTERS Sheet 1` 等名称，去掉末尾读写说明。按类型持久化下个编号并跳过所有已占用名称，删除、重命名和撤销不回退计数；旧工作区从同类型名称的最大后缀初始化并保留原名。初始表、增表和自动补建使用新规则，复制表保留原类型并检查名称冲突。
-- [ ] [feat] **每种表类型始终至少保留一张表**：未实现；[删除及撤销路径](packages/ui/src/app-store.ts) 只在工作区完全无表时补建保持寄存器表。建议按四种核心表类型判断最后一张表，并将“删除原表＋补建同类型空表＋切换活动表”记录为一次可撤销操作；撤销恢复完整原表并移除补建表，重做复用同一结果。新名称依赖上一项；插件类型不自动套用此规则。
-- [ ] [feat] **支持多活动连接**：待确认 P2 范围；[SessionHostCore](packages/application/src/session-host-core.ts) 仍只有单个活动 session，[当前调度设计](docs/architecture/application/communication/调度与轮询.md) 也以单连接为前提。建议新增应用层连接管理器，每个运行时 connectionId 独占会话、队列、取消域和事件流；先扩展 Host/IPC，再接共享 UI。运行时 ID 不写入公开项目文件；同一串口禁止重复占用。验收至少两个连接并行读写/轮询，断开或超时只影响对应连接。
-- [ ] [feat] **支持每个标签页独立连接**：剩余为表与连接绑定；[RegisterSheet](packages/domain/src/workspace-model.ts) 尚无连接引用。依赖多活动连接，建议持久化稳定的 connectionProfileId，在运行时解析到 connectionId；区分“当前表绑定”和“新表默认绑定”，离线或无绑定时门控通信。迁移旧表至原活动 profile；切表不重连、不重绑其他表，关闭表只取消该表任务。补齐两表异设备的请求、日志、Trace 和错误隔离。
 - [ ] [feat] **补齐 Trace 样本身份、暂停与清空**：剩余为样本关联字段、独立 Pause/Resume/Clear 和迟到样本隔离。[TraceCoordinator](packages/communication/src/trace-coordinator.ts) 的返回检查只判断 key 是否仍存在，同 key 停止后重启时旧请求可能混入新采样。建议按采样会话 generation 校验，从实际请求携带 requestId、connectionId、sheetId、rowId 和不可变路由，并将 timestamp 保留到 UI 缓冲。同步 [IPC 样本 Schema](packages/platform-api/src/session-payloads.ts)，将逐次复制数组改为应用层有界环形缓冲；清空推进代次，暂停不接收新样本，删除行或重绑后丢弃旧结果。
 - [ ] [feat] **实现多寄存器数据曲线**：未实现；[TraceWindow](packages/ui/src/components/TraceWindow.tsx) 没有曲线视图。依赖完整 Trace 样本，先确认核心/插件归属；建议建立独立曲线视图模型，支持多行选择、时间窗口、暂停视图和恢复追加，缺失数据画断点，截断、删行和断线显示明确状态。补齐深浅主题、键盘图例、缩放/平移及数据点读取；异常值不得导致坐标范围反复跳动。
 - [ ] [feat] **实现 Trace CSV 导出**：剩余为结构化 CSV、范围选择与跨平台保存；[saveTrace](packages/ui/src/components/TraceWindow.tsx) 仍通过 Blob 下载 JSON。建议冻结选定采样范围，再由纯序列化函数输出 BOM CSV，包含时间、序号、连接/表/行/请求 ID、地址、名称、原始值、格式化值及类型；文件名带时间戳，保存走 Host 文件接口。导出前提示设备数据敏感性；覆盖运行中、暂停及截断缓冲，正确转义逗号/引号/换行，取消保存不报错。
@@ -64,3 +60,7 @@
 - [ ] [verify] **统一 VSCode Webview 生命周期文档并补回归**：剩余为文档冲突和完整生命周期证据；[资源释放文档](docs/architecture/host/lifecycle/资源释放.md) 仍写关闭后保留连接，而 [VSCode 宿主文档](docs/architecture/host/vscode-extension/VSCode宿主.md) 与 [onDidDispose](apps/vscode-extension/src/extension.ts) 要求关闭即释放会话。建议按宿主文档及代码记录的关闭即断开决策统一描述，保留“隐藏”与“关闭”的区别；回归隐藏/切签、关闭重开、serializer 恢复和扩展停用，检查轮询/Trace/插件任务/日志订阅释放与重新打开的离线快照。
 - [ ] [bug] **修复 antd Splitter 首帧高度沉降**：仍有缺口；[首帧 E2E](tests/e2e-web/tests/boot-ui-state-first-paint.spec.ts) 仍对 bottomHeight 使用容差。建议先测量容器首次可用高度，以应用自己的确定高度布局或挂载前尺寸初始化解决，不改第三方私有属性；侧栏、页签、活动表和数据的现有严格断言保留，修复后收紧底部高度断言。覆盖持久化尺寸、折叠状态及生产恢复路径，不能以扩大容差代替修复。
 - [ ] [feat] **确认并实现诊断包导出**：未实现；[日志设计](docs/architecture/application/logging/日志.md) 只给出可选独立能力。建议先确认产品范围，再定义白名单导出 DTO：应用/平台/Schema 版本、插件摘要、能力和脱敏错误分类；不直接序列化错误对象或工作区。设备地址、原始报文、寄存器值、IP 和用户路径默认排除；先预览并由用户确认，再经 Host 保存。补敏感字段泄漏与取消/失败检查，导出不改变通信状态。
+
+# Postpone
+- [ ] [feat] **支持多活动连接**：待确认 P2 范围；[SessionHostCore](packages/application/src/session-host-core.ts) 仍只有单个活动 session，[当前调度设计](docs/architecture/application/communication/调度与轮询.md) 也以单连接为前提。建议新增应用层连接管理器，每个运行时 connectionId 独占会话、队列、取消域和事件流；先扩展 Host/IPC，再接共享 UI。运行时 ID 不写入公开项目文件；同一串口禁止重复占用。验收至少两个连接并行读写/轮询，断开或超时只影响对应连接。
+- [ ] [feat] **支持每个标签页独立连接**：剩余为表与连接绑定；[RegisterSheet](packages/domain/src/workspace-model.ts) 尚无连接引用。依赖多活动连接，建议持久化稳定的 connectionProfileId，在运行时解析到 connectionId；区分“当前表绑定”和“新表默认绑定”，离线或无绑定时门控通信。迁移旧表至原活动 profile；切表不重连、不重绑其他表，关闭表只取消该表任务。补齐两表异设备的请求、日志、Trace 和错误隔离。

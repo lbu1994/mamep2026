@@ -210,8 +210,8 @@ export function sheetFromSnapshot(snapshot: SheetEditSnapshot): RegisterSheet {
  * 撤销条目：
  * - kind="sheet"：单表内容/配置编辑。before=编辑前快照（null=编辑前表不存在，如新增表）；
  *   after=编辑后快照（null=编辑后表不存在，如删除表）。
- *   removeFallback：删除唯一表时 UI 会重建默认空表；撤销删除时需移除该保底表
- *   （仅删除唯一表的场景设置，此时 undo 后应只保留被恢复的表）。
+ *   removal records the complete removed sheet, its replacement and active selection.
+ *   Replay reuses these sheets without allocating new IDs or names.
  * - kind="sheets-reorder"：表顺序重排（拖拽移动表；只记录 sheetId 顺序）。
  */
 export type UndoEntry =
@@ -220,7 +220,13 @@ export type UndoEntry =
       sheetId: SheetId;
       before: SheetEditSnapshot | null;
       after: SheetEditSnapshot | null;
-      removeFallback?: boolean;
+      removal?: {
+        original: RegisterSheet;
+        replacement: RegisterSheet | null;
+        index: number;
+        activeBefore: SheetId | null;
+        activeAfter: SheetId | null;
+      };
     }
   | {
       kind: "sheets-reorder";

@@ -42,6 +42,27 @@ export function initializeSheetNameCounters(workspace: Workspace): Workspace {
   return changed ? { ...workspace, sheetNameCounters: counters } : workspace;
 }
 
+/** Allocate against shared metadata without scanning sheets again for each new type. */
+function allocateSheetName(
+  type: SheetType,
+  counters: Record<string, number>,
+  names: Set<string>,
+  englishTitle?: string,
+): string {
+  let number = Object.hasOwn(counters, type) ? (counters[type] ?? 1) : 1;
+  const prefix = `${sheetTypeName(type, englishTitle)} Sheet `;
+  while (names.has(`${prefix}${number}`) && number < Number.MAX_SAFE_INTEGER) {
+    number += 1;
+  }
+  if (number >= Number.MAX_SAFE_INTEGER) {
+    throw new RangeError("Sheet name counter is exhausted.");
+  }
+  const name = `${prefix}${number}`;
+  names.add(name);
+  counters[type] = number + 1;
+  return name;
+}
+
 /** Allocate a unique name and advance only this type's persisted counter. */
 export function createNamedSheet(
   workspace: Workspace,
@@ -49,26 +70,49 @@ export function createNamedSheet(
   englishTitle?: string,
 ): { sheet: RegisterSheet; workspace: Workspace } {
   const initialized = initializeSheetNameCounters(workspace);
-  const counters = initialized.sheetNameCounters ?? {};
-  let number = Object.hasOwn(counters, type) ? (counters[type] ?? 1) : 1;
-  const prefix = `${sheetTypeName(type, englishTitle)} Sheet `;
+  const counters = { ...initialized.sheetNameCounters };
   const names = new Set(workspace.sheets.map((sheet) => sheet.name));
-  while (names.has(`${prefix}${number}`) && number < Number.MAX_SAFE_INTEGER) {
-    number += 1;
-  }
-  if (number >= Number.MAX_SAFE_INTEGER) {
-    throw new RangeError("Sheet name counter is exhausted.");
-  }
   return {
     sheet: createRegisterSheet(
-      `${prefix}${number}`,
+      allocateSheetName(type, counters, names, englishTitle),
       workspace.sheets.length,
       type,
     ),
     workspace: {
       ...initialized,
-      sheetNameCounters: { ...counters, [type]: number + 1 },
+      sheetNameCounters: counters,
     },
+  };
+}
+
+/** Fill missing core types at startup or reset; never inspect existing rows. */
+export function ensureCoreSheets(workspace: Workspace): Workspace {
+  const present = new Set(workspace.sheets.map((sheet) => sheet.type));
+  const missing = CORE_TABLE_TYPES.filter((type) => !present.has(type.id));
+  if (missing.length === 0) return workspace;
+
+  // Share name lookup and counters across the bounded set of missing core types.
+  const initialized = initializeSheetNameCounters(workspace);
+  const counters = { ...initialized.sheetNameCounters };
+  const names = new Set<string>();
+  let nextOrder = 0;
+  for (const sheet of workspace.sheets) {
+    names.add(sheet.name);
+    nextOrder = Math.max(nextOrder, sheet.order + 1);
+  }
+  const added = missing.map(({ id }) =>
+    createRegisterSheet(
+      allocateSheetName(id, counters, names),
+      nextOrder++,
+      id,
+    ),
+  );
+  return {
+    ...initialized,
+    sheets: [...workspace.sheets, ...added],
+    sheetNameCounters: counters,
+    activeSheetId: workspace.activeSheetId ?? added[0]?.sheetId ?? null,
+    updatedAt: Date.now(),
   };
 }
 

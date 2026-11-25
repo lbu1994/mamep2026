@@ -91,8 +91,9 @@ describe("default sheet names", () => {
     store.addSheet();
     expect(names()).toEqual([
       "Old registers",
-      "Keep this name",
       "COILS Sheet 13",
+      "Keep this name",
+      "COILS Sheet 14",
       "HOLDING REGISTERS Sheet 10",
     ]);
   });
@@ -119,7 +120,11 @@ describe("default sheet names", () => {
     ).toBe("COILS Sheet 1");
     store.undo();
     store.addSheet("coil");
-    expect(names()).toEqual(["HOLDING REGISTERS Sheet 1", "COILS Sheet 2"]);
+    expect(names()).toEqual([
+      "HOLDING REGISTERS Sheet 1",
+      "COILS Sheet 2",
+      "COILS Sheet 3",
+    ]);
   });
 
   it("uses the next number for fallback sheets without renaming restored sheets", () => {
@@ -130,11 +135,11 @@ describe("default sheet names", () => {
     store.undo();
     expect(names()).toEqual(["HOLDING REGISTERS Sheet 1"]);
     store.redo();
-    expect(names()).toEqual(["HOLDING REGISTERS Sheet 3"]);
+    expect(names()).toEqual(["HOLDING REGISTERS Sheet 2"]);
     store.addSheet();
     expect(names()).toEqual([
+      "HOLDING REGISTERS Sheet 2",
       "HOLDING REGISTERS Sheet 3",
-      "HOLDING REGISTERS Sheet 4",
     ]);
   });
 

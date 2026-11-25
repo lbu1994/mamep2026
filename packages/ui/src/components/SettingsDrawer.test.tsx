@@ -6,8 +6,15 @@
  * - 插件 settings 贡献分区归属 `Plugins` 页签，无贡献时不渲染。
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
+import {
+  createEmptyWorkspace,
+  defaultConfig,
+  ok,
+  createMamepError,
+  fail,
+} from "@mamep2026/domain";
 import {
   BUILTIN_CONTRIBUTION_POINTS,
   ContributionPointRegistry,
@@ -18,6 +25,7 @@ import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import type { FieldPerformanceSettings } from "../local-performance-settings";
 import { SettingsDrawer } from "./SettingsDrawer";
+import { makeHost as makeCompleteHost } from "../test/make-app-host";
 
 /** 带贡献点注册表的 PluginRegistry（贡献聚合需要，与 App 装配一致）。 */
 function makeRegistry(): PluginRegistry {
@@ -91,6 +99,122 @@ function performanceSettings(): FieldPerformanceSettings {
     clearSessions: vi.fn(),
   };
 }
+
+describe("SettingsDrawer workspace reset", () => {
+  beforeEach(() => {
+    initI18n();
+    const store = useAppStore.getState();
+    store.setWorkspace(createEmptyWorkspace());
+    store.addSheet("vendor:registers");
+    store.addSheet();
+    store.undo();
+    useAppStore.setState({
+      settingsModalOpen: true,
+      loaded: true,
+      messages: [],
+    });
+  });
+
+  it("publishes four empty core types once and clears history after reset succeeds", async () => {
+    const { host } = makeCompleteHost();
+    const fresh = createEmptyWorkspace();
+    host.resetWorkspace = vi.fn(async () => ok(fresh));
+    const previousIds = useAppStore
+      .getState()
+      .workspace.sheets.map((sheet) => sheet.sheetId);
+    render(
+      <AntApp>
+        <SettingsDrawer host={host} />
+      </AntApp>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset Workspace" }));
+    expect(host.resetWorkspace).not.toHaveBeenCalled();
+    const updates: number[] = [];
+    const unsubscribe = useAppStore.subscribe((state, previous) => {
+      if (state.workspace !== previous.workspace)
+        updates.push(state.workspace.sheets.length);
+    });
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: /^Reset$/ }));
+      await waitFor(() =>
+        expect(useAppStore.getState().messages.at(-1)?.messageKey).toBe(
+          "messages.workspaceReset",
+        ),
+      );
+    } finally {
+      unsubscribe();
+    }
+    const state = useAppStore.getState();
+    expect(host.resetWorkspace).toHaveBeenCalledTimes(1);
+    expect(updates).toEqual([4]);
+    expect(state.workspace.sheets.map((sheet) => sheet.type)).toEqual([
+      "holding-register",
+      "coil",
+      "discrete-input",
+      "input-register",
+    ]);
+    expect(state.workspace.sheets.map((sheet) => sheet.name)).toEqual([
+      "HOLDING REGISTERS Sheet 1",
+      "COILS Sheet 1",
+      "DISCRETE INPUTS Sheet 1",
+      "INPUT REGISTERS Sheet 1",
+    ]);
+    for (const sheet of state.workspace.sheets) {
+      expect(previousIds).not.toContain(sheet.sheetId);
+      expect(sheet.rows).toHaveLength(
+        defaultConfig.registerTable.defaultRowCount,
+      );
+      expect(
+        sheet.rows.every(
+          (row) =>
+            row.name === "" &&
+            row.cellText === "" &&
+            !row.pollingEnabled &&
+            !row.traceEnabled,
+        ),
+      ).toBe(true);
+    }
+    expect(state.workspace.activeSheetId).toBe(fresh.activeSheetId);
+    expect(state.activeSheetId).toBeNull();
+    expect(state.undoStack).toEqual([]);
+    expect(state.redoStack).toEqual([]);
+    expect(state.loaded).toBe(true);
+    expect(host.connect).not.toHaveBeenCalled();
+    expect(host.connectTcp).not.toHaveBeenCalled();
+  });
+
+  it("preserves the workspace and history when the host rejects reset", async () => {
+    const { host } = makeCompleteHost();
+    host.resetWorkspace = vi.fn(async () =>
+      fail(
+        createMamepError({
+          code: "WORKSPACE_RESET_FAILED",
+          category: "persistence",
+          userMessageKey: "messages.resetFailed",
+          technicalMessage: "Reset failed.",
+        }),
+      ),
+    );
+    const before = useAppStore.getState();
+    render(
+      <AntApp>
+        <SettingsDrawer host={host} />
+      </AntApp>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset Workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Reset$/ }));
+    await waitFor(() =>
+      expect(useAppStore.getState().messages.at(-1)?.messageKey).toBe(
+        "messages.resetFailed",
+      ),
+    );
+    const after = useAppStore.getState();
+    expect(after.workspace).toBe(before.workspace);
+    expect(after.activeSheetId).toBe(before.activeSheetId);
+    expect(after.undoStack).toBe(before.undoStack);
+    expect(after.redoStack).toBe(before.redoStack);
+  });
+});
 
 describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
   beforeEach(() => {
