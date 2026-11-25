@@ -39,6 +39,7 @@ import type {
   FrameParser,
   ProtocolCodec,
 } from "./codec";
+import { getBasicTablesTcpCodec } from "./basic-tables-tcp-codec";
 import { TcpFrameParser } from "./tcp-frame-parser";
 import {
   createCancellationToken,
@@ -556,6 +557,15 @@ export class CommunicationSession {
     return this.protocol;
   }
 
+  /** Accept core table routes on the shared TCP connection and scheduler. */
+  supportsProtocol(protocol: string): boolean {
+    return (
+      protocol === this.protocol ||
+      (this.protocol === "tcp" &&
+        getBasicTablesTcpCodec(protocol) !== undefined)
+    );
+  }
+
   /** 当前兼容上下文快照：仅用于无显式路由的插件/旧调用在创建时取一次。 */
   getCurrentRoute(): RequestRoute {
     return {
@@ -580,7 +590,7 @@ export class CommunicationSession {
       return fail(requestRouteInvalidError(unitAddress));
     }
     const protocol = route?.protocol ?? this.protocol;
-    if (protocol !== this.protocol) {
+    if (!this.supportsProtocol(protocol)) {
       return fail(requestRouteProtocolMismatchError(protocol, this.protocol));
     }
     return ok(
@@ -651,15 +661,22 @@ export class CommunicationSession {
     if (this.stateMachine.getState() !== "connected") {
       return Promise.resolve(fail(notConnectedError()));
     }
-    if (
+    const route = this.resolveRequestRoute(meta.route);
+    if (!route.ok) return Promise.resolve(route);
+    const basicCodec =
+      this.protocol === "tcp"
+        ? getBasicTablesTcpCodec(route.value.protocol)
+        : undefined;
+    if (basicCodec !== undefined) {
+      const valid = basicCodec.validateRead(sentAddress, quantity);
+      if (!valid.ok) return Promise.resolve(valid);
+    } else if (
       !Number.isInteger(quantity) ||
       quantity < 1 ||
       quantity > MAX_READ_QUANTITY
     ) {
       return Promise.resolve(fail(quantityOutOfRangeError("read", quantity)));
     }
-    const route = this.resolveRequestRoute(meta.route);
-    if (!route.ok) return Promise.resolve(route);
     const run =
       this.codec !== null
         ? () =>
@@ -726,13 +743,20 @@ export class CommunicationSession {
     if (this.stateMachine.getState() !== "connected") {
       return Promise.resolve(fail(notConnectedError()));
     }
-    if (values.length < 1 || values.length > MAX_WRITE_QUANTITY) {
+    const route = this.resolveRequestRoute(meta.route);
+    if (!route.ok) return Promise.resolve(route);
+    const basicCodec =
+      this.protocol === "tcp"
+        ? getBasicTablesTcpCodec(route.value.protocol)
+        : undefined;
+    if (basicCodec !== undefined) {
+      const valid = basicCodec.validateWrite(sentAddress, values);
+      if (!valid.ok) return Promise.resolve(valid);
+    } else if (values.length < 1 || values.length > MAX_WRITE_QUANTITY) {
       return Promise.resolve(
         fail(quantityOutOfRangeError("write", values.length)),
       );
     }
-    const route = this.resolveRequestRoute(meta.route);
-    if (!route.ok) return Promise.resolve(route);
     const run =
       this.codec !== null
         ? () =>
@@ -793,7 +817,9 @@ export class CommunicationSession {
         unitAddress: route.unitAddress,
         userAddress: meta.userAddress ?? null,
         sentAddress,
-        functionCode: FUNCTION_READ_HOLDING,
+        functionCode:
+          getBasicTablesTcpCodec(route.protocol)?.readFunction ??
+          FUNCTION_READ_HOLDING,
         quantity,
         pluginId: meta.pluginId ?? null,
       },
@@ -802,7 +828,12 @@ export class CommunicationSession {
     if (decoded.value.kind === "exception") {
       return fail(modbusExceptionError(decoded.value.exceptionCode));
     }
-    if (decoded.value.kind === "read-holding") {
+    if (
+      decoded.value.kind === "read-holding" ||
+      decoded.value.kind === "read-coils" ||
+      decoded.value.kind === "read-discrete-inputs" ||
+      decoded.value.kind === "read-input-registers"
+    ) {
       return ok(decoded.value.values);
     }
     return fail(
@@ -830,7 +861,9 @@ export class CommunicationSession {
         unitAddress: route.unitAddress,
         userAddress: meta.userAddress ?? null,
         sentAddress,
-        functionCode: FUNCTION_WRITE_MULTIPLE,
+        functionCode:
+          getBasicTablesTcpCodec(route.protocol)?.writeFunction ??
+          FUNCTION_WRITE_MULTIPLE,
         quantity: values.length,
         pluginId: meta.pluginId ?? null,
       },
@@ -840,7 +873,10 @@ export class CommunicationSession {
     if (decoded.value.kind === "exception") {
       return fail(modbusExceptionError(decoded.value.exceptionCode));
     }
-    if (decoded.value.kind === "write-multiple") {
+    if (
+      decoded.value.kind === "write-multiple" ||
+      decoded.value.kind === "write-multiple-coils"
+    ) {
       return ok({ kind: "write-succeeded-no-verify" });
     }
     return fail(
@@ -1098,6 +1134,15 @@ export class CommunicationSession {
   } {
     if (this.protocol === "tcp") {
       const transactionId = this.allocateTransactionId();
+      const basicCodec = getBasicTablesTcpCodec(route.protocol);
+      if (basicCodec !== undefined) {
+        return basicCodec.buildReadAttempt(
+          transactionId,
+          route.unitAddress,
+          sentAddress,
+          quantity,
+        );
+      }
       return {
         frame: encodeTcpReadHoldingRegistersRequest({
           transactionId,
@@ -1140,6 +1185,15 @@ export class CommunicationSession {
   } {
     if (this.protocol === "tcp") {
       const transactionId = this.allocateTransactionId();
+      const basicCodec = getBasicTablesTcpCodec(route.protocol);
+      if (basicCodec !== undefined) {
+        return basicCodec.buildWriteAttempt(
+          transactionId,
+          route.unitAddress,
+          sentAddress,
+          values,
+        );
+      }
       return {
         frame: encodeTcpWriteMultipleRegistersRequest({
           transactionId,

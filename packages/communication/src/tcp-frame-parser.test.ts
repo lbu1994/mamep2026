@@ -10,6 +10,62 @@ const expectRead: TcpExpectedResponse = {
   quantity: 1,
 };
 
+describe.each([
+  { kind: "read-coils", fc: 1, pdu: [1, 1, 1] },
+  { kind: "read-discrete-inputs", fc: 2, pdu: [2, 1, 1] },
+  { kind: "read-input-registers", fc: 4, pdu: [4, 2, 0, 1] },
+  { kind: "write-multiple-coils", fc: 15, pdu: [15, 0, 1, 0, 1] },
+] as const)("TCP stream $kind", ({ kind, fc, pdu }) => {
+  const expected: TcpExpectedResponse = {
+    kind,
+    transactionId: 0x1234,
+    unitId: 1,
+    startAddress: 1,
+    address: 1,
+    quantity: 1,
+  };
+
+  it("accepts every split point in normal and exception frames", () => {
+    for (const payload of [pdu, [fc | 0x80, 2]]) {
+      const frame = tcpFrame(0x1234, 1, Uint8Array.from(payload));
+      for (let split = 1; split < frame.length; split++) {
+        const parser = new TcpFrameParser(expected);
+        expect(parser.push(frame.slice(0, split))).toEqual({ done: false });
+        expect(parser.push(frame.slice(split))).toMatchObject({
+          done: true,
+          outcome: { ok: true },
+        });
+      }
+    }
+  });
+
+  it("discards stale frames before a fragmented current frame", () => {
+    const parser = new TcpFrameParser(expected);
+    const current = tcpFrame(0x1234, 1, Uint8Array.from(pdu));
+    expect(
+      parser.push(
+        concat(tcpFrame(0x1233, 1, Uint8Array.from(pdu)), current.slice(0, 8)),
+      ),
+    ).toEqual({ done: false });
+    expect(parser.push(current.slice(8))).toMatchObject({
+      done: true,
+      outcome: { ok: true },
+    });
+  });
+
+  it("resynchronizes after oversized MBAP lengths", () => {
+    const parser = new TcpFrameParser(expected);
+    expect(
+      parser.push(
+        concat(
+          new Uint8Array(8).fill(0xaa),
+          tcpFrame(0x1234, 1, Uint8Array.from(pdu)),
+        ),
+      ),
+    ).toMatchObject({ done: true, outcome: { ok: true } });
+  });
+});
+
 /** 组 MBAP 帧（tid/proto=0/length/unit + pdu），不含 CRC。 */
 function tcpFrame(tid: number, unitId: number, pdu: Uint8Array): Uint8Array {
   const length = 1 + pdu.length;

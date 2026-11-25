@@ -62,7 +62,7 @@ export interface AddressTransformContribution {
  * 表类型 → 会话协议：
  * - 核心 "holding-register" → "rtu"；
  * - 核心基础表 "coil"/"discrete-input"/"input-register" → 基础表 codec 协议 ID
- *   （"modbus-basic-tables:<tableType>"，RTU 承载）；
+ *   ("modbus-basic-tables:<tableType>", carried by the active RTU/TCP session);
  * - 插件表类型 "<pluginId>:<tableTypeId>" → 查 tableType 贡献的 protocolId；
  * - 目标协议不在平台能力矩阵 protocolExtensions 内 → 回退 "rtu"（能力门控）。
  */

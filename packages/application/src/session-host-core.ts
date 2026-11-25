@@ -235,7 +235,7 @@ export class SessionHostCore {
     return (
       route === undefined ||
       this.session === null ||
-      route.protocol === this.session.getProtocol()
+      this.session.supportsProtocol(route.protocol)
     );
   }
 

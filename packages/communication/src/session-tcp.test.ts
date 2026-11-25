@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { TcpConnectionProfile } from "@mamep2026/domain";
 import {
   encodeTcpReadHoldingRegistersRequest,
   encodeTcpWriteSingleRegisterRequest,
 } from "@mamep2026/protocol-modbus";
 import { CommunicationSession } from "./session";
+import { createCancellationToken } from "./cancellation";
 import type { CommunicationLogEvent } from "./log-event";
 import { FakeTransport } from "./testing/fake-transport";
 import { ManualClock, advanceUntil } from "./testing/manual-clock";
@@ -89,6 +90,240 @@ function concat(...chunks: Uint8Array[]): Uint8Array {
   }
   return out;
 }
+
+describe("TCP core table routes", () => {
+  const coil = { protocol: "modbus-basic-tables:coil", unitAddress: 7 };
+  const input = {
+    protocol: "modbus-basic-tables:input-register",
+    unitAddress: 255,
+  };
+
+  it("wraps the shared 16-bit transaction sequence across basic and holding tables", async () => {
+    const { session, transport } = makeTcpSession();
+    const transactionIds: number[] = [];
+    vi.spyOn(transport, "write").mockImplementation(async (request) => {
+      const transactionId = ((request[0] ?? 0) << 8) | (request[1] ?? 0);
+      transactionIds.push(transactionId);
+      transport.simulateData(
+        tcpFrame(
+          transactionId,
+          request[6] ?? 0,
+          request[7] === 1
+            ? Uint8Array.from([1, 1, 1])
+            : Uint8Array.from([3, 2, 0, 1]),
+        ),
+      );
+      return { ok: true, value: undefined };
+    });
+    await session.connect();
+    for (let requestIndex = 0; requestIndex <= 0x10000; requestIndex++) {
+      const result = await session.readRegister(0, {
+        source: "manual-read",
+        route:
+          requestIndex % 2 === 0 ? coil : { protocol: "tcp", unitAddress: 1 },
+      });
+      if (!result.ok) throw result.error;
+    }
+    expect(transactionIds.slice(-3)).toEqual([65534, 65535, 0]);
+    await session.disconnect();
+  }, 10000);
+
+  it("serializes mixed tables with one transaction sequence and captured Unit IDs", async () => {
+    const { session, transport, clock } = makeTcpSession();
+    await session.connect();
+    const first = session.readRegisters(10, 9, {
+      source: "manual-read",
+      route: coil,
+    });
+    const second = session.readRegister(20, {
+      source: "manual-read",
+      route: input,
+    });
+    const third = session.readRegister(30, {
+      source: "manual-read",
+      route: { protocol: "tcp", unitAddress: 0 },
+    });
+    session.setUnitId(99);
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    expect([...(transport.sentFrames[0] ?? [])]).toEqual([
+      0, 0, 0, 0, 0, 6, 7, 1, 0, 10, 0, 9,
+    ]);
+    transport.simulateData(tcpFrame(0, 7, Uint8Array.from([1, 2, 0x85, 1])));
+    expect(await first).toEqual({
+      ok: true,
+      value: [1, 0, 1, 0, 0, 0, 0, 1, 1],
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    expect([...(transport.sentFrames[1] ?? [])]).toEqual([
+      0, 1, 0, 0, 0, 6, 255, 4, 0, 20, 0, 1,
+    ]);
+    transport.simulateData(
+      tcpFrame(1, 255, Uint8Array.from([4, 2, 0xab, 0xcd])),
+    );
+    expect(await second).toEqual({ ok: true, value: 0xabcd });
+    await advanceUntil(clock, () => transport.sentFrames.length === 3);
+    transport.simulateData(readResponse(2, 0, 42));
+    expect(await third).toEqual({ ok: true, value: 42 });
+    await session.disconnect();
+  });
+
+  it.each(["discrete-input", "input-register"])(
+    "rejects writes to %s without transmitting",
+    async (table) => {
+      const { session, transport } = makeTcpSession();
+      await session.connect();
+      expect(
+        await session.writeRegister(0, 1, {
+          source: "manual-write",
+          route: { protocol: `modbus-basic-tables:${table}`, unitAddress: 1 },
+        }),
+      ).toMatchObject({ ok: false, error: { code: "BASIC_TABLES_READ_ONLY" } });
+      expect(transport.sentFrames).toHaveLength(0);
+      await session.disconnect();
+    },
+  );
+
+  it("checks coil values, quantity limits and address overflow before sending", async () => {
+    const { session, transport } = makeTcpSession();
+    await session.connect();
+    for (const [address, quantity] of [
+      [0, 0],
+      [0, 2001],
+      [65535, 2],
+      [-1, 1],
+      [0.5, 1],
+    ]) {
+      expect(
+        (
+          await session.readRegisters(address ?? 0, quantity ?? 0, {
+            source: "manual-read",
+            route: coil,
+          })
+        ).ok,
+      ).toBe(false);
+    }
+    expect(
+      (
+        await session.readRegisters(0, 126, {
+          source: "manual-read",
+          route: input,
+        })
+      ).ok,
+    ).toBe(false);
+    for (const values of [[2], [-1], [NaN], Array<number>(1969).fill(0)]) {
+      expect(
+        (
+          await session.writeRegisters(0, values, {
+            source: "manual-write",
+            route: coil,
+          })
+        ).ok,
+      ).toBe(false);
+    }
+    expect(transport.sentFrames).toHaveLength(0);
+    await session.disconnect();
+  });
+
+  it("supports maximum bit reads and FC0F writes beyond holding-register limits", async () => {
+    const { session, transport, clock } = makeTcpSession();
+    await session.connect();
+    const read = session.readRegisters(0, 2000, {
+      source: "manual-read",
+      route: coil,
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(
+      tcpFrame(
+        0,
+        7,
+        Uint8Array.from([1, 250, ...Array<number>(250).fill(255)]),
+      ),
+    );
+    expect(await read).toEqual({
+      ok: true,
+      value: Array<number>(2000).fill(1),
+    });
+    const write = session.writeRegisters(0, Array<number>(1968).fill(1), {
+      source: "manual-write",
+      route: coil,
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    expect(transport.sentFrames[1]?.length).toBe(259);
+    transport.simulateData(tcpFrame(1, 7, Uint8Array.from([15, 0, 0, 7, 176])));
+    expect(await write).toEqual({
+      ok: true,
+      value: { kind: "write-succeeded-no-verify" },
+    });
+    await session.disconnect();
+  });
+
+  it("allocates a fresh retry ID and rejects stale, wrong-unit and wrong-function frames", async () => {
+    const { session, transport, clock } = makeTcpSession({
+      profile: tcpProfile({ requestTimeoutMs: 100, retryCount: 1 }),
+    });
+    await session.connect();
+    const result = session.readRegister(0, {
+      source: "manual-read",
+      route: coil,
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    expect(transport.sentFrames[1]?.[1]).toBe(1);
+    transport.simulateData(
+      concat(
+        tcpFrame(0, 7, Uint8Array.from([1, 1, 0])),
+        tcpFrame(1, 8, Uint8Array.from([1, 1, 0])),
+        tcpFrame(1, 7, Uint8Array.from([2, 1, 0])),
+        tcpFrame(1, 7, Uint8Array.from([1, 1, 1])),
+      ),
+    );
+    expect(await result).toEqual({ ok: true, value: 1 });
+    await session.disconnect();
+  });
+
+  it("returns device exceptions without retrying", async () => {
+    const { session, transport, clock } = makeTcpSession();
+    await session.connect();
+    const result = session.readRegister(0, {
+      source: "manual-read",
+      route: input,
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(tcpFrame(0, 255, Uint8Array.from([0x84, 2])));
+    expect(await result).toMatchObject({
+      ok: false,
+      error: { category: "modbus-exception", retryable: false },
+    });
+    expect(transport.sentFrames).toHaveLength(1);
+    await session.disconnect();
+  });
+
+  it("cancels queued work and drops incomplete data on disconnect", async () => {
+    const { session, transport, clock } = makeTcpSession();
+    await session.connect();
+    const first = session.readRegister(0, {
+      source: "manual-read",
+      route: coil,
+    });
+    const cancelToken = createCancellationToken();
+    const queued = session.readRegister(1, {
+      source: "batch-read",
+      route: input,
+      cancelToken,
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    cancelToken.cancel("test");
+    transport.simulateData(Uint8Array.from([0, 0, 0, 0, 0, 4, 7, 1]));
+    await session.disconnect();
+    expect((await first).ok).toBe(false);
+    expect((await queued).ok).toBe(false);
+    expect(transport.sentFrames).toHaveLength(1);
+    expect(
+      (await session.readRegister(2, { source: "manual-read", route: coil }))
+        .ok,
+    ).toBe(false);
+  });
+});
 
 describe("CommunicationSession over TCP", () => {
   it("TCP 读：发送 MBAP 请求（tid=0, unitId=0）并解析响应", async () => {

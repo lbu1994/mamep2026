@@ -113,6 +113,96 @@ async function connect(h: Harness): Promise<boolean> {
   return result.ok;
 }
 
+describe("TCP basic table operations", () => {
+  const route = { protocol: "modbus-basic-tables:coil", unitAddress: 7 };
+
+  it("preserves the coil route through FC0F write and FC01 verification", async () => {
+    const h = createHarness();
+    await connect(h);
+    const result = h.host.writeRow(
+      makeRow(10, "1"),
+      { writeVerify: { mode: "immediate", delayMs: null } },
+      route,
+    );
+    await flushMicrotasks();
+    expect(h.transport.sentFrames[0]?.[7]).toBe(15);
+    h.transport.simulateData(
+      tcpFrame(0, 7, Uint8Array.from([15, 0, 10, 0, 1])),
+    );
+    await flushMicrotasks(30);
+    expect(h.transport.sentFrames[1]?.[7]).toBe(1);
+    expect(h.transport.sentFrames[1]?.[6]).toBe(7);
+    h.transport.simulateData(tcpFrame(1, 7, Uint8Array.from([1, 1, 1])));
+    expect(await result).toEqual({
+      ok: true,
+      value: { kind: "write-succeeded-verify-matched", readValues: [1] },
+    });
+    await h.host.dispose();
+  });
+
+  it("accepts basic table batches and retains route context in row results", async () => {
+    const h = createHarness();
+    await connect(h);
+    const batch = h.host.readAllRows(
+      [{ key: "row-a", sheetId: "sheet-a", address: 10 }],
+      "basic-batch",
+      route,
+    );
+    await flushMicrotasks();
+    expect(h.transport.sentFrames[0]?.[7]).toBe(1);
+    h.transport.simulateData(tcpFrame(0, 7, Uint8Array.from([1, 1, 1])));
+    expect(await batch.promise).toMatchObject({
+      ok: true,
+      value: { successCount: 1, failureCount: 0 },
+    });
+    expect(h.events.onPollResult).toHaveBeenCalledWith(
+      expect.objectContaining({ route, result: { ok: true, value: 1 } }),
+    );
+    await h.host.dispose();
+  });
+
+  it("accepts basic table polling and trace routes without enabling RTU plugins", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.host.updatePollingTargets([
+      { key: "coil", sheetId: "sheet-a", address: 10, route },
+    ]);
+    h.host.startPolling();
+    h.clock.advance(0);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames[0]?.[7]).toBe(1);
+    h.transport.simulateData(tcpFrame(0, 7, Uint8Array.from([1, 1, 1])));
+    await flushMicrotasks(30);
+    h.host.stopPolling();
+    expect(h.events.onPollResult).toHaveBeenCalledWith(
+      expect.objectContaining({ route }),
+    );
+    h.host.traceStart("input", 20, 100, 1, {
+      protocol: "modbus-basic-tables:input-register",
+      unitAddress: 255,
+    });
+    h.clock.advance(100);
+    await flushMicrotasks(30);
+    const sent = h.transport.sentFrames.at(-1);
+    expect(sent?.[7]).toBe(4);
+    h.transport.simulateData(
+      tcpFrame(sent?.[1] ?? 0, 255, Uint8Array.from([4, 2, 0, 42])),
+    );
+    await flushMicrotasks(30);
+    expect(h.events.onTraceSample).toHaveBeenCalled();
+    expect(
+      await h.host.readRow(makeRow(10), {
+        protocol: "yaskawa-memobus",
+        unitAddress: 7,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "REQUEST_ROUTE_PROTOCOL_MISMATCH" },
+    });
+    await h.host.dispose();
+  });
+});
+
 describe("TcpSessionHost 连接/断开", () => {
   it("connect 打开传输并进入 connected", async () => {
     const h = createHarness();

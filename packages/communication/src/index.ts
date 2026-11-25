@@ -1,5 +1,6 @@
 export * from "./batch-read-coordinator";
 export * from "./basic-tables-codec";
+export * from "./basic-tables-tcp-codec";
 export * from "./cancellation";
 export * from "./clock";
 export * from "./codec";

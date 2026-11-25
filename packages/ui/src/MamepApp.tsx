@@ -413,8 +413,8 @@ function MamepAppContent({
         titleKey: "table.tableType.holdingRegister",
       },
     ];
-    // 核心基础表组：coil/discrete-input/input-register，
-    // RTU 承载（codec 协议 ID），按能力矩阵 protocolExtensions 门控（VSCode 未接 codec 前不显示）。
+    // Core table IDs select RTU or TCP codecs in the active session.
+    // Only show tables declared by the host's protocol capabilities.
     for (const meta of CORE_TABLE_TYPES) {
       if (meta.id === "holding-register") continue;
       const protocol = basicTablesProtocolId(meta.id);

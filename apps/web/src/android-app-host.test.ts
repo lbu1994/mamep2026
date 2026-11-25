@@ -123,6 +123,92 @@ function lastRequest(bridge: FakeTransportBridge): Uint8Array {
   return decoded.value;
 }
 
+describe("Android core TCP table wiring", () => {
+  it.each([
+    ["coil", 1, [1, 1, 1], 1],
+    ["discrete-input", 2, [2, 1, 1], 1],
+    ["input-register", 4, [4, 2, 0xab, 0xcd], 0xabcd],
+  ] as const)(
+    "routes %s through the native byte bridge",
+    async (table, fc, pdu, value) => {
+      const { host, bridge } = createHost();
+      try {
+        await host.connectTcp(tcpProfile());
+        const read = host.readRow(makeRow(10), {
+          protocol: `modbus-basic-tables:${table}`,
+          unitAddress: 255,
+        });
+        await flushMicrotasks();
+        expect([...lastRequest(bridge)]).toEqual([
+          0,
+          0,
+          0,
+          0,
+          0,
+          6,
+          255,
+          fc,
+          0,
+          10,
+          0,
+          1,
+        ]);
+        const response = Uint8Array.from([
+          0,
+          0,
+          0,
+          0,
+          0,
+          pdu.length + 1,
+          255,
+          ...pdu,
+        ]);
+        bridge.emitData(response.slice(0, 8));
+        bridge.emitData(response.slice(8));
+        expect(await read).toEqual({ ok: true, value });
+      } finally {
+        await host.dispose();
+      }
+    },
+  );
+
+  it("writes FC0F and rejects writes to read-only tables", async () => {
+    const { host, bridge } = createHost();
+    try {
+      await host.connectTcp(tcpProfile());
+      const row = makeRow(10);
+      row.cellText = "1";
+      for (const table of ["discrete-input", "input-register"]) {
+        expect(
+          await host.writeRow(row, undefined, {
+            protocol: `modbus-basic-tables:${table}`,
+            unitAddress: 7,
+          }),
+        ).toMatchObject({
+          ok: false,
+          error: { code: "BASIC_TABLES_READ_ONLY" },
+        });
+      }
+      expect(bridge.writeCalls).toHaveLength(0);
+      const write = host.writeRow(row, undefined, {
+        protocol: "modbus-basic-tables:coil",
+        unitAddress: 7,
+      });
+      await flushMicrotasks();
+      expect([...lastRequest(bridge)]).toEqual([
+        0, 0, 0, 0, 0, 8, 7, 15, 0, 10, 0, 1, 1, 1,
+      ]);
+      bridge.emitData(Uint8Array.from([0, 0, 0, 0, 0, 6, 7, 15, 0, 10, 0, 1]));
+      expect(await write).toEqual({
+        ok: true,
+        value: { kind: "write-succeeded-no-verify" },
+      });
+    } finally {
+      await host.dispose();
+    }
+  });
+});
+
 describe("AndroidAppHost：平台声明", () => {
   it("platform=android、能力矩阵如实（TCP + USB 串口均支持）、不用浏览器兼容性提示", () => {
     const { host } = createHost();

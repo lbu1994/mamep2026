@@ -129,6 +129,7 @@ export class TcpSessionHost {
     profile: TcpConnectionProfile,
     transport: TransportPort,
   ): CommunicationSession {
+    // Core table routes select MBAP codecs within this single TCP session.
     return new CommunicationSession({
       transport,
       clock: this.core.clock,

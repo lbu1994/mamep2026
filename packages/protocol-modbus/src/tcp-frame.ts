@@ -1,18 +1,22 @@
 /**
- * Modbus TCP ADU（MBAP + PDU）编解码（docs/TECH_DESIGN.md §34.3.16 后续 Node TCP Adapter）。
- * FC03 读保持寄存器（quantity 可 >1）、FC0x10 写保持寄存器（单值或多值，与 rtu-frame.ts 对齐，
- * ）。
- *
- * MBAP 头（7 字节）：
- * - transactionId(2) + protocolId(2, 恒为 0x0000) + length(2, 其后字节数 = unitId+PDU) + unitId(1)
- * TCP 无 CRC（与 RTU 的关键差异）。
- *
- * 本包只处理帧编解码；TCP 流的分帧/缓冲（deframer）与传输打开属通信/适配层职责。
+ * Modbus TCP ADU encoding and decoding for FC01/02/03/04/0F/10.
+ * MBAP contains transaction ID, protocol ID, length and Unit ID; TCP has no CRC.
+ * PDU semantics are shared with RTU. Stream buffering belongs to communication.
  */
 import { createMamepError, type MamepError } from "@mamep2026/domain";
 import type { Result } from "@mamep2026/domain";
-import { fail, ok } from "@mamep2026/domain";
-import { FUNCTION_READ_HOLDING, FUNCTION_WRITE_MULTIPLE } from "./rtu-frame";
+import { fail } from "@mamep2026/domain";
+import {
+  decodeResponsePdu,
+  encodeReadPdu,
+  encodeWritePdu,
+  FUNCTION_READ_HOLDING,
+  FUNCTION_READ_INPUT_REGISTERS,
+  FUNCTION_WRITE_MULTIPLE,
+  FUNCTION_WRITE_MULTIPLE_COILS,
+  type PduExpectedResponse,
+  type DecodedPduResponse,
+} from "./pdu";
 
 export const PROTOCOL_IDENTIFIER = 0x0000;
 
@@ -39,34 +43,11 @@ export interface TcpWriteMultipleRegistersRequest {
 }
 
 /** 期望的响应类型：解码时据此做一致性校验（与 rtu-frame 的 ExpectedResponse 对齐）。 */
-export type TcpExpectedResponse =
-  | {
-      kind: "read-holding";
-      transactionId: number;
-      unitId: number;
-      startAddress: number;
-      quantity: number;
-    }
-  | {
-      kind: "write-single";
-      transactionId: number;
-      unitId: number;
-      address: number;
-      quantity: number;
-    }
-  | {
-      kind: "write-multiple";
-      transactionId: number;
-      unitId: number;
-      address: number;
-      quantity: number;
-    };
-
-export type DecodedTcpResponse =
-  | { kind: "read-holding"; values: number[] }
-  | { kind: "write-single" }
-  | { kind: "write-multiple" }
-  | { kind: "exception"; exceptionCode: number };
+export type TcpExpectedResponse = PduExpectedResponse & {
+  transactionId: number;
+  unitId: number;
+};
+export type DecodedTcpResponse = DecodedPduResponse;
 
 function protocolError(code: string, technicalMessage: string): MamepError {
   return createMamepError({
@@ -101,52 +82,43 @@ function buildTcpFrame(
 export function encodeTcpReadHoldingRegistersRequest(
   request: TcpReadHoldingRegistersRequest,
 ): Uint8Array {
-  const pdu = Uint8Array.from([
-    FUNCTION_READ_HOLDING,
-    (request.startAddress >> 8) & 0xff,
-    request.startAddress & 0xff,
-    (request.quantity >> 8) & 0xff,
-    request.quantity & 0xff,
-  ]);
-  return buildTcpFrame(request.transactionId, request.unitId, pdu);
+  return buildTcpFrame(
+    request.transactionId,
+    request.unitId,
+    encodeReadPdu(
+      FUNCTION_READ_HOLDING,
+      request.startAddress,
+      request.quantity,
+    ),
+  );
 }
 
 /** 即使只写一个寄存器也使用功能码 0x10（docs/AGENTS.md §5.1）。 */
 export function encodeTcpWriteSingleRegisterRequest(
   request: TcpWriteSingleRegisterRequest,
 ): Uint8Array {
-  const pdu = Uint8Array.from([
-    FUNCTION_WRITE_MULTIPLE,
-    (request.address >> 8) & 0xff,
-    request.address & 0xff,
-    0x00,
-    0x01, // quantity = 1
-    0x02, // byte count = 2
-    (request.rawValue >> 8) & 0xff,
-    request.rawValue & 0xff,
-  ]);
-  return buildTcpFrame(request.transactionId, request.unitId, pdu);
+  return buildTcpFrame(
+    request.transactionId,
+    request.unitId,
+    encodeWritePdu(FUNCTION_WRITE_MULTIPLE, request.address, [
+      request.rawValue,
+    ]),
+  );
 }
 
 /** FC0x10 多寄存器写入（TCP）：quantity = values.length、byteCount = 2N、值大端。 */
 export function encodeTcpWriteMultipleRegistersRequest(
   request: TcpWriteMultipleRegistersRequest,
 ): Uint8Array {
-  const quantity = request.values.length;
-  const byteCount = quantity * 2;
-  const pdu = new Uint8Array(6 + byteCount);
-  pdu[0] = FUNCTION_WRITE_MULTIPLE;
-  pdu[1] = (request.startAddress >> 8) & 0xff;
-  pdu[2] = request.startAddress & 0xff;
-  pdu[3] = (quantity >> 8) & 0xff;
-  pdu[4] = quantity & 0xff;
-  pdu[5] = byteCount & 0xff;
-  for (let i = 0; i < quantity; i++) {
-    const value = request.values[i] ?? 0;
-    pdu[6 + i * 2] = (value >> 8) & 0xff;
-    pdu[7 + i * 2] = value & 0xff;
-  }
-  return buildTcpFrame(request.transactionId, request.unitId, pdu);
+  return buildTcpFrame(
+    request.transactionId,
+    request.unitId,
+    encodeWritePdu(
+      FUNCTION_WRITE_MULTIPLE,
+      request.startAddress,
+      request.values,
+    ),
+  );
 }
 
 /** 解码 TCP 响应 ADU。MBAP 头 7 字节 + PDU；严格长度校验（长度字段与实收一致）。 */
@@ -205,103 +177,47 @@ export function decodeTcpResponse(
     );
   }
 
-  const functionCode = frame[7] ?? -1;
-  const expectedFunction =
-    expected.kind === "read-holding"
-      ? FUNCTION_READ_HOLDING
-      : FUNCTION_WRITE_MULTIPLE;
+  return decodeResponsePdu(frame.subarray(7), expected, "TCP");
+}
 
-  // 异常响应：功能码最高位置 1。
-  if (
-    (functionCode & 0x7f) === expectedFunction &&
-    (functionCode & 0x80) !== 0
-  ) {
-    // 异常响应：MBAP(7) + fc|0x80(1) + exceptionCode(1) = 9 字节。
-    if (frame.length !== 9) {
-      return fail(
-        protocolError(
-          "TCP_INVALID_LENGTH",
-          `exception frame must be 9 bytes, got ${frame.length}`,
-        ),
-      );
-    }
-    return ok({ kind: "exception", exceptionCode: frame[8] ?? 0 });
-  }
+/** Encode FC01 or FC02 with an MBAP header. */
+export function encodeTcpReadBitsRequest(
+  request: TcpReadHoldingRegistersRequest,
+  functionCode: number,
+): Uint8Array {
+  return buildTcpFrame(
+    request.transactionId,
+    request.unitId,
+    encodeReadPdu(functionCode, request.startAddress, request.quantity),
+  );
+}
 
-  if (functionCode !== expectedFunction) {
-    return fail(
-      protocolError(
-        "TCP_FUNCTION_MISMATCH",
-        `function mismatch: expected ${expectedFunction.toString(16)}, got ${functionCode.toString(16)}`,
-      ),
-    );
-  }
+/** Encode FC04 with an MBAP header. */
+export function encodeTcpReadInputRegistersRequest(
+  request: TcpReadHoldingRegistersRequest,
+): Uint8Array {
+  return buildTcpFrame(
+    request.transactionId,
+    request.unitId,
+    encodeReadPdu(
+      FUNCTION_READ_INPUT_REGISTERS,
+      request.startAddress,
+      request.quantity,
+    ),
+  );
+}
 
-  if (expected.kind === "read-holding") {
-    // 正常读响应：MBAP(7) + fc(1) + byteCount(1) + data(quantity*2)。
-    if (frame.length !== 9 + expected.quantity * 2) {
-      return fail(
-        protocolError(
-          "TCP_INVALID_LENGTH",
-          `read frame must be ${9 + expected.quantity * 2} bytes, got ${frame.length}`,
-        ),
-      );
-    }
-    const byteCount = frame[8] ?? -1;
-    if (byteCount !== expected.quantity * 2) {
-      return fail(
-        protocolError(
-          "TCP_BYTE_COUNT_MISMATCH",
-          `byte count expected ${expected.quantity * 2}, got ${byteCount}`,
-        ),
-      );
-    }
-    const values: number[] = [];
-    for (let i = 0; i < expected.quantity; i++) {
-      const hi = frame[9 + i * 2];
-      const lo = frame[10 + i * 2];
-      if (hi === undefined || lo === undefined) {
-        return fail(
-          protocolError(
-            "TCP_DATA_LENGTH_MISMATCH",
-            "read response data truncated",
-          ),
-        );
-      }
-      values.push((hi << 8) | lo);
-    }
-    return ok({ kind: "read-holding", values });
-  }
-
-  // write-single / write-multiple 响应：MBAP(7) + fc(1) + address(2) + quantity(2) = 12 字节。
-  if (frame.length !== 12) {
-    return fail(
-      protocolError(
-        "TCP_INVALID_LENGTH",
-        `write frame must be 12 bytes, got ${frame.length}`,
-      ),
-    );
-  }
-  const respAddress = ((frame[8] ?? 0) << 8) | (frame[9] ?? 0);
-  if (respAddress !== expected.address) {
-    return fail(
-      protocolError(
-        "TCP_ADDRESS_MISMATCH",
-        `address expected ${expected.address}, got ${respAddress}`,
-      ),
-    );
-  }
-  const respQuantity = ((frame[10] ?? 0) << 8) | (frame[11] ?? 0);
-  if (respQuantity !== expected.quantity) {
-    return fail(
-      protocolError(
-        "TCP_QUANTITY_MISMATCH",
-        `quantity expected ${expected.quantity}, got ${respQuantity}`,
-      ),
-    );
-  }
-  return ok({
-    kind:
-      expected.kind === "write-multiple" ? "write-multiple" : "write-single",
-  });
+/** Encode FC0F with an MBAP header. Values are ordered coil bits. */
+export function encodeTcpWriteMultipleCoilsRequest(
+  request: TcpWriteMultipleRegistersRequest,
+): Uint8Array {
+  return buildTcpFrame(
+    request.transactionId,
+    request.unitId,
+    encodeWritePdu(
+      FUNCTION_WRITE_MULTIPLE_COILS,
+      request.startAddress,
+      request.values,
+    ),
+  );
 }

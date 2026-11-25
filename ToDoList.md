@@ -6,11 +6,7 @@
 
 > 核对范围：原第 25–86 行，共 54 项。以下只保留未完成部分；整项已完成的已删除。依据为当前源码、测试定义和架构文档，未执行全量回归、四端 E2E 或真机验收。“建议方案”不表示已批准改变产品范围、协议、插件 API 或持久化格式。PRD §8.4 的增强能力及 §8.5 的探索能力实施前仍需确认范围并同步设计。
 
-- [ ] [feat] **实现多寄存器数据曲线**：未实现；[TraceWindow](packages/ui/src/components/TraceWindow.tsx) 没有曲线视图。依赖完整 Trace 样本，先确认核心/插件归属；建议建立独立曲线视图模型，支持多行选择、时间窗口、暂停视图和恢复追加，缺失数据画断点，截断、删行和断线显示明确状态。补齐深浅主题、键盘图例、缩放/平移及数据点读取；异常值不得导致坐标范围反复跳动。
-- [ ] [feat] **实现 Trace CSV 导出**：剩余为结构化 CSV、范围选择与跨平台保存；[saveTrace](packages/ui/src/components/TraceWindow.tsx) 仍通过 Blob 下载 JSON。建议冻结选定采样范围，再由纯序列化函数输出 BOM CSV，包含时间、序号、连接/表/行/请求 ID、地址、名称、原始值、格式化值及类型；文件名带时间戳，保存走 Host 文件接口。导出前提示设备数据敏感性；覆盖运行中、暂停及截断缓冲，正确转义逗号/引号/换行，取消保存不报错。
-- [ ] [feat] **支持更细粒度的轮询调度**：待确认 P2 范围；[当前设计](docs/architecture/application/communication/调度与轮询.md) 明确固定间隔 0 且不提供 ALL Polling。建议确认后为 [PollingTarget](packages/communication/src/polling-coordinator.ts) 增加周期、首次延迟和受限优先级，以单调时钟的 nextDueAt 调度，漏周期直接跳过；表/连接启停只作用于选定范围。补齐持久化迁移与待执行任务取消，保持同连接串行；覆盖后台恢复、超时、地址修改和取消，不补发积压周期。
-- [ ] [feat] **支持每行独立从站地址**：待确认 P2 范围；[行模型](packages/domain/src/workspace-model.ts) 尚无覆盖字段，[PRD](docs/ref/PRD.md) 当前范围明确不提供。建议增加可空 unitAddressOverride，由统一路由解析器先取行覆盖、再取表默认，并将来源写入日志；UI 区分继承与独立值。同步 Schema、IPC、剪贴板、撤销和读写/轮询/Trace 路由；批读不得跨不同最终目标合并，已入队快照不随默认值改变。
-- [ ] [feat] **实现 32 位浮点数类型**：未实现；[内置类型](packages/domain/src/workspace-model.ts) 和 [转换模块](packages/data-conversion/src/data-types.ts) 尚无 float32。建议先确认普通小数的 IEEE 754 舍入策略：原要求“不可精确表示即提示”不能静默变成截断或无提示接受。随后用两个原始 word 和固定大端转换实现解析、格式化与宽度校验，明确拒绝非有限值、溢出和不允许的精度损失；覆盖范围行、批读、写后回读、日志及典型正负数/极值往返。
+
 - [ ] [feat] **支持字节序和字序配置**：待确认 P2 范围；[转换设计](docs/architecture/domain/data-conversion/转换设计.md) 仍规定固定大端。建议定义可组合的字节交换与 word 排列，表设默认、行可覆盖，所有解释先从原始 word 数组读取；切换只重新解释，不改原值。同步持久化迁移、撤销、导入导出、宽度校验和日志；用独立向量覆盖 32/64 位整数、float32 与多寄存器字符串，16 位维持默认行为。
 - [ ] [feat] **实现配置模板**：未实现；[工作区模型](packages/domain/src/workspace-model.ts) 没有模板模型。建议在 workspace 包定义独立版本化配置投影，只提取表/行配置，排除连接授权、本机路径和运行值；待字节序、轮询字段确定后纳入对应 Schema。提供双语名称描述、保存/重命名/删除及新建/合并预览；相对地址须定义基址和越界规则，用户确认前不修改目标表。
 - [ ] [feat] **实现标签页分组**：未实现；[Workspace](packages/domain/src/workspace-model.ts) 只保存平面 sheets。建议新增稳定 groupId、成员顺序及折叠状态，迁移旧表为未分组；UI 按模型渲染并自动展开活动表所在组。拖动与键盘移动共用命令和撤销路径；删除组时明确选择移出成员或连同成员删除，并与“同类型保留一张表”规则协调。
@@ -28,7 +24,6 @@
 
 ## 平台与架构待办
 
-- [ ] [feat] **补齐核心基础表的 Modbus TCP codec**：未实现；[BasicTablesRtuCodec](packages/communication/src/basic-tables-codec.ts) 仍仅处理 RTU，[TcpSessionHost](packages/application/src/tcp-session-host.ts) 固定标准 TCP 路径。建议分离 PDU 语义与 RTU/TCP 封装，补 FC01/FC02/FC04/FC0F 的 MBAP 编解码和路由，再接 Electron、VSCode、Android。覆盖事务号、Unit ID、功能码、数量、异常、半包/粘包和迟到帧，禁止向只读表写入；完成对应平台接线后才声明能力。
 - [ ] [feat] **完成 Android 文件通道及工作区/日志导出**：未实现；[AndroidAppHost](apps/web/src/android-app-host.ts) 的文件方法仍拒绝调用，[能力表](packages/platform-android/src/android-capabilities.ts) 仍为 unsupported。建议新增受控、版本化文本文件桥，优先通过 SAF 选择/创建用户文件，分享作为独立动作；是否使用 Capacitor Filesystem 按沙盒暂存需求确定。接入既有导入预览与 CSV 保存接口，统一取消、权限拒绝和 I/O 错误；真机完成选取、保存及取消闭环后再翻转能力位。
 - [ ] [feat] **增加 Android BLE UART 与经典蓝牙 SPP 传输**：未实现；[原生桥白名单](packages/platform-android/src/bridge-contract.ts) 没有蓝牙方法。建议分别定义 BLE profile（设备、服务 UUID、特征、分片参数）和 SPP profile，明确权限、配对与重连边界并提供迁移；原生适配器只输出受控字节流，继续交给共享 Transport/会话。覆盖拒绝授权、断线、取消、重连及资源释放；没有对应能力时不暴露可用入口。
 - [ ] [plugin] **实现受控的交互式插件面板**：剩余为交互内容；[PluginPanels](packages/ui/src/components/plugin-contributions.tsx) 仍渲染 Empty 占位。建议在 plugin-api 定义版本化声明式组件树、事件和 RPC Schema，共享 UI 白名单渲染；读数据与执行命令分别校验权限。禁止任意 DOM、Store 和文件/网络/Transport 对象访问；绑定插件 generation 回收订阅，覆盖异常、启停和卸载，并支持主题、i18n、键盘与辅助技术。
@@ -63,3 +58,7 @@
 # Postpone
 - [ ] [feat] **支持多活动连接**：待确认 P2 范围；[SessionHostCore](packages/application/src/session-host-core.ts) 仍只有单个活动 session，[当前调度设计](docs/architecture/application/communication/调度与轮询.md) 也以单连接为前提。建议新增应用层连接管理器，每个运行时 connectionId 独占会话、队列、取消域和事件流；先扩展 Host/IPC，再接共享 UI。运行时 ID 不写入公开项目文件；同一串口禁止重复占用。验收至少两个连接并行读写/轮询，断开或超时只影响对应连接。
 - [ ] [feat] **支持每个标签页独立连接**：剩余为表与连接绑定；[RegisterSheet](packages/domain/src/workspace-model.ts) 尚无连接引用。依赖多活动连接，建议持久化稳定的 connectionProfileId，在运行时解析到 connectionId；区分“当前表绑定”和“新表默认绑定”，离线或无绑定时门控通信。迁移旧表至原活动 profile；切表不重连、不重绑其他表，关闭表只取消该表任务。补齐两表异设备的请求、日志、Trace 和错误隔离。
+- [ ] [feat] **实现多寄存器数据曲线**：未实现；[TraceWindow](packages/ui/src/components/TraceWindow.tsx) 没有曲线视图。依赖完整 Trace 样本，先确认核心/插件归属；建议建立独立曲线视图模型，支持多行选择、时间窗口、暂停视图和恢复追加，缺失数据画断点，截断、删行和断线显示明确状态。补齐深浅主题、键盘图例、缩放/平移及数据点读取；异常值不得导致坐标范围反复跳动。
+- [ ] [feat] **实现 Trace CSV 导出**：剩余为结构化 CSV、范围选择与跨平台保存；[saveTrace](packages/ui/src/components/TraceWindow.tsx) 仍通过 Blob 下载 JSON。建议冻结选定采样范围，再由纯序列化函数输出 BOM CSV，包含时间、序号、连接/表/行/请求 ID、地址、名称、原始值、格式化值及类型；文件名带时间戳，保存走 Host 文件接口。导出前提示设备数据敏感性；覆盖运行中、暂停及截断缓冲，正确转义逗号/引号/换行，取消保存不报错。
+- [ ] [feat] **支持更细粒度的轮询调度**：待确认 P2 范围；[当前设计](docs/architecture/application/communication/调度与轮询.md) 明确固定间隔 0 且不提供 ALL Polling。建议确认后为 [PollingTarget](packages/communication/src/polling-coordinator.ts) 增加周期、首次延迟和受限优先级，以单调时钟的 nextDueAt 调度，漏周期直接跳过；表/连接启停只作用于选定范围。补齐持久化迁移与待执行任务取消，保持同连接串行；覆盖后台恢复、超时、地址修改和取消，不补发积压周期。
+- [ ] [feat] **支持每行独立从站地址**：待确认 P2 范围；[行模型](packages/domain/src/workspace-model.ts) 尚无覆盖字段，[PRD](docs/ref/PRD.md) 当前范围明确不提供。建议增加可空 unitAddressOverride，由统一路由解析器先取行覆盖、再取表默认，并将来源写入日志；UI 区分继承与独立值。同步 Schema、IPC、剪贴板、撤销和读写/轮询/Trace 路由；批读不得跨不同最终目标合并，已入队快照不随默认值改变。

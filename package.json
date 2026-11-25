@@ -1,7 +1,7 @@
 {
   "name": "mamep2026",
   "private": true,
-  "version": "0.10.8",
+  "version": "0.10.9",
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "main": "dist-electron/main.js",
