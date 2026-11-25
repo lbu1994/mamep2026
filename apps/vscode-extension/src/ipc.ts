@@ -8,6 +8,7 @@
 import { createMamepError, ok, type Result } from "@mamep2026/domain";
 import type { PlatformCapabilities } from "@mamep2026/domain";
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   ConnectionState,
@@ -116,6 +117,7 @@ export interface VscodeSessionLike {
     speedMs: number,
     quantity?: number,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void;
   traceStop(key: string): void;
   dispose(): Promise<void>;
@@ -409,6 +411,7 @@ export async function handleVscodeRequest(
           message.payload.speedMs,
           message.payload.quantity,
           message.payload.route,
+          message.payload.identity,
         ),
       );
     case "session-trace-stop":

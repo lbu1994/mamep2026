@@ -668,7 +668,8 @@ function MamepAppContent({
         );
       const row = sheet?.rows.find((r) => r.rowId === sample.key);
       if (row === undefined) return;
-      appendTraceSample(sample.key as never, {
+      appendTraceSample(row.rowId, {
+        ...sample,
         no: sample.sequence,
         value: formatRawValue(sample.rawValue, row.dataType),
         rawValue: sample.rawValue,

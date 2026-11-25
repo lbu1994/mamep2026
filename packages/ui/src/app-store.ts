@@ -2,6 +2,9 @@
  * UI Store（zustand）：领域持久状态、运行时连接状态、通信任务投影与纯界面状态
  * 的分类视图（docs/TECH_DESIGN.md §4.4）。
  */
+import { TraceBuffer } from "@mamep2026/application";
+import type { TraceIdentity, TraceSample } from "@mamep2026/communication";
+import { requestRouteForSheet } from "./request-route";
 import type {
   AddressTransformConfig,
   DataType,
@@ -10,6 +13,7 @@ import type {
   RegisterRadix,
   RegisterRow,
   RegisterSheet,
+  RequestRoute,
   RowId,
   SheetId,
   SheetType,
@@ -102,11 +106,11 @@ export type BufferSizeOption =
   "continue" | "100" | "500" | "1000" | "1500" | "2000" | "3000";
 
 const TRACE_CONTINUE_CAPACITY = 10000;
+let nextTraceGeneration = 0;
 
-export interface TraceWindowSample {
+export interface TraceWindowSample extends TraceSample {
   no: number;
   value: string;
-  rawValue: number;
   dataType: DataType;
 }
 
@@ -117,12 +121,24 @@ export interface TraceAverageStats {
 }
 
 export interface TraceWindowModel {
-  rowId: string;
+  rowId: RowId;
   bufferSize: BufferSizeOption;
   /** Speed 滑块 0..100（Quick -> Slow）。 */
   speed: number;
   playing: boolean;
-  samples: TraceWindowSample[];
+  started: boolean;
+  buffer: TraceBuffer<TraceWindowSample>;
+  generation: number;
+  restartVersion: number;
+  nextNo: number;
+  binding:
+    | (TraceIdentity & {
+        route: Readonly<RequestRoute>;
+        address: number;
+        quantity: number;
+        dataType: DataType;
+      })
+    | null;
   average: string | null;
   averageStats: TraceAverageStats | null;
 }
@@ -401,6 +417,9 @@ export interface AppStoreState {
 
   openTraceWindow: (rowId: RowId) => void;
   closeTraceWindow: (rowId: RowId) => void;
+  bindTrace: (rowId: RowId) => TraceWindowModel["binding"];
+  invalidateTrace: (rowId: RowId) => void;
+  clearTrace: (rowId: RowId) => void;
   setTracePlaying: (rowId: RowId, playing: boolean) => void;
   setTraceBufferSize: (rowId: RowId, bufferSize: BufferSizeOption) => void;
   setTraceSpeed: (rowId: RowId, speed: number) => void;
@@ -2054,7 +2073,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
           speed: 40,
           // 打开窗口不自动开始采样，等待用户手动点击 Play。
           playing: false,
-          samples: [],
+          started: false,
+          buffer: new TraceBuffer<TraceWindowSample>(TRACE_CONTINUE_CAPACITY),
+          generation: ++nextTraceGeneration,
+          restartVersion: 0,
+          nextNo: 1,
+          binding: null,
           average: null,
           averageStats: null,
         },
@@ -2062,6 +2086,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     })),
   closeTraceWindow: (rowId) =>
     set((state) => {
+      state.host?.traceStop(rowId);
       const windows = { ...state.traceWindows };
       delete windows[rowId];
       // 关闭窗口后同步复位对应行的 TM 勾选（traceEnabled），保持 Checkbox 与窗口单向同步。
@@ -2086,14 +2111,93 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         },
       };
     }),
-  setTracePlaying: (rowId, playing) =>
+  bindTrace: (rowId) => {
+    const state = get();
+    const current = state.traceWindows[rowId];
+    const sheet = state.workspace.sheets.find((sheet) =>
+      sheet.rows.some((row) => row.rowId === rowId),
+    );
+    const row = sheet?.rows.find((row) => row.rowId === rowId);
+    if (
+      !current?.playing ||
+      state.connectionState !== "connected" ||
+      state.host === null ||
+      sheet === undefined ||
+      row?.addressValue == null
+    )
+      return null;
+    const binding = {
+      generation: ++nextTraceGeneration,
+      sheetId: sheet.sheetId,
+      rowId,
+      address: row.addressValue.value,
+      quantity: row.registerCount,
+      dataType: row.dataType,
+      route: Object.freeze(requestRouteForSheet(state.host, sheet)),
+    };
+    set({
+      traceWindows: {
+        ...state.traceWindows,
+        [rowId]: {
+          ...current,
+          started: true,
+          generation: binding.generation,
+          binding,
+        },
+      },
+    });
+    return binding;
+  },
+  invalidateTrace: (rowId) =>
     set((state) => {
       const current = state.traceWindows[rowId];
       if (current === undefined) return state;
+      state.host?.traceStop(rowId);
       return {
         traceWindows: {
           ...state.traceWindows,
-          [rowId]: { ...current, playing },
+          [rowId]: {
+            ...current,
+            binding: null,
+            generation: ++nextTraceGeneration,
+            restartVersion: current.restartVersion + 1,
+          },
+        },
+      };
+    }),
+  clearTrace: (rowId) => {
+    get().invalidateTrace(rowId);
+    set((state) => {
+      const current = state.traceWindows[rowId];
+      if (current === undefined) return state;
+      current.buffer.clear();
+      return {
+        traceWindows: {
+          ...state.traceWindows,
+          [rowId]: {
+            ...current,
+            nextNo: 1,
+            average: null,
+            averageStats: null,
+          },
+        },
+      };
+    });
+  },
+  setTracePlaying: (rowId, playing) =>
+    set((state) => {
+      const current = state.traceWindows[rowId];
+      if (current === undefined || current.playing === playing) return state;
+      state.host?.traceStop(rowId);
+      return {
+        traceWindows: {
+          ...state.traceWindows,
+          [rowId]: {
+            ...current,
+            playing,
+            binding: null,
+            generation: ++nextTraceGeneration,
+          },
         },
       };
     }),
@@ -2101,21 +2205,17 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     set((state) => {
       const current = state.traceWindows[rowId];
       if (current === undefined) return state;
-      const capacity =
+      current.buffer.resize(
         bufferSize === "continue"
           ? TRACE_CONTINUE_CAPACITY
-          : Number(bufferSize);
+          : Number(bufferSize),
+      );
       return {
         traceWindows: {
           ...state.traceWindows,
           [rowId]: {
             ...current,
             bufferSize,
-            samples:
-              current.samples.length > capacity
-                ? current.samples.slice(current.samples.length - capacity)
-                : current.samples,
-            // 统计范围已改变，旧平均值不得继续显示。
             average: null,
             averageStats: null,
           },
@@ -2125,29 +2225,53 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   setTraceSpeed: (rowId, speed) =>
     set((state) => {
       const current = state.traceWindows[rowId];
-      if (current === undefined) return state;
-      return {
-        traceWindows: { ...state.traceWindows, [rowId]: { ...current, speed } },
-      };
-    }),
-  appendTraceSample: (rowId, sample) =>
-    set((state) => {
-      const current = state.traceWindows[rowId];
-      if (current === undefined) return state;
-      const samples = [...current.samples, sample];
-      const cap =
-        current.bufferSize === "continue"
-          ? TRACE_CONTINUE_CAPACITY
-          : Number(current.bufferSize);
+      if (current === undefined || current.speed === speed) return state;
+      state.host?.traceStop(rowId);
       return {
         traceWindows: {
           ...state.traceWindows,
           [rowId]: {
             ...current,
-            samples:
-              samples.length > cap
-                ? samples.slice(samples.length - cap)
-                : samples,
+            speed,
+            binding: null,
+            generation: ++nextTraceGeneration,
+          },
+        },
+      };
+    }),
+  appendTraceSample: (rowId, sample) =>
+    set((state) => {
+      const current = state.traceWindows[rowId];
+      const binding = current?.binding;
+      if (
+        !current?.playing ||
+        binding == null ||
+        state.connectionState !== "connected" ||
+        sample.key !== rowId ||
+        sample.rowId !== rowId ||
+        sample.sheetId !== binding.sheetId ||
+        sample.generation !== binding.generation ||
+        sample.address !== binding.address ||
+        sample.quantity !== binding.quantity ||
+        sample.route.protocol !== binding.route.protocol ||
+        sample.route.unitAddress !== binding.route.unitAddress
+      )
+        return state;
+      current.buffer.push(
+        Object.freeze({
+          ...sample,
+          route: Object.freeze({ ...sample.route }),
+          no: current.nextNo,
+        }),
+      );
+      return {
+        traceWindows: {
+          ...state.traceWindows,
+          [rowId]: {
+            ...current,
+            nextNo: current.nextNo + 1,
+            average: null,
+            averageStats: null,
           },
         },
       };
@@ -2276,3 +2400,43 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       };
     }),
 }));
+
+// Invalidate synchronously, before React effects or delayed IPC delivery can run.
+useAppStore.subscribe((state, previous) => {
+  if (
+    state.workspace === previous.workspace &&
+    state.host === previous.host &&
+    state.connectionState === previous.connectionState
+  )
+    return;
+  for (const windowModel of Object.values(state.traceWindows)) {
+    const rowId = windowModel.rowId;
+    const sheet = state.workspace.sheets.find((sheet) =>
+      sheet.rows.some((row) => row.rowId === rowId),
+    );
+    const row = sheet?.rows.find((row) => row.rowId === rowId);
+    if (row === undefined) {
+      state.closeTraceWindow(rowId);
+      continue;
+    }
+    const binding = windowModel.binding;
+    if (binding === null) continue;
+    const route =
+      sheet !== undefined && state.host !== null
+        ? requestRouteForSheet(state.host, sheet)
+        : null;
+    if (
+      state.host !== previous.host ||
+      state.connectionState !== previous.connectionState ||
+      sheet?.sheetId !== binding.sheetId ||
+      row.addressValue?.value !== binding.address ||
+      row.registerCount !== binding.quantity ||
+      row.dataType !== binding.dataType ||
+      route?.protocol !== binding.route.protocol ||
+      route.unitAddress !== binding.route.unitAddress
+    ) {
+      previous.host?.traceStop(rowId);
+      state.invalidateTrace(rowId);
+    }
+  }
+});

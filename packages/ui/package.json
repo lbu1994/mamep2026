@@ -15,6 +15,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@mamep2026/application": "workspace:*",
     "@ant-design/icons": "catalog:",
     "@dnd-kit/core": "catalog:",
     "@dnd-kit/modifiers": "catalog:",

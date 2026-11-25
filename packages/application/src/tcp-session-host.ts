@@ -10,6 +10,7 @@
  * 不依赖 platform-api / platform-node。
  */
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   Clock,
@@ -241,8 +242,9 @@ export class TcpSessionHost {
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
-    this.core.traceStart(key, address, speedMs, quantity, route);
+    this.core.traceStart(key, address, speedMs, quantity, route, identity);
   }
 
   traceStop(key: string): void {

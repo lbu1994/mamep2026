@@ -1,3 +1,4 @@
+import { makeHost } from "../test/make-app-host";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ConnectionState } from "@mamep2026/communication";
@@ -85,5 +86,62 @@ describe("TraceWindow 离线通信门控", () => {
     await waitFor(() => {
       expect(traceStart).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe("Trace controls", () => {
+  it("pauses without clearing, resumes with a new generation, and clears while playing or paused", async () => {
+    initI18n();
+    const workspace = createEmptyWorkspace();
+    const sheet = workspace.sheets[0];
+    const row = sheet?.rows[0];
+    const address = RegisterAddress.create(1);
+    if (row === undefined || !address.ok) throw new Error("missing row");
+    row.addressValue = address.value;
+    const { host } = makeHost();
+    useAppStore.setState({
+      host,
+      workspace,
+      connectionState: "connected",
+      traceWindows: {},
+    });
+    useAppStore.getState().openTraceWindow(row.rowId);
+    render(<TraceWindow rowId={row.rowId} />);
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    await waitFor(() => expect(host.traceStart).toHaveBeenCalledTimes(1));
+    const binding = useAppStore.getState().traceWindows[row.rowId]?.binding;
+    if (binding == null) throw new Error("missing binding");
+    const sample = {
+      ...binding,
+      key: row.rowId,
+      connectionId: "connection-1",
+      requestId: "request-1",
+      no: 1,
+      sequence: 1,
+      rawValue: 123,
+      value: "123",
+      timestamp: 456,
+    };
+    useAppStore.getState().appendTraceSample(row.rowId, sample);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    useAppStore.getState().appendTraceSample(row.rowId, sample);
+    expect(useAppStore.getState().traceWindows[row.rowId]?.buffer.length).toBe(
+      1,
+    );
+    expect(useAppStore.getState().traceWindows[row.rowId]?.average).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() => expect(host.traceStart).toHaveBeenCalledTimes(2));
+    const resumed = useAppStore.getState().traceWindows[row.rowId]?.binding;
+    expect(resumed?.generation).toBeGreaterThan(binding.generation);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    await waitFor(() => expect(host.traceStart).toHaveBeenCalledTimes(3));
+    expect(useAppStore.getState().traceWindows[row.rowId]?.playing).toBe(true);
+    expect(useAppStore.getState().traceWindows[row.rowId]?.buffer.length).toBe(
+      0,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(useAppStore.getState().traceWindows[row.rowId]?.playing).toBe(false);
+    expect(host.traceStart).toHaveBeenCalledTimes(3);
   });
 });

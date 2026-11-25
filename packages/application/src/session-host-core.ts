@@ -13,6 +13,7 @@
  * - 不感知串口库/协议细节：传输与会话由协议专用宿主打开/构建后注入。
  */
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   Clock,
@@ -103,6 +104,7 @@ export class SessionHostCore {
       address: number;
       speedMs: number;
       quantity: number;
+      identity?: TraceIdentity;
       route?: RequestRoute;
     }
   >();
@@ -168,7 +170,10 @@ export class SessionHostCore {
       this.events.onPollResult({ ...event, connectionGeneration });
     });
     this.trace = new TraceCoordinator(session, this.clock);
-    this.trace.onSample((sample) => this.events.onTraceSample(sample));
+    this.trace.onSample((sample) => {
+      if (connectionGeneration === this.connectionGeneration)
+        this.events.onTraceSample(sample);
+    });
 
     this.syncPollingTargets();
     if (this.pollingTargets.length > 0 && !this.backgroundSuspended) {
@@ -183,6 +188,7 @@ export class SessionHostCore {
             entry.speedMs,
             entry.quantity,
             entry.route,
+            entry.identity,
           );
         }
       }
@@ -440,6 +446,7 @@ export class SessionHostCore {
           entry.speedMs,
           entry.quantity,
           entry.route,
+          entry.identity,
         );
       }
     }
@@ -455,14 +462,17 @@ export class SessionHostCore {
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
     const resolvedRoute = route ?? this.session?.getCurrentRoute();
     this.activeTraces.set(key, {
       address,
       speedMs,
       quantity,
-      ...(resolvedRoute !== undefined ? { route: resolvedRoute } : {}),
+      ...(resolvedRoute !== undefined ? { route: { ...resolvedRoute } } : {}),
+      ...(identity !== undefined ? { identity: { ...identity } } : {}),
     });
+    this.trace?.stop(key);
     if (this.backgroundSuspended) return;
     if (!this.isRouteCompatible(resolvedRoute)) {
       this.events.onMessage({
@@ -474,7 +484,7 @@ export class SessionHostCore {
       });
       return;
     }
-    this.trace?.start(key, address, speedMs, quantity, resolvedRoute);
+    this.trace?.start(key, address, speedMs, quantity, resolvedRoute, identity);
   }
 
   traceStop(key: string): void {

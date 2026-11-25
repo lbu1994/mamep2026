@@ -11,7 +11,7 @@ import type {
   Result,
 } from "@mamep2026/domain";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
-import type { ConnectionState } from "@mamep2026/communication";
+import type { TraceIdentity, ConnectionState } from "@mamep2026/communication";
 import {
   appMessagePayloadSchema,
   batchReadSummaryPayloadSchema,
@@ -456,6 +456,13 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
       /** 覆盖的连续寄存器数：缺省/1=单寄存器。 */
       quantity: z.number().int().min(1).optional(),
       route: requestRoutePayloadSchema,
+      identity: z
+        .object({
+          sheetId: z.string().min(1),
+          rowId: z.string().min(1),
+          generation: z.number().int().nonnegative(),
+        })
+        .optional(),
     }),
   }),
   z.object({
@@ -810,6 +817,7 @@ export interface MamepHostApi {
     speedMs: number,
     quantity?: number,
     route?: RequestRoutePayload,
+    identity?: TraceIdentity,
   ): Promise<Result<null>>;
   sessionTraceStop(key: string): Promise<Result<null>>;
 }
@@ -899,6 +907,7 @@ export interface VscodeHostApi extends Omit<
     speedMs: number,
     quantity?: number,
     route?: RequestRoutePayload,
+    identity?: TraceIdentity,
   ): Promise<Result<null>>;
   sessionTraceStop(key: string): Promise<Result<null>>;
   /** 打开并连接远程 TCP 会话（session-tcp-connect；profile 即连接参数，无串口句柄）。 */

@@ -24,6 +24,56 @@ function createHarness() {
 }
 
 describe("createVscodeBridge（HostMessage v2 编解码）", () => {
+  it("sends trace identity and retains it in sample events", async () => {
+    const { posted, bridge, dispatch } = createHarness();
+    const identity = { sheetId: "sheet-1", rowId: "row-1", generation: 42 };
+    const route = { unitAddress: 7, protocol: "rtu" };
+    const promise = bridge.sessionTraceStart(
+      "row-1",
+      100,
+      200,
+      2,
+      route,
+      identity,
+    );
+    const request = posted[0] as Record<string, unknown>;
+    expect(request).toMatchObject({ payload: { identity, route } });
+    dispatch({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "response",
+      messageId: request.messageId,
+      kind: "session-trace-start",
+      ok: true,
+      payload: null,
+    });
+    expect((await promise).ok).toBe(true);
+    const events: unknown[] = [];
+    const unsubscribe = bridge.onEvent((event) => events.push(event));
+    const sample = {
+      ...identity,
+      route,
+      key: "row-1",
+      requestId: "request-1",
+      connectionId: "connection-1",
+      address: 100,
+      quantity: 2,
+      sequence: 1,
+      timestamp: 123,
+      rawValue: 65538,
+    };
+    dispatch({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "event-1",
+      kind: "trace-sample",
+      payload: { sample },
+    });
+    expect(events).toEqual([
+      expect.objectContaining({ kind: "trace-sample", payload: { sample } }),
+    ]);
+    unsubscribe();
+  });
+
   it("get-capabilities 发送 request Envelope 并按 messageId 关联响应", async () => {
     const { posted, bridge, dispatch } = createHarness();
     const promise = bridge.getCapabilities();

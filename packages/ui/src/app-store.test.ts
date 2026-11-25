@@ -1,3 +1,6 @@
+import { makeHost } from "./test/make-app-host";
+import { RegisterAddress } from "@mamep2026/domain";
+import type { TraceWindowSample } from "./app-store";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   createEmptyWorkspace,
@@ -1979,27 +1982,59 @@ describe("traceWindows（TM 追踪窗口）", () => {
     return row;
   }
 
+  function startTraceForTest(row: RegisterRow): TraceWindowSample {
+    const address = RegisterAddress.create(1);
+    if (!address.ok) throw new Error("invalid test address");
+    useAppStore.getState().updateRow(row.rowId, (current) => ({
+      ...current,
+      addressValue: address.value,
+    }));
+    useAppStore.setState({
+      host: makeHost().host,
+      connectionState: "connected",
+    });
+    useAppStore.getState().setTracePlaying(row.rowId, true);
+    const binding = useAppStore.getState().bindTrace(row.rowId);
+    if (binding === null) throw new Error("missing binding");
+    return {
+      ...binding,
+      key: row.rowId,
+      requestId: "request-1",
+      connectionId: "connection-1",
+      sequence: 1,
+      timestamp: 12345,
+      no: 1,
+      rawValue: 123,
+      value: "123",
+    };
+  }
+
   it("openTraceWindow 打开窗口但初始不自动开始采样（playing=false）", () => {
     const row = addFirstRowForTrace();
     useAppStore.getState().openTraceWindow(row.rowId);
     const model = useAppStore.getState().traceWindows[row.rowId];
     expect(model).toBeDefined();
     expect(model?.playing).toBe(false);
-    expect(model?.samples).toEqual([]);
+    expect(model?.buffer.snapshot()).toEqual([]);
     expect(model?.averageStats).toBeNull();
   });
 
   it("Trace 样本保存原始值和采样时 Type", () => {
     const row = addFirstRowForTrace();
     useAppStore.getState().openTraceWindow(row.rowId);
+    const identity = startTraceForTest(row);
     useAppStore.getState().appendTraceSample(row.rowId, {
+      ...identity,
       no: 1,
       value: "12.3",
       rawValue: 123,
       dataType: "unsigned-0.1",
     });
-    expect(useAppStore.getState().traceWindows[row.rowId]?.samples).toEqual([
+    expect(
+      useAppStore.getState().traceWindows[row.rowId]?.buffer.snapshot(),
+    ).toEqual([
       {
+        ...identity,
         no: 1,
         value: "12.3",
         rawValue: 123,
@@ -2011,8 +2046,10 @@ describe("traceWindows（TM 追踪窗口）", () => {
   it("缩小 Buffer Size 时立即截断并清除旧统计结果", () => {
     const row = addFirstRowForTrace();
     useAppStore.getState().openTraceWindow(row.rowId);
+    const identity = startTraceForTest(row);
     for (let no = 1; no <= 101; no += 1) {
       useAppStore.getState().appendTraceSample(row.rowId, {
+        ...identity,
         no,
         value: String(no),
         rawValue: no,
@@ -2027,11 +2064,87 @@ describe("traceWindows（TM 追踪窗口）", () => {
 
     useAppStore.getState().setTraceBufferSize(row.rowId, "100");
     const model = useAppStore.getState().traceWindows[row.rowId];
-    expect(model?.samples).toHaveLength(100);
-    expect(model?.samples[0]?.no).toBe(2);
-    expect(model?.samples.at(-1)?.no).toBe(101);
+    expect(model?.buffer.snapshot()).toHaveLength(100);
+    expect(model?.buffer.snapshot()[0]?.no).toBe(2);
+    expect(model?.buffer.snapshot().at(-1)?.no).toBe(101);
     expect(model?.average).toBeNull();
     expect(model?.averageStats).toBeNull();
+  });
+
+  it("rejects paused and old-generation samples, retains timestamps, and clears independently", () => {
+    const row = addFirstRowForTrace();
+    useAppStore.getState().openTraceWindow(row.rowId);
+    const old = startTraceForTest(row);
+    useAppStore.getState().appendTraceSample(row.rowId, old);
+    useAppStore.getState().setTracePlaying(row.rowId, false);
+    useAppStore.getState().appendTraceSample(row.rowId, old);
+    expect(useAppStore.getState().traceWindows[row.rowId]?.buffer.length).toBe(
+      1,
+    );
+    useAppStore.getState().setTracePlaying(row.rowId, true);
+    const resumed = useAppStore.getState().bindTrace(row.rowId);
+    if (resumed === null) throw new Error("missing binding");
+    useAppStore.getState().appendTraceSample(row.rowId, old);
+    useAppStore.getState().appendTraceSample(row.rowId, { ...old, ...resumed });
+    expect(
+      useAppStore
+        .getState()
+        .traceWindows[row.rowId]?.buffer.snapshot()
+        .map((sample) => [sample.no, sample.timestamp]),
+    ).toEqual([
+      [1, 12345],
+      [2, 12345],
+    ]);
+    useAppStore.getState().clearTrace(row.rowId);
+    const cleared = useAppStore.getState().traceWindows[row.rowId];
+    expect(cleared?.playing).toBe(true);
+    expect(cleared?.generation).toBeGreaterThan(resumed.generation);
+    expect(cleared?.buffer.length).toBe(0);
+    useAppStore.getState().appendTraceSample(row.rowId, { ...old, ...resumed });
+    expect(cleared?.buffer.length).toBe(0);
+    const restarted = useAppStore.getState().bindTrace(row.rowId);
+    if (restarted === null) throw new Error("missing binding");
+    useAppStore
+      .getState()
+      .appendTraceSample(row.rowId, { ...old, ...restarted });
+    expect(
+      useAppStore.getState().traceWindows[row.rowId]?.buffer.snapshot()[0]?.no,
+    ).toBe(1);
+    useAppStore.getState().setTracePlaying(row.rowId, false);
+    useAppStore.getState().clearTrace(row.rowId);
+    expect(useAppStore.getState().traceWindows[row.rowId]?.playing).toBe(false);
+  });
+
+  it("invalidates immediately on rebind, deletion, and disconnect", () => {
+    const row = addFirstRowForTrace();
+    useAppStore.getState().openTraceWindow(row.rowId);
+    const old = startTraceForTest(row);
+    const sheetId = firstSheetId();
+    const state = useAppStore.getState();
+    useAppStore.setState({
+      workspace: {
+        ...state.workspace,
+        sheets: state.workspace.sheets.map((sheet) =>
+          sheet.sheetId === sheetId ? { ...sheet, slaveAddress: 8 } : sheet,
+        ),
+      },
+    });
+    useAppStore.getState().appendTraceSample(row.rowId, old);
+    expect(useAppStore.getState().traceWindows[row.rowId]?.binding).toBeNull();
+    expect(useAppStore.getState().traceWindows[row.rowId]?.buffer.length).toBe(
+      0,
+    );
+    const rebound = useAppStore.getState().bindTrace(row.rowId);
+    if (rebound === null) throw new Error("missing binding");
+    useAppStore.getState().appendTraceSample(row.rowId, { ...old, ...rebound });
+    useAppStore.getState().setConnectionState("disconnected");
+    useAppStore.getState().appendTraceSample(row.rowId, { ...old, ...rebound });
+    expect(useAppStore.getState().traceWindows[row.rowId]?.buffer.length).toBe(
+      1,
+    );
+    clearAllSheetRows();
+    useAppStore.getState().appendTraceSample(row.rowId, old);
+    expect(useAppStore.getState().traceWindows[row.rowId]).toBeUndefined();
   });
 
   it("closeTraceWindow 删除窗口并复位对应行 traceEnabled", () => {

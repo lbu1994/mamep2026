@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import {
   commLogEventFromPayload,
+  traceSamplePayloadSchema,
   readVerifySettingsFromPayload,
   registerRowFromPayload,
   rtuConnectionProfileFromPayload,
@@ -18,6 +19,46 @@ import {
   toTcpConnectionProfilePayload,
   toWriteOutcomePayload,
 } from "./session-payloads";
+
+describe("Trace sample identity", () => {
+  it("retains request identity, route, generation, and timestamp across JSON", () => {
+    const sample = {
+      key: "row-1",
+      rowId: "row-1",
+      sheetId: "sheet-1",
+      requestId: "request-1",
+      connectionId: "connection-1",
+      generation: 4,
+      sequence: 7,
+      timestamp: 12345,
+      address: 100,
+      quantity: 2,
+      rawValue: 65538,
+      route: { unitAddress: 6, protocol: "rtu" },
+    };
+    expect(
+      traceSamplePayloadSchema.parse(JSON.parse(JSON.stringify(sample))),
+    ).toEqual(sample);
+    for (const field of [
+      "requestId",
+      "connectionId",
+      "sheetId",
+      "rowId",
+      "generation",
+      "route",
+      "timestamp",
+    ]) {
+      const incomplete: Record<string, unknown> = { ...sample };
+      delete incomplete[field];
+      expect(traceSamplePayloadSchema.safeParse(incomplete).success).toBe(
+        false,
+      );
+    }
+    expect(
+      traceSamplePayloadSchema.safeParse({ ...sample, generation: -1 }).success,
+    ).toBe(false);
+  });
+});
 import {
   createDefaultRtuProfile,
   createDefaultTcpProfile,

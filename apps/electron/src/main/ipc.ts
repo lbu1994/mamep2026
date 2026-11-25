@@ -17,6 +17,7 @@ import type {
   TcpConnectionProfile,
 } from "@mamep2026/domain";
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   ConnectionState,
@@ -86,6 +87,7 @@ export interface ElectronSessionLike {
     speedMs: number,
     quantity?: number,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void;
   traceStop(key: string): void;
   dispose(): Promise<void>;
@@ -362,6 +364,7 @@ export async function handleRequest(
           message.payload.speedMs,
           message.payload.quantity,
           message.payload.route,
+          message.payload.identity,
         ),
       );
     case "session-trace-stop":

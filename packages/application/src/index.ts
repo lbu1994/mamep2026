@@ -3,3 +3,4 @@ export * from "./rtu-session-host";
 export * from "./session-host-core";
 export * from "./tcp-session-host";
 export * from "./plugin-communication";
+export * from "./trace-buffer";

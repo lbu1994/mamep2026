@@ -26,6 +26,7 @@ import type {
 } from "@mamep2026/domain";
 import { createMamepError, defaultConfig, fail, ok } from "@mamep2026/domain";
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   Clock,
@@ -590,6 +591,7 @@ export class AndroidAppHost
     speedMs: number,
     quantity?: number,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
     if (this.activeProtocol === "tcp") {
       this.tcp.traceStart(
@@ -598,6 +600,7 @@ export class AndroidAppHost
         speedMs,
         quantity,
         route ?? this.fallbackRoute(),
+        identity,
       );
       return;
     }
@@ -607,6 +610,7 @@ export class AndroidAppHost
       speedMs,
       quantity,
       route ?? this.fallbackRoute(),
+      identity,
     );
   }
 

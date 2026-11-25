@@ -9,6 +9,7 @@
  * 不依赖 platform-api / platform-node / platform-web。
  */
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   Clock,
@@ -195,8 +196,9 @@ export class RtuSessionHost {
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
-    this.core.traceStart(key, address, speedMs, quantity, route);
+    this.core.traceStart(key, address, speedMs, quantity, route, identity);
   }
 
   traceStop(key: string): void {

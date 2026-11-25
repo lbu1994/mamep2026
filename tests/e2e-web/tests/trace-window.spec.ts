@@ -66,6 +66,22 @@ test("TM opens Memory Trace and Play keeps the page responsive", async ({
   ).toHaveCount(2, { timeout: 5000 });
   await expect(traceWindow).toContainText("0010");
 
+  await traceWindow.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(
+    traceWindow.getByRole("button", { name: "Pause", exact: true }),
+  ).toBeDisabled();
+  await expect(traceWindow.getByLabel("Average")).toHaveValue("");
+  await traceWindow.getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(
+    traceWindow.locator(".ant-table-tbody [data-row-key]"),
+  ).toHaveCount(0);
+  await traceWindow
+    .getByRole("button", { name: "Resume", exact: true })
+    .click();
+  await expect(
+    traceWindow.locator(".ant-table-tbody [data-row-key]"),
+  ).toHaveCount(2, { timeout: 5000 });
+
   // 窗口打开期间取消 TM 不会关闭追踪窗。
   await firstRow(page)
     .getByLabel(/^Trace row /)

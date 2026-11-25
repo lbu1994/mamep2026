@@ -654,10 +654,34 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     host.traceStop("row-a");
     expect(bridge.sessionUpdatePollingTargets).toHaveBeenCalled();
     expect(bridge.sessionPollingStart).toHaveBeenCalled();
-    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100, 1, {
-      unitAddress: 0,
-      protocol: "tcp",
-    });
+    expect(bridge.sessionTraceStart).toHaveBeenCalledWith(
+      "row-a",
+      1,
+      100,
+      1,
+      {
+        unitAddress: 0,
+        protocol: "tcp",
+      },
+      undefined,
+    );
+  });
+
+  it("passes trace identity through the TCP bridge", async () => {
+    const { bridge } = createFakeBridge();
+    const host = makeTcpHost(bridge);
+    await host.connectTcp(createDefaultTcpProfile());
+    const identity = { sheetId: "sheet-1", rowId: "row-1", generation: 42 };
+    const route = { unitAddress: 7, protocol: "tcp" };
+    host.traceStart("row-1", 100, 200, 2, route, identity);
+    expect(bridge.sessionTraceStart).toHaveBeenCalledWith(
+      "row-1",
+      100,
+      200,
+      2,
+      route,
+      identity,
+    );
   });
 
   it("TCP writeRow 携带 writeVerify 经 sessionWriteRow 转发（2026-08-26）", async () => {

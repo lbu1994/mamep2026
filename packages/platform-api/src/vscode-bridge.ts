@@ -15,6 +15,7 @@
  * 注意：为避免本包（node 侧无 DOM lib）依赖 Window/MessageEvent 全局类型，消息接收目标
  * 用最小结构化类型 BridgeMessageTarget 表达（真实 window 满足该结构）。
  */
+import type { TraceIdentity } from "@mamep2026/communication";
 import { fail } from "@mamep2026/domain";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
 import type {
@@ -203,6 +204,7 @@ export function createVscodeBridge(
       speedMs: number,
       quantity?: number,
       route?: RequestRoutePayload,
+      identity?: TraceIdentity,
     ) =>
       postRequest<null>("session-trace-start", {
         key,
@@ -210,6 +212,7 @@ export function createVscodeBridge(
         speedMs,
         ...(quantity !== undefined ? { quantity } : {}),
         ...(route !== undefined ? { route } : {}),
+        ...(identity !== undefined ? { identity } : {}),
       }),
     sessionTraceStop: (key: string) =>
       postRequest<null>("session-trace-stop", { key }),

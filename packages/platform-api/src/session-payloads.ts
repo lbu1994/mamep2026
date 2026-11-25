@@ -392,8 +392,16 @@ export function commLogEventFromPayload(
 // ---- TraceSample ----
 
 export const traceSamplePayloadSchema = z.object({
+  requestId: z.string().min(1),
+  connectionId: z.string().min(1),
+  sheetId: z.string().min(1),
+  rowId: z.string().min(1),
+  generation: z.number().int().nonnegative(),
+  address: z.number().int().min(0).max(65535),
+  quantity: z.number().int().min(1),
+  route: requestRoutePayloadSchema,
   key: z.string(),
-  sequence: z.number(),
+  sequence: z.number().int().positive(),
   rawValue: z.number(),
   timestamp: z.number(),
 });

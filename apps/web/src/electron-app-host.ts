@@ -11,6 +11,7 @@
  * （window.mamepHost）主进程真实实现。
  */
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   CodecRegistry,
@@ -711,6 +712,7 @@ export class ElectronAppHost
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
     if (this.activeProtocol === "tcp") {
       void this.bridge.sessionTraceStart(
@@ -719,6 +721,7 @@ export class ElectronAppHost
         speedMs,
         quantity,
         route ?? this.fallbackRoute(),
+        identity,
       );
       return;
     }
@@ -728,6 +731,7 @@ export class ElectronAppHost
       speedMs,
       quantity,
       route ?? this.fallbackRoute(),
+      identity,
     );
   }
 

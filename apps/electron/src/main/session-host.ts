@@ -12,6 +12,7 @@
  */
 import { TcpSessionHost, type SessionHostEvents } from "@mamep2026/application";
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   ConnectionState,
@@ -133,8 +134,9 @@ export class ElectronSessionHost {
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
-    this.tcp.traceStart(key, address, speedMs, quantity, route);
+    this.tcp.traceStart(key, address, speedMs, quantity, route, identity);
   }
 
   traceStop(key: string): void {

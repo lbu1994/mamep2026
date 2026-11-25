@@ -88,6 +88,17 @@ export interface ReadRegistersMeta {
   route?: RequestRoute;
 }
 
+/** Identity captured before a read enters the scheduler. */
+export interface ReadRequestContext {
+  readonly requestId: string;
+  readonly connectionId: string;
+  readonly sheetId: string;
+  readonly rowId: string;
+  readonly route: Readonly<RequestRoute>;
+  readonly address: number;
+  readonly quantity: number;
+}
+
 /** 写请求元数据（多寄存器 values 由 writeRegisters 传入）。 */
 export interface WriteRegistersMeta {
   source: RequestSource;
@@ -374,7 +385,36 @@ export interface SessionOptions {
   fairnessThresholdMs?: number;
 }
 
+// Separate host runtimes must not produce the same connection or request IDs.
+const connectionIdPrefix = Math.random().toString(36).slice(2);
+let nextConnectionId = 0;
+
 export class CommunicationSession {
+  private connectionId = `connection-${connectionIdPrefix}-${++nextConnectionId}`;
+  private nextReadRequestId = 0;
+
+  /** Submit a read and retain the identity and route used by that request. */
+  createReadRequest(
+    address: number,
+    quantity: number,
+    meta: ReadRegistersMeta,
+    identity: { sheetId: string; rowId: string },
+  ): { context: ReadRequestContext; result: Promise<Result<number[]>> } {
+    const route = Object.freeze({ ...(meta.route ?? this.getCurrentRoute()) });
+    const context = Object.freeze({
+      requestId: `${this.connectionId}-read-${++this.nextReadRequestId}`,
+      connectionId: this.connectionId,
+      sheetId: identity.sheetId,
+      rowId: identity.rowId,
+      route,
+      address,
+      quantity,
+    });
+    return {
+      context,
+      result: this.readRegisters(address, quantity, { ...meta, route }),
+    };
+  }
   readonly stateMachine = new ConnectionStateMachine();
   private readonly options: SessionOptions;
   private readonly scheduler: RequestScheduler;
@@ -557,6 +597,7 @@ export class CommunicationSession {
 
   async connect(): Promise<Result<void>> {
     if (this.stateMachine.getState() === "connected") return ok(undefined);
+    this.connectionId = `connection-${connectionIdPrefix}-${++nextConnectionId}`;
     if (!this.stateMachine.transition("connecting").ok) {
       this.stateMachine.forceState("connecting");
     }

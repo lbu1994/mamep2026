@@ -20,7 +20,6 @@ import { useShallow } from "zustand/react/shallow";
 import type { ColumnsType } from "antd/es/table";
 import type { RegisterRow, RowId } from "@mamep2026/domain";
 import { useAppStore, type BufferSizeOption } from "../app-store";
-import { requestRouteForSheet } from "../request-route";
 import { computeTraceAverage } from "../trace-statistics";
 import { traceSpeedToInterval } from "../trace-speed";
 import { isCommunicationAvailable } from "../communication-gate";
@@ -56,6 +55,8 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   );
   const windowModel = useAppStore((s) => s.traceWindows[rowId]);
   const closeTraceWindow = useAppStore((s) => s.closeTraceWindow);
+  const clearTrace = useAppStore((s) => s.clearTrace);
+  const bindTrace = useAppStore((s) => s.bindTrace);
   const setTracePlaying = useAppStore((s) => s.setTracePlaying);
   const setTraceBufferSize = useAppStore((s) => s.setTraceBufferSize);
   const setTraceSpeed = useAppStore((s) => s.setTraceSpeed);
@@ -71,14 +72,16 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
       host !== null &&
       sheetRoute !== null
     ) {
-      const address = row.addressValue.value;
-      host.traceStart(
-        rowId,
-        address,
-        traceSpeedToInterval(windowModel.speed),
-        row.registerCount,
-        requestRouteForSheet(host, sheetRoute),
-      );
+      const binding = bindTrace(rowId);
+      if (binding !== null)
+        host.traceStart(
+          rowId,
+          binding.address,
+          traceSpeedToInterval(windowModel.speed),
+          binding.quantity,
+          binding.route,
+          { sheetId: binding.sheetId, rowId, generation: binding.generation },
+        );
     } else {
       host?.traceStop(rowId);
     }
@@ -87,6 +90,10 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
   }, [
     windowModel?.playing,
     windowModel?.speed,
+    windowModel?.restartVersion,
+    host,
+    rowId,
+    row?.dataType,
     communicationAvailable,
     row?.addressValue?.value,
     row?.registerCount,
@@ -160,6 +167,8 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
 
   if (windowModel === undefined || row === undefined) return null;
 
+  const samples = windowModel.buffer.snapshot();
+
   const bufferOptions: Array<{ value: BufferSizeOption; label: string }> = [
     { value: "continue", label: t("trace.bufferContinue") },
     ...(["100", "500", "1000", "1500", "2000", "3000"] as const).map((v) => ({
@@ -170,7 +179,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
 
   const stopAndAverage = (): void => {
     setTracePlaying(rowId, false);
-    const average = computeTraceAverage(windowModel.samples);
+    const average = computeTraceAverage(samples);
     if (average === null) {
       setTraceAverage(rowId, null, null);
       return;
@@ -188,7 +197,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
       name: row.name,
       address: row.addressDraft,
       type: row.dataType,
-      samples: windowModel.samples,
+      samples,
       average: windowModel.average,
       averageStats: windowModel.averageStats,
     };
@@ -301,7 +310,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
         <div className="trace-window__group">
           <Flex vertical gap={6}>
             <Flex align="center" gap={8}>
-              <Space size={6}>
+              <Space size={6} wrap>
                 <Tooltip
                   title={
                     communicationAvailable
@@ -318,13 +327,16 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
                           : "primary"
                       }
                       icon={<PlayCircleOutlined />}
+                      aria-label={t(
+                        windowModel.started ? "trace.resume" : "trace.play",
+                      )}
                       disabled={!communicationAvailable}
                       aria-describedby={
                         communicationAvailable ? undefined : playReasonId
                       }
                       onClick={() => setTracePlaying(rowId, true)}
                     >
-                      {t("trace.play")}
+                      {t(windowModel.started ? "trace.resume" : "trace.play")}
                     </Button>
                   </span>
                 </Tooltip>
@@ -333,6 +345,16 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
                     {t("table.connectBeforeCommunication")}
                   </span>
                 ) : null}
+                <Button
+                  size="small"
+                  disabled={!windowModel.playing}
+                  onClick={() => setTracePlaying(rowId, false)}
+                >
+                  {t("trace.pause")}
+                </Button>
+                <Button size="small" onClick={() => clearTrace(rowId)}>
+                  {t("trace.clear")}
+                </Button>
                 <Button
                   size="small"
                   className={
@@ -394,7 +416,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
             size="small"
             rowKey="no"
             columns={columns}
-            dataSource={windowModel.samples}
+            dataSource={samples}
             pagination={false}
             scroll={{ y: 200 }}
           />

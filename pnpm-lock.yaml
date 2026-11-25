@@ -687,6 +687,9 @@ importers:
       '@hookform/resolvers':
         specifier: 'catalog:'
         version: 5.7.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.85.0(react@19.2.8))(zod@4.4.3)
+      '@mamep2026/application':
+        specifier: workspace:*
+        version: link:../application
       '@mamep2026/communication':
         specifier: workspace:*
         version: link:../communication

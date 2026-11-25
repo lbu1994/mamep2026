@@ -7,6 +7,7 @@
  * 能力矩阵 vscodeCapabilities 如实声明（modbusRtu:true、serialPorts:"enumerated"）。
  */
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   BatchReadSummary,
@@ -625,6 +626,7 @@ export class VscodeAppHost
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
     void this.bridge.sessionTraceStart(
       key,
@@ -632,6 +634,7 @@ export class VscodeAppHost
       speedMs,
       quantity,
       route ?? this.fallbackRoute(),
+      identity,
     );
   }
 

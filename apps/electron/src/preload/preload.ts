@@ -4,6 +4,7 @@
  * 不暴露文件系统 / net / 串口库对象。sandbox 开启，因此以 CJS 输出
  * （由 apps/web/vite.config.ts 的 vite-plugin-electron preload 配置保证）。
  */
+import type { TraceIdentity } from "@mamep2026/communication";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   BatchReadRowPayload,
@@ -242,6 +243,7 @@ const api: MamepHostApi = {
     speedMs: number,
     quantity?: number,
     route?: RequestRoutePayload,
+    identity?: TraceIdentity,
   ): Promise<Result<null>> {
     return invoke<null>("session-trace-start", {
       key,
@@ -249,6 +251,7 @@ const api: MamepHostApi = {
       speedMs,
       ...(quantity !== undefined ? { quantity } : {}),
       ...(route !== undefined ? { route } : {}),
+      ...(identity !== undefined ? { identity } : {}),
     });
   },
   sessionTraceStop(key: string): Promise<Result<null>> {

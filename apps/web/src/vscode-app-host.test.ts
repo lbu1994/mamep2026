@@ -679,10 +679,17 @@ describe("VscodeAppHost RTU 远程会话代理（2026-08-23）", () => {
     const { bridge } = createFakeBridge();
     const host = makeHost(bridge);
     host.traceStart("row-a", 1, 100);
-    expect(bridge.sessionTraceStart).toHaveBeenCalledWith("row-a", 1, 100, 1, {
-      unitAddress: 1,
-      protocol: "rtu",
-    });
+    expect(bridge.sessionTraceStart).toHaveBeenCalledWith(
+      "row-a",
+      1,
+      100,
+      1,
+      {
+        unitAddress: 1,
+        protocol: "rtu",
+      },
+      undefined,
+    );
     host.traceStop("row-a");
     expect(bridge.sessionTraceStop).toHaveBeenCalledWith("row-a");
     host.updatePollingTargets([

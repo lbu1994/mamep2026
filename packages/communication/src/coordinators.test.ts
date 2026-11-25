@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
 import { appendCrc } from "@mamep2026/protocol-modbus";
 import { BatchReadCoordinator } from "./batch-read-coordinator";
@@ -209,6 +209,90 @@ describe("BatchReadCoordinator", () => {
 });
 
 describe("TraceCoordinator", () => {
+  it("drops an old request after same-key restart and keeps the submitted identity", async () => {
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const session = new CommunicationSession({
+      transport,
+      clock,
+      config: createDefaultRtuProfile(),
+    });
+    await session.connect();
+    const submitted = vi.spyOn(session, "createReadRequest");
+    const coordinator = new TraceCoordinator(session, clock);
+    const listener = vi.fn();
+    coordinator.onSample(listener);
+    const route = { protocol: "rtu", unitAddress: 6 };
+    coordinator.start("row", 1, 100, 1, route, {
+      sheetId: "sheet-a",
+      rowId: "row",
+      generation: 10,
+    });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    const oldContext = submitted.mock.results[0]?.value.context;
+    coordinator.stop("row");
+    coordinator.start("row", 2, 100, 1, route, {
+      sheetId: "sheet-b",
+      rowId: "row",
+      generation: 11,
+    });
+    route.unitAddress = 9;
+    transport.simulateData(readResponse(6, 111));
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    expect(listener).not.toHaveBeenCalled();
+    const newContext = submitted.mock.results[1]?.value.context;
+    expect(newContext.requestId).not.toBe(oldContext.requestId);
+    expect(newContext.connectionId).toBe(oldContext.connectionId);
+    transport.simulateData(readResponse(6, 222));
+    await advanceUntil(clock, () => listener.mock.calls.length === 1);
+    expect(listener).toHaveBeenCalledWith({
+      ...newContext,
+      key: "row",
+      generation: 11,
+      sequence: 1,
+      rawValue: 222,
+      timestamp: expect.any(Number),
+    });
+    expect(newContext.route).toEqual({ protocol: "rtu", unitAddress: 6 });
+    expect(Object.isFrozen(newContext.route)).toBe(true);
+    coordinator.stopAll();
+  });
+
+  it("cancels queued reads when stopped and does not publish failed reads", async () => {
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const profile = createDefaultRtuProfile();
+    profile.requestTimeoutMs = 1000;
+    profile.retryCount = 0;
+    const session = new CommunicationSession({
+      transport,
+      clock,
+      config: profile,
+    });
+    await session.connect();
+    const blocker = session.readRegister(0, { source: "manual-read" });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    const coordinator = new TraceCoordinator(session, clock);
+    const listener = vi.fn();
+    coordinator.onSample(listener);
+    coordinator.start("row", 1, 50);
+    clock.advance(50);
+    coordinator.stop("row");
+    transport.simulateData(readResponse(1, 12));
+    await blocker;
+    clock.advance(100);
+    await Promise.resolve();
+    expect(transport.sentFrames).toHaveLength(1);
+    expect(listener).not.toHaveBeenCalled();
+    coordinator.start("row", 1, 50);
+    await advanceUntil(clock, () => transport.sentFrames.length === 2);
+    transport.simulateData(appendCrc(Uint8Array.from([1, 0x83, 2])));
+    await advanceUntil(clock, () => transport.sentFrames.length === 3);
+    expect(listener).not.toHaveBeenCalled();
+    coordinator.stopAll();
+    await session.disconnect();
+  });
+
   it("samples using the route captured at trace start", async () => {
     const clock = new ManualClock();
     const transport = new FakeTransport();

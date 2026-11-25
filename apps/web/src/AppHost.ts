@@ -32,6 +32,7 @@ import {
   loadWebPluginEntry,
 } from "@mamep2026/platform-web";
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   Clock,
@@ -972,6 +973,7 @@ export class BrowserAppHost
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
     this.rtu.traceStart(
       key,
@@ -979,6 +981,7 @@ export class BrowserAppHost
       speedMs,
       quantity,
       route ?? this.fallbackRoute(),
+      identity,
     );
   }
 

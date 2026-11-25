@@ -15,6 +15,7 @@ import {
   type RtuSessionHostEvents,
 } from "@mamep2026/application";
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   CodecRegistry,
@@ -225,8 +226,16 @@ export class VscodeSessionHost {
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
-    this.activeSession.traceStart(key, address, speedMs, quantity, route);
+    this.activeSession.traceStart(
+      key,
+      address,
+      speedMs,
+      quantity,
+      route,
+      identity,
+    );
   }
 
   traceStop(key: string): void {

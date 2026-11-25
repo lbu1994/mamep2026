@@ -2,18 +2,34 @@
  * 轨迹追踪协调器（TM）：按 Speed 设定的间隔对目标寄存器持续采样。
  * 采样走统一调度器；缓冲与历史数据由调用方（register-table / UI）管理。
  */
-import type { RequestRoute, Result } from "@mamep2026/domain";
+import type { RequestRoute } from "@mamep2026/domain";
 import type { Clock, TimeoutHandle } from "./clock";
-import type { CommunicationSession } from "./session";
+import type { CommunicationSession, ReadRequestContext } from "./session";
+import {
+  createCancellationToken,
+  type CancellationToken,
+} from "./cancellation";
 
-export interface TraceSample {
+/** Receiver-owned identity; a new generation invalidates earlier IPC samples. */
+export interface TraceIdentity {
+  sheetId: string;
+  rowId: string;
+  generation: number;
+}
+
+export interface TraceSample extends ReadRequestContext {
   key: string;
+  generation: number;
   sequence: number;
   rawValue: number;
   timestamp: number;
 }
 
 interface TraceEntry {
+  /** Coordinator-owned generation; changes even when a caller reuses its identity. */
+  generation: number;
+  identity: TraceIdentity;
+  cancelToken: CancellationToken;
   key: string;
   address: number;
   speedMs: number;
@@ -26,6 +42,7 @@ interface TraceEntry {
 }
 
 export class TraceCoordinator {
+  private nextGeneration = 0;
   private readonly entries = new Map<string, TraceEntry>();
   private readonly listeners = new Set<(sample: TraceSample) => void>();
   private readonly session: CommunicationSession;
@@ -47,14 +64,27 @@ export class TraceCoordinator {
     speedMs: number,
     quantity = 1,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void {
     this.stop(key);
+    const generation = ++this.nextGeneration;
     const entry: TraceEntry = {
+      generation,
+      identity: Object.freeze(
+        identity
+          ? { ...identity }
+          : {
+              sheetId: key,
+              rowId: key,
+              generation,
+            },
+      ),
+      cancelToken: createCancellationToken(),
       key,
       address,
       speedMs,
       quantity,
-      route: route ? { ...route } : this.session.getCurrentRoute(),
+      route: Object.freeze({ ...(route ?? this.session.getCurrentRoute()) }),
       timer: null,
       inFlight: false,
       sequence: 0,
@@ -66,6 +96,7 @@ export class TraceCoordinator {
   stop(key: string): void {
     const entry = this.entries.get(key);
     if (entry !== undefined) {
+      entry.cancelToken.cancel("trace-stopped");
       entry.timer?.cancel();
       entry.timer = null;
       this.entries.delete(key);
@@ -81,36 +112,38 @@ export class TraceCoordinator {
   }
 
   private tick(entry: TraceEntry): void {
-    if (!this.entries.has(entry.key)) return;
+    if (this.entries.get(entry.key)?.generation !== entry.generation) return;
     if (entry.inFlight) {
       // 采样未完成时跳过本次，不积压。
       this.schedule(entry);
       return;
     }
     entry.inFlight = true;
-    // 多寄存器行：一次读全部并按大端组合为数值采样（字符串行由 UI 禁用 TM）。
-    const request =
-      entry.quantity > 1
-        ? this.session.readRegisters(entry.address, entry.quantity, {
-            source: "trace",
-            priority: "polling",
-            route: entry.route,
-          })
-        : this.session.readRegister(entry.address, {
-            source: "trace",
-            priority: "polling",
-            route: entry.route,
-          });
-    void request.then((result: Result<number | number[]>) => {
+    // Capture identity at submission, before the scheduler can delay the read.
+    const request = this.session.createReadRequest(
+      entry.address,
+      entry.quantity,
+      {
+        source: "trace",
+        priority: "polling",
+        route: entry.route,
+        cancelToken: entry.cancelToken,
+      },
+      entry.identity,
+    );
+    void request.result.then((result) => {
       entry.inFlight = false;
-      if (this.entries.has(entry.key) && result.ok) {
+      if (
+        this.entries.get(entry.key)?.generation === entry.generation &&
+        result.ok
+      ) {
         entry.sequence += 1;
         const sample: TraceSample = {
+          ...request.context,
+          generation: entry.identity.generation,
           key: entry.key,
           sequence: entry.sequence,
-          rawValue: Array.isArray(result.value)
-            ? combinedNumeric(result.value)
-            : result.value,
+          rawValue: combinedNumeric(result.value),
           timestamp: this.clock.now(),
         };
         for (const listener of this.listeners) listener(sample);

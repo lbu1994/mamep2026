@@ -19,6 +19,7 @@ import type {
   WorkspaceRecoveryInfo,
 } from "@mamep2026/domain";
 import type {
+  TraceIdentity,
   BatchReadHandle,
   BatchReadRow,
   CommunicationLogEvent,
@@ -44,12 +45,7 @@ import type {
 } from "@mamep2026/platform-api";
 import type { ApplicationMessage } from "@mamep2026/logging";
 
-export interface TraceSampleEvent {
-  key: string;
-  sequence: number;
-  rawValue: number;
-  timestamp: number;
-}
+export type TraceSampleEvent = import("@mamep2026/communication").TraceSample;
 
 export interface CommProperties {
   /** 连接协议：RTU 显示串口参数；TCP 显示 host/port/unitId。 */
@@ -190,6 +186,7 @@ export interface TraceHost {
     speedMs: number,
     quantity?: number,
     route?: RequestRoute,
+    identity?: TraceIdentity,
   ): void;
   traceStop(key: string): void;
   subscribeTraceSample(

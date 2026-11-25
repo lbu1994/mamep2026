@@ -472,11 +472,23 @@ describe("RtuSessionHost WP 轮询 / TM 追踪", () => {
     const h = createHarness();
     await connect(h);
     h.device.setRegister(0x3000, 0x55aa);
-    h.host.traceStart("row-b", 0x3000, 100);
+    const identity = { sheetId: "sheet-b", rowId: "row-b", generation: 42 };
+    h.host.traceStart("row-b", 0x3000, 100, 1, undefined, identity);
     h.clock.advance(100);
     await flushMicrotasks();
     expect(h.events.onTraceSample).toHaveBeenCalledWith(
-      expect.objectContaining({ key: "row-b", rawValue: 0x55aa, sequence: 1 }),
+      expect.objectContaining({
+        ...identity,
+        key: "row-b",
+        rawValue: 0x55aa,
+        sequence: 1,
+        timestamp: expect.any(Number),
+        requestId: expect.any(String),
+        connectionId: expect.any(String),
+        address: 0x3000,
+        quantity: 1,
+        route: { protocol: "rtu", unitAddress: 1 },
+      }),
     );
     h.host.traceStop("row-b");
   });

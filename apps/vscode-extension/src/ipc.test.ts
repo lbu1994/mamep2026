@@ -802,10 +802,43 @@ describe("RTU 会话 kind（VSCode 接线，2026-08-23）", () => {
       makeDeps({ session }),
     );
     expect(result.type).toBe("response");
-    expect(session.traceStart).toHaveBeenCalledWith("k", 1, 100, undefined, {
-      unitAddress: 1,
-      protocol: "rtu",
-    });
+    expect(session.traceStart).toHaveBeenCalledWith(
+      "k",
+      1,
+      100,
+      undefined,
+      {
+        unitAddress: 1,
+        protocol: "rtu",
+      },
+      undefined,
+    );
+  });
+
+  it("forwards trace identity without replacing its generation", async () => {
+    const session = makeSession();
+    const identity = { sheetId: "sheet-1", rowId: "row-1", generation: 42 };
+    const route = { unitAddress: 7, protocol: "rtu" };
+    const result = await handleVscodeInvoke(
+      request("session-trace-start", {
+        key: "row-1",
+        address: 100,
+        quantity: 2,
+        speedMs: 200,
+        route,
+        identity,
+      }),
+      makeDeps({ session }),
+    );
+    expect(result.type).toBe("response");
+    expect(session.traceStart).toHaveBeenCalledWith(
+      "row-1",
+      100,
+      200,
+      2,
+      route,
+      identity,
+    );
   });
 
   it("会话操作抛异常时返回 SESSION_INTERNAL_ERROR", async () => {

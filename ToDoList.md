@@ -6,7 +6,6 @@
 
 > 核对范围：原第 25–86 行，共 54 项。以下只保留未完成部分；整项已完成的已删除。依据为当前源码、测试定义和架构文档，未执行全量回归、四端 E2E 或真机验收。“建议方案”不表示已批准改变产品范围、协议、插件 API 或持久化格式。PRD §8.4 的增强能力及 §8.5 的探索能力实施前仍需确认范围并同步设计。
 
-- [ ] [feat] **补齐 Trace 样本身份、暂停与清空**：剩余为样本关联字段、独立 Pause/Resume/Clear 和迟到样本隔离。[TraceCoordinator](packages/communication/src/trace-coordinator.ts) 的返回检查只判断 key 是否仍存在，同 key 停止后重启时旧请求可能混入新采样。建议按采样会话 generation 校验，从实际请求携带 requestId、connectionId、sheetId、rowId 和不可变路由，并将 timestamp 保留到 UI 缓冲。同步 [IPC 样本 Schema](packages/platform-api/src/session-payloads.ts)，将逐次复制数组改为应用层有界环形缓冲；清空推进代次，暂停不接收新样本，删除行或重绑后丢弃旧结果。
 - [ ] [feat] **实现多寄存器数据曲线**：未实现；[TraceWindow](packages/ui/src/components/TraceWindow.tsx) 没有曲线视图。依赖完整 Trace 样本，先确认核心/插件归属；建议建立独立曲线视图模型，支持多行选择、时间窗口、暂停视图和恢复追加，缺失数据画断点，截断、删行和断线显示明确状态。补齐深浅主题、键盘图例、缩放/平移及数据点读取；异常值不得导致坐标范围反复跳动。
 - [ ] [feat] **实现 Trace CSV 导出**：剩余为结构化 CSV、范围选择与跨平台保存；[saveTrace](packages/ui/src/components/TraceWindow.tsx) 仍通过 Blob 下载 JSON。建议冻结选定采样范围，再由纯序列化函数输出 BOM CSV，包含时间、序号、连接/表/行/请求 ID、地址、名称、原始值、格式化值及类型；文件名带时间戳，保存走 Host 文件接口。导出前提示设备数据敏感性；覆盖运行中、暂停及截断缓冲，正确转义逗号/引号/换行，取消保存不报错。
 - [ ] [feat] **支持更细粒度的轮询调度**：待确认 P2 范围；[当前设计](docs/architecture/application/communication/调度与轮询.md) 明确固定间隔 0 且不提供 ALL Polling。建议确认后为 [PollingTarget](packages/communication/src/polling-coordinator.ts) 增加周期、首次延迟和受限优先级，以单调时钟的 nextDueAt 调度，漏周期直接跳过；表/连接启停只作用于选定范围。补齐持久化迁移与待执行任务取消，保持同连接串行；覆盖后台恢复、超时、地址修改和取消，不补发积压周期。
