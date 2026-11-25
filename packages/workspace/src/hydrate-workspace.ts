@@ -38,6 +38,9 @@ export function hydrateWorkspaceData(data: WorkspaceData): Workspace {
             });
       return {
         ...row,
+        // Ignore selections saved by older versions when restoring a workspace.
+        pollingEnabled: false,
+        traceEnabled: false,
         rowId: row.rowId as RowId,
         addressValue: addressResult === null ? null : addressResult.value,
         registerValues,

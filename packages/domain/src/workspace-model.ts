@@ -170,9 +170,9 @@ export interface RegisterRow {
   /** 覆盖的连续寄存器数：1=单寄存器；范围行 >1 */
   registerCount: number;
   dataType: DataType;
-  /** WP：周期轮询开关 */
+  /** WP polling selection for the current app session; restored as false. */
   pollingEnabled: boolean;
-  /** TM：轨迹追踪开关（与轮询相互独立，§36） */
+  /** TM trace selection for the current app session, independent of WP; restored as false. */
   traceEnabled: boolean;
   /** Data 单元格单一当前值（§15.1） */
   cellText: string;

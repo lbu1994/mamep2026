@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   createEmptyWorkspace,
+  createRegisterSheet,
   type RtuConnectionProfile,
   type Workspace,
 } from "@mamep2026/domain";
-import { parseWorkspace, serializeWorkspace, workspaceSchema } from "./schema";
+import {
+  parseWorkspace,
+  parseWorkspaceData,
+  serializeWorkspace,
+  serializeWorkspaceSnapshot,
+  workspaceSchema,
+} from "./schema";
+import { hydrateWorkspaceData } from "./hydrate-workspace";
 
 function mutate(w: Workspace, patch: (mutable: Workspace) => void): Workspace {
   patch(w);
@@ -210,6 +218,67 @@ describe("preferences language persistence", () => {
   });
 });
 
+describe("session-only TM and WP selections", () => {
+  it("saves disabled flags for every sheet without changing the active session", () => {
+    const workspace = createEmptyWorkspace();
+    const closedSheet = createRegisterSheet("Closed sheet", 1);
+    closedSheet.open = false;
+    workspace.sheets.push(closedSheet);
+    for (const sheet of workspace.sheets) {
+      for (const [rowIndex, row] of sheet.rows.entries()) {
+        row.pollingEnabled = rowIndex % 2 === 0;
+        row.traceEnabled = rowIndex % 3 === 0;
+      }
+    }
+    const before = structuredClone(workspace);
+    const snapshot = serializeWorkspaceSnapshot(workspace);
+    expect(snapshot.ok).toBe(true);
+    if (!snapshot.ok) return;
+    const expected = structuredClone(snapshot.value.data);
+    for (const sheet of expected.sheets) {
+      for (const row of sheet.rows) {
+        row.pollingEnabled = false;
+        row.traceEnabled = false;
+      }
+    }
+    expect(snapshot.value.data).toEqual(expected);
+    expect(JSON.parse(snapshot.value.serialized)).toEqual(expected);
+    expect(workspace).toEqual(before);
+  });
+
+  it.each(["direct", "worker"])(
+    "clears legacy selections through the %s restore path",
+    (path) => {
+      const workspace = createEmptyWorkspace();
+      const closedSheet = createRegisterSheet("Closed sheet", 1);
+      closedSheet.open = false;
+      workspace.sheets.push(closedSheet);
+      const legacy = workspaceSchema.parse(
+        JSON.parse(serializeWorkspace(workspace)),
+      );
+      for (const sheet of legacy.sheets) {
+        for (const row of sheet.rows) {
+          row.pollingEnabled = true;
+          row.traceEnabled = true;
+        }
+      }
+      const before = structuredClone(legacy);
+      const parsed = parseWorkspaceData(legacy);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      // Use the same validation and hydration sequence as the parse Worker.
+      const restored =
+        path === "direct"
+          ? parseWorkspace(legacy)
+          : { ok: true, value: hydrateWorkspaceData(parsed.value) };
+      expect(restored.ok).toBe(true);
+      if (!restored.ok) return;
+      expect(restored.value).toEqual(workspace);
+      expect(legacy).toEqual(before);
+    },
+  );
+});
+
 describe("workspace schema round-trip", () => {
   it("serializes and parses an empty workspace preserving key fields", () => {
     const workspace = createEmptyWorkspace();
@@ -227,7 +296,7 @@ describe("workspace schema round-trip", () => {
     expect(value.sheets[0]?.slaveAddress).toBe(1);
   });
 
-  it("preserves comment, polling and trace flags per row", () => {
+  it("preserves row data and clears polling and trace selections on round-trip", () => {
     const workspace = mutate(createEmptyWorkspace(), (w) => {
       const sheet = w.sheets[0];
       if (sheet === undefined) return;
@@ -259,8 +328,8 @@ describe("workspace schema round-trip", () => {
     expect(row).toBeDefined();
     expect(row?.name).toBe("Speed Ref");
     expect(row?.comment).toBe("unit: rpm");
-    expect(row?.pollingEnabled).toBe(true);
-    expect(row?.traceEnabled).toBe(true);
+    expect(row?.pollingEnabled).toBe(false);
+    expect(row?.traceEnabled).toBe(false);
     expect(row?.addressValue?.value).toBe(1);
     expect(row?.registerValues?.[0]?.value).toBe(123);
     expect(row?.cellText).toBe("12.3");
@@ -643,14 +712,14 @@ describe("public exchange format（工作区导入导出，2026-08-29）", () =>
       name: "Speed",
       addressDraft: "100",
       dataType: "unsigned-0.1",
-      pollingEnabled: true,
+      pollingEnabled: false,
       cellText: "123",
     });
     expect(single?.registerValues).toEqual([{ value: 1230 }]);
     expect(range).toMatchObject({
       registerCount: 2,
       dataType: "hex",
-      traceEnabled: true,
+      traceEnabled: false,
       cellText: "12 34",
     });
     expect(range?.registers).toEqual([

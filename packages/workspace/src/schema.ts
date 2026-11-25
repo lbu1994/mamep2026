@@ -245,6 +245,9 @@ function workspaceDataFromWorkspace(workspace: Workspace): WorkspaceData {
       ...sheet,
       rows: sheet.rows.map((row) => ({
         ...row,
+        // Keep the stored shape compatible without saving session selections.
+        pollingEnabled: false,
+        traceEnabled: false,
         addressValue: row.addressValue?.value ?? null,
         registerValues: row.registerValues?.map((value) => value.value) ?? null,
       })),
