@@ -197,19 +197,21 @@ export function BottomPanel({
     setCommListHeight(el.clientHeight);
   });
 
-  // 新日志到达时，若开关开启且用户未上滚离开底部，则自动滚动到底部。
-  // 性能优化：rAF 合并高频 append，避免每次追加同步调用 scrollTo。
-  // 利用 antd Listy 官方命令式滚动 API：scrollTo({ key, align: "bottom" })；key 为末条日志的
-  // 稳定 seq（rowKey）。scrollTo 触发的滚动同样会触发 onScroll → isNearBottom，贴底判定一致。
-  useEffect(() => {
-    if (!autoScroll || !stickToBottom.current || commLog.length === 0) return;
+  // Align before the browser delivers scroll events for the previous update.
+  // Deferring to rAF lets those events compare an old offset with the new height
+  // and pause following. Depend on the entries even when retention keeps the count fixed.
+  useLayoutEffect(() => {
+    if (
+      !autoScroll ||
+      !stickToBottom.current ||
+      collapsed ||
+      activeTab !== "commlog"
+    )
+      return;
     const lastSeq = commLog[commLog.length - 1]?.seq;
     if (lastSeq === undefined) return;
-    const handle = requestAnimationFrame(() => {
-      listyRef.current?.scrollTo({ key: lastSeq, align: "bottom" });
-    });
-    return () => cancelAnimationFrame(handle);
-  }, [commLog, autoScroll]);
+    listyRef.current?.scrollTo({ key: lastSeq, align: "bottom" });
+  }, [commLog, autoScroll, activeTab, collapsed, commListHeight]);
 
   const handleCommScroll = (e: React.UIEvent<HTMLElement>): void => {
     const el = e.currentTarget;
@@ -337,7 +339,10 @@ export function BottomPanel({
               <Switch
                 size="small"
                 checked={autoScroll}
-                onChange={setAutoScroll}
+                onChange={(checked) => {
+                  stickToBottom.current = checked;
+                  setAutoScroll(checked);
+                }}
                 aria-label={t("panel.autoScroll")}
               />
               <Typography.Text>{t("panel.autoScroll")}</Typography.Text>

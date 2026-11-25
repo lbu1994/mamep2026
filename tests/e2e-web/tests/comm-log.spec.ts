@@ -2,6 +2,158 @@ import { expect, test, type Page } from "@playwright/test";
 
 const BASE_URL = "http://localhost:5173/?mockTransport=1";
 
+// Feed the public UI store directly so large-log checks do not depend on device speed.
+async function appendLogBatch(
+  page: Page,
+  count: number,
+  continuous = false,
+): Promise<number> {
+  return page.evaluate(
+    async ({ batchSize, continuous }) => {
+      const runtimeUrl = "/@id/@mamep2026/ui/runtime";
+      const { useAppStore } = await import(runtimeUrl);
+      const state = useAppStore.getState();
+      const firstSeq = (state.commLog.at(-1)?.seq ?? -1) + 1;
+      for (let entryIndex = 0; entryIndex < batchSize; entryIndex++) {
+        if (continuous && entryIndex % 20 === 0) {
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          );
+        }
+        const seq = firstSeq + entryIndex;
+        state.appendCommLog({
+          seq,
+          timestamp: 1700000000000 + seq,
+          direction: "response",
+          bytesHex: `01 03 02 ${seq.toString(16).toUpperCase().padStart(8, "0")}`,
+          protocol: "rtu",
+          slaveAddress: 1,
+          functionCode: 3,
+          userAddress: 0,
+          sentAddress: 0,
+          quantity: 1,
+          attempt: 1,
+          status: "success",
+          errorCode: null,
+          exceptionCode: null,
+          source: "row",
+          durationMs: 1,
+        });
+      }
+      return firstSeq + batchSize - 1;
+    },
+    { batchSize: count, continuous },
+  );
+}
+
+async function expectLatestLog(page: Page, seq: number): Promise<void> {
+  const holder = page.locator(".comm-log .ant-listy-holder");
+  await expect
+    .poll(() =>
+      holder.evaluate((el) => ({
+        overflowing: el.scrollHeight > el.clientHeight,
+        atBottom:
+          el.scrollTop > 0 &&
+          el.scrollHeight - el.scrollTop - el.clientHeight <= 1,
+      })),
+    )
+    .toEqual({ overflowing: true, atBottom: true });
+  const latest = holder.getByText(
+    `01 03 02 ${seq.toString(16).toUpperCase().padStart(8, "0")}`,
+    { exact: true },
+  );
+  await expect(latest).toBeInViewport();
+}
+
+test("comm log follows sustained batches through the retention limit", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  await openCommLogTab(page);
+  for (let batchIndex = 0; batchIndex < 12; batchIndex++) {
+    const lastSeq = await appendLogBatch(page, 1000);
+    await expectLatestLog(page, lastSeq);
+  }
+  const retained = await page.evaluate(async () => {
+    const runtimeUrl = "/@id/@mamep2026/ui/runtime";
+    const { useAppStore } = await import(runtimeUrl);
+    const entries = useAppStore.getState().commLog;
+    return {
+      count: entries.length,
+      first: entries[0]?.seq,
+      last: entries.at(-1)?.seq,
+    };
+  });
+  expect(retained).toEqual({ count: 10000, first: 2000, last: 11999 });
+  await expectLatestLog(page, await appendLogBatch(page, 400, true));
+  await expectLatestLog(page, await appendLogBatch(page, 1));
+});
+
+test("comm log follows continuous appends before the retention limit", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openCommLogTab(page);
+  await expectLatestLog(page, await appendLogBatch(page, 2000, true));
+});
+
+test("comm log keeps following when a previous scroll event arrives after an append", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openCommLogTab(page);
+  await expectLatestLog(page, await appendLogBatch(page, 1000));
+  await page.evaluate(async () => {
+    const runtimeUrl = "/@id/@mamep2026/ui/runtime";
+    const { useAppStore } = await import(runtimeUrl);
+    const holder = document.querySelector(".comm-log .ant-listy-holder");
+    if (holder === null) throw new Error("Missing log scroll holder");
+    // Deliver the previous scroll notification after the next DOM update,
+    // before a deferred animation-frame scroll can catch up with the new height.
+    const observer = new MutationObserver(() => {
+      observer.disconnect();
+      holder.dispatchEvent(new Event("scroll"));
+      const state = useAppStore.getState();
+      const previous = state.commLog.at(-1);
+      const seq = previous.seq + 1;
+      state.appendCommLog({
+        ...previous,
+        seq,
+        bytesHex: `01 03 02 ${seq.toString(16).toUpperCase().padStart(8, "0")}`,
+      });
+    });
+    observer.observe(holder, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+    });
+  });
+  const lastSeq = await appendLogBatch(page, 100);
+  await expectLatestLog(page, lastSeq + 1);
+  await expectLatestLog(page, await appendLogBatch(page, 100));
+});
+
+test("comm log resumes following when auto-scroll is enabled again", async ({
+  page,
+}) => {
+  await openApp(page);
+  await openCommLogTab(page);
+  await expectLatestLog(page, await appendLogBatch(page, 1000));
+  const toggle = page.getByRole("switch", { name: "Auto scroll" });
+  await toggle.click();
+  const holder = page.locator(".comm-log .ant-listy-holder");
+  await holder.evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await expect.poll(() => holder.evaluate((el) => el.scrollTop)).toBe(0);
+  const lastSeq = await appendLogBatch(page, 100);
+  await expect.poll(() => holder.evaluate((el) => el.scrollTop)).toBe(0);
+  await toggle.click();
+  await expectLatestLog(page, lastSeq);
+  await expectLatestLog(page, await appendLogBatch(page, 1));
+});
+
 async function openApp(page: Page): Promise<void> {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`PAGEERROR: ${String(error)}`));
