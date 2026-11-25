@@ -1,0 +1,26 @@
+[skill]
+id = "css-modern-layouts"
+name = "CSS Modern Layouts"
+name_zh = "现代CSS布局指南"
+description = "CSS Grid, Flexbox and responsive design patterns for modern web layouts"
+description_zh = "涵盖CSS Grid、Flexbox和响应式设计的实战技巧，掌握现代CSS布局技术"
+version = "1.0.0"
+author = "Ethan Auto-Pilot"
+
+[skill.execution]
+auto_execute = false
+priority = 83
+
+[skill.capabilities]
+flexbox = "Flexbox一维布局完整指南"
+css_grid = "CSS Grid二维布局实战"
+responsive_strategy = "移动优先的响应式设计策略"
+advanced_layouts = "圣杯布局、瀑布流等高级布局模式"
+
+[skill.triggers]
+keywords = [
+  "CSS布局", "Flexbox", "CSS Grid", "响应式设计",
+  "栅格布局", "flex", "grid", "圣杯布局",
+  "瀑布流", "masonry", "responsive design",
+  "移动优先", "mobile first"
+]
