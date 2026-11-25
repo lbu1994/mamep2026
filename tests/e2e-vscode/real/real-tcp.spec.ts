@@ -18,6 +18,8 @@ import type { Frame, Locator, Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { isKnownVSCodeWebviewShellPageError } from "./known-upstream-errors";
+
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 const CONNECTED_TIMEOUT = 20_000;
 
@@ -309,6 +311,7 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
   workbox.on("pageerror", (err) => {
     const stack = err.stack ?? "";
     if (!stack.includes("vscode-webview://")) return;
+    if (isKnownVSCodeWebviewShellPageError(err)) return;
     consoleErrors.push(`PAGEERROR: ${String(err)}\n${stack}`);
   });
 

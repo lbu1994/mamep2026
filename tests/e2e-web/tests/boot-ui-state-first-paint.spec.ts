@@ -135,9 +135,7 @@ async function openApp(page: Page): Promise<string[]> {
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
-  await expect(
-    page.locator('[data-startup-hydrated="true"]'),
-  ).toHaveCount(1);
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
   return errors;
 }
 
@@ -223,8 +221,9 @@ test("多表 / 活动 Tab / 行数据：刷新后外壳首帧即持久化状态"
   page,
 }) => {
   const errors = await openApp(page);
-  // 非默认：Sheet 1 加两行 → 新建 Sheet 2 → 新建 Sheet 3（活动表）并再加两行，
-  // 使「活动面板行数」既能区分默认工作区（50 行），也能验证行数据已就位。
+  // 非默认：HOLDING REGISTERS Sheet 1 加两行 → 新建 Sheet 2 → 新建 Sheet 3
+  // （活动表）并再加两行，使「活动面板行数」既能区分默认工作区（50 行），
+  // 也能验证行数据已就位。启动自带 4 个核心表，新建 2 张后共 6 个页签。
   await addRow(page);
   await addRow(page);
   await addHoldingSheet(page);
@@ -232,13 +231,13 @@ test("多表 / 活动 Tab / 行数据：刷新后外壳首帧即持久化状态"
   await addRow(page);
   await addRow(page);
   await expect(page.locator(".register-table-tabs .ant-tabs-tab")).toHaveCount(
-    3,
+    6,
   );
 
   // 等自动保存（IndexedDB 防抖 500ms）落盘后取「稳定态」快照。
   await page.waitForTimeout(1200);
   const settled = await readShellSnapshot(page);
-  expect(settled.tabCount).toBe(3);
+  expect(settled.tabCount).toBe(6);
   expect(settled.rows).toBeGreaterThan(0);
 
   await page.addInitScript(RECORDER_SCRIPT);
@@ -246,9 +245,7 @@ test("多表 / 活动 Tab / 行数据：刷新后外壳首帧即持久化状态"
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
-  await expect(
-    page.locator('[data-startup-hydrated="true"]'),
-  ).toHaveCount(1);
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
 
   const record = await readShellBootRecord(page);
   // 外壳首现必须晚于启动骨架（骨架窗口覆盖工作区加载）。
@@ -257,16 +254,18 @@ test("多表 / 活动 Tab / 行数据：刷新后外壳首帧即持久化状态"
     const diagnostics = await page.evaluate(() => ({
       header: document.querySelector(".mamep-header") !== null,
       sider: document.querySelector(".ant-layout-sider") !== null,
-      hydrated: [
-        ...document.querySelectorAll("[data-startup-hydrated]"),
-      ].map((element) => element.getAttribute("data-startup-hydrated")),
+      hydrated: [...document.querySelectorAll("[data-startup-hydrated]")].map(
+        (element) => element.getAttribute("data-startup-hydrated"),
+      ),
     }));
-    throw new Error(`shell recorder did not settle: ${JSON.stringify(diagnostics)}`);
+    throw new Error(
+      `shell recorder did not settle: ${JSON.stringify(diagnostics)}`,
+    );
   }
   // 关键断言（红 / 绿分界）：外壳首现快照 == 刷新前稳定态快照（无「先默认后切换」）。
   expectShellStateMatch(record.shellAtFirstAppearance, settled);
   // 显式复核（避免「两边都错成一样」的假绿）。
-  expect(record.shellAtFirstAppearance?.tabCount).toBe(3);
+  expect(record.shellAtFirstAppearance?.tabCount).toBe(6);
   expect(record.shellAtFirstAppearance?.activeTabLabel).toBe(
     settled.activeTabLabel,
   );
@@ -301,9 +300,7 @@ test("侧栏折叠 / 底部面板折叠 / 活动底部页签：刷新后首帧�
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
-  await expect(
-    page.locator('[data-startup-hydrated="true"]'),
-  ).toHaveCount(1);
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
 
   const record = await readShellBootRecord(page);
   expect(record.sawSkeleton).toBe(true);
@@ -311,7 +308,8 @@ test("侧栏折叠 / 底部面板折叠 / 活动底部页签：刷新后首帧�
   // 显式复核（避免「两边都错成一样」的假绿）。
   expect(record.shellAtFirstAppearance?.sidebarCollapsed).toBe(true);
   expect(record.shellAtFirstAppearance?.bottomCollapsed).toBe(true);
-  expect(record.shellAtFirstAppearance?.tabCount).toBe(2);
+  // 启动自带 4 个核心表，本用例再新建 1 张 HOLDING REGISTERS 表。
+  expect(record.shellAtFirstAppearance?.tabCount).toBe(5);
   expect(record.shellAtFirstAppearance?.activeBottomTabLabel).toContain(
     "Comm Log",
   );
@@ -335,9 +333,7 @@ test("侧栏宽度 / 底部面板高度：刷新后首帧即持久化值", async
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
-  await expect(
-    page.locator('[data-startup-hydrated="true"]'),
-  ).toHaveCount(1);
+  await expect(page.locator('[data-startup-hydrated="true"]')).toHaveCount(1);
 
   const record = await readShellBootRecord(page);
   expect(record.sawSkeleton).toBe(true);

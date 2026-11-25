@@ -270,11 +270,8 @@ test("column order is independent per tab (不共享)", async ({ page }) => {
   ).toContainText("Name");
   // 表 2 为默认顺序（与表 1 不共享）。
   expect(await columnHeaders(page)).toEqual(DEFAULT_ORDER);
-  // 切回表 1：仍保持拖拽后的顺序。
-  await page
-    .locator(".register-table-tabs div[role=tab]")
-    .filter({ hasText: "Sheet 1" })
-    .click();
+  // 切回 HOLDING REGISTERS Sheet 1：仍保持拖拽后的顺序。
+  await page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" }).click();
   await expect(
     page.locator(".register-table-tabs .ant-tabs-content-active"),
   ).toContainText("Name");

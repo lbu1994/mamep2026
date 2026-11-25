@@ -41,13 +41,13 @@ test("empty-address rows disable Read/Write/WP with an explanatory tooltip", asy
   const reasonId = await readBtn.getAttribute("aria-describedby");
   expect(reasonId).toBeTruthy();
   await expect(page.locator(`[id="${reasonId}"]`)).toHaveText(
-    "Set a valid register address first to enable this control.",
+    "Set a valid address first to enable this control.",
   );
   await expect(
     page
       .locator(".ant-tooltip")
       .filter({
-        hasText: "Set a valid register address first to enable this control.",
+        hasText: "Set a valid address first to enable this control.",
       })
       .last(),
   ).toBeVisible();

@@ -256,11 +256,8 @@ test("restore only affects the current sheet (不共享)", async ({ page }) => {
   ).toContainText("Name");
   await dragColumnTo(page, "Data", "Write");
   await dragHeaderHandle(page, "Type", 40);
-  // 切回表 1 并一键恢复。
-  await page
-    .locator(".register-table-tabs div[role=tab]")
-    .filter({ hasText: "Sheet 1" })
-    .click();
+  // 切回 HOLDING REGISTERS Sheet 1 并一键恢复。
+  await page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" }).click();
   await expect(
     page.locator(".register-table-tabs .ant-tabs-content-active"),
   ).toContainText("Name");
@@ -271,10 +268,7 @@ test("restore only affects the current sheet (不共享)", async ({ page }) => {
   expect(nameWidth).toBeGreaterThanOrEqual(145);
   expect(nameWidth).toBeLessThanOrEqual(155);
   // 表 2 不受影响：Data 仍在 Write 之后（自定义列序保留）、Type 仍为加宽值。
-  await page
-    .locator(".register-table-tabs div[role=tab]")
-    .filter({ hasText: "Sheet 2" })
-    .click();
+  await page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 2" }).click();
   await expect(
     page.locator(".register-table-tabs .ant-tabs-content-active"),
   ).toContainText("Name");

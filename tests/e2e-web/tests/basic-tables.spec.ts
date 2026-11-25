@@ -146,8 +146,9 @@ test("线圈表：FC01 读位值、FC0F 写 + 写后回读", async ({ page }) =>
   );
 
   // 写 0（FC0F）：mock 线圈回读为 0。
+  // 启动已自带 COILS Sheet 1；本用例新建的活动表是 COILS Sheet 2。
   await page
-    .getByRole("tab", { name: "COILS Sheet 1" })
+    .getByRole("tab", { name: "COILS Sheet 2" })
     .first()
     .evaluate((el) => (el as HTMLElement).click());
   const dataInput2 = parentRow(page, 0).locator('[data-register-cell="data"]');

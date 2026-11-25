@@ -21,7 +21,7 @@ test("empty sheet shows a guided empty state with an Add Row CTA", async ({
   await page.keyboard.press("Delete");
   await expect(page.locator(".ant-empty")).toBeVisible();
   await expect(page.locator(".ant-empty")).toContainText(
-    "Add registers to start monitoring.",
+    "Add rows to start reading device data.",
   );
   // 空表时页面只有唯一一个 "Add Row"（空状态 CTA），点击后出现寄存器输入。
   await page

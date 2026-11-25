@@ -161,19 +161,22 @@ test("sidebar context menu shows Close Others and Close to the Right", async ({
   await page.keyboard.press("Escape");
 });
 
-test("Close Others is disabled on a single table", async ({ page }) => {
+test("startup core sheets keep Close Others and Close to the Right enabled", async ({
+  page,
+}) => {
   await openApp(page);
 
-  // 单表：Close Others 与 Close to the Right 均禁用。
+  // 启动自带 4 个核心表：HOLDING REGISTERS Sheet 1 后仍有其他表，
+  // Close Others 与 Close to the Right 均可用。
   await sidebarItem(page, "HOLDING REGISTERS Sheet 1").click({
     button: "right",
   });
   await expect(
     page.getByRole("menuitem", { name: "Close Others" }),
-  ).toHaveClass(/ant-dropdown-menu-item-disabled/);
+  ).not.toHaveClass(/ant-dropdown-menu-item-disabled/);
   await expect(
     page.getByRole("menuitem", { name: "Close to the Right" }),
-  ).toHaveClass(/ant-dropdown-menu-item-disabled/);
+  ).not.toHaveClass(/ant-dropdown-menu-item-disabled/);
 });
 
 test("Close to the Right is disabled on the last table", async ({ page }) => {
@@ -214,20 +217,20 @@ test("Close Others keeps only the target table and activates it", async ({
     .evaluate((el) => (el as HTMLElement).click());
   const confirm = page.locator(".ant-modal-container:visible");
   await expect(confirm).toContainText("Close other tables");
-  await expect(confirm).toContainText("Close the other 2 table(s)");
+  await expect(confirm).toContainText("Close the other 5 table(s)");
   await confirm
     .locator(".ant-btn-primary")
     .evaluate((el) => (el as HTMLElement).click());
 
-  // 非破坏性：侧边栏仍保留全部表，仅目标打开且激活，其余为关闭态。
+  // 非破坏性：侧边栏仍保留全部 6 张表，仅目标打开且激活，其余 5 张为关闭态。
   const items = page.locator(".ant-layout-sider li.sheet-item");
-  await expect(items).toHaveCount(3);
+  await expect(items).toHaveCount(6);
   await expect(page.locator("li.sheet-item--active")).toContainText(
     "HOLDING REGISTERS Sheet 2",
   );
   await expect(
     page.locator(".ant-layout-sider li.sheet-item--closed"),
-  ).toHaveCount(2);
+  ).toHaveCount(5);
   await expect(
     page.locator(".register-table-tabs .ant-tabs-tab-active"),
   ).toContainText("HOLDING REGISTERS Sheet 2");
@@ -263,14 +266,18 @@ test("Close to the Right keeps left tables and activates the target", async ({
     .locator(".ant-btn-primary")
     .evaluate((el) => (el as HTMLElement).click());
 
-  // 非破坏性：侧边栏仍保留 3 张表，HOLDING REGISTERS Sheet 3 关闭，HOLDING REGISTERS Sheet 1/2 打开，目标 Sheet 2 激活。
+  // 非破坏性：侧边栏仍保留 6 张表；HOLDING REGISTERS Sheet 3 关闭，
+  // 目标 Sheet 2 激活。侧栏按类型分组显示，HOLDING 组内三张表连续排列。
   const names = page.locator(
     ".ant-layout-sider li.sheet-item .sheet-item__name",
   );
-  await expect(names).toHaveCount(3);
+  await expect(names).toHaveCount(6);
   await expect(names.nth(0)).toHaveText("HOLDING REGISTERS Sheet 1");
   await expect(names.nth(1)).toHaveText("HOLDING REGISTERS Sheet 2");
   await expect(names.nth(2)).toHaveText("HOLDING REGISTERS Sheet 3");
+  await expect(names.nth(3)).toHaveText("COILS Sheet 1");
+  await expect(names.nth(4)).toHaveText("DISCRETE INPUTS Sheet 1");
+  await expect(names.nth(5)).toHaveText("INPUT REGISTERS Sheet 1");
   await expect(page.locator("li.sheet-item--active")).toContainText(
     "HOLDING REGISTERS Sheet 2",
   );
@@ -308,7 +315,7 @@ test("Close Others confirm cancels without effect and applies on OK", async ({
     .getByRole("button", { name: "Cancel" })
     .evaluate((el) => (el as HTMLElement).click());
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
-  await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(3);
+  await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(6);
 
   // OK：生效。
   await sidebarItem(page, "HOLDING REGISTERS Sheet 2").click({
@@ -322,14 +329,14 @@ test("Close Others confirm cancels without effect and applies on OK", async ({
   await confirm
     .locator(".ant-btn-primary")
     .evaluate((el) => (el as HTMLElement).click());
-  // 非破坏性：侧边栏仍保留全部表，其他表变为关闭态。
-  await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(3);
+  // 非破坏性：侧边栏仍保留全部 6 张表，其他 5 张表变为关闭态。
+  await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(6);
   await expect(
     page.locator(".ant-layout-sider li.sheet-item--closed"),
-  ).toHaveCount(2);
+  ).toHaveCount(5);
 });
 
-test("deleting the last sheet creates the next numbered empty sheet", async ({
+test("deleting the last holding sheet creates the next numbered empty sheet", async ({
   page,
 }) => {
   await openApp(page);
@@ -346,7 +353,9 @@ test("deleting the last sheet creates the next numbered empty sheet", async ({
     .locator(".ant-btn-primary")
     .evaluate((el) => (el as HTMLElement).click());
 
-  await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(1);
+  // 删除最后一个 HOLDING REGISTERS 表时按类型补建 Sheet 2；
+  // 其他 3 个启动核心表仍保留，总数保持 4。
+  await expect(page.locator(".ant-layout-sider li.sheet-item")).toHaveCount(4);
   await expect(page.locator(".ant-layout-sider")).toContainText(
     "HOLDING REGISTERS Sheet 2",
   );

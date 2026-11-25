@@ -12,6 +12,8 @@
 import { expect, test } from "vscode-test-playwright";
 import type { Frame, Page } from "@playwright/test";
 
+import { isKnownVSCodeWebviewShellPageError } from "./known-upstream-errors";
+
 test.skip(
   process.env.MAMEP_REAL !== "1",
   "真实端口测试需显式开启（MAMEP_REAL=1，由 pnpm test:e2e:vscode:real 触发）",
@@ -135,6 +137,7 @@ test("VSCode 主题完整适配（UI 级）：跟随 + 实时切换 + 面板重�
   workbox.on("pageerror", (err) => {
     const stack = err.stack ?? "";
     if (!stack.includes("vscode-webview://")) return;
+    if (isKnownVSCodeWebviewShellPageError(err)) return;
     consoleErrors.push(`PAGEERROR: ${String(err)}\n${stack}`);
   });
   await workbox.setViewportSize({ width: 1600, height: 900 });

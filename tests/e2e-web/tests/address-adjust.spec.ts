@@ -126,11 +126,8 @@ test("Address Adjust 每表独立且刷新后恢复", async ({ page }) => {
     "OFF",
   );
 
-  // 切回 Sheet 1：仍为 ON。
-  await page
-    .locator(".register-table-tabs div[role=tab]")
-    .filter({ hasText: "Sheet 1" })
-    .click();
+  // 切回 HOLDING REGISTERS Sheet 1：仍为 ON。
+  await page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" }).click();
   await expect(
     (await adjustSegmented(page)).locator(".ant-segmented-item-selected"),
   ).toHaveText("ON");
@@ -144,10 +141,7 @@ test("Address Adjust 每表独立且刷新后恢复", async ({ page }) => {
   await expect(
     (await adjustSegmented(page)).locator(".ant-segmented-item-selected"),
   ).toHaveText("ON");
-  await page
-    .locator(".register-table-tabs div[role=tab]")
-    .filter({ hasText: "Sheet 2" })
-    .click();
+  await page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 2" }).click();
   await expect(
     (await adjustSegmented(page)).locator(".ant-segmented-item-selected"),
   ).toHaveText("OFF");

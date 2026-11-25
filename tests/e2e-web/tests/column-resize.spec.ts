@@ -157,11 +157,8 @@ test("column widths are independent per tab (不共享)", async ({ page }) => {
   const tab2Width = await columnWidth(page, "Name");
   expect(tab2Width).toBeGreaterThanOrEqual(145);
   expect(tab2Width).toBeLessThanOrEqual(155);
-  // 切回表 1：仍保持拖宽值。
-  await page
-    .locator(".register-table-tabs div[role=tab]")
-    .filter({ hasText: "Sheet 1" })
-    .click();
+  // 切回 HOLDING REGISTERS Sheet 1：仍保持拖宽值。
+  await page.getByRole("tab", { name: "HOLDING REGISTERS Sheet 1" }).click();
   await expect(
     page.locator(".register-table-tabs .ant-tabs-content-active"),
   ).toContainText("Name");
