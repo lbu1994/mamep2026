@@ -226,6 +226,23 @@ describe("SettingsDrawer（2026-09-12 插件管理并入）", () => {
     });
   });
 
+  it.each([
+    ["en-US", "Language"],
+    ["zh-CN", "语言"],
+  ] as const)(
+    "labels the language selector correctly in %s",
+    (language, label) => {
+      initI18n(language);
+      renderDrawer(null);
+      const selector = screen.getByRole("combobox", { name: label });
+      expect(
+        selector.closest('[data-testid="settings-language-select"]'),
+      ).toBeTruthy();
+      expect(screen.getByText(label)).toBeTruthy();
+      expect(screen.queryByText("Mamep2026", { exact: true })).toBeNull();
+    },
+  );
+
   it("渲染 General / Plugins 两个页签，默认停在 General", () => {
     renderDrawer(null);
     expect(screen.getByRole("tab", { name: "General" })).toBeTruthy();

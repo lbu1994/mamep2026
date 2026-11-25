@@ -81,7 +81,7 @@ export const en = {
     host: "Host / IP",
     portTcp: "TCP Port",
     unitId: "Unit ID",
-    unitIdHint: "MBAP Unit Identifier: 0–255. 0 = broadcast (not implemented).",
+    unitIdHint: "Modbus TCP Unit ID: 0–255.",
     autoReconnect: "Auto Reconnect",
     autoReconnectHint:
       "Automatically reconnect when the TCP link drops (limited attempts with backoff).",
@@ -133,7 +133,7 @@ export const en = {
       "{{column}}, row {{row}}, address {{address}}, table type {{tableType}}",
     editableCellLabelNoAddress:
       "{{column}}, row {{row}}, table type {{tableType}}",
-    wpHint: "Poll this register continuously while online.",
+    wpHint: "Poll this row continuously while online.",
     wpStateOff: "Polling off",
     wpStatePaused: "Polling paused while offline or without a valid address",
     wpStateWaiting: "Polling on, waiting for response",
@@ -151,15 +151,14 @@ export const en = {
     bitLabel: "Bit {{bit}}",
     bitToggle: "Toggle bit {{bit}}",
     bitToggleLabel: "Toggle bit {{bit}}, row {{row}}, address {{address}}",
-    emptyAddressTooltip:
-      "Set a valid register address first to enable this control.",
+    emptyAddressTooltip: "Set a valid address first to enable this control.",
     connectDevice: "Connect device",
     connectBeforeCommunication:
       "Connect the device before reading, writing, or polling.",
     typeCountMismatchTooltip:
       "The row range length does not match the selected data type.",
     addressFormatHint:
-      "Address display format only; does not affect the Data value format.",
+      "Sets the address display and input format; does not affect the Data value format.",
     addRow: "Add Row",
     dragHandle: "Drag to reorder",
     deleteRow: "Delete Row",
@@ -202,7 +201,7 @@ export const en = {
     duplicateSheet: "Duplicate",
     deleteSheet: "Delete",
     deleteConfirmTitle: "Delete table",
-    deleteConfirmContent: 'Delete "{{name}}" and all its registers?',
+    deleteConfirmContent: 'Delete "{{name}}" and all its rows?',
     deleteOk: "Delete",
     closeOthers: "Close Others",
     closeToRight: "Close to the Right",
@@ -221,8 +220,8 @@ export const en = {
     settingsColumns: "Columns",
     settingsActions: "Actions",
     addressError: "Invalid address",
-    emptySheet: "Add registers to start monitoring.",
-    emptySheetHint: "Define a register, then read or write it from the device.",
+    emptySheet: "Add rows to start reading device data.",
+    emptySheetHint: "Set a row address and type, then read it from the device.",
     rowCount: "{{count}} rows",
     restoreColumnLayout: "Reset layout",
     restoreColumnLayoutHint:
@@ -238,7 +237,7 @@ export const en = {
     writeVerify: "Write verification",
     writeVerifyLabel: "Verify:",
     writeVerifyHint:
-      "Read back (FC03) after a write for this table. ON = read back immediately; ON 100/200/500 ms = wait before reading back.",
+      "Read back after a write for this table. ON = read back immediately; ON 100/200/500 ms = wait before reading back.",
     // 表级 Address Adjust：每表独立 OFF/ON。
     addressAdjust: "Address Adjust",
     addressAdjustOff: "OFF",
@@ -313,6 +312,7 @@ export const en = {
     request: "Request",
     response: "Response",
     serialPort: "Serial Port",
+    tcpEndpoint: "TCP Host / Port",
     baud: "Baud Rate",
     status: "Status",
     notesPlaceholder: "Device model, firmware version, test notes…",
@@ -322,7 +322,7 @@ export const en = {
     version: "Version",
     enabled: "Enabled",
     loadErrors: "Load errors",
-    empty: "No built-in plugins registered.",
+    empty: "No plugins installed.",
     exampleTitle: "Example Plugin",
     exampleThemeColor: "Indigo",
     // panels 贡献示例插件：插件自带翻译优先（方案 A），本键作 i18n 兜底。
@@ -346,8 +346,7 @@ export const en = {
       "Plugin panel content will be provided by the plugin runtime.",
     settingsPlaceholder:
       "Plugin settings will be provided by the plugin runtime.",
-    toolbarActionPlaceholder:
-      "This plugin action is not available yet (plugin runtime is Phase A).",
+    toolbarActionPlaceholder: "This plugin action is not available yet.",
     // 安川插件：表类型标题（侧边栏分组头/新建表类型名）与协议标题。
     yaskawaTableTypeTitle: "Read/write via 67H 010DH/010EH",
     yaskawaMemobusTitle: "Yaskawa MEMOBUS (67H 010DH/010EH)",
@@ -368,6 +367,7 @@ export const en = {
     },
     // 地址变换注册。
     transformAlreadyRegistered: "Address transform already registered.",
+    dataTypeAlreadyRegistered: "This data type is already registered.",
     // 插件安装入口（PRD §8.3 P1）。
     install: "Install Plugin",
     installUnsupported:
@@ -417,11 +417,11 @@ export const en = {
     groupTable: "Table",
     shortcut: "Shortcut",
     action: "Action",
-    hint: "Press ? or Ctrl+/ to show this dialog.",
+    hint: "Press ? or Ctrl+/ to open Help.",
     openSettings: "Open Settings",
     toggleConnect: "Connect / Disconnect",
-    openHelp: "Show keyboard shortcuts",
-    openHelpQuestion: "Show keyboard shortcuts",
+    openHelp: "Open Help",
+    openHelpQuestion: "Open Help",
     prevSheet: "Previous table",
     nextSheet: "Next table",
     newSheet: "New table",
@@ -442,6 +442,7 @@ export const en = {
     title: "Settings",
     // 抽屉页签（插件管理并入）：General=既有设置项，Plugins=插件管理。
     tabGeneral: "General",
+    language: "Language",
     tabPlugins: "Plugins",
     theme: "Theme",
     themeLight: "Light",
@@ -475,8 +476,7 @@ export const en = {
       "This deletes all performance sessions saved by this browser. The workspace is not affected.",
     fieldPerformanceClearOk: "Clear",
     fieldPerformanceSessionCount: "Saved sessions: {{count}}",
-    aboutText:
-      "Mamep2026 — Modbus debugging tool (browser MVP). Modbus RTU via Web Serial.",
+    aboutText: "Mamep2026 — Cross-platform Modbus debugging tool.",
   },
   // ---- 工作区导入导出（PRD §8.3 P1）----
   workspace: {
@@ -547,6 +547,25 @@ export const en = {
     dirty: "Edited, not synced to device",
   },
   errors: {
+    selectDeviceFirst: "Select a serial port first.",
+    rawValueInvalidType: "The raw register value must be a number.",
+    rawValueNotInteger: "The raw register value must be an integer.",
+    rawValueOutOfRange: "The raw register value is out of range (0..65535).",
+    registerAddressOutOfRange: "Address is out of range (0..65535).",
+    slaveAddressInvalid: "Slave Address must be an integer.",
+    slaveAddressOutOfRange: "Slave Address is out of range (0..255).",
+    hostMessageInvalid: "The platform message is invalid.",
+    hostMessageRejected: "The application host rejected this request.",
+    pluginRuntimeNotAvailable: "The plugin runtime is unavailable.",
+    pluginVersionIncompatible:
+      "The plugin API version is incompatible with this application.",
+    pluginContributionPointExists:
+      "This plugin contribution point is already registered.",
+    pluginPermissionDenied:
+      "The plugin does not have permission for this operation.",
+    rowNotFound: "The requested row no longer exists.",
+    migrationChainBroken:
+      "The workspace format cannot be upgraded because a migration step is missing.",
     notConnected: "Not connected to a device.",
     requestTimeout: "No response from the device within the timeout.",
     requestRouteInvalid:
@@ -556,8 +575,8 @@ export const en = {
     writeVerifyMismatch: "Write succeeded but the read-back value differs.",
     modbusException: "The device returned a Modbus exception.",
     cancelled: "Cancelled.",
-    registerAddressEmpty: "Register address is empty.",
-    registerAddressInvalid: "Invalid register address.",
+    registerAddressEmpty: "Address is empty.",
+    registerAddressInvalid: "Invalid address.",
     addressInvalidCharacters: "Address contains invalid characters.",
     addressTooLong: "Address has more than 4 hex digits.",
     addressOutOfRange: "Address is out of range (0..65535).",
@@ -566,7 +585,8 @@ export const en = {
       "Address 0 cannot be adjusted with Address Adjust ON.",
     dataTooManyDecimals: "Too many decimal places for this type.",
     dataInvalidNumber: "Invalid number.",
-    dataOutOfRange: "Value out of 16-bit range.",
+    dataOutOfRange:
+      "Data exceeds the range or length allowed by the selected type and register count.",
     dataInvalidRegisterCount: "Register count is not valid for this type.",
     dataEmpty: "Value is empty.",
     persistenceError: "Persistence error.",
@@ -584,8 +604,9 @@ export const en = {
     serialRequestFailed: "Failed to request a serial port.",
     serialEnumerationUnsupported:
       "Serial port enumeration is not supported in this environment.",
-    transportNotOpen: "Serial port is not open.",
-    transportWriteFailed: "Failed to write to the serial port.",
+    transportNotOpen: "Communication connection is not open.",
+    transportWriteFailed:
+      "Failed to send data over the communication connection.",
     tcpConnectionFailed: "Failed to connect to the TCP server.",
     tcpPortInUse: "TCP port is already in use.",
     tcpOpenFailed: "Failed to open the TCP connection.",
@@ -694,7 +715,7 @@ export const zh: TranslationResources = {
     host: "主机 / IP",
     portTcp: "TCP 端口",
     unitId: "单元 ID",
-    unitIdHint: "MBAP 单元 ID：0–255；0 = 广播（未实现）。",
+    unitIdHint: "Modbus TCP 单元 ID：0–255。",
     autoReconnect: "自动重连",
     autoReconnectHint: "TCP 断线后自动重连（有限次数 + 指数退避）。",
   },
@@ -741,7 +762,7 @@ export const zh: TranslationResources = {
       "{{column}}，第 {{row}} 行，地址 {{address}}，表类型：{{tableType}}",
     editableCellLabelNoAddress:
       "{{column}}，第 {{row}} 行，表类型：{{tableType}}",
-    wpHint: "在线时持续周期读取该寄存器。",
+    wpHint: "在线时持续周期读取该行。",
     wpStateOff: "轮询已关闭",
     wpStatePaused: "离线或地址无效时暂停轮询",
     wpStateWaiting: "轮询已开启，等待响应",
@@ -758,11 +779,11 @@ export const zh: TranslationResources = {
     bitLabel: "位 {{bit}}",
     bitToggle: "切换位 {{bit}}",
     bitToggleLabel: "切换第 {{bit}} 位，第 {{row}} 行，地址 {{address}}",
-    emptyAddressTooltip: "请先填写合法寄存器地址以启用该控件。",
+    emptyAddressTooltip: "请先填写合法地址以启用该控件。",
     connectDevice: "连接设备",
     connectBeforeCommunication: "请先连接设备，再进行读取、写入或轮询。",
     typeCountMismatchTooltip: "行范围长度与所选数据类型不匹配。",
-    addressFormatHint: "仅影响地址的显示与输入进制，不影响 Data 值格式。",
+    addressFormatHint: "仅影响地址的显示与输入进制，不影响数据值格式。",
     addRow: "新增行",
     dragHandle: "拖拽排序",
     deleteRow: "删除行",
@@ -802,8 +823,8 @@ export const zh: TranslationResources = {
     closeSheet: "关闭",
     duplicateSheet: "复制标签页",
     deleteSheet: "删除",
-    deleteConfirmTitle: "删除寄存器表",
-    deleteConfirmContent: '删除"{{name}}"及其全部寄存器？',
+    deleteConfirmTitle: "删除表格",
+    deleteConfirmContent: "删除“{{name}}”及其全部行？",
     deleteOk: "删除",
     closeOthers: "关闭其他标签页",
     closeToRight: "关闭右侧标签页",
@@ -822,8 +843,8 @@ export const zh: TranslationResources = {
     settingsColumns: "列布局",
     settingsActions: "操作",
     addressError: "地址无效",
-    emptySheet: "添加寄存器开始监控。",
-    emptySheetHint: "定义寄存器后，即可从设备读取或写入。",
+    emptySheet: "添加行以开始读取设备数据。",
+    emptySheetHint: "设置行地址和类型后，即可从设备读取。",
     rowCount: "{{count}} 行",
     restoreColumnLayout: "恢复列布局",
     restoreColumnLayoutHint: "将本表列宽与列排序恢复为默认。",
@@ -837,7 +858,7 @@ export const zh: TranslationResources = {
     writeVerify: "写后回读",
     writeVerifyLabel: "回读：",
     writeVerifyHint:
-      "本表写入后回读（FC03）校验。ON = 写入后立即回读；ON 100/200/500 ms = 等待后再回读。",
+      "本表写入后回读校验。开启 = 写入后立即回读；开启 100/200/500 ms = 等待后再回读。",
     // 表级 Address Adjust：每表独立 OFF/ON。
     addressAdjust: "地址调整",
     addressAdjustOff: "OFF",
@@ -912,6 +933,7 @@ export const zh: TranslationResources = {
     request: "请求",
     response: "响应",
     serialPort: "串口",
+    tcpEndpoint: "TCP 主机 / 端口",
     baud: "波特率",
     status: "状态",
     notesPlaceholder: "设备型号、固件版本、测试记录…",
@@ -921,7 +943,7 @@ export const zh: TranslationResources = {
     version: "版本",
     enabled: "启用",
     loadErrors: "加载错误",
-    empty: "没有已注册的内置插件。",
+    empty: "尚未安装插件。",
     exampleTitle: "示例插件",
     exampleThemeColor: "靛蓝",
     // panels 贡献示例插件：插件自带翻译优先（方案 A），本键作 i18n 兜底。
@@ -943,7 +965,7 @@ export const zh: TranslationResources = {
     // 贡献点占位：交互内容随插件 runtime 提供。
     panelPlaceholder: "插件面板内容将由插件运行时提供。",
     settingsPlaceholder: "插件设置内容将由插件运行时提供。",
-    toolbarActionPlaceholder: "此插件动作暂不可用（插件运行时为 Phase A）。", // 安川插件：表类型标题与协议标题。
+    toolbarActionPlaceholder: "此插件动作暂不可用。", // 安川插件：表类型标题与协议标题。
     yaskawaTableTypeTitle: "用 67H 010DH/010EH 读写寄存器",
     yaskawaMemobusTitle: "安川 MEMOBUS（67H 010DH/010EH）",
     yaskawaManualTitle: "安川 MEMOBUS 寄存器手册",
@@ -963,6 +985,7 @@ export const zh: TranslationResources = {
     },
     // 地址变换注册。
     transformAlreadyRegistered: "地址变换已注册。",
+    dataTypeAlreadyRegistered: "该数据类型已注册。",
     // 插件安装入口（PRD §8.3 P1）。
     install: "安装插件",
     installUnsupported: "当前环境不支持安装插件。",
@@ -1010,11 +1033,11 @@ export const zh: TranslationResources = {
     groupTable: "表格",
     shortcut: "快捷键",
     action: "操作",
-    hint: "按 ? 或 Ctrl+/ 可随时打开本对话框。",
+    hint: "按 ? 或 Ctrl+/ 打开帮助。",
     openSettings: "打开设置",
     toggleConnect: "连接 / 断开",
-    openHelp: "显示键盘快捷键",
-    openHelpQuestion: "显示键盘快捷键",
+    openHelp: "打开帮助",
+    openHelpQuestion: "打开帮助",
     prevSheet: "上一个表",
     nextSheet: "下一个表",
     newSheet: "新建表格",
@@ -1035,6 +1058,7 @@ export const zh: TranslationResources = {
     title: "设置",
     // 抽屉页签（插件管理并入）：General=既有设置项，Plugins=插件管理。
     tabGeneral: "常规",
+    language: "语言",
     tabPlugins: "插件",
     theme: "主题",
     themeLight: "浅色",
@@ -1067,8 +1091,7 @@ export const zh: TranslationResources = {
       "将删除此浏览器保存的全部性能会话，不影响工作区。",
     fieldPerformanceClearOk: "清除",
     fieldPerformanceSessionCount: "已保存会话：{{count}}",
-    aboutText:
-      "Mamep2026 — Modbus 调试工具（浏览器 MVP）。通过 Web Serial 支持 Modbus RTU。",
+    aboutText: "Mamep2026 — 跨平台 Modbus 调试工具。",
   },
   // ---- 工作区导入导出（PRD §8.3 P1）----
   workspace: {
@@ -1135,6 +1158,21 @@ export const zh: TranslationResources = {
     dirty: "已编辑，未同步到设备",
   },
   errors: {
+    selectDeviceFirst: "请先选择串口。",
+    rawValueInvalidType: "寄存器原始值必须为数值。",
+    rawValueNotInteger: "寄存器原始值必须为整数。",
+    rawValueOutOfRange: "寄存器原始值超出范围（0..65535）。",
+    registerAddressOutOfRange: "地址超出范围（0..65535）。",
+    slaveAddressInvalid: "从站地址必须为整数。",
+    slaveAddressOutOfRange: "从站地址超出范围（0..255）。",
+    hostMessageInvalid: "平台消息无效。",
+    hostMessageRejected: "应用宿主拒绝了此请求。",
+    pluginRuntimeNotAvailable: "插件运行时不可用。",
+    pluginVersionIncompatible: "插件 API 版本与当前应用不兼容。",
+    pluginContributionPointExists: "该插件贡献点已注册。",
+    pluginPermissionDenied: "插件没有执行此操作的权限。",
+    rowNotFound: "请求的行已不存在。",
+    migrationChainBroken: "缺少工作区格式迁移步骤，无法升级工作区。",
     notConnected: "未连接设备。",
     requestTimeout: "设备在超时时间内未响应。",
     requestRouteInvalid: "请求中的从站地址或单元 ID 无效。",
@@ -1142,8 +1180,8 @@ export const zh: TranslationResources = {
     writeVerifyMismatch: "写入成功但回读值不一致。",
     modbusException: "设备返回 Modbus 异常。",
     cancelled: "已取消。",
-    registerAddressEmpty: "寄存器地址为空。",
-    registerAddressInvalid: "寄存器地址无效。",
+    registerAddressEmpty: "地址为空。",
+    registerAddressInvalid: "地址无效。",
     addressInvalidCharacters: "地址包含非法字符。",
     addressTooLong: "地址超过 4 位十六进制。",
     addressOutOfRange: "地址超出范围（0..65535）。",
@@ -1151,7 +1189,7 @@ export const zh: TranslationResources = {
     addressAdjustUnderflow: "Address Adjust 为 ON 时地址 0 无法调整。",
     dataTooManyDecimals: "小数位数超过该类型精度。",
     dataInvalidNumber: "数字格式无效。",
-    dataOutOfRange: "数值超出 16 位范围。",
+    dataOutOfRange: "数据超出所选类型和寄存器数量允许的范围或长度。",
     dataInvalidRegisterCount: "寄存器数量与该类型不匹配。",
     dataEmpty: "值为空。",
     persistenceError: "持久化错误。",
@@ -1166,8 +1204,8 @@ export const zh: TranslationResources = {
     serialOpenFailed: "打开串口失败。",
     serialRequestFailed: "请求串口失败。",
     serialEnumerationUnsupported: "当前环境不支持枚举串口。",
-    transportNotOpen: "串口未打开。",
-    transportWriteFailed: "串口写入失败。",
+    transportNotOpen: "通信连接未打开。",
+    transportWriteFailed: "通过通信连接发送数据失败。",
     tcpConnectionFailed: "TCP 连接失败。",
     tcpPortInUse: "TCP 端口已被占用。",
     tcpOpenFailed: "打开 TCP 连接失败。",

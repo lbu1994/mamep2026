@@ -138,7 +138,7 @@ describe("PluginManagerSection", () => {
   it("shows the empty state when no plugins are registered", () => {
     setHostWithPlugin(new PluginRegistry());
     renderSection();
-    expect(screen.getByText("No built-in plugins registered.")).toBeTruthy();
+    expect(screen.getByText("No plugins installed.")).toBeTruthy();
   });
 
   it("renders author, platform capability and permission labels", () => {

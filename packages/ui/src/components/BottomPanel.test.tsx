@@ -10,6 +10,7 @@ import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import type { AppHost, CommProperties } from "../host";
 import { BottomPanel } from "./BottomPanel";
+import { makeHost } from "../test/make-app-host";
 
 // BottomPanel 使用 App.useApp()（antd message），测试渲染必须包 <AntApp>。
 function renderPanel(): ReturnType<typeof render> {
@@ -480,11 +481,52 @@ describe("BottomPanel properties", () => {
     expect(screen.getByText("19200")).toBeTruthy();
     expect(screen.getByText("8")).toBeTruthy();
     expect(screen.getByText("1")).toBeTruthy();
-    expect(screen.getByText("even")).toBeTruthy();
+    expect(screen.getByText("Even")).toBeTruthy();
     expect(screen.getByText("RTS/CTS")).toBeTruthy();
     expect(screen.getByText("500")).toBeTruthy();
     expect(screen.getByText("3")).toBeTruthy();
     expect(screen.getByText("Online")).toBeTruthy();
+  });
+
+  it.each([
+    ["en-US", "TCP Host / Port", "Serial Port"],
+    ["zh-CN", "TCP 主机 / 端口", "串口"],
+  ] as const)(
+    "labels TCP endpoints correctly in %s",
+    (language, label, serialLabel) => {
+      initI18n(language);
+      const { host } = makeHost();
+      host.getCommProperties = () => ({
+        ...fullProperties,
+        protocol: "tcp",
+        portLabel: "192.168.1.10:502",
+        unitId: 1,
+      });
+      useAppStore.setState({
+        host,
+      });
+      renderPanel();
+      expect(screen.getByText(label)).toBeTruthy();
+      expect(screen.getByText("192.168.1.10:502")).toBeTruthy();
+      expect(screen.queryByText(serialLabel)).toBeNull();
+    },
+  );
+
+  it.each([
+    ["none", "无"],
+    ["even", "偶校验"],
+    ["odd", "奇校验"],
+  ] as const)("localizes RTU parity %s in Chinese", (parity, label) => {
+    initI18n("zh-CN");
+    const { host } = makeHost();
+    host.getCommProperties = () => ({ ...fullProperties, parity });
+    useAppStore.setState({
+      host,
+    });
+    renderPanel();
+    expect(screen.getByText("串口")).toBeTruthy();
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.queryByText(parity)).toBeNull();
   });
 
   it("lays properties out in 3 columns (9 items across 3 rows)", () => {

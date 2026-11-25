@@ -204,7 +204,7 @@ test("卸载：确认后从列表移除并提示成功", async ({ page }) => {
   const modal = await openPluginManager(page);
 
   //插件一律由用户手动安装（无随包插件）→ 初始为空态。
-  await expect(modal).toContainText("No built-in plugins registered.");
+  await expect(modal).toContainText("No plugins installed.");
 
   // 安装一个插件。
   await modal.getByRole("button", { name: "Install Plugin" }).click();

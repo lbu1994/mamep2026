@@ -1,6 +1,39 @@
 import { describe, expect, it } from "vitest";
 import { en, zh } from "./index";
 
+function flattenTranslations(
+  resources: object,
+  prefix = "",
+): Record<string, string> {
+  const entries: Record<string, string> = {};
+  for (const [name, value] of Object.entries(resources)) {
+    const key = prefix === "" ? name : `${prefix}.${name}`;
+    if (typeof value === "string") entries[key] = value;
+    else if (typeof value === "object" && value !== null) {
+      Object.assign(entries, flattenTranslations(value, key));
+    }
+  }
+  return entries;
+}
+
+describe("translation resource integrity", () => {
+  it("keeps every key and interpolation parameter consistent across languages", () => {
+    const english = flattenTranslations(en);
+    const chinese = flattenTranslations(zh);
+    expect(Object.keys(chinese).sort()).toEqual(Object.keys(english).sort());
+    for (const [key, text] of Object.entries(english)) {
+      const translated = chinese[key] ?? "";
+      expect(translated.trim(), key).not.toBe("");
+      const parameters = (value: string): string[] =>
+        Array.from(
+          value.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g),
+          (match) => match[1]?.trim() ?? "",
+        ).sort();
+      expect(parameters(translated), key).toEqual(parameters(text));
+    }
+  });
+});
+
 describe("zh-CN Type labels", () => {
   it("translates every built-in Type option", () => {
     expect({

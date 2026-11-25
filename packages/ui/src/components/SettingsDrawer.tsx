@@ -188,9 +188,10 @@ export function SettingsDrawer({
         />
       </div>
       <div>
-        <Typography.Text type="secondary">{t("app.title")}</Typography.Text>{" "}
+        <Typography.Text>{t("settings.language")}</Typography.Text>{" "}
         <Select
           data-testid="settings-language-select"
+          aria-label={t("settings.language")}
           size="small"
           value={i18n.language}
           style={{ width: 100, marginLeft: 8 }}

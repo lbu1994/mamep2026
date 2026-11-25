@@ -431,7 +431,7 @@ export function TraceWindow({ rowId }: TraceWindowProps): React.ReactNode {
             size="small"
             variant="borderless"
             className="trace-window__average"
-            aria-label="Average"
+            aria-label={t("trace.average")}
             value={windowModel.average ?? ""}
             readOnly
           />

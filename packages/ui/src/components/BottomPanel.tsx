@@ -399,6 +399,12 @@ export function BottomPanel({
     "xon-xoff": t("connection.flowXonXoff"),
   };
 
+  const parityLabels = new Map<string, string>([
+    ["none", t("connection.parityNone")],
+    ["even", t("connection.parityEven")],
+    ["odd", t("connection.parityOdd")],
+  ]);
+
   const propertiesTab =
     properties === null ? null : (
       /* 通信属性读数面板（精修）：容器 + 小写大写字幕标签 + 统一值字体，
@@ -412,7 +418,13 @@ export function BottomPanel({
             content: "comm-props__content",
           }}
         >
-          <Descriptions.Item label={t("panel.serialPort")}>
+          <Descriptions.Item
+            label={t(
+              properties.protocol === "tcp"
+                ? "panel.tcpEndpoint"
+                : "panel.serialPort",
+            )}
+          >
             {properties.portLabel ?? "-"}
           </Descriptions.Item>
           {properties.protocol === "tcp" ? (
@@ -439,7 +451,7 @@ export function BottomPanel({
                 {properties.stopBits}
               </Descriptions.Item>
               <Descriptions.Item label={t("connection.parity")}>
-                {properties.parity}
+                {parityLabels.get(properties.parity) ?? properties.parity}
               </Descriptions.Item>
               <Descriptions.Item label={t("connection.flowControl")}>
                 {flowControlLabels[properties.flowControl]}
