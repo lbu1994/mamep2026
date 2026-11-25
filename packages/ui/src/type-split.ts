@@ -1,15 +1,20 @@
 /**
- * Type 双列拆分辅助：进制 + scale 两列映射回单一 DataType。
- * - 进制（radix）5 种：hex / unsigned / signed / binary / string；
- * - scale 5 种：1 / 0.1 / 0.01 / 0.001 / 0.0001，仅 unsigned/signed 可用；
- * - hex/binary/string 的 scale 恒为 1（下拉禁用）；
- * - 纯函数，便于 jsdom 单测。
+ * Map Type and Scale columns to a DataType ID.
+ * Only unsigned and signed types support scaling. Floating-point types
+ * select their own register width and always use scale 1.
  */
 import { isBuiltinDataType, type DataType } from "@mamep2026/domain";
 
 /** 进制列取值（与 domain DataType 前缀对应）。bool 为基础表位值类型。 */
 export type DataRadix =
-  "hex" | "unsigned" | "signed" | "binary" | "string" | "bool";
+  | "hex"
+  | "unsigned"
+  | "signed"
+  | "binary"
+  | "string"
+  | "bool"
+  | "float32"
+  | "float64";
 
 /** scale 列取值（字符串表示，便于 Select 直接使用）。 */
 export type ScaleValue = "1" | "0.1" | "0.01" | "0.001" | "0.0001";
@@ -21,6 +26,8 @@ export const RADIX_OPTIONS: readonly DataRadix[] = [
   "binary",
   "string",
   "bool",
+  "float32",
+  "float64",
 ];
 
 export const SCALE_OPTIONS: readonly ScaleValue[] = [
@@ -39,10 +46,14 @@ export const RADIX_LABEL_KEYS: Record<DataRadix, string> = {
   binary: "table.binary",
   string: "table.string",
   bool: "table.bool",
+  float32: "table.float32",
+  float64: "table.float64",
 };
 
 /** DataType → 进制（开放联合：显式收窄，插件类型回退 signed 显示）。 */
 export function dataTypeToRadix(type: DataType): DataRadix {
+  if (type === "float32") return "float32";
+  if (type === "float64") return "float64";
   if (type === "hex" || type === "binary" || type === "string") {
     return type as DataRadix;
   }
@@ -84,7 +95,9 @@ export function combineRadixScale(
     radix === "hex" ||
     radix === "binary" ||
     radix === "string" ||
-    radix === "bool"
+    radix === "bool" ||
+    radix === "float32" ||
+    radix === "float64"
   ) {
     return radix;
   }

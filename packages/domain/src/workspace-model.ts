@@ -17,7 +17,7 @@ export type ConnectionProfileId = string & {
 };
 export type PluginId = string & { readonly __brand: "PluginId" };
 
-/** 内置 16 位数据类型字面量（E-3 后为闭集，插件类型经 string & {} 扩展）。 */
+/** Built-in register types; float32 and float64 require two and four words. */
 export type BuiltinDataType =
   | "hex"
   | "unsigned"
@@ -32,11 +32,13 @@ export type BuiltinDataType =
   | "signed-0.0001"
   | "binary"
   | "string"
+  | "float32"
+  | "float64"
   | "bool";
 
 /**
- * 16 位数据类型（字符串联合，不用 enum 作序列化格式）。
- * 联合开放——内置字面量 + 插件类型（string & {}，单寄存器）。
+ * Register data type IDs use strings in persisted workspaces.
+ * Built-in types may span multiple words; plugin types use one register.
  */
 export type DataType = BuiltinDataType | (string & {});
 
@@ -54,6 +56,8 @@ export const dataTypes: readonly BuiltinDataType[] = [
   "signed-0.0001",
   "binary",
   "string",
+  "float32",
+  "float64",
   "bool",
 ];
 
@@ -118,14 +122,19 @@ export interface RegisterSubRowMeta {
   dataType: DataType;
 }
 
-/** 创建单个子行默认元数据（name/comment 为空，dataType 继承父行）。 */
+/** Create empty per-word metadata; inherit the parent type except floats use HEX. */
 export function createRegisterSubRowMeta(
   dataType: DataType,
 ): RegisterSubRowMeta {
-  return { name: "", comment: "", dataType };
+  return { name: "", comment: "", dataType: singleRegisterDataType(dataType) };
 }
 
-/** 按长度构建范围行子行元数据数组（缺省继承父行 dataType）。 */
+/** Use HEX for individual words of a floating-point parent row. */
+export function singleRegisterDataType(dataType: DataType): DataType {
+  return dataType === "float32" || dataType === "float64" ? "hex" : dataType;
+}
+
+/** Create per-word metadata for a range; floating-point parents use HEX children. */
 export function createRegisterSubRowMetas(
   count: number,
   dataType: DataType,

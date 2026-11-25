@@ -238,6 +238,32 @@ describe("RegisterTable 单元格校验（回归：Data 列编辑校验恢复）
     fireEvent.keyDown(input, { key: "Enter" });
   }
 
+  it.each([
+    ["float32", 2, "0.1", "0.10000000149011612", "Enter"],
+    ["float32", 2, "0.1", "0.10000000149011612", "blur"],
+    ["float64", 4, "9007199254740993", "9007199254740992", "Enter"],
+    ["float64", 4, "9007199254740993", "9007199254740992", "blur"],
+  ] as const)("silently commits %s rounding on %s %s %s %s", async (type, count, inputText, expectedText, trigger) => {
+    const rowId = firstRowId();
+    useAppStore.getState().updateRow(rowId, (row) => ({ ...row, dataType: type, registerCount: count }));
+    render(<RegisterTable sheetId={sheetId()} />);
+    const cell = document.querySelector<HTMLElement>('[data-register-cell="data"]');
+    if (cell === null) throw new Error("missing data cell");
+    fireEvent.click(cell);
+    const input = document.querySelector<HTMLInputElement>('input[data-register-cell="data"]');
+    if (input === null) throw new Error("missing data input");
+    fireEvent.change(input, { target: { value: inputText } });
+    if (trigger === "Enter") fireEvent.keyDown(input, { key: "Enter" });
+    else fireEvent.blur(input);
+    await waitFor(() => {
+      expect(useAppStore.getState().workspace.sheets[0]?.rows[0]?.cellText).toBe(expectedText);
+      expect(document.querySelector('[data-register-cell="data"]')?.textContent).toContain(expectedText);
+    });
+    expect(useAppStore.getState().cellValidationErrors[`${rowId}:data`]).toBeUndefined();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.querySelector(".ant-message-notice")).toBeNull();
+  });
+
   it("Data 列提交非法值：非编辑态出现 error 样式（红框+Tooltip），输入被保留", async () => {
     render(<RegisterTable sheetId={sheetId()} />);
     // 默认 dataType=hex；"zz" 非法（DATA_HEX_INVALID）。
@@ -1437,6 +1463,25 @@ describe("RegisterTable Read All 全局 message（2026-08-28）", () => {
       durationMs: 152,
     };
   }
+
+  it("skips invalid float widths in Read All and retains valid float64 quantities", async () => {
+    const host = fakeHostWithSummary(baseSummary());
+    const state = useAppStore.getState();
+    const address = RegisterAddress.create(100);
+    if (!address.ok) throw new Error("invalid test address");
+    state.updateRow(firstRowId(), (row) => ({ ...row, addressValue: address.value, dataType: "float32", registerCount: 1 }));
+    const second = state.workspace.sheets[0]?.rows[1];
+    if (second === undefined) throw new Error("missing second row");
+    state.updateRow(second.rowId, (row) => ({ ...row, addressValue: address.value, dataType: "float64", registerCount: 4 }));
+    useAppStore.setState({ host });
+    render(<AntApp><RegisterTable sheetId={sheetId()} /></AntApp>);
+    fireEvent.click(screen.getByRole("button", { name: /Read All/ }));
+    await waitFor(() => expect(host.readAllRows).toHaveBeenCalled());
+    expect(host.readAllRows).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ key: firstRowId(), address: null }),
+      expect.objectContaining({ key: second.rowId, address: 100, quantity: 4 }),
+    ]), expect.anything());
+  });
 
   it("Read All 成功后弹出富内容全局 message（统计 + 耗时），底部消息照常追加", async () => {
     useAppStore.setState({ host: fakeHostWithSummary(baseSummary()) });

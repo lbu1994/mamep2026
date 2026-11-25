@@ -10,6 +10,7 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
+import { isFloatType } from "./floating-point";
 
 const SCALE_DIGITS: Partial<Record<DataType, number>> = {
   "unsigned-0.1": 1,
@@ -148,6 +149,14 @@ function formatScaled(raw: number, type: DataType): string {
 
 /** 把单元格文本按类型解析为原始值（0..65535）。失败返回结构化错误，不清空输入。 */
 export function parseCellText(text: string, type: DataType): Result<number> {
+  if (isFloatType(type)) {
+    return fail(createMamepError({
+      code: "DATA_INVALID_REGISTER_COUNT",
+      category: "validation",
+      userMessageKey: "errors.dataInvalidNumber",
+      technicalMessage: `${type} cannot use a single register`,
+    }));
+  }
   const trimmed = text.trim();
   if (trimmed === "") {
     return fail(dataError("DATA_EMPTY", "cell text is empty"));

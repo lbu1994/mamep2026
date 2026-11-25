@@ -8,7 +8,7 @@
  * - 成功提交**同时同步 `registerValues`**：保持「原始值单一事实源」
  *   不变式，使派生展示（范围行子行 `tree-rows`、位明细 `bit-register`）与位切换
  *   基准跟随父行文本，而不是停在旧读值。
- * - 规范化不做任何舍入或截断：超范围/超小数位仍返回结构化错误。
+ * - Float inputs round on commit; integer and fixed-point inputs never round.
  */
 import {
   RawRegisterValue,
@@ -147,5 +147,6 @@ function reformatByType(
   const resolve = resolver ?? defaultResolver;
   const parsed = resolve.parse(text, row.dataType);
   if (!parsed.ok) return text;
+  if (!resolve.isValidRegisterCount(nextType, 1)) return text;
   return resolve.format(parsed.value, nextType);
 }

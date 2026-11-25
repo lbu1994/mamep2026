@@ -132,6 +132,8 @@ describe("options", () => {
       "binary",
       "string",
       "bool",
+      "float32",
+      "float64",
     ]);
     expect(SCALE_OPTIONS).toEqual(["1", "0.1", "0.01", "0.001", "0.0001"]);
   });
@@ -140,5 +142,12 @@ describe("options", () => {
     expect(dataTypeToRadix("bool")).toBe("bool");
     expect(combineRadixScale("bool", "0.1")).toBe("bool");
     expect(isScaleApplicable("bool")).toBe(false);
+  });
+  it.each(["float32", "float64"] as const)("keeps %s unscaled and localized", (type) => {
+    expect(dataTypeToRadix(type)).toBe(type);
+    expect(dataTypeToScale(type)).toBe("1");
+    expect(combineRadixScale(type, "0.1")).toBe(type);
+    expect(dataTypeLabelKey(type)).toBe(`table.${type}`);
+    expect(isScaleApplicable(type)).toBe(false);
   });
 });

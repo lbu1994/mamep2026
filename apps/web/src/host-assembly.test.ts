@@ -414,6 +414,31 @@ describe("startAppHost", () => {
     expect(sinks.updateRow).not.toHaveBeenCalled();
   });
 
+  it("rejects non-finite float poll results without replacing Data", async () => {
+    const { host, pollResultListeners } = makeFakeHost();
+    const sinks = makeSinks();
+    const sheet = makeSheetWithRow(1);
+    const row = sheet.rows[0];
+    if (row === undefined) throw new Error("expected row");
+    row.dataType = "float32";
+    row.registerCount = 2;
+    row.cellText = "1";
+    vi.mocked(sinks.getWorkspaceSheets).mockReturnValue([sheet]);
+    const deps = makeDeps({ sinks, loadHostFactory: async () => () => asHost(host) });
+    await startAppHost(deps, new AbortController().signal);
+    await vi.waitFor(() => expect(pollResultListeners).toHaveLength(1));
+    pollResultListeners[0]?.({
+      key: row.rowId, sheetId: sheet.sheetId, address: 1,
+      route: { unitAddress: 1, protocol: "rtu" }, requestGeneration: 1, connectionGeneration: 1,
+      result: { ok: true, value: [0x7f80, 0] },
+    });
+    expect(sinks.recordPollResult).toHaveBeenCalledWith(row.rowId, expect.objectContaining({
+      ok: false, error: expect.objectContaining({ code: "DATA_NON_FINITE" }),
+    }));
+    expect(sinks.updateRow).not.toHaveBeenCalled();
+    expect(row.cellText).toBe("1");
+  });
+
   it("工厂加载失败：提示 hostLoadFailed + 失败态，且不接线不抛", async () => {
     const deps = makeDeps({
       loadHostFactory: async () => {

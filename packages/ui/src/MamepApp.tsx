@@ -70,7 +70,7 @@ import {
   createDefaultRtuProfile,
   defaultConfig,
 } from "@mamep2026/domain";
-import { formatRawValue } from "@mamep2026/data-conversion";
+import { formatRawValue, formatFloatWords, isFloatType } from "@mamep2026/data-conversion";
 import { mergeThemeConfig } from "@mamep2026/ui-theme";
 import { connectionButtonSpec } from "./connection-button";
 import { useIsMobileLayout } from "./layout/breakpoints";
@@ -668,10 +668,14 @@ function MamepAppContent({
         );
       const row = sheet?.rows.find((r) => r.rowId === sample.key);
       if (row === undefined) return;
+      const floatText = isFloatType(row.dataType)
+        ? formatFloatWords(sample.rawValues ?? [], row.dataType)
+        : null;
+      if (floatText !== null && !floatText.ok) return;
       appendTraceSample(row.rowId, {
         ...sample,
         no: sample.sequence,
-        value: formatRawValue(sample.rawValue, row.dataType),
+        value: floatText?.value ?? formatRawValue(sample.rawValue, row.dataType),
         rawValue: sample.rawValue,
         dataType: row.dataType,
       });

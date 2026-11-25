@@ -7,6 +7,7 @@ import {
 } from "@mamep2026/domain";
 import {
   CommunicationSession,
+  BatchReadCoordinator,
   type CommunicationLogEvent,
 } from "@mamep2026/communication";
 import {
@@ -75,6 +76,50 @@ function makeRow(address: number, dataType: DataType = "unsigned") {
 }
 
 describe("RegisterTableService", () => {
+  it.each([
+    ["float32", 2, "0.1", [0x3dcc, 0xcccd], "0.10000000149011612"],
+    ["float64", 4, "-2.5", [0xc004, 0, 0, 0], "-2.5"],
+  ] as const)("writes, verifies, batch-reads and logs %s words unchanged", async (type, count, text, words, expectedText) => {
+    const { session, service, clock, logs, device } = setup();
+    await session.connect();
+    const row = { ...makeRow(100, type), registerCount: count, cellText: text };
+    const write = service.writeRow(row, { writeVerify: { mode: "immediate", delayMs: null } });
+    await advanceVirtual(clock, 300);
+    expect(await write).toEqual(ok({ kind: "write-succeeded-verify-matched", readValues: [...words] }));
+    expect(words.map((_, index) => device.getRegister(100 + index))).toEqual(words);
+    const writeLog = logs.find((entry) => entry.direction === "request" && entry.functionCode === 0x10);
+    expect(writeLog?.quantity).toBe(count);
+    expect(Array.from(writeLog?.bytes.slice(7, 7 + count * 2) ?? [])).toEqual(words.flatMap((word) => [word >>> 8, word & 0xff]));
+    const batch = new BatchReadCoordinator(session, clock).readAll([
+      { key: row.rowId, sheetId: "float-sheet", address: 100, quantity: count },
+    ], (event) => {
+      expect(event.result).toEqual(ok([...words]));
+      if (event.result.ok) {
+        const applied = service.applyReadResult(row, event.result.value);
+        expect(applied.ok && applied.value.cellText).toBe(expectedText);
+        expect(applied.ok && applied.value.registerValues?.map((word) => word.value)).toEqual(words);
+      }
+    });
+    await advanceVirtual(clock, 300);
+    const summary = await batch.promise;
+    expect(summary.ok && summary.value.successCount).toBe(1);
+    expect(logs.some((entry) => entry.source === "batch-read" && entry.quantity === count)).toBe(true);
+  });
+
+  it("rejects float input and widths before sending, and rejects non-finite read results", async () => {
+    const { session, service, transport, device } = setup();
+    await session.connect();
+    const row = { ...makeRow(100, "float32"), cellText: "1" };
+    expect((await service.readRow(row)).ok).toBe(false);
+    expect((await service.writeRow(row)).ok).toBe(false);
+    expect((await service.writeRow({ ...row, registerCount: 2, cellText: "Infinity" })).ok).toBe(false);
+    expect(transport.sentFrames).toHaveLength(0);
+    device.setRegister(100, 0x7f80);
+    const read = await service.readRow({ ...row, registerCount: 2 });
+    expect(read.ok).toBe(false);
+    expect(service.applyReadResult({ ...row, registerCount: 2 }, [0x7f80, 0]).ok).toBe(false);
+    expect(row.cellText).toBe("1");
+  });
   it("reads a row and applies the formatted result to the cell text", async () => {
     const { session, service } = setup();
     await session.connect();

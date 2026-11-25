@@ -37,7 +37,11 @@ import type {
 import type { SaveStatus } from "@mamep2026/workspace";
 import type { Result } from "@mamep2026/domain";
 import type { DataTypeResolver } from "@mamep2026/data-conversion";
-import { createDataTypeResolver } from "@mamep2026/data-conversion";
+import {
+  createDataTypeResolver,
+  isFloatType,
+  isValidRegisterCount,
+} from "@mamep2026/data-conversion";
 import {
   addRowAfter,
   commitAddress,
@@ -2123,7 +2127,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       state.connectionState !== "connected" ||
       state.host === null ||
       sheet === undefined ||
-      row?.addressValue == null
+      row?.addressValue == null ||
+      (isFloatType(row.dataType) &&
+        !isValidRegisterCount(row.dataType, row.registerCount))
     )
       return null;
     const binding = {

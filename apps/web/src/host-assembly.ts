@@ -27,6 +27,7 @@ import type {
   WorkspaceRecoveryInfo,
 } from "@mamep2026/domain";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
+import { decodeFloatWords, isFloatType } from "@mamep2026/data-conversion";
 import type {
   CommunicationLogEvent,
   ConnectionState,
@@ -297,6 +298,15 @@ async function startDeferredServices(
       }
       // 轮询/全表读取逐行结果 → 三态状态点：成功清失败/编辑完成态（不产生成功点）；
       // 失败幂等写失败态（同因子返回原引用，设备掉线时 store 零更新）。
+      const row = sheet.rows.find((candidate) => candidate.rowId === pollResult.key);
+      if (pollResult.result.ok && row !== undefined && isFloatType(row.dataType)) {
+        const raw = pollResult.result.value;
+        const decoded = decodeFloatWords(Array.isArray(raw) ? raw : [raw], row.dataType);
+        if (!decoded.ok) {
+          sinks.recordPollResult(pollResult.key as RowId, decoded);
+          return;
+        }
+      }
       sinks.recordPollResult(pollResult.key as RowId, pollResult.result);
       if (!pollResult.result.ok) return;
       const updated = applyPollResult(

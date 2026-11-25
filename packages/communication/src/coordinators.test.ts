@@ -209,6 +209,21 @@ describe("BatchReadCoordinator", () => {
 });
 
 describe("TraceCoordinator", () => {
+  it("retains all float64 words including a low bit lost by a combined Number", async () => {
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const session = new CommunicationSession({ transport, clock, config: createDefaultRtuProfile() });
+    await session.connect();
+    const coordinator = new TraceCoordinator(session, clock);
+    const listener = vi.fn();
+    coordinator.onSample(listener);
+    coordinator.start("float-row", 100, 100, 4);
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(appendCrc(Uint8Array.from([1, 3, 8, 0x3f, 0xf0, 0, 0, 0, 0, 0, 1])));
+    await advanceUntil(clock, () => listener.mock.calls.length === 1);
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ rawValues: [0x3ff0, 0, 0, 1], quantity: 4 }));
+    coordinator.stopAll();
+  });
   it("drops an old request after same-key restart and keeps the submitted identity", async () => {
     const clock = new ManualClock();
     const transport = new FakeTransport();
@@ -251,6 +266,7 @@ describe("TraceCoordinator", () => {
       generation: 11,
       sequence: 1,
       rawValue: 222,
+      rawValues: [222],
       timestamp: expect.any(Number),
     });
     expect(newContext.route).toEqual({ protocol: "rtu", unitAddress: 6 });

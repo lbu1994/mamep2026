@@ -24,6 +24,8 @@ import { fail, ok } from "@mamep2026/domain";
 import {
   createDataTypeResolver,
   formatRawValues,
+  formatFloatWords,
+  isFloatType,
   parseCompositeText,
   type DataTypeResolver,
 } from "@mamep2026/data-conversion";
@@ -194,6 +196,10 @@ export function setRegisterBit(
     return ok(row);
   }
   base[registerIndex] = next;
+  if (isFloatType(row.dataType)) {
+    const formatted = formatFloatWords(base, row.dataType);
+    if (!formatted.ok) return formatted;
+  }
   const registerValues: RawRegisterValue[] = [];
   for (const raw of base) {
     const created = RawRegisterValue.create(raw);

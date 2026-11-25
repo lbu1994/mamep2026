@@ -22,6 +22,8 @@ export interface TraceSample extends ReadRequestContext {
   generation: number;
   sequence: number;
   rawValue: number;
+  /** Original words preserve all bits of multi-register floating-point samples. */
+  rawValues?: number[] | undefined;
   timestamp: number;
 }
 
@@ -144,6 +146,7 @@ export class TraceCoordinator {
           key: entry.key,
           sequence: entry.sequence,
           rawValue: combinedNumeric(result.value),
+          rawValues: [...result.value],
           timestamp: this.clock.now(),
         };
         for (const listener of this.listeners) listener(sample);

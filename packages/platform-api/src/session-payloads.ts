@@ -403,6 +403,7 @@ export const traceSamplePayloadSchema = z.object({
   key: z.string(),
   sequence: z.number().int().positive(),
   rawValue: z.number(),
+  rawValues: z.array(z.number().int().min(0).max(65535)).min(1).max(125).optional(),
   timestamp: z.number(),
 });
 export type TraceSamplePayload = z.infer<typeof traceSamplePayloadSchema>;

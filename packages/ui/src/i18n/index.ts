@@ -181,6 +181,8 @@ export const en = {
     binary: "Binary",
     string: "String",
     bool: "Bool",
+    float32: "Float32",
+    float64: "Float64",
     readOnlyTable:
       "This table is read-only (discrete inputs / input registers)",
     // 核心表类型标题（侧边栏分组/新建表）： 起明确读/写属性、
@@ -782,6 +784,8 @@ export const zh: TranslationResources = {
     binary: "二进制",
     string: "字符串",
     bool: "布尔值",
+    float32: "32 位浮点数",
+    float64: "64 位浮点数",
     readOnlyTable: "该表为只读（离散输入 / 输入寄存器）",
     // 核心表类型标题（侧边栏分组/新建表）： 起明确读/写属性。
     tableType: {

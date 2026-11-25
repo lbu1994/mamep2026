@@ -4,16 +4,19 @@
  */
 import {
   createEmptyRow,
+  createMamepError,
   newRowId,
   RawRegisterValue,
   type RegisterRow,
   type RegisterSheet,
   type Result,
 } from "@mamep2026/domain";
-import { ok } from "@mamep2026/domain";
+import { fail, ok } from "@mamep2026/domain";
 import {
   createDataTypeResolver,
   formatRawValues,
+  formatFloatWords,
+  isFloatType,
   type DataTypeResolver,
 } from "@mamep2026/data-conversion";
 
@@ -26,6 +29,10 @@ export function applyReadValueToRow(
   raw: number,
   resolver?: DataTypeResolver,
 ): Result<RegisterRow> {
+  if (isFloatType(row.dataType)) {
+    const formatted = formatFloatWords([raw], row.dataType);
+    if (!formatted.ok) return formatted;
+  }
   const rawValue = RawRegisterValue.create(raw);
   if (!rawValue.ok) return rawValue;
   return ok({
@@ -42,6 +49,18 @@ export function applyReadValuesToRow(
   row: RegisterRow,
   values: readonly number[],
 ): Result<RegisterRow> {
+  if (isFloatType(row.dataType)) {
+    if (values.length !== row.registerCount) {
+      return fail(createMamepError({
+        code: "DATA_INVALID_REGISTER_COUNT",
+        category: "validation",
+        userMessageKey: "errors.dataInvalidNumber",
+        technicalMessage: "read width does not match the floating-point row",
+      }));
+    }
+    const formatted = formatFloatWords(values, row.dataType);
+    if (!formatted.ok) return formatted;
+  }
   const registerValues: RawRegisterValue[] = [];
   for (const value of values) {
     const created = RawRegisterValue.create(value);

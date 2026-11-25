@@ -34,11 +34,16 @@ describe("Trace sample identity", () => {
       address: 100,
       quantity: 2,
       rawValue: 65538,
+      rawValues: [1, 2],
       route: { unitAddress: 6, protocol: "rtu" },
     };
     expect(
       traceSamplePayloadSchema.parse(JSON.parse(JSON.stringify(sample))),
     ).toEqual(sample);
+    expect(traceSamplePayloadSchema.safeParse({ ...sample, rawValues: [65536] }).success).toBe(false);
+    const legacySample: Partial<typeof sample> = { ...sample };
+    delete legacySample.rawValues;
+    expect(traceSamplePayloadSchema.safeParse(legacySample).success).toBe(true);
     for (const field of [
       "requestId",
       "connectionId",

@@ -89,7 +89,7 @@ import {
   defaultConfig,
   sheetTypeWritable,
 } from "@mamep2026/domain";
-import { formatRegisterAddress } from "@mamep2026/data-conversion";
+import { formatRegisterAddress, isFloatType, isValidRegisterCount } from "@mamep2026/data-conversion";
 import {
   applyColumnOrder,
   isRowTypeCountValid,
@@ -762,7 +762,8 @@ const TmCell = memo(function TmCell(props: TmCellProps) {
     <DeferredCellPlaceholder className="register-table__virtual-placeholder--checkbox">
       <Checkbox
         checked={props.traceEnabled}
-        disabled={props.registerCount > 1 && props.dataType === "string"}
+        disabled={(props.registerCount > 1 && props.dataType === "string") ||
+          (isFloatType(props.dataType) && !isValidRegisterCount(props.dataType, props.registerCount))}
         tabIndex={-1}
       />
     </DeferredCellPlaceholder>
@@ -788,7 +789,8 @@ function TmControl({
   const traceWindowOpen = useAppStore(
     (s) => s.traceWindows[rowId] !== undefined,
   );
-  const traceDisabled = registerCount > 1 && dataType === "string";
+  const traceDisabled = (registerCount > 1 && dataType === "string") ||
+    (isFloatType(dataType) && !isValidRegisterCount(dataType, registerCount));
   return (
     <Checkbox
       checked={traceEnabled}
@@ -1761,7 +1763,7 @@ const ChildTypeCell = memo(function ChildTypeCell({
           dataType: combineRadixScale(value, scale),
         })
       }
-      options={RADIX_OPTIONS.map((r) => ({
+      options={RADIX_OPTIONS.filter((r) => r !== "float32" && r !== "float64").map((r) => ({
         value: r,
         label: t(RADIX_LABEL_KEYS[r]),
       }))}
@@ -2777,7 +2779,8 @@ const RegisterTableContent = memo(function RegisterTableContent({
       rows.map((row) => ({
         key: row.rowId,
         sheetId,
-        address: row.addressValue?.value ?? null,
+        address: isFloatType(row.dataType) && !isRowTypeCountValid(row)
+          ? null : row.addressValue?.value ?? null,
         // 多寄存器范围行：一次 FC03 批量读取全部连续寄存器。
         ...(row.registerCount > 1 ? { quantity: row.registerCount } : {}),
       })),

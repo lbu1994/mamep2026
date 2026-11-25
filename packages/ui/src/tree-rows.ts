@@ -10,6 +10,7 @@
  * - 纯函数，便于 jsdom 单测。
  */
 import type { RegisterRow, RowId } from "@mamep2026/domain";
+import { singleRegisterDataType } from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { BITS_PER_REGISTER, buildBitEntries } from "@mamep2026/register-table";
 
@@ -148,7 +149,7 @@ export function buildTreeRows(rows: readonly RegisterRow[]): TreeRow[] {
       const raw = row.registerValues?.[i]?.value;
       // 子行独立元数据：优先父行 registers[i]，缺省回退父行 dataType/空串。
       const meta = row.registers?.[i];
-      const childType = meta?.dataType ?? row.dataType;
+      const childType = singleRegisterDataType(meta?.dataType ?? row.dataType);
       const dataText =
         raw !== null && raw !== undefined
           ? formatRawValue(raw, childType)

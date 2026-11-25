@@ -17,6 +17,7 @@ import {
   type Result,
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
+import { isFloatType, formatFloatWords, parseFloatWords } from "./floating-point";
 import {
   getScaleDigits,
   groupBinaryBits,
@@ -57,6 +58,8 @@ export function allowedRegisterCounts(
 ): readonly number[] | "any" {
   if (type === "hex" || type === "string") return "any";
   if (type === "binary") return BINARY_ALLOWED;
+  if (type === "float32") return [2];
+  if (type === "float64") return [4];
   // bool：单寄存器（线圈/离散输入一行一个位）。
   if (type === "bool") return [1];
   // 插件类型（范围收敛）：仅单寄存器（registerCount 恒 1），范围行拒绝。
@@ -73,6 +76,11 @@ export function isValidRegisterCount(type: DataType, count: number): boolean {
 
 /** 把组合值（各寄存器原始值，大端）格式化为单元格显示文本。 */
 export function formatRawValues(values: number[], type: DataType): string {
+  if (isFloatType(type)) {
+    const formatted = formatFloatWords(values, type);
+    if (!formatted.ok) throw new Error(formatted.error.technicalMessage);
+    return formatted.value;
+  }
   const combined = values.reduce(
     (acc, value) => (acc << 16n) | BigInt(value & 0xffff),
     0n,
@@ -125,6 +133,7 @@ export function parseCompositeText(
   if (trimmed === "") {
     return fail(multiError("DATA_EMPTY", "cell text is empty"));
   }
+  if (isFloatType(type)) return parseFloatWords(trimmed, type);
   switch (type) {
     case "hex":
       return parseCompositeHex(trimmed, registerCount);

@@ -24,6 +24,9 @@ import {
 import {
   createDataTypeResolver,
   parseCompositeText,
+  decodeFloatWords,
+  isFloatType,
+  isValidRegisterCount,
   type DataTypeResolver,
 } from "@mamep2026/data-conversion";
 import { applyAddressTransform } from "./address";
@@ -79,17 +82,30 @@ export class RegisterTableService {
     if (session === null) return fail(notConnectedError());
     const address = row.addressValue?.value;
     if (address === undefined) return fail(addressEmptyError());
+    if (isFloatType(row.dataType) && !isValidRegisterCount(row.dataType, row.registerCount)) {
+      return fail(createMamepError({
+        code: "DATA_INVALID_REGISTER_COUNT",
+        category: "validation",
+        userMessageKey: "errors.dataInvalidNumber",
+        technicalMessage: `invalid register count for ${row.dataType}`,
+      }));
+    }
     const sent = applyAddressTransform(
       address,
       this.deps.getAddressTransform(),
     );
     if (!sent.ok) return sent;
     if (row.registerCount > 1) {
-      return session.readRegisters(sent.value, row.registerCount, {
+      const result = await session.readRegisters(sent.value, row.registerCount, {
         source: "manual-read",
         userAddress: address,
         ...(route !== undefined ? { route } : {}),
       });
+      if (result.ok && isFloatType(row.dataType)) {
+        const decoded = decodeFloatWords(result.value, row.dataType);
+        if (!decoded.ok) return decoded;
+      }
+      return result;
     }
     return session.readRegister(sent.value, {
       source: "manual-read",

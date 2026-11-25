@@ -13,6 +13,12 @@ function makeRow(overrides: Partial<RegisterRow> = {}): RegisterRow {
 }
 
 describe("buildTreeRows", () => {
+  it("shows float range children as individual HEX words", () => {
+    const row = makeRow({ registerCount: 2, dataType: "float32", registerValues: [{ value: 0x3f80 }, { value: 0 }] });
+    const parent = buildTreeRows([row])[0];
+    if (parent === undefined || !("children" in parent) || !Array.isArray(parent.children)) throw new Error("missing children");
+    expect(parent.children.map((child: RegisterRow) => [child.dataType, child.cellText])).toEqual([["hex", "3F80"], ["hex", "0000"]]);
+  });
   it("passes single-register rows through unchanged", () => {
     const row = makeRow({ registerCount: 1 });
     const tree = buildTreeRows([row]);

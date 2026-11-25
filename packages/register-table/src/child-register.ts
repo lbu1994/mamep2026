@@ -15,6 +15,7 @@
 import {
   createMamepError,
   createRegisterSubRowMetas,
+  singleRegisterDataType,
   RawRegisterValue,
   type DataType,
   type RegisterRow,
@@ -25,6 +26,8 @@ import { fail, ok } from "@mamep2026/domain";
 import {
   createDataTypeResolver,
   formatRawValues,
+  formatFloatWords,
+  isFloatType,
   parseCompositeText,
   type DataTypeResolver,
 } from "@mamep2026/data-conversion";
@@ -39,9 +42,9 @@ export interface ChildMetaPatch {
   dataType?: DataType;
 }
 
-/** 取子行 dataType：优先子行独立元数据，缺省回退父行 dataType（迁移/未编辑过）。 */
+/** Resolve the child type from its metadata or parent; floats use HEX for one word. */
 export function childDataType(row: RegisterRow, index: number): DataType {
-  return row.registers?.[index]?.dataType ?? row.dataType;
+  return singleRegisterDataType(row.registers?.[index]?.dataType ?? row.dataType);
 }
 
 /** 保证 registers 数组存在且长度=registerCount（单寄存器行返回 null）。 */
@@ -54,8 +57,9 @@ export function ensureRegisters(row: RegisterRow): RegisterSubRowMeta[] | null {
 }
 
 /**
- * 按新范围长度调整子行元数据：按索引保留/截断/补齐（缺省继承父行 dataType）。
- * 范围长度未变且已有 registers 时原引用返回（不触发重渲染）；count<=1 返回 null。
+ * Preserve, truncate or extend child metadata by index. New children inherit
+ * the parent type except floats use HEX. Return the existing array when its
+ * length is unchanged, or null for a single-register row.
  */
 export function resizeRegisters(
   row: RegisterRow,
@@ -72,7 +76,7 @@ export function resizeRegisters(
     next.push(
       existing !== undefined
         ? existing
-        : { name: "", comment: "", dataType: row.dataType },
+        : { name: "", comment: "", dataType: singleRegisterDataType(row.dataType) },
     );
   }
   return next;
@@ -121,6 +125,10 @@ export function commitChildCellText(
       : Array.from({ length: row.registerCount }, () => 0);
   }
   base[index] = parsed.value;
+  if (isFloatType(row.dataType)) {
+    const formatted = formatFloatWords(base, row.dataType);
+    if (!formatted.ok) return formatted;
+  }
   const registerValues: RawRegisterValue[] = [];
   for (const value of base) {
     const created = RawRegisterValue.create(value);
@@ -142,6 +150,14 @@ export function setChildMeta(
   index: number,
   patch: ChildMetaPatch,
 ): Result<RegisterRow> {
+  if (patch.dataType !== undefined && isFloatType(patch.dataType)) {
+    return fail(createMamepError({
+      code: "DATA_INVALID_REGISTER_COUNT",
+      category: "validation",
+      userMessageKey: "errors.dataInvalidNumber",
+      technicalMessage: "a child row contains only one register",
+    }));
+  }
   if (index < 0 || index >= row.registerCount) {
     return fail(
       createMamepError({

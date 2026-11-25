@@ -1,9 +1,10 @@
 import type { DataType } from "@mamep2026/domain";
-import { interpretRawValueAsNumber } from "@mamep2026/data-conversion";
+import { decodeFloatWords, isFloatType, interpretRawValueAsNumber } from "@mamep2026/data-conversion";
 
 export interface TraceNumericSample {
   no: number;
   rawValue: number;
+  rawValues?: readonly number[] | undefined;
   dataType: DataType;
 }
 
@@ -24,7 +25,7 @@ export function computeTraceAverage(
   let lastNo: number | null = null;
 
   for (const sample of samples) {
-    const value = interpretRawValueAsNumber(sample.rawValue, sample.dataType);
+    const value = traceNumericValue(sample);
     if (value === null) continue;
     sum += value;
     sampleCount += 1;
@@ -39,4 +40,13 @@ export function computeTraceAverage(
     firstNo,
     lastNo,
   };
+}
+
+/** Decode floating-point samples from their original words, never a combined Number. */
+export function traceNumericValue(sample: TraceNumericSample): number | null {
+  if (isFloatType(sample.dataType)) {
+    const decoded = decodeFloatWords(sample.rawValues ?? [], sample.dataType);
+    return decoded.ok ? decoded.value : null;
+  }
+  return interpretRawValueAsNumber(sample.rawValue, sample.dataType);
 }

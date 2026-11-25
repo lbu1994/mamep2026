@@ -1970,6 +1970,15 @@ describe("workspaceImportDraft（工作区导入，2026-08-29）", () => {
 });
 
 describe("traceWindows（TM 追踪窗口）", () => {
+  it("does not bind a floating-point trace with the wrong register width", () => {
+    const row = addFirstRowForTrace();
+    useAppStore.getState().openTraceWindow(row.rowId);
+    startTraceForTest(row);
+    useAppStore.getState().updateRow(row.rowId, (current) => ({ ...current, dataType: "float64", registerCount: 2 }));
+    expect(useAppStore.getState().bindTrace(row.rowId)).toBeNull();
+    useAppStore.getState().updateRow(row.rowId, (current) => ({ ...current, registerCount: 4 }));
+    expect(useAppStore.getState().bindTrace(row.rowId)?.quantity).toBe(4);
+  });
   function addFirstRowForTrace() {
     clearAllSheetRows();
     const id = firstSheetId();

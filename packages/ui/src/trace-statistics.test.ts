@@ -7,6 +7,16 @@ function sample(no: number, rawValue: number, dataType: DataType) {
 }
 
 describe("computeTraceAverage", () => {
+  it("decodes float words without losing float64 bits and excludes non-finite samples", () => {
+    expect(computeTraceAverage([
+      { ...sample(1, 0, "float32"), rawValues: [0xc020, 0] },
+      { ...sample(2, 0, "float64"), rawValues: [0x4004, 0, 0, 0] },
+      { ...sample(3, 0, "float64"), rawValues: [0x7ff0, 0, 0, 0] },
+    ])).toEqual({ value: 0, sampleCount: 2, firstNo: 1, lastNo: 2 });
+    expect(computeTraceAverage([
+      { ...sample(1, 0, "float64"), rawValues: [0x3ff0, 0, 0, 1] },
+    ])?.value).toBe(1.0000000000000002);
+  });
   it.each([
     ["hex", [0x0010, 0x0020], 24],
     ["binary", [0b0010, 0b0100], 3],

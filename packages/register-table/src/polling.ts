@@ -14,7 +14,7 @@ import type {
   RegisterSheet,
   RequestRoute,
 } from "@mamep2026/domain";
-import { formatRawValue } from "@mamep2026/data-conversion";
+import { formatRawValue, isFloatType, isValidRegisterCount } from "@mamep2026/data-conversion";
 import { applyAddressTransform, resolveSheetAddressTransform } from "./address";
 import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 
@@ -52,6 +52,7 @@ export function buildPollingTargets(
     const transform = sheetTransform(sheet, resolve);
     for (const row of sheet.rows) {
       if (!row.pollingEnabled) continue;
+      if (isFloatType(row.dataType) && !isValidRegisterCount(row.dataType, row.registerCount)) continue;
       const address = row.addressValue?.value;
       if (address === undefined) continue;
       const sent = applyAddressTransform(address, transform);
@@ -141,6 +142,7 @@ export function applyPollResult(
     if (sheet.sheetId !== event.sheetId) continue;
     const row = sheet.rows.find((candidate) => candidate.rowId === event.key);
     if (row === undefined) continue;
+    if (isFloatType(row.dataType) && !Array.isArray(raw)) return null;
     // 多寄存器行：一次请求读回 values[]，按组合类型格式化。
     if (Array.isArray(raw)) {
       const applied = applyReadValuesToRow(row, raw);
