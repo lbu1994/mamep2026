@@ -10,7 +10,12 @@
  * 由安装确认框中的显式授权决定（默认走隔离线程）；平台侧加载器只做「加载 + 形状校验」。
  */
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
-import type { PluginLocalEntry } from "@mamep2026/plugin-api";
+import {
+  assertPluginSourceBudget,
+  PLUGIN_RUNTIME_LIMITS,
+  withPluginDeadline,
+  type PluginLocalEntry,
+} from "@mamep2026/plugin-api";
 
 function entryError(code: string, technicalMessage: string) {
   return createMamepError({
@@ -35,14 +40,17 @@ export async function loadWebPluginEntry(
 ): Promise<Result<PluginLocalEntry>> {
   let scriptUrl: string | null = null;
   try {
+    assertPluginSourceBudget(entrySource);
     scriptUrl = URL.createObjectURL(
       new Blob([entrySource], { type: "text/javascript" }),
     );
     // 动态 import Blob URL：Vite 无法静态分析该说明符（运行时产物），显式忽略。
-    const module = (await import(/* @vite-ignore */ scriptUrl)) as Record<
-      string,
-      unknown
-    >;
+    const entryUrl = scriptUrl;
+    const module = (await withPluginDeadline(
+      () => import(/* @vite-ignore */ entryUrl),
+      PLUGIN_RUNTIME_LIMITS.loadTimeoutMs,
+      "load",
+    )) as Record<string, unknown>;
     const activate = module.activate;
     if (typeof activate !== "function" || module.manifest === undefined) {
       return fail(

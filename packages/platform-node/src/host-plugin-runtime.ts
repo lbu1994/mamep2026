@@ -100,6 +100,7 @@ export class HostPluginRuntime {
   /** 已上报的 registry 加载错误条数（避免重建时重复上报历史错误）。 */
   private reportedErrors = 0;
   private syncing = false;
+  private disposed = false;
 
   constructor(deps: HostPluginRuntimeDeps) {
     this.deps = deps;
@@ -155,10 +156,11 @@ export class HostPluginRuntime {
    * 未变化则直接返回（幂等）。并发调用串行化（syncing 守卫）。
    */
   async sync(): Promise<void> {
-    if (this.syncing) return;
+    if (this.syncing || this.disposed) return;
     this.syncing = true;
     try {
       const stored = await this.deps.store.load();
+      if (this.disposed) return;
       if (!stored.ok) {
         this.report("", stored.error.code, stored.error.technicalMessage);
         return;
@@ -197,6 +199,7 @@ export class HostPluginRuntime {
           );
           continue;
         }
+        if (this.disposed) return;
         desired.set(entry.manifest.id, {
           approval: entry.approval,
           manifest: parsed.data,
@@ -215,9 +218,8 @@ export class HostPluginRuntime {
 
   /** 释放全部宿主插件（注销 + 清空注册表）；宿主退出时调用。 */
   dispose(): void {
-    for (const pluginId of [...this.loaded.keys()]) {
-      this.registry.unregister(pluginId);
-    }
+    this.disposed = true;
+    void this.registry.dispose();
     this.loaded.clear();
     this.signature = null;
     this.reportedErrors = 0;
@@ -245,6 +247,7 @@ export class HostPluginRuntime {
 
     for (const [pluginId, next] of desired) {
       const entryResult = await loadNodePluginEntry(next.entrySource);
+      if (this.disposed) return;
       if (!entryResult.ok) {
         this.report(
           pluginId,

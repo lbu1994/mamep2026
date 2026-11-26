@@ -476,4 +476,26 @@ describe("HostPluginRuntime（ADR-055）", () => {
     expect(runtime.listLoadedPluginIds()).toEqual([]);
     expect(runtime.resolveAddressTransform("alpha.t")).toBeNull();
   });
+
+  it("does not load plugins from a store response delivered after disposal", async () => {
+    let complete: (result: Result<PluginStoreData>) => void = () => {};
+    const load = vi.fn(
+      () =>
+        new Promise<Result<PluginStoreData>>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const runtime = createHostPluginRuntime({
+      store: { load, save: async () => ok(undefined) },
+    });
+    const syncing = runtime.sync();
+    runtime.dispose();
+    complete(
+      ok({ schemaVersion: 5, plugins: [storedPlugin({ pluginId: "late" })] }),
+    );
+    await syncing;
+    await runtime.sync();
+    expect(runtime.listLoadedPluginIds()).toEqual([]);
+    expect(load).toHaveBeenCalledOnce();
+  });
 });

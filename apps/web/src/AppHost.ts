@@ -266,7 +266,15 @@ export class BrowserAppHost
   } | null = null;
   private pendingPluginPreview: AbortController | null = null;
   private hostDisposed = false;
+  private readonly loadingPluginRuntimes = new Map<
+    PluginRemoteRuntime,
+    string
+  >();
   private readonly pluginEnableRequests = new Map<string, object>();
+  private readonly releasedPluginRuntimes = new WeakMap<
+    PluginRemoteRuntime,
+    Promise<void>
+  >();
 
   constructor(options: AppHostOptions) {
     this.baseCapabilities = options.capabilities ?? browserCapabilities;
@@ -338,6 +346,9 @@ export class BrowserAppHost
           )
         : null;
     this.pluginStore = options.pluginStore ?? null;
+    this.pluginRegistry.subscribe((event) => {
+      if (event.type === "unregistered") this.cancelPluginLoad(event.pluginId);
+    });
     this.resolveAddressTransform = options.resolveAddressTransform ?? null;
     this.yieldToMainThread =
       options.yieldToMainThread ?? defaultYieldToMainThread;
@@ -470,7 +481,11 @@ export class BrowserAppHost
     );
     if (this.hostDisposed || preview.signal?.aborted)
       return fail(pluginPermissionDenied("installation cancelled"));
-    const loaded = await this.loadEntryExecutable(entrySource, executionMode);
+    const loaded = await this.loadEntryExecutable(
+      entrySource,
+      executionMode,
+      preview.manifest.id,
+    );
     if (!loaded.ok) return loaded;
     const { manifest, localEntry, remoteRuntime } = loaded.value;
     if (
@@ -479,7 +494,7 @@ export class BrowserAppHost
       pluginApprovalContent(manifest, entrySource, executionMode) !==
         pluginApprovalContent(preview.manifest, entrySource, executionMode)
     ) {
-      await remoteRuntime?.dispose();
+      await this.releasePluginRuntime(remoteRuntime);
       return fail(
         pluginPermissionDenied("plugin content changed after preview"),
       );
@@ -501,7 +516,7 @@ export class BrowserAppHost
         : {}),
       ...(remoteRuntime !== undefined ? { remoteRuntime } : {}),
     });
-    if (!result.ok) await remoteRuntime?.dispose();
+    if (!result.ok) await this.releasePluginRuntime(remoteRuntime);
     return result;
   }
 
@@ -510,10 +525,12 @@ export class BrowserAppHost
     pluginId: string,
     enabled: boolean,
   ): Promise<Result<void>> {
+    if (this.hostDisposed) return fail(pluginPermissionDenied("host disposed"));
     const request = {};
     this.pluginEnableRequests.set(pluginId, request);
     if (!enabled) {
-      this.pluginRegistry.setEnabled(pluginId, false);
+      this.cancelPluginLoad(pluginId);
+      await this.pluginRegistry.setEnabled(pluginId, false);
       return ok(undefined);
     }
     const stored = this.pluginRegistry
@@ -550,6 +567,7 @@ export class BrowserAppHost
   private async loadEntryExecutable(
     entrySource: string,
     executionMode: PluginExecutionMode,
+    pluginId: string,
   ): Promise<
     Result<{
       manifest: PluginManifest;
@@ -567,17 +585,46 @@ export class BrowserAppHost
       return ok({ manifest: parsed.data, localEntry: entryResult.value });
     }
     const remoteRuntime = this.createRemoteRuntime(entrySource);
-    const loadResult = await remoteRuntime.load();
+    this.loadingPluginRuntimes.set(remoteRuntime, pluginId);
+    let loadResult: Awaited<ReturnType<PluginRemoteRuntime["load"]>>;
+    try {
+      loadResult = await remoteRuntime.load();
+    } finally {
+      this.loadingPluginRuntimes.delete(remoteRuntime);
+    }
+    if (this.hostDisposed) {
+      await this.releasePluginRuntime(remoteRuntime);
+      return fail(pluginPermissionDenied("host disposed"));
+    }
     if (!loadResult.ok) {
-      void remoteRuntime.dispose();
+      void this.releasePluginRuntime(remoteRuntime);
       return loadResult;
     }
     const parsed = pluginManifestSchema.safeParse(loadResult.value);
     if (!parsed.success) {
-      void remoteRuntime.dispose();
+      void this.releasePluginRuntime(remoteRuntime);
       return fail(pluginManifestInvalidError(parsed.error.message));
     }
     return ok({ manifest: parsed.data, remoteRuntime });
+  }
+
+  /** Share one release operation between cancellation and late load completion. */
+  private releasePluginRuntime(
+    runtime: PluginRemoteRuntime | undefined,
+  ): Promise<void> {
+    if (runtime === undefined) return Promise.resolve();
+    const released = this.releasedPluginRuntimes.get(runtime);
+    if (released !== undefined) return released;
+    const disposal = runtime.dispose();
+    this.releasedPluginRuntimes.set(runtime, disposal);
+    return disposal;
+  }
+
+  /** Cancel unregistered loads as well as already active runtimes. */
+  private cancelPluginLoad(pluginId: string): void {
+    for (const [runtime, owner] of this.loadingPluginRuntimes) {
+      if (owner === pluginId) void this.releasePluginRuntime(runtime);
+    }
   }
 
   /** Restore metadata first; only enabled records with matching consent may execute. */
@@ -611,7 +658,11 @@ export class BrowserAppHost
         );
       return false;
     }
-    const loaded = await this.loadEntryExecutable(entrySource, executionMode);
+    const loaded = await this.loadEntryExecutable(
+      entrySource,
+      executionMode,
+      stored.manifest.id,
+    );
     if (!loaded.ok) {
       this.appendPluginMessage("errors.pluginLoadFailed", loaded.error.code);
       return false;
@@ -623,7 +674,7 @@ export class BrowserAppHost
       pluginApprovalContent(manifest, entrySource, executionMode) !==
         pluginApprovalContent(stored.manifest, entrySource, executionMode)
     ) {
-      await remoteRuntime?.dispose();
+      await this.releasePluginRuntime(remoteRuntime);
       this.appendPluginMessage(
         "errors.pluginPermissionDenied",
         "plugin manifest changed during restore",
@@ -646,7 +697,7 @@ export class BrowserAppHost
         : {}),
       ...(remoteRuntime !== undefined ? { remoteRuntime } : {}),
     });
-    if (!result.ok) await remoteRuntime?.dispose();
+    if (!result.ok) await this.releasePluginRuntime(remoteRuntime);
     return result.ok;
   }
 
@@ -923,7 +974,13 @@ export class BrowserAppHost
     this.pluginPreview = null;
     this.pluginEnableRequests.clear();
     this.pluginPersistence?.dispose();
-    this.pluginRegistry.dispose();
+    const pluginDisposal = this.pluginRegistry.dispose();
+    const loadingDisposal = Promise.all(
+      [...this.loadingPluginRuntimes.keys()].map((runtime) =>
+        this.releasePluginRuntime(runtime),
+      ),
+    );
+    this.loadingPluginRuntimes.clear();
     this.connectionListeners.clear();
     this.commLogListeners.clear();
     this.messageListeners.clear();
@@ -931,6 +988,7 @@ export class BrowserAppHost
     this.pollResultListeners.clear();
     this.traceListeners.clear();
     await this.rtu.dispose();
+    await Promise.all([pluginDisposal, loadingDisposal]);
   }
 
   async copyTextToClipboard(text: string): Promise<Result<void>> {

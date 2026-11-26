@@ -44,6 +44,51 @@ function makeFactory(api: ReturnType<typeof makeApi>) {
 }
 
 describe("NodePluginRemoteRuntime（ADR-044 Phase F-2）", () => {
+  it.each(["throw", "hang"])(
+    "terminates a real Worker when deactivate will %s",
+    async (mode) => {
+      const runtime = new NodePluginRemoteRuntime(
+        `
+      export const manifest = { id: "stop" };
+      export function activate() {}
+      export function deactivate() { ${mode === "throw" ? 'throw new Error("stop rejected")' : "return new Promise(() => {})"}; }
+    `,
+        makeFactory(makeApi()),
+      );
+      try {
+        expect((await runtime.load()).ok).toBe(true);
+        await runtime.activate({ pluginId: "stop", communication: makeApi() });
+        await expect(runtime.deactivate()).rejects.toThrow(
+          mode === "throw" ? "stop rejected" : "timed out",
+        );
+        expect((await runtime.load()).ok).toBe(false);
+      } finally {
+        await runtime.dispose();
+      }
+    },
+  );
+
+  it("invalidates a real Worker that exits normally without replying", async () => {
+    const runtime = new NodePluginRemoteRuntime(
+      `
+      export const manifest = { id: "exit" };
+      export function activate() { process.exit(0); }
+    `,
+      makeFactory(makeApi()),
+    );
+    const invalidate = vi.fn();
+    try {
+      expect((await runtime.load()).ok).toBe(true);
+      runtime.setInvalidationHandler(invalidate);
+      await expect(
+        runtime.activate({ pluginId: "exit", communication: makeApi() }),
+      ).rejects.toThrow("exited (0)");
+      expect(invalidate).toHaveBeenCalledOnce();
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
   it("rejects raw pre-activation and forged-identity requests in a real worker", async () => {
     const api = makeApi();
     const factory = vi.fn(() => api);

@@ -12,6 +12,8 @@ export const PLUGIN_SANDBOX_LOADER_SOURCE = `addEventListener("message", functio
       port.postMessage({ kind: "message", data: event.data });
     worker.onerror = (event) =>
       port.postMessage({ kind: "error", message: event.message });
+    worker.onmessageerror = () =>
+      port.postMessage({ kind: "error", message: "plugin message could not be deserialized" });
     port.onmessage = (event) => {
       if (event.data.kind === "terminate") {
         worker.terminate();
@@ -27,4 +29,4 @@ export const PLUGIN_SANDBOX_LOADER_SOURCE = `addEventListener("message", functio
 
 /** Exact CSP authorization for the fixed inline bootstrap. */
 export const PLUGIN_SANDBOX_LOADER_HASH =
-  "sha256-QxLp6Dk8s3A/H+MqRT4wfxtc2DFvCtZO011rhKDwUmg=";
+  "sha256-khKkhR8HXjqpbZNUDh1KsIeLUpF8XdjYSRClGSTbaWA=";

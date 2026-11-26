@@ -14,7 +14,12 @@
  * 引用，避免把串口原生绑定打进宿主 bundle）。
  */
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
-import type { PluginLocalEntry } from "@mamep2026/plugin-api";
+import {
+  assertPluginSourceBudget,
+  PLUGIN_RUNTIME_LIMITS,
+  withPluginDeadline,
+  type PluginLocalEntry,
+} from "@mamep2026/plugin-api";
 
 function entryError(technicalMessage: string) {
   return createMamepError({
@@ -32,11 +37,13 @@ export async function loadNodePluginEntry(
   entrySource: string,
 ): Promise<Result<PluginLocalEntry>> {
   try {
+    assertPluginSourceBudget(entrySource);
     const dataUrl = `data:text/javascript;base64,${Buffer.from(entrySource, "utf8").toString("base64")}`;
-    const module = (await import(/* @vite-ignore */ dataUrl)) as Record<
-      string,
-      unknown
-    >;
+    const module = (await withPluginDeadline(
+      () => import(/* @vite-ignore */ dataUrl),
+      PLUGIN_RUNTIME_LIMITS.loadTimeoutMs,
+      "load",
+    )) as Record<string, unknown>;
     const activate = module.activate;
     if (typeof activate !== "function" || module.manifest === undefined) {
       return fail(

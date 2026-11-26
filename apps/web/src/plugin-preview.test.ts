@@ -138,6 +138,20 @@ function expectReleased(worker: (typeof state.workers)[number]): void {
 }
 
 describe("preview isolation through the real message bridge", () => {
+  it("releases an installation Worker still loading when the Host is disposed", async () => {
+    const { host } = fixture();
+    expect(
+      (await host.previewPluginEntry("pending install", "isolated")).ok,
+    ).toBe(true);
+    state.ready = false;
+    const installation = host.installPluginEntry("pending install", "isolated");
+    await vi.waitFor(() => expect(state.workers).toHaveLength(2));
+    await host.dispose();
+    expect((await installation).ok).toBe(false);
+    for (const worker of state.workers) expectReleased(worker);
+    expect(host.pluginRegistry.list()).toEqual([]);
+  });
+
   it.each([true, false])(
     "rejects top-level requests, releases repeated previews and never resumes after connection (connected=%s)",
     async (connected) => {

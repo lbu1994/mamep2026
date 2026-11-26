@@ -6,6 +6,7 @@ export const PLUGIN_WORKER_BOOTSTRAP = `
 self.onmessage = function (event) {
   var msg = event.data;
   if (!msg || typeof msg.type !== "string") return;
+  if (msg.type === "ping") { self.postMessage({ version: 1, type: "pong", id: msg.id }); return; }
   if (msg.type === "init") {
     void init(msg.entrySource);
     return;
@@ -84,7 +85,7 @@ function runActivate(pluginId) {
 function runDeactivate() {
   return Promise.resolve()
     .then(function () { if (deactivateFn) return deactivateFn(); })
-    .catch(function () { /* deactivate 失败不阻断关闭 */ })
-    .then(function () { self.postMessage({ version: 1, type: "deactivated" }); });
+    .then(function () { self.postMessage({ version: 1, type: "deactivated" }); })
+    .catch(function (err) { self.postMessage({ version: 1, type: "error", message: String((err && err.message) || err) }); });
 }
 `;

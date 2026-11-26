@@ -71,6 +71,68 @@ async function preview(page: Page, source = ENTRY, name = "Sandbox verified") {
   return dialog;
 }
 
+for (const failure of [
+  "stop-hang",
+  "stop-throw",
+  "activation-hang",
+  "heartbeat-hang",
+  "message-flood",
+] as const) {
+  test(`SEC-05 releases a real isolated Worker: ${failure}`, async ({
+    page,
+    baseURL,
+  }) => {
+    await openPlugins(page, baseURL);
+    const liveWorkers = new Set<Worker>();
+    page.on("worker", (worker) => {
+      // Reload also creates the application's workspace parser Worker, which stays alive.
+      if (!worker.url().startsWith("blob:")) return;
+      liveWorkers.add(worker);
+      worker.on("close", () => liveWorkers.delete(worker));
+    });
+    const source = `
+      export const manifest = { id: "sec05", name: "Lifecycle budgets", description: "SEC-05 regression",
+        version: "1.0.0", apiVersion: "2.0", platform: { web: true, node: false }, permissions: [], contributes: {} };
+      export function activate() {
+        ${failure === "activation-hang" ? "return new Promise(() => {});" : ""}
+        ${failure === "heartbeat-hang" ? "setTimeout(() => { while (true) {} }, 0);" : ""}
+        ${failure === "message-flood" ? "setTimeout(() => { for (let id = 0; id < 140; id++) self.postMessage({ version: 1, type: 'pong', id }); }, 0);" : ""}
+      }
+      export function deactivate() {
+        ${failure === "stop-hang" ? "return new Promise(() => {});" : ""}
+        ${failure === "stop-throw" ? "throw new Error('SEC-05 stop rejected');" : ""}
+      }
+    `;
+    const dialog = await preview(page, source, "Lifecycle budgets");
+    await expect.poll(() => liveWorkers.size).toBe(0);
+    await dialog.getByRole("button", { name: "Install", exact: true }).click();
+    // Loading has a 10-second contract; allow that deadline plus the modal update.
+    await expect(dialog).toBeHidden({ timeout: 15000 });
+    const row = page
+      .getByTestId("plugin-manager")
+      .locator(".ant-listy-item")
+      .filter({ hasText: "Lifecycle budgets" });
+    const toggle = row.getByRole("switch");
+    if (failure.startsWith("stop-")) {
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+      await toggle.click();
+    }
+    await expect(toggle).toHaveAttribute("aria-checked", "false", {
+      timeout: 25000,
+    });
+    await expect.poll(() => liveWorkers.size, { timeout: 25000 }).toBe(0);
+    await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+    await expect
+      .poll(async () => (await readApplicationStorage(page)).plugins)
+      .toMatchObject({ plugins: [{ enabled: false }] });
+    // A normal reload must preserve the disabled failure state and must not replay activation.
+    await openPlugins(page, baseURL);
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+    expect(liveWorkers.size).toBe(0);
+  });
+}
+
 for (const mode of ["same-process", "isolated"] as const) {
   test(`disabled ${mode} restore never executes entry and explicit enable loads once`, async ({
     page,

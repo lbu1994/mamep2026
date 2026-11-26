@@ -10,6 +10,13 @@ const write = z
 
 /** Validate untrusted runtime messages before dispatch. Unknown operations never write. */
 export const pluginWorkerEventSchema = z.union([
+  z
+    .object({
+      version: z.literal(1),
+      type: z.literal("pong"),
+      id: z.number().int().nonnegative(),
+    })
+    .strict(),
   z.object({
     version: z.literal(1),
     type: z.literal("ready"),

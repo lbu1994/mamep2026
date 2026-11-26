@@ -68,6 +68,24 @@ DOM 快照工作，详见
 
 ## 插件通信授权的针对性检查
 
+SEC-05 生命周期和配额回归使用以下入口。插件 API 用例使用虚拟计时器和注入端点，
+检查加载、激活、停用、心跳、消息/请求限额、旧实例拒绝以及 Host 释放；Node 用例使用
+真实 `worker_threads` 检查停用拒绝、永不返回及提前退出。它们不连接设备。
+
+```powershell
+pnpm --filter @mamep2026/plugin-api test
+pnpm --filter @mamep2026/platform-web exec vitest run src/plugin-remote-runtime.test.ts src/plugin-execution-probe.test.ts src/plugin-sandbox-loader.test.ts
+pnpm --filter @mamep2026/platform-node exec vitest run src/plugin-remote-runtime.test.ts src/host-plugin-runtime.test.ts src/plugin-local-runtime.test.ts
+pnpm --filter @mamep2026/web exec vitest run src/plugin-preview.test.ts src/plugin-authorization.test.ts src/app-host.test.ts
+pnpm build
+$env:NO_PROXY = 'localhost,127.0.0.1,[::1]'
+pnpm --filter @mamep2026/e2e-web exec playwright test -c playwright.plugin-production.config.ts --grep 'SEC-05'
+```
+
+生产浏览器专项检查实际 Worker 在停用挂起、停用抛错、激活挂起、激活后死循环及消息
+洪泛后退出，并检查故障禁用状态在页面重载后保留。该结果不能代替 Electron、VSCode、
+Android 宿主或真实设备结果，也不证明浏览器具有单 Worker 堆内存硬上限。
+
 以下用例使用模拟传输、进程内存储或真实浏览器，不连接真实设备。它们分别检查
 权限矩阵、运行实例失效、撤销队列请求、安装批准与恢复，以及沙箱的实际浏览器边界。
 
