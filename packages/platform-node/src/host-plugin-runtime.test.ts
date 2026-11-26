@@ -151,6 +151,55 @@ function activations(): string[] {
 }
 
 describe("HostPluginRuntime（ADR-055）", () => {
+  it.each(["source", "mode", "manifest", "missing"] as const)(
+    "rejects %s tampering in persisted host consent on restart",
+    async (change) => {
+      const log = activations();
+      const store = new MemoryPluginStore();
+      const record = storedPlugin({ pluginId: "approved" });
+      store.setPlugins([record]);
+      const first = createHostPluginRuntime({ store });
+      await first.sync();
+      expect(first.listLoadedPluginIds()).toEqual(["approved"]);
+      first.dispose();
+      log.length = 0;
+
+      const tampered = { ...record };
+      if (change === "source")
+        tampered.entrySource +=
+          '\nthrow new Error("Unapproved source executed");';
+      if (change === "mode") {
+        // An isolated approval must never authorize execution in the Node host.
+        tampered.approval = storedPlugin({
+          pluginId: "approved",
+          executionMode: "isolated",
+        }).approval;
+      }
+      if (change === "manifest")
+        tampered.manifest = { ...record.manifest, version: "2.0.0" };
+      if (change === "missing") delete tampered.approval;
+      store.setPlugins([tampered]);
+      const issues: HostPluginIssue[] = [];
+      const restarted = createHostPluginRuntime({
+        store,
+        onIssue: (issue) => issues.push(issue),
+      });
+      try {
+        await restarted.sync();
+        expect(restarted.listLoadedPluginIds()).toEqual([]);
+        expect(log).toEqual([]);
+        expect(issues).toEqual([
+          expect.objectContaining({
+            pluginId: "approved",
+            code: "PLUGIN_PERMISSION_DENIED",
+          }),
+        ]);
+      } finally {
+        restarted.dispose();
+      }
+    },
+  );
+
   it("首次 sync：只加载「已启用 + same-process + 有 entrySource」插件，并把同步能力注册到宿主注册表", async () => {
     const log = activations();
     const store = new MemoryPluginStore();

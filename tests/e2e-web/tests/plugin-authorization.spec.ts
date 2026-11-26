@@ -1,4 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
+import { STORAGE_ATTACK_ENTRY } from "../../plugin-storage-attack";
+import {
+  applicationStorageContent,
+  copyWorkspaceToBackup,
+  readApplicationStorage,
+  tamperStoredPlugin,
+} from "../../plugin-storage-helpers";
 
 async function openPlugins(page: Page, baseURL?: string) {
   await page.goto(`${baseURL ?? "http://localhost:5173"}/?mockTransport=1`);
@@ -48,16 +55,16 @@ export async function activate(ctx) {
 }
 `;
 
-async function preview(page: Page) {
+async function preview(page: Page, source = ENTRY, name = "Sandbox verified") {
   await page.getByTestId("plugin-manifest-file-input").setInputFiles({
     name: "consent.mjs",
     mimeType: "text/javascript",
-    buffer: Buffer.from(ENTRY),
+    buffer: Buffer.from(source),
   });
   const dialog = page
     .locator(".ant-modal-container")
     .filter({ hasText: "Install this plugin?" });
-  await expect(dialog).toContainText("Sandbox verified");
+  await expect(dialog).toContainText(name);
   return dialog;
 }
 
@@ -84,6 +91,129 @@ test("sandbox blocks application storage and preview communication, and cancella
     );
   }
   expect(errors).toEqual([]);
+});
+
+test("opaque origin protects workspace, backup and consent even through a nested Worker", async ({
+  page,
+  baseURL,
+}) => {
+  await openPlugins(page, baseURL);
+  await expect
+    .poll(async () => (await readApplicationStorage(page)).workspace)
+    .not.toBeNull();
+  await copyWorkspaceToBackup(page);
+  const before = await readApplicationStorage(page);
+  const dialog = await preview(
+    page,
+    STORAGE_ATTACK_ENTRY,
+    "Storage isolation regression",
+  );
+  expect(await readApplicationStorage(page)).toEqual(before);
+  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const row = page
+    .getByTestId("plugin-manager")
+    .locator(".ant-listy-item")
+    .filter({ hasText: "Storage isolation regression" });
+  await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect
+    .poll(async () => (await readApplicationStorage(page)).plugins)
+    .not.toBeNull();
+  const installed = await readApplicationStorage(page);
+  expect(installed.workspace).toEqual(before.workspace);
+  expect(installed["workspace-backup"]).toEqual(before["workspace-backup"]);
+  await openPlugins(page, baseURL);
+  await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(1);
+  expect(applicationStorageContent(await readApplicationStorage(page))).toEqual(
+    applicationStorageContent(installed),
+  );
+});
+
+for (const change of ["source", "mode", "approval"] as const) {
+  test(`restart rejects ${change} tampering before same-process import`, async ({
+    page,
+    baseURL,
+  }) => {
+    await openPlugins(page, baseURL);
+    // Preview runs in isolation. This entry can run legitimately in either mode.
+    const source =
+      ENTRY.slice(
+        ENTRY.indexOf("export const manifest"),
+        ENTRY.indexOf("export async function activate"),
+      ) +
+      'export function activate() { if (typeof document !== "undefined") document.documentElement.dataset.approvedPlugin = "executed"; }';
+    const dialog = await preview(page, source);
+    if (change !== "mode")
+      await dialog.getByText("Same process", { exact: false }).click();
+    await dialog.getByRole("button", { name: "Install", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect
+      .poll(async () => (await readApplicationStorage(page)).plugins)
+      .not.toBeNull();
+    if (change !== "mode") {
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-approved-plugin",
+        "executed",
+      );
+      // Prove intact consent restores before testing the changed record.
+      await openPlugins(page, baseURL);
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-approved-plugin",
+        "executed",
+      );
+    }
+    await tamperStoredPlugin(page, change);
+    await openPlugins(page, baseURL);
+    const row = page
+      .getByTestId("plugin-manager")
+      .locator(".ant-listy-item")
+      .filter({ hasText: "Sandbox verified" });
+    await expect(row.getByRole("switch")).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await expect(
+      row.getByRole("button", { name: "Review permissions" }),
+    ).toBeVisible();
+    await expect(page.locator("html")).not.toHaveAttribute(
+      "data-approved-plugin",
+      "executed",
+    );
+    await expect(page.locator("html")).not.toHaveAttribute(
+      "data-unapproved-plugin",
+      "executed",
+    );
+    await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+  });
+}
+
+test("forged plugin-store-save message cannot reach persistence", async ({
+  page,
+  baseURL,
+}) => {
+  await openPlugins(page, baseURL);
+  await expect
+    .poll(async () => (await readApplicationStorage(page)).workspace)
+    .not.toBeNull();
+  const before = await readApplicationStorage(page);
+  await page.getByTestId("plugin-manifest-file-input").setInputFiles({
+    name: "forged-storage-message.mjs",
+    mimeType: "text/javascript",
+    buffer: Buffer.from(
+      `self.postMessage({version: 1, type: "plugin-store-save", data: {schemaVersion: 5, plugins: []}});` +
+        ENTRY.slice(
+          ENTRY.indexOf("export const manifest"),
+          ENTRY.indexOf("export async function activate"),
+        ) +
+        "export function activate() {}",
+    ),
+  });
+  await expect(
+    page.getByText("Failed to load the plugin entry.", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+  expect(await readApplicationStorage(page)).toEqual(before);
 });
 
 test("approved isolated plugin restores, disables and re-enables through a fresh runtime", async ({

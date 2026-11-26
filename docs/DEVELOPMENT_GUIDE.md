@@ -88,6 +88,31 @@ pnpm --filter @mamep2026/e2e-web exec playwright test -c playwright.plugin-produ
 运行前先构建当前源码。浏览器检查不能代替 Electron、VSCode、Android 宿主运行或
 真实 RTU/TCP 设备验证。设计说明见[插件通信授权](architecture/ports/plugin-api/插件通信授权.md)。
 
+SEC-02 存储回归复用上述浏览器生产专项，覆盖 IndexedDB 打开、枚举、删除、嵌套
+Worker、伪造存储消息、工作区及备份内容、源码/执行模式/批准变化后的重载。
+工作区重载会触发自动保存，因此重载前后比较全部内容时仅排除工作区顶层 `updatedAt`；
+插件记录及批准摘要仍逐字段比较。Cache Storage 在部分不透明来源中不暴露；若存在，
+则必须拒绝访问。IndexedDB 必须返回 `SecurityError`，其他异常不计为隔离成功。
+
+宿主存储和重启检查使用以下入口：
+
+```powershell
+pnpm --filter @mamep2026/electron exec vitest run src/main/plugin-file-store.test.ts
+pnpm --filter @mamep2026/vscode-extension exec vitest run src/plugin-store.test.ts
+pnpm build:electron
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+pnpm --filter @mamep2026/e2e-electron exec playwright test plugin-host-execution.spec.ts
+```
+
+Electron 专项使用独立临时 `userData`，检查真实文件仓储及进程重启；结束后删除该临时目录。
+VSCode 存储单测使用 Memento 替身，检查 `mamep2026.plugins` 键、批准保留及内容绑定，
+不能代替真实 Extension Host/Webview 运行。Node 运行时单测检查恢复前的批准拒绝。
+
+Android 的 `tests/e2e-android/tests/plugin-runtime.spec.ts` 包含同一攻击入口、工作区与备份
+保护、重载及执行模式篡改回归。按 Android 既有准备流程构建当前 APK 后运行该文件。
+该套件会安装 APK 并清空测试应用数据，必须使用已准备的测试设备；桌面浏览器结果不能
+作为 Android 真机结果。
+
 ## 环境要点与坑
 
 - 包管理 **pnpm 11**；原生依赖构建白名单在 `pnpm-workspace.yaml` 的 `allowBuilds`。pnpm 会自动往该文件追加占位键，修改时必须检查 YAML 键是否重复。

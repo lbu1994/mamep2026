@@ -27,6 +27,13 @@ import {
 } from "../helpers/app";
 import { expectNoConsoleErrors } from "../console-guard";
 import { pluginArtifact, readPluginStore } from "../helpers/plugins";
+import { STORAGE_ATTACK_ENTRY } from "../../plugin-storage-attack";
+import {
+  applicationStorageContent,
+  copyWorkspaceToBackup,
+  readApplicationStorage,
+  tamperStoredPlugin,
+} from "../../plugin-storage-helpers";
 
 /** 可执行插件（单文件 entry：codec + dataType 同步贡献）。 */
 const CUSTOM_FC_PLUGIN = "custom-function-code";
@@ -344,4 +351,61 @@ test("same-process 可执行插件贡献在真机生效（表列表出现插件�
   // 贡献回收：分组节点从 DOM 消失（表列表已渲染过，可直接断言）。
   await expect(pluginContribution(page)).toHaveCount(0);
   expect(await storedPlugin(CUSTOM_FC_PLUGIN)).toBeUndefined();
+});
+
+test("isolated plugin cannot access workspace, backup or consent, including after reload", async () => {
+  const page = session.page;
+  const section = await openPluginsSection();
+  await expect
+    .poll(async () => (await readApplicationStorage(page)).workspace)
+    .not.toBeNull();
+  await copyWorkspaceToBackup(page);
+  const before = await readApplicationStorage(page);
+  await page.getByTestId("plugin-manifest-file-input").setInputFiles({
+    name: "storage-isolation.mjs",
+    mimeType: "text/javascript",
+    buffer: Buffer.from(STORAGE_ATTACK_ENTRY),
+  });
+  const dialog = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Install this plugin?" });
+  await expect(dialog).toContainText("Storage isolation regression");
+  expect(await readApplicationStorage(page)).toEqual(before);
+  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const row = section
+    .locator(".ant-listy-item")
+    .filter({ hasText: "Storage isolation regression" });
+  await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect
+    .poll(
+      async () =>
+        (await storedPlugin("storage-isolation-regression"))?.executionMode,
+    )
+    .toBe("isolated");
+  const installed = await readApplicationStorage(page);
+  expect(installed.workspace).toEqual(before.workspace);
+  expect(installed["workspace-backup"]).toEqual(before["workspace-backup"]);
+  await page.reload();
+  await waitForAppReady();
+  await openPluginsSection();
+  await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(1);
+  expect(applicationStorageContent(await readApplicationStorage(page))).toEqual(
+    applicationStorageContent(installed),
+  );
+
+  await tamperStoredPlugin(page, "mode", "storage-isolation-regression");
+  await page.reload();
+  await waitForAppReady();
+  await openPluginsSection();
+  await expect(row.getByRole("switch")).toHaveAttribute(
+    "aria-checked",
+    "false",
+  );
+  await expect(
+    row.getByRole("button", { name: "Review permissions" }),
+  ).toBeVisible();
+  await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+  await uninstallPlugin("Storage isolation regression");
 });

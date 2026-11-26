@@ -84,6 +84,36 @@ function fixture(plugins: StoredPlugin[] = []) {
 }
 
 describe("host consent and runtime lifecycle", () => {
+  it.each(["mode", "manifest", "permissions", "missing"] as const)(
+    "rejects %s tampering on restart and explicit enable before executing source",
+    async (change) => {
+      const record: StoredPlugin = {
+        manifest,
+        enabled: true,
+        entrySource: "approved source",
+        executionMode: change === "mode" ? "isolated" : "same-process",
+      };
+      const approval = await createPluginApproval(record, hash);
+      const tampered: StoredPlugin = { ...record, approval };
+      if (change === "mode") tampered.executionMode = "same-process";
+      if (change === "manifest")
+        tampered.manifest = { ...manifest, version: "2.0.0" };
+      if (change === "permissions")
+        tampered.approval = { ...approval, permissions: [] };
+      if (change === "missing") delete tampered.approval;
+      const { host } = fixture([tampered]);
+      await host.startPlugins();
+      expect(host.pluginRegistry.isEnabled(manifest.id)).toBe(false);
+      expect((await host.setPluginEnabled(manifest.id, true)).ok).toBe(false);
+      expect(loadWebPluginEntry).not.toHaveBeenCalled();
+      expect(createWebPluginRemoteRuntime).not.toHaveBeenCalled();
+      expect(host.pluginRegistry.getEntrySource(manifest.id)).toBe(
+        "approved source",
+      );
+      await host.dispose();
+    },
+  );
+
   it("does not replace a same-source reinstall with an older enable operation", async () => {
     const record: StoredPlugin = {
       manifest,

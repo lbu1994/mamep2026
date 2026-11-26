@@ -6,6 +6,11 @@
 import { describe, expect, it } from "vitest";
 import { GlobalStatePluginStore, type KeyValueMemento } from "./plugin-store";
 import type { PluginManifest, PluginStoreData } from "@mamep2026/plugin-api";
+import {
+  createPluginApproval,
+  matchesPluginApproval,
+} from "@mamep2026/plugin-api";
+import { createHash } from "node:crypto";
 
 const manifest: PluginManifest = {
   id: "installed-a",
@@ -41,6 +46,47 @@ function makeMemento(initial?: unknown): {
 }
 
 describe("GlobalStatePluginStore", () => {
+  it("retains source-bound consent in Host globalState across store recreation", async () => {
+    const hash = async (content: string) =>
+      createHash("sha256").update(content).digest("hex");
+    const data = storeData();
+    const plugin = data.plugins[0];
+    if (plugin === undefined) throw new Error("Plugin fixture missing");
+    plugin.entrySource = "export function activate() {}";
+    plugin.executionMode = "same-process";
+    plugin.approval = await createPluginApproval(plugin, hash);
+    const values = new Map<string, unknown>();
+    const memento: KeyValueMemento = {
+      get: <T>(key: string) => values.get(key) as T | undefined,
+      update: async (key, value) => {
+        values.set(key, structuredClone(value));
+      },
+    };
+    expect((await new GlobalStatePluginStore(memento).save(data)).ok).toBe(
+      true,
+    );
+    expect([...values.keys()]).toEqual(["mamep2026.plugins"]);
+    const loaded = await new GlobalStatePluginStore(memento).load();
+    expect(loaded).toEqual({ ok: true, value: data });
+    if (!loaded.ok || loaded.value.plugins[0] === undefined)
+      throw new Error("Saved plugin missing");
+    const restored = loaded.value.plugins[0];
+    expect(await matchesPluginApproval(restored, hash)).toBe(true);
+    expect(
+      await matchesPluginApproval(
+        { ...restored, executionMode: "isolated" },
+        hash,
+      ),
+    ).toBe(false);
+    expect(
+      await matchesPluginApproval(
+        { ...restored, entrySource: "changed" },
+        hash,
+      ),
+    ).toBe(false);
+    expect(values.get("mamep2026.plugins")).toEqual(data);
+  });
+
   it("首次 load（无数据）返回空插件存储", async () => {
     const { memento } = makeMemento(undefined);
     const store = new GlobalStatePluginStore(memento);

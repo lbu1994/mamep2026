@@ -4,7 +4,12 @@
  * （自愈写回）、双坏错误、无文件空存储、非法数据拒绝落盘、错误映射（category plugin）。
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { createEmptyPluginStoreData } from "@mamep2026/plugin-api";
+import {
+  createEmptyPluginStoreData,
+  createPluginApproval,
+  matchesPluginApproval,
+} from "@mamep2026/plugin-api";
+import { createHash } from "node:crypto";
 import type { PluginManifest, PluginStoreData } from "@mamep2026/plugin-api";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -57,6 +62,43 @@ afterEach(async () => {
 });
 
 describe("PluginFileStore", () => {
+  it("retains content-bound consent through file restart and backup recovery", async () => {
+    const hash = async (content: string) =>
+      createHash("sha256").update(content).digest("hex");
+    const { repo, dir } = await makeRepo();
+    const data = storeData("installed-a");
+    const plugin = data.plugins[0];
+    if (plugin === undefined) throw new Error("Plugin fixture missing");
+    plugin.entrySource = "export function activate() {}";
+    plugin.executionMode = "same-process";
+    plugin.approval = await createPluginApproval(plugin, hash);
+    expect((await repo.save(data)).ok).toBe(true);
+    expect((await repo.save(data)).ok).toBe(true);
+    expect(await new PluginFileStore(dir).load()).toEqual({
+      ok: true,
+      value: data,
+    });
+    await writeFile(path.join(dir, MAIN_FILE), "broken", "utf8");
+    const recovered = await new PluginFileStore(dir).load();
+    expect(recovered).toEqual({ ok: true, value: data });
+    if (!recovered.ok || recovered.value.plugins[0] === undefined)
+      throw new Error("Backup plugin missing");
+    const restored = recovered.value.plugins[0];
+    expect(await matchesPluginApproval(restored, hash)).toBe(true);
+    expect(
+      await matchesPluginApproval(
+        { ...restored, entrySource: "changed" },
+        hash,
+      ),
+    ).toBe(false);
+    expect(
+      await matchesPluginApproval(
+        { ...restored, executionMode: "isolated" },
+        hash,
+      ),
+    ).toBe(false);
+  });
+
   it("首次 load（无文件）返回空插件存储", async () => {
     const { repo } = await makeRepo();
     const result = await repo.load();

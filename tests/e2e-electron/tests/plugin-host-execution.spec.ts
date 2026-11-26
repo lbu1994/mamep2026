@@ -25,10 +25,12 @@ import {
   type Page,
 } from "@playwright/test";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expectNoConsoleErrors } from "../no-console-guard";
+import { STORAGE_ATTACK_ENTRY } from "../../plugin-storage-attack";
+import { applicationStorageContent } from "../../plugin-storage-helpers";
 
 const require = createRequire(import.meta.url);
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -86,8 +88,8 @@ test.afterAll(async () => {
   } catch {
     // 已关闭。
   }
-  expectNoConsoleErrors(consoleErrors);
   await rm(userDataDir, { recursive: true, force: true });
+  expectNoConsoleErrors(consoleErrors);
 });
 
 /** 打开 Settings 抽屉的 Plugins 页签。 */
@@ -202,4 +204,92 @@ test("卸载 → plugins.json 清空（宿主侧插件随之注销）", async ()
       { timeout: 10000 },
     )
     .toBe(0);
+});
+
+test("isolated plugin cannot access storage or the preload bridge; file tampering cannot authorize restart", async () => {
+  const entryPath = path.join(userDataDir, "storage-isolation.mjs");
+  await writeFile(entryPath, STORAGE_ATTACK_ENTRY, "utf8");
+  await app.evaluate(async ({ dialog }, selectedPath) => {
+    (dialog as unknown as { showOpenDialog: unknown }).showOpenDialog =
+      async () => ({ canceled: false, filePaths: [selectedPath] });
+  }, entryPath);
+  const workspacePath = path.join(userDataDir, "workspace.json");
+  await expect
+    .poll(async () => readFile(workspacePath, "utf8").catch(() => ""))
+    .not.toBe("");
+  const workspace = await readFile(workspacePath, "utf8");
+  const backupPath = path.join(userDataDir, "workspace.json.bak");
+  await writeFile(backupPath, workspace, "utf8");
+
+  const section = await openPluginsSection();
+  await section.getByRole("button", { name: "Install Plugin" }).click();
+  const dialog = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Install this plugin?" });
+  await expect(dialog).toContainText("Storage isolation regression");
+  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const row = section
+    .locator(".ant-listy-item")
+    .filter({ hasText: "Storage isolation regression" });
+  await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveAttribute(
+    "sandbox",
+    "allow-scripts",
+  );
+  const pluginsPath = path.join(userDataDir, "plugins.json");
+  await expect
+    .poll(async () => readFile(pluginsPath, "utf8"))
+    .toContain("storage-isolation-regression");
+  const installed = await readFile(pluginsPath, "utf8");
+  await app.close();
+  await launch(userDataDir);
+  const reopened = await openPluginsSection();
+  await expect(
+    reopened
+      .locator(".ant-listy-item")
+      .filter({ hasText: "Storage isolation regression" })
+      .getByRole("switch"),
+  ).toHaveAttribute("aria-checked", "true");
+  expect(await readFile(pluginsPath, "utf8")).toBe(installed);
+  expect(
+    applicationStorageContent({
+      workspace: JSON.parse(await readFile(workspacePath, "utf8")),
+      "workspace-backup": JSON.parse(await readFile(backupPath, "utf8")),
+    }),
+  ).toEqual(
+    applicationStorageContent({
+      workspace: JSON.parse(workspace),
+      "workspace-backup": JSON.parse(workspace),
+    }),
+  );
+
+  await app.close();
+  const tampered = JSON.parse(installed) as {
+    plugins: Array<{ executionMode: string; entrySource: string }>;
+  };
+  const record = tampered.plugins[0];
+  if (record === undefined) throw new Error("Installed plugin missing");
+  record.executionMode = "same-process";
+  record.entrySource =
+    'document.documentElement.dataset.unapprovedPlugin = "executed";\n' +
+    record.entrySource;
+  await writeFile(pluginsPath, JSON.stringify(tampered), "utf8");
+  await launch(userDataDir);
+  const restoredSection = await openPluginsSection();
+  const restoredRow = restoredSection
+    .locator(".ant-listy-item")
+    .filter({ hasText: "Storage isolation regression" });
+  await expect(restoredRow.getByRole("switch")).toHaveAttribute(
+    "aria-checked",
+    "false",
+  );
+  await expect(
+    restoredRow.getByRole("button", { name: "Review permissions" }),
+  ).toBeVisible();
+  await expect(page.locator("html")).not.toHaveAttribute(
+    "data-unapproved-plugin",
+    "executed",
+  );
+  await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
 });
