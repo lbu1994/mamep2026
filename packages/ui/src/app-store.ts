@@ -371,8 +371,10 @@ export interface AppStoreState {
   duplicateRowInSheet: (sheetId: SheetId, rowId: RowId) => void;
   /** 行多选与剪贴板：会话状态，不随工作区持久化（§19.2）。 */
   selectedRowIds: RowId[];
-  /** 应用内剪贴板（行级）：copy/cut 填充，paste 优先系统剪贴板、回退此处。 */
+  /** Latest copied row block; used while the system write is pending or failed. */
   clipboardPayload: RowClipboardData[] | null;
+  /** System write status for clipboardPayload; null means no application copy. */
+  clipboardWriteStatus: "pending" | "succeeded" | "failed" | null;
   /** 剪贴板来源表类型：跨类型粘贴被拒；null=无来源（外部 CSV）不限制。 */
   clipboardSourceSheetType: SheetType | null;
   setSelectedRowIds: (rowIds: RowId[]) => void;
@@ -766,6 +768,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   pollingOutcomes: {},
   selectedRowIds: [],
   clipboardPayload: null,
+  clipboardWriteStatus: null,
   clipboardSourceSheetType: null,
   workspaceImportDraft: null,
   workspaceImportParser: null,
@@ -1510,15 +1513,22 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     const sheet = state.workspace.sheets.find((s) => s.sheetId === sheetId);
     if (sheet === undefined || state.selectedRowIds.length === 0) return;
     const payload = copyRowsToClipboard(sheet, state.selectedRowIds);
-    set({ clipboardPayload: payload, clipboardSourceSheetType: sheet.type });
     const host = state.host;
-    if (
-      host !== null &&
-      hasPlatformCapability(host.capabilities, "clipboard")
-    ) {
+    const canWrite =
+      host !== null && hasPlatformCapability(host.capabilities, "clipboard");
+    set({
+      clipboardPayload: payload,
+      clipboardSourceSheetType: sheet.type,
+      clipboardWriteStatus: canWrite ? "pending" : "failed",
+    });
+    if (canWrite) {
       void host
         .copyTextToClipboard(encodeClipboardCsv(payload))
         .then((result) => {
+          // An older write must not change the status of a newer row block.
+          if (get().clipboardPayload === payload) {
+            set({ clipboardWriteStatus: result.ok ? "succeeded" : "failed" });
+          }
           if (!result.ok) {
             get().appendMessage({
               timestamp: Date.now(),
@@ -1541,6 +1551,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       sheet,
       state.selectedRowIds,
     );
+    const host = state.host;
+    const canWrite =
+      host !== null && hasPlatformCapability(host.capabilities, "clipboard");
     set({
       workspace: {
         ...state.workspace,
@@ -1551,20 +1564,21 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       },
       clipboardPayload: payload,
       clipboardSourceSheetType: sheet.type,
+      clipboardWriteStatus: canWrite ? "pending" : "failed",
       selectedRowIds: [],
     });
     const after = findSheetById(get().workspace, sheetId);
     if (after !== undefined && after !== sheet) {
       pushSheetEntry(get, set, sheetId, beforeSnapshot, snapshotSheet(after));
     }
-    const host = state.host;
-    if (
-      host !== null &&
-      hasPlatformCapability(host.capabilities, "clipboard")
-    ) {
+    if (canWrite) {
       void host
         .copyTextToClipboard(encodeClipboardCsv(payload))
         .then((result) => {
+          // Copy and cut share the same system clipboard fallback rule.
+          if (get().clipboardPayload === payload) {
+            set({ clipboardWriteStatus: result.ok ? "succeeded" : "failed" });
+          }
           if (!result.ok) {
             get().appendMessage({
               timestamp: Date.now(),
@@ -1600,10 +1614,13 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     let payload: RowClipboardData[] | null = null;
     let issues: ClipboardIssue[] = [];
     const host = state.host;
-    // 系统剪贴板为优先来源；读取失败/无内容时回退到应用内剪贴板。
+    // A pending or failed write leaves old system text. Paste the current
+    // application block until its system write succeeds.
     if (
       host !== null &&
-      hasPlatformCapability(host.capabilities, "clipboard")
+      hasPlatformCapability(host.capabilities, "clipboard") &&
+      state.clipboardWriteStatus !== "pending" &&
+      state.clipboardWriteStatus !== "failed"
     ) {
       const readResult = await host.readTextFromClipboard();
       if (readResult.ok && readResult.value !== null) {
