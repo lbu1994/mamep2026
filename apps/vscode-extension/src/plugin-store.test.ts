@@ -46,6 +46,72 @@ function makeMemento(initial?: unknown): {
 }
 
 describe("GlobalStatePluginStore", () => {
+  for (const rejectFirst of [false, true]) {
+    it(`serializes snapshots and lets reads wait for the latest save (first failure: ${rejectFirst})`, async () => {
+      const updates: Array<{
+        value: unknown;
+        complete: () => void;
+        reject: () => void;
+      }> = [];
+      let value: unknown;
+      const store = new GlobalStatePluginStore({
+        get: <T>() => value as T | undefined,
+        update: (_key, next) =>
+          new Promise<void>((resolve, reject) => {
+            updates.push({
+              value: next,
+              complete: () => {
+                value = next;
+                resolve();
+              },
+              reject: () => reject(new Error("write failed")),
+            });
+          }),
+      });
+      const first = store.save({ schemaVersion: 5, plugins: [] });
+      const latest = storeData();
+      const second = store.save(latest);
+      const read = store.load();
+      await Promise.resolve();
+      expect(updates).toHaveLength(1);
+      const earlier = updates[0];
+      if (earlier === undefined) throw new Error("First update missing");
+      if (rejectFirst) earlier.reject();
+      else earlier.complete();
+      expect((await first).ok).toBe(!rejectFirst);
+      await Promise.resolve();
+      expect(updates).toHaveLength(2);
+      const later = updates[1];
+      if (later === undefined) throw new Error("Second update missing");
+      expect(later.value).toEqual(latest);
+      later.complete();
+      expect((await second).ok).toBe(true);
+      expect(await read).toEqual({ ok: true, value: latest });
+    });
+  }
+
+  it("rejects excess pending saves and accepts saves again after the queue drains", async () => {
+    let complete: () => void = () => {};
+    const stalled = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    const store = new GlobalStatePluginStore({
+      get: () => undefined,
+      update: () => stalled,
+    });
+    const pending = Array.from({ length: 32 }, () => store.save(storeData()));
+    const rejected = await store.save(storeData());
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: { code: "PLUGIN_STORE_WRITE_FAILED", retryable: true },
+    });
+    complete();
+    expect((await Promise.all(pending)).every((result) => result.ok)).toBe(
+      true,
+    );
+    expect((await store.save(storeData())).ok).toBe(true);
+  });
+
   it("retains source-bound consent in Host globalState across store recreation", async () => {
     const hash = async (content: string) =>
       createHash("sha256").update(content).digest("hex");

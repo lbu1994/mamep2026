@@ -12,6 +12,7 @@ import type {
 //   未设置 MAMEP_REAL 时用例自行 skip。
 export default defineConfig<VSCodeTestOptions, VSCodeWorkerOptions>({
   testDir: path.join(__dirname, "real"),
+  testIgnore: "plugin-storage.spec.ts",
   timeout: 300_000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

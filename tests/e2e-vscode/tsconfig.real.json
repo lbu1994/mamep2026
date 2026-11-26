@@ -10,5 +10,10 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["real", "unit", "playwright.real.config.ts"]
+  "include": [
+    "real",
+    "unit",
+    "playwright.real.config.ts",
+    "playwright.storage.config.ts"
+  ]
 }

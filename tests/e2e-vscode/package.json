@@ -5,8 +5,9 @@
   "scripts": {
     "build": "tsc -p .",
     "pretest": "tsc -p .",
-    "test": "node scripts/run-e2e.mjs",
+    "test": "node scripts/run-e2e.mjs && pnpm test:storage",
     "test:real": "playwright test -c playwright.real.config.ts",
+    "test:storage": "playwright test -c playwright.storage.config.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.real.json",
     "lint": "eslint ."
   },

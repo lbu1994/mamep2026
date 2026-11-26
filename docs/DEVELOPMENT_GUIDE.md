@@ -132,6 +132,40 @@ Electron 专项使用独立临时 `userData`，检查真实文件仓储及进程
 VSCode 存储单测使用 Memento 替身，检查 `mamep2026.plugins` 键、批准保留及内容绑定，
 不能代替真实 Extension Host/Webview 运行。Node 运行时单测检查恢复前的批准拒绝。
 
+VSCode 生产存储专项使用以下入口，不需要串口或 TCP 从站：
+
+```powershell
+pnpm test:e2e:vscode:storage
+# 使用本机 VSCode，避免下载测试版；仅本次 PowerShell 会话生效。
+$env:MAMEP_VSCODE_EXECUTABLE = 'C:\Program Files\Microsoft VS Code\Code.exe'
+pnpm test:e2e:vscode:storage
+Remove-Item Env:MAMEP_VSCODE_EXECUTABLE
+```
+
+默认通过 `@vscode/test-electron` 下载 stable，也可用 `MAMEP_VSCODE_VERSION` 指定版本。
+专项要求支持 `node:sqlite` 的 Node.js，用于退出进程后只读检查真实 `state.vscdb`。
+用例位于 [plugin-storage.spec.ts](../tests/e2e-vscode/real/plugin-storage.spec.ts)，
+也纳入 `pnpm test:e2e:vscode`，不随真实端口专项重复执行。
+
+测试将当前生产构建复制到独立临时扩展目录，以正常扩展模式启动真实 VSCode；
+不使用 `extensionDevelopmentPath`、dev server 或假 Memento。测试要求生产调试 RPC
+被拒绝，资源经 VSCode 授权 URI 加载，每次启动保持设备断开。每次恢复检查都完整退出
+VSCode，再以同一用户目录启动新进程。源码先由可信测试驱动写入未批准记录，再由真实
+`Review permissions` 和安装确认界面创建批准；这一步不覆盖原生文件选择对话框。
+测试用户配置固定为 `Light Modern`，并等待插件恢复落定后再操作；工作区比较仍包含主题
+字段，避免把宿主默认主题变化误判为插件篡改。
+
+覆盖不透明来源 Worker 及嵌套 Worker 的存储拒绝、伪造存储消息、工作区与备份内容、
+真实 `globalState` 落盘、正常批准恢复、禁用后重启及重新启用。另一组用例单独修改源码、
+执行模式、批准及 Manifest，使用顶层 DOM 标记和 Node 文件标记检查恢复前是否执行了
+源码，同时保留完整批准的正向对照。篡改由可信测试驱动经真实桥注入，不能作为隔离插件
+可写入 `globalState` 或取得 Node 权限的证据；`same-process` 仍属于显式完全信任模式。
+
+日志入口保留在 `test-reports/`。逐次重启 trace、VSCode 日志、存储快照、进程 ID 和清理
+记录位于 `tests/e2e-vscode/test-results/plugin-storage/`，JSON 汇总位于同级
+`plugin-storage.json`。成功和失败均关闭测试进程并清理临时用户目录，不改动用户的
+VSCode 配置。该专项不能代替 Android 真机、串口或 TCP 设备验证。
+
 Android 的 `tests/e2e-android/tests/plugin-runtime.spec.ts` 包含同一攻击入口、工作区与备份
 保护、重载及执行模式篡改回归。按 Android 既有准备流程构建当前 APK 后运行该文件。
 该套件会安装 APK 并清空测试应用数据，必须使用已准备的测试设备；桌面浏览器结果不能

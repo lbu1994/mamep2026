@@ -1,4 +1,4 @@
-/** Self-contained entry shared by browser, Electron and Android security regressions. */
+/** Self-contained entry shared by all four platform storage regressions. */
 export const STORAGE_ATTACK_ENTRY = `
 async function requireStorageIsolation() {
   async function denied(label, operation) {
@@ -44,7 +44,7 @@ async function requireStorageIsolation() {
   }
   // Some opaque-origin contexts do not expose Cache Storage at all.
   if (typeof caches !== "undefined") await denied("Cache Storage", () => caches.open("mamep-plugin-attack"));
-  for (const name of ["document", "localStorage", "mamepHost", "Capacitor", "require", "process"]) {
+  for (const name of ["document", "localStorage", "mamepHost", "acquireVsCodeApi", "Capacitor", "require", "process"]) {
     if (typeof globalThis[name] !== "undefined") throw new Error(name + " leaked into the Worker");
   }
 }

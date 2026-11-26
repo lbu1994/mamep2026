@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Frame, Page } from "@playwright/test";
 
 /** Startup autosave refreshes only the workspace timestamp; compare all persisted content. */
 export function applicationStorageContent(
@@ -26,7 +26,7 @@ export function applicationStorageContent(
 
 /** Read application storage from the trusted test driver, never from the plugin. */
 export async function readApplicationStorage(
-  page: Page,
+  page: Page | Frame,
 ): Promise<Record<string, unknown>> {
   return page.evaluate(
     () =>
@@ -57,7 +57,7 @@ export async function readApplicationStorage(
 }
 
 /** Populate the real backup key so a blocked attack cannot pass against an empty store. */
-export async function copyWorkspaceToBackup(page: Page): Promise<void> {
+export async function copyWorkspaceToBackup(page: Page | Frame): Promise<void> {
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
