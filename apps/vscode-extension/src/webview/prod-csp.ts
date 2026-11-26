@@ -10,11 +10,17 @@
  * （以及 Webview 文档内的同进程加载）由 `script-src` 管控，仅放行 `worker-src` 仍会被
  * `script-src` 拦截（详因见 apps/web `src/csp.ts`）。
  */
-export function buildWebviewCsp(cspSource: string): string {
+export function buildWebviewCsp(cspSource: string, bundledCsp = ""): string {
+  // Preserve exact script hashes from the trusted renderer build when replacing its resource origins.
+  const scriptDirective =
+    bundledCsp
+      .split(";")
+      .find((entry) => entry.trim().startsWith("script-src ")) ?? "";
+  const hashes = scriptDirective.match(/'sha256-[A-Za-z0-9+/]{43}='/g) ?? [];
   return [
     `default-src ${cspSource} 'self'`,
     // 插件 entry 经 blob: URL 动态 import（同进程加载 / Worker 内加载）。
-    `script-src ${cspSource} 'self' blob:`,
+    [`script-src ${cspSource} 'self' blob:`, ...hashes].join(" "),
     // 插件 Blob Worker（无此指令则回退到 script-src，blob: 被拦截）。
     `worker-src ${cspSource} 'self' blob:`,
     // antd CSS-in-JS 依赖内联 <style>，必须放行 unsafe-inline。

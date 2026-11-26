@@ -107,6 +107,7 @@ const pluginHost = {
   previewPluginEntry: async () => {
     throw new Error("contract fixture: previewPluginEntry not called");
   },
+  setPluginEnabled: async () => ({ ok: true, value: undefined }),
   installPluginEntry: async () => {
     throw new Error("contract fixture: installPluginEntry not called");
   },

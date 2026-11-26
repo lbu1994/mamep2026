@@ -103,6 +103,26 @@ export class RequestScheduler {
     void this.drain();
   }
 
+  /** Remove cancelled queued tasks even while an unrelated exchange is running. */
+  removeCancelled(): void {
+    const cancelled = this.queue.filter((task) => task.cancelToken?.cancelled);
+    this.queue = this.queue.filter((task) => !task.cancelToken?.cancelled);
+    for (const task of cancelled) {
+      task.resolve(
+        fail(
+          createMamepError({
+            code: "CANCELLED",
+            category: "cancellation",
+            severity: "info",
+            retryable: false,
+            userMessageKey: "errors.cancelled",
+            technicalMessage: task.cancelToken?.reason ?? "task cancelled",
+          }),
+        ),
+      );
+    }
+  }
+
   private async drain(): Promise<void> {
     if (this.running) return;
     this.running = true;

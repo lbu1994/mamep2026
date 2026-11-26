@@ -1,13 +1,6 @@
 /**
- * 插件隔离 worker_threads 引导脚本。
- *
- * Electron 主进程 / VSCode Extension Host 用 `new Worker(code, {eval:true,
- * type:"module"})` 加载本脚本；脚本经 parentPort 与主线程隔离桥通信，协议与
- * 浏览器端 PLUGIN_WORKER_BOOTSTRAP 完全一致（init/ready/activate/deactivate/
- * communication-request/communication-response/error）。
- *
- * 安全边界：worker_threads 内插件代码无主进程全局（无 electron / vscode /
- * process 宿主能力），唯一外部通道为 communication 代理桥。
+ * Node worker bootstrap for the versioned plugin message bridge.
+ * Thread separation does not remove Node system privileges.
  */
 export const PLUGIN_NODE_WORKER_BOOTSTRAP = `
 const { parentPort } = require("node:worker_threads");
@@ -23,7 +16,7 @@ function callMain(op, payload) {
   return new Promise(function (resolve) {
     var id = nextId++;
     pendingMap[id] = resolve;
-    port.postMessage({ type: "communication-request", id: id, op: op, payload: payload });
+    port.postMessage({ version: 1, type: "communication-request", id: id, op: op, payload: payload });
   });
 }
 
@@ -47,10 +40,10 @@ function init(entrySource) {
       manifestValue = mod.manifest;
       activateFn = typeof mod.activate === "function" ? mod.activate : null;
       deactivateFn = typeof mod.deactivate === "function" ? mod.deactivate : null;
-      port.postMessage({ type: "ready", manifest: manifestValue });
+      port.postMessage({ version: 1, type: "ready", manifest: manifestValue });
     })
     .catch(function (err) {
-      port.postMessage({ type: "load-error", message: String((err && err.message) || err) });
+      port.postMessage({ version: 1, type: "load-error", message: String((err && err.message) || err) });
     });
 }
 
@@ -60,9 +53,9 @@ function runActivate(pluginId) {
       if (!activateFn) throw new Error("plugin entry has no activate export");
       return activateFn({ pluginId: pluginId, communication: communicationApi(pluginId) });
     })
-    .then(function () { port.postMessage({ type: "activated" }); })
+    .then(function () { port.postMessage({ version: 1, type: "activated" }); })
     .catch(function (err) {
-      port.postMessage({ type: "error", message: String((err && err.message) || err) });
+      port.postMessage({ version: 1, type: "error", message: String((err && err.message) || err) });
     });
 }
 
@@ -70,7 +63,7 @@ function runDeactivate() {
   return Promise.resolve()
     .then(function () { if (deactivateFn) return deactivateFn(); })
     .catch(function () { })
-    .then(function () { port.postMessage({ type: "deactivated" }); });
+    .then(function () { port.postMessage({ version: 1, type: "deactivated" }); });
 }
 
 port.on("message", function (msg) {

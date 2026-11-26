@@ -511,6 +511,10 @@ export class AndroidAppHost
   }
 
   /** 安装可执行插件：委托 inner（注册 + 持久化）。 */
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<Result<void>> {
+    return this.inner.setPluginEnabled(pluginId, enabled);
+  }
+
   installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,

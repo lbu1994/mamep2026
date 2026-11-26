@@ -12,3 +12,4 @@ export * from "./plugin-local-runtime";
 export * from "./plugin-execution-probe";
 // Web Serial 最小类型声明：供复用侧（如 ElectronAppHost 注入参数）显式引用。
 export type * from "./web-serial";
+export * from "./plugin-content-hash";

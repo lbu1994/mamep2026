@@ -249,6 +249,7 @@ export interface PluginHost {
     executionMode: PluginExecutionMode,
   ): Promise<Result<PluginManifest>>;
   /** 安装可执行插件，并按 executionMode 装配执行面。 */
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<Result<void>>;
   installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,

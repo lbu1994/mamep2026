@@ -10,3 +10,6 @@ export * from "./plugin-communication-api";
 export * from "./builtin-contribution-points";
 export * from "./address-transform";
 export * from "./data-type";
+export * from "./authorization";
+export * from "./plugin-worker-message";
+export * from "./plugin-approval";

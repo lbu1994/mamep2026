@@ -8,6 +8,12 @@
  * （activate/deactivate + PLUGIN_HOOK_FAILED 错误隔离，贡献随状态过滤）。
  */
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
+import {
+  hasCommunicationPermission,
+  pluginPermissionDenied,
+  type PluginAuthorization,
+} from "./authorization";
+import type { PluginApproval } from "./plugin-approval";
 import { pluginManifestSchema, type PluginManifest } from "./manifest";
 import {
   checkCompatibility,
@@ -69,7 +75,10 @@ export interface PluginRegistryOptions {
    * 按插件 id 动态构造通信面（插件外部化）：同进程 runtime 的 ctx.communication
    * 按 pluginId 绑定，经统一调度器记录来源插件；优先于 communicationApi。
    */
-  communicationApiFactory?: (pluginId: string) => PluginCommunicationApi;
+  communicationApiFactory?: (
+    pluginId: string,
+    authorization: PluginAuthorization,
+  ) => PluginCommunicationApi;
   /**
    * 同步贡献注册面：插件 `activate(ctx)` 经 `ctx.registries` 注册
    * codec/dataType/addressTransform。未提供则用「不可用」兜底（注册返回能力错误）。
@@ -112,6 +121,10 @@ interface RegisteredPlugin {
   /** 执行模式：随快照持久化，重启后据此重建执行面；无执行面时为 undefined。 */
   executionMode: PluginExecutionMode | undefined;
   lifecycleState: PluginLifecycleState;
+  approval: PluginApproval | undefined;
+  grantedPermissions: readonly PermissionId[];
+  generation: object;
+  revokeListeners: Set<() => void>;
 }
 
 export class PluginRegistry {
@@ -122,7 +135,11 @@ export class PluginRegistry {
   private readonly communicationApi: PluginCommunicationApi;
   /** 按插件 id 动态通信面工厂（插件外部化）：优先于 communicationApi。 */
   private readonly communicationApiFactory:
-    ((pluginId: string) => PluginCommunicationApi) | undefined;
+    | ((
+        pluginId: string,
+        authorization: PluginAuthorization,
+      ) => PluginCommunicationApi)
+    | undefined;
   /** 同步贡献注册面：注入到插件 `ctx.registries`。 */
   private readonly syncRegistries: PluginSyncRegistries;
   /** 变更版本号（注册/启停/生命周期变化时自增）：UI 消费方响应式订阅用。 */
@@ -141,6 +158,9 @@ export class PluginRegistry {
     input: unknown,
     options?: {
       source?: PluginSource;
+      enabled?: boolean;
+      approval?: PluginApproval;
+      approvedPermissions?: readonly PermissionId[];
       runtime?: PluginRuntime;
       /** 隔离线程运行时：installed 插件 entry 在 Worker/worker_threads 执行。 */
       remoteRuntime?: PluginRemoteRuntime;
@@ -150,6 +170,7 @@ export class PluginRegistry {
       executionMode?: PluginExecutionMode;
     },
   ): Result<PluginManifest> {
+    const enabled = options?.enabled ?? true;
     const source = options?.source ?? "builtin";
     const runtime = options?.runtime;
     const remoteRuntime = options?.remoteRuntime;
@@ -280,12 +301,18 @@ export class PluginRegistry {
           message: e.message,
         });
       }
-      this.contributionRegistry.setContributionsActive(manifest.id, true);
+      this.contributionRegistry.setContributionsActive(manifest.id, enabled);
     }
 
     this.plugins.set(manifest.id, {
       manifest,
-      enabled: true,
+      enabled,
+      approval: options?.approval,
+      grantedPermissions: [...(options?.approvedPermissions ?? [])].filter(
+        (permission) => manifest.permissions.includes(permission),
+      ),
+      generation: {},
+      revokeListeners: new Set(),
       source,
       runtime,
       remoteRuntime,
@@ -296,9 +323,9 @@ export class PluginRegistry {
           ? "active"
           : "registered",
     });
-    if (runtime !== undefined) {
+    if (enabled && runtime !== undefined) {
       this.activatePlugin(manifest.id);
-    } else if (remoteRuntime !== undefined) {
+    } else if (enabled && remoteRuntime !== undefined) {
       void this.activateRemotePlugin(manifest.id);
     }
     this.emit({ type: "registered", pluginId: manifest.id });
@@ -333,6 +360,8 @@ export class PluginRegistry {
         }),
       );
     }
+    this.revoke(plugin);
+    plugin.enabled = false;
     if (plugin.runtime !== undefined) {
       try {
         plugin.runtime.deactivate?.();
@@ -341,11 +370,7 @@ export class PluginRegistry {
       }
     }
     if (plugin.remoteRuntime !== undefined) {
-      // 关闭隔离线程：deactivate + dispose，异常不阻断卸载。
-      void plugin.remoteRuntime
-        .deactivate?.()
-        .then(() => plugin.remoteRuntime?.dispose())
-        .catch((err: unknown) => this.handleHookFailure(pluginId, err));
+      void this.stopRemote(pluginId, plugin);
     }
     this.contributionRegistry?.removePluginContributions(pluginId);
     this.plugins.delete(pluginId);
@@ -364,6 +389,16 @@ export class PluginRegistry {
 
   isEnabled(pluginId: string): boolean {
     return this.plugins.get(pluginId)?.enabled ?? false;
+  }
+
+  /** Capture one registration and activation generation for asynchronous host work. */
+  captureRegistration(pluginId: string): () => boolean {
+    const plugin = this.plugins.get(pluginId);
+    const generation = plugin?.generation;
+    return () =>
+      plugin !== undefined &&
+      this.plugins.get(pluginId) === plugin &&
+      plugin.generation === generation;
   }
 
   /** 插件来源：未注册返回 null。 */
@@ -395,7 +430,11 @@ export class PluginRegistry {
     actionId: string,
   ): Promise<Result<void>> {
     const plugin = this.plugins.get(pluginId);
-    if (plugin?.runtime?.handleToolbarAction === undefined) {
+    if (
+      plugin?.runtime?.handleToolbarAction === undefined ||
+      !plugin.enabled ||
+      plugin.lifecycleState === "failed"
+    ) {
       return fail(
         createMamepError({
           code: PLUGIN_ACTION_NOT_HANDLED,
@@ -405,10 +444,11 @@ export class PluginRegistry {
         }),
       );
     }
+    const generation = plugin.generation;
+    const access = this.createAccess(pluginId, true);
     const ctx: PluginContext = {
       pluginId,
-      communication:
-        this.communicationApiFactory?.(pluginId) ?? this.communicationApi,
+      communication: access.api,
       registries: this.syncRegistries,
     };
     try {
@@ -427,7 +467,11 @@ export class PluginRegistry {
       }
       return result === undefined ? ok(undefined) : result;
     } catch (err) {
-      this.handleHookFailure(pluginId, err);
+      if (
+        this.plugins.get(pluginId) === plugin &&
+        plugin.generation === generation
+      )
+        this.handleHookFailure(pluginId, err);
       return fail(
         createMamepError({
           code: PLUGIN_HOOK_FAILED,
@@ -436,12 +480,15 @@ export class PluginRegistry {
           technicalMessage: err instanceof Error ? err.message : String(err),
         }),
       );
+    } finally {
+      access.close();
     }
   }
 
   setEnabled(pluginId: string, enabled: boolean): void {
     const plugin = this.plugins.get(pluginId);
     if (plugin === undefined || plugin.enabled === enabled) return;
+    this.revoke(plugin);
     plugin.enabled = enabled;
     this.contributionRegistry?.setContributionsActive(pluginId, enabled);
     if (plugin.runtime !== undefined) {
@@ -462,9 +509,7 @@ export class PluginRegistry {
         void this.activateRemotePlugin(pluginId);
       } else {
         plugin.lifecycleState = "deactivated";
-        void plugin.remoteRuntime
-          .deactivate?.()
-          .catch((err: unknown) => this.handleHookFailure(pluginId, err));
+        void this.stopRemote(pluginId, plugin);
       }
     }
     this.emit({ type: "enabled-changed", pluginId, enabled });
@@ -490,6 +535,7 @@ export class PluginRegistry {
         .map((p) => ({
           manifest: p.manifest,
           enabled: p.enabled,
+          ...(p.approval !== undefined ? { approval: p.approval } : {}),
           ...(p.entrySource !== null ? { entrySource: p.entrySource } : {}),
           ...(p.executionMode !== undefined
             ? { executionMode: p.executionMode }
@@ -507,6 +553,8 @@ export class PluginRegistry {
       if (this.plugins.has(stored.manifest.id)) continue;
       const result = this.register(stored.manifest, {
         source: "installed",
+        enabled: stored.enabled,
+        ...(stored.approval !== undefined ? { approval: stored.approval } : {}),
         ...(stored.entrySource !== undefined && stored.entrySource !== null
           ? { entrySource: stored.entrySource }
           : {}),
@@ -547,10 +595,10 @@ export class PluginRegistry {
   private activatePlugin(pluginId: string): void {
     const plugin = this.plugins.get(pluginId);
     if (plugin?.runtime === undefined) return;
+    const generation = plugin.generation;
     const ctx: PluginContext = {
       pluginId,
-      communication:
-        this.communicationApiFactory?.(pluginId) ?? this.communicationApi,
+      communication: this.createAccess(pluginId, false).api,
       registries: this.syncRegistries,
     };
     try {
@@ -559,12 +607,20 @@ export class PluginRegistry {
         result !== undefined &&
         typeof (result as Promise<void>).catch === "function"
       ) {
-        (result as Promise<void>).catch((err: unknown) =>
-          this.handleHookFailure(pluginId, err),
-        );
+        (result as Promise<void>).catch((err: unknown) => {
+          if (
+            this.plugins.get(pluginId) === plugin &&
+            plugin.generation === generation
+          )
+            this.handleHookFailure(pluginId, err);
+        });
       }
     } catch (err) {
-      this.handleHookFailure(pluginId, err);
+      if (
+        this.plugins.get(pluginId) === plugin &&
+        plugin.generation === generation
+      )
+        this.handleHookFailure(pluginId, err);
     }
   }
 
@@ -572,16 +628,32 @@ export class PluginRegistry {
   private activateRemotePlugin(pluginId: string): void {
     const plugin = this.plugins.get(pluginId);
     if (plugin?.remoteRuntime === undefined) return;
+    const generation = plugin.generation;
+    plugin.remoteRuntime.setInvalidationHandler?.(() => {
+      if (
+        this.plugins.get(pluginId) === plugin &&
+        plugin.generation === generation
+      ) {
+        this.handleHookFailure(
+          pluginId,
+          new Error("plugin runtime terminated"),
+        );
+      }
+    });
     const ctx: PluginContext = {
       pluginId,
-      communication: this.communicationApi,
+      communication: this.createAccess(pluginId, false).api,
       registries: this.syncRegistries,
     };
     plugin.remoteRuntime
       .activate(ctx)
       .then(() => {
         const current = this.plugins.get(pluginId);
-        if (current !== undefined && current.enabled) {
+        if (
+          current === plugin &&
+          current.generation === generation &&
+          current.enabled
+        ) {
           current.lifecycleState = "active";
           this.emit({
             type: "lifecycle-changed",
@@ -591,14 +663,20 @@ export class PluginRegistry {
         }
       })
       .catch((err: unknown) => {
-        this.handleHookFailure(pluginId, err);
+        if (
+          this.plugins.get(pluginId) === plugin &&
+          plugin.generation === generation
+        )
+          this.handleHookFailure(pluginId, err);
       });
   }
 
   private handleHookFailure(pluginId: string, err: unknown): void {
     const plugin = this.plugins.get(pluginId);
     if (plugin === undefined) return;
+    this.revoke(plugin);
     plugin.lifecycleState = "failed";
+    void plugin.remoteRuntime?.dispose();
     this.contributionRegistry?.setContributionsActive(pluginId, false);
     this.loadErrors.push({
       pluginId,
@@ -606,6 +684,114 @@ export class PluginRegistry {
       message: err instanceof Error ? err.message : String(err),
     });
     this.emit({ type: "lifecycle-changed", pluginId, state: "failed" });
+  }
+
+  /** Always release a remote runtime, including runtimes without a deactivate hook. */
+  private async stopRemote(
+    pluginId: string,
+    plugin: RegisteredPlugin,
+  ): Promise<void> {
+    const generation = plugin.generation;
+    try {
+      await plugin.remoteRuntime?.deactivate?.();
+    } catch (error) {
+      if (
+        this.plugins.get(pluginId) === plugin &&
+        plugin.generation === generation
+      )
+        this.handleHookFailure(pluginId, error);
+    } finally {
+      try {
+        await plugin.remoteRuntime?.dispose();
+      } catch (error) {
+        if (
+          this.plugins.get(pluginId) === plugin &&
+          plugin.generation === generation
+        )
+          this.handleHookFailure(pluginId, error);
+      }
+    }
+  }
+
+  /** Revoke every retained API before lifecycle hooks can run. */
+  private revoke(plugin: RegisteredPlugin): void {
+    plugin.generation = {};
+    for (const listener of [...plugin.revokeListeners]) listener();
+    plugin.revokeListeners.clear();
+  }
+
+  /** Bind access to one registration and one generation; commands get a bounded write scope. */
+  private createAccess(pluginId: string, allowWrite: boolean) {
+    const plugin = this.plugins.get(pluginId);
+    const generation = plugin?.generation;
+    let closed = false;
+    const listeners = new Set<() => void>();
+    const authorization: PluginAuthorization = {
+      check: (operation) => {
+        if (
+          closed ||
+          plugin === undefined ||
+          this.plugins.get(pluginId) !== plugin ||
+          plugin.generation !== generation ||
+          !plugin.enabled ||
+          plugin.lifecycleState === "failed" ||
+          (operation === "write" && !allowWrite) ||
+          !hasCommunicationPermission(plugin.grantedPermissions, operation)
+        ) {
+          return fail(
+            pluginPermissionDenied(
+              `plugin ${pluginId}: ${operation} is not authorized`,
+            ),
+          );
+        }
+        return ok(undefined);
+      },
+      onRevoke: (listener) => {
+        listeners.add(listener);
+        plugin?.revokeListeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+          plugin?.revokeListeners.delete(listener);
+        };
+      },
+    };
+    const backend =
+      this.communicationApiFactory?.(pluginId, authorization) ??
+      this.communicationApi;
+    const api: PluginCommunicationApi = {
+      readRegisters: async (request) => {
+        const allowed = authorization.check("read");
+        if (!allowed.ok) return allowed;
+        const result = await backend.readRegisters(request);
+        const current = authorization.check("read");
+        return current.ok ? result : current;
+      },
+      writeRegisters: async (request) => {
+        const allowed = authorization.check("write");
+        if (!allowed.ok) return allowed;
+        const result = await backend.writeRegisters(request);
+        const current = authorization.check("write");
+        return current.ok ? result : current;
+      },
+    };
+    return {
+      api,
+      close: () => {
+        closed = true;
+        for (const listener of [...listeners]) listener();
+        for (const listener of listeners)
+          plugin?.revokeListeners.delete(listener);
+        listeners.clear();
+      },
+    };
+  }
+
+  /** Release installed runtimes and revoke retained APIs on host shutdown. */
+  dispose(): void {
+    for (const plugin of this.plugins.values()) this.revoke(plugin);
+    for (const [id, plugin] of this.plugins) {
+      if (plugin.source === "installed") this.unregister(id);
+    }
   }
 
   private emit(event: PluginRegistryEvent): void {

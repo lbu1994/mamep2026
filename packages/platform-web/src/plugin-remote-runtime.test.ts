@@ -38,7 +38,7 @@ function fakeWorkerFactory(
 
 /** 触发 fake worker 的 onmessage（把消息从「主线程侧」注入 runtime）。 */
 function emit(fake: FakeWorker, event: Record<string, unknown>): void {
-  fake.onmessage?.({ data: event } as MessageEvent);
+  fake.onmessage?.({ data: { version: 1, ...event } } as MessageEvent);
 }
 
 describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
@@ -188,7 +188,7 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
     expect((await runtime.load()).ok).toBe(true);
     await runtime.activate({
       pluginId: "x",
-      communication: { readRegisters: vi.fn(), writeRegisters: vi.fn() },
+      communication: { readRegisters, writeRegisters: vi.fn() },
     });
 
     expect(readRegisters).toHaveBeenCalledWith({ address: 0x100, quantity: 2 });
@@ -253,5 +253,84 @@ describe("WebPluginRemoteRuntime（ADR-044 Phase F-2）", () => {
     const result = await runtime.load();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("PLUGIN_LOAD_FAILED");
+  });
+});
+
+describe("untrusted plugin messages", () => {
+  function fixture() {
+    const ref: { current: FakeWorker | null } = { current: null };
+    const api = {
+      readRegisters: vi.fn(async () => ({ ok: true as const, value: [7] })),
+      writeRegisters: vi.fn(async () => ({
+        ok: true as const,
+        value: undefined,
+      })),
+    };
+    const factory = vi.fn(() => api);
+    const runtime = new WebPluginRemoteRuntime(
+      "export const manifest = {};",
+      factory,
+      {
+        workerFactory: fakeWorkerFactory((message) => {
+          if (message.type === "init" && ref.current)
+            emit(ref.current, { type: "ready", manifest: { id: "owner" } });
+          if (message.type === "activate" && ref.current)
+            emit(ref.current, { type: "activated" });
+          if (message.type === "deactivate" && ref.current)
+            emit(ref.current, { type: "deactivated" });
+        }, ref),
+      },
+    );
+    const send = (pluginId: string, op = "read") => {
+      if (ref.current)
+        emit(ref.current, {
+          type: "communication-request",
+          id: 1,
+          op,
+          payload: { pluginId, req: { address: 0, quantity: 1 } },
+        });
+    };
+    return { ref, api, factory, runtime, send };
+  }
+
+  it("rejects pre-activation requests and forged IDs without selecting an API factory", async () => {
+    const f = fixture();
+    await f.runtime.load();
+    f.send("owner");
+    expect(f.api.readRegisters).not.toHaveBeenCalled();
+    await f.runtime.activate({ pluginId: "owner", communication: f.api });
+    f.send("victim");
+    expect(f.api.readRegisters).not.toHaveBeenCalled();
+    f.send("owner");
+    expect(f.api.readRegisters).toHaveBeenCalledTimes(1);
+    expect(f.factory).not.toHaveBeenCalled();
+    await f.runtime.deactivate();
+    f.send("owner");
+    expect(f.api.readRegisters).toHaveBeenCalledTimes(1);
+    await f.runtime.dispose();
+  });
+
+  it.each(["unknown", "WRITE", "read-all"])(
+    "rejects unknown operation %s instead of treating it as write",
+    async (op) => {
+      const f = fixture();
+      await f.runtime.load();
+      await f.runtime.activate({ pluginId: "owner", communication: f.api });
+      f.send("owner", op);
+      expect(f.api.readRegisters).not.toHaveBeenCalled();
+      expect(f.api.writeRegisters).not.toHaveBeenCalled();
+      expect(f.ref.current?.terminate).toHaveBeenCalled();
+    },
+  );
+
+  it("settles a load when the host disposes it before readiness", async () => {
+    const runtime = new WebPluginRemoteRuntime(
+      "",
+      () => ({ readRegisters: vi.fn(), writeRegisters: vi.fn() }),
+      { workerFactory: fakeWorkerFactory(() => {}) },
+    );
+    const pending = runtime.load();
+    await runtime.dispose();
+    expect((await pending).ok).toBe(false);
   });
 });

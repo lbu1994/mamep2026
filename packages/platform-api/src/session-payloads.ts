@@ -403,7 +403,11 @@ export const traceSamplePayloadSchema = z.object({
   key: z.string(),
   sequence: z.number().int().positive(),
   rawValue: z.number(),
-  rawValues: z.array(z.number().int().min(0).max(65535)).min(1).max(125).optional(),
+  rawValues: z
+    .array(z.number().int().min(0).max(65535))
+    .min(1)
+    .max(125)
+    .optional(),
   timestamp: z.number(),
 });
 export type TraceSamplePayload = z.infer<typeof traceSamplePayloadSchema>;
@@ -470,6 +474,13 @@ export const pluginManifestPayloadSchema = z.object({
 export type PluginManifestPayload = z.infer<typeof pluginManifestPayloadSchema>;
 
 export const storedPluginPayloadSchema = z.object({
+  approval: z
+    .object({
+      contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      permissions: pluginManifestPayloadSchema.shape.permissions,
+    })
+    .strict()
+    .optional(),
   manifest: pluginManifestPayloadSchema,
   enabled: z.boolean(),
   // 单文件 JS 插件源码：跨边界往返必须无损，否则重启无法重建执行面。
@@ -480,14 +491,14 @@ export const storedPluginPayloadSchema = z.object({
 export type StoredPluginPayload = z.infer<typeof storedPluginPayloadSchema>;
 
 export const pluginStoreDataPayloadSchema = z.object({
-  schemaVersion: z.literal(4),
+  schemaVersion: z.literal(5),
   plugins: z.array(storedPluginPayloadSchema),
 });
 export type PluginStoreDataPayload = z.infer<
   typeof pluginStoreDataPayloadSchema
 >;
 
-/** plugin-store-load 响应载荷（结构同 PluginStoreData v4，空 store 返回 { schemaVersion:4, plugins:[] }）。 */
+/** The host returns the same validated v5 representation that it stores. */
 export const pluginStoreDataResponseSchema = pluginStoreDataPayloadSchema;
 export type PluginStoreDataResponse = z.infer<
   typeof pluginStoreDataResponseSchema

@@ -5,7 +5,10 @@
  * pluginId（CommunicationLogEvent.pluginId）。不暴露 Transport / socket 句柄。
  *  实现 readRegisters / writeRegisters；batchRead / trace 随扩展。
  */
-import type { CommunicationSession } from "@mamep2026/communication";
+import {
+  createCancellationToken,
+  type CommunicationSession,
+} from "@mamep2026/communication";
 import {
   createMamepError,
   fail,
@@ -14,6 +17,8 @@ import {
 } from "@mamep2026/domain";
 import {
   PLUGIN_RUNTIME_NOT_AVAILABLE,
+  deniedPluginAuthorization,
+  type PluginAuthorization,
   type PluginCommunicationApi,
 } from "@mamep2026/plugin-api";
 
@@ -24,6 +29,8 @@ export interface PluginCommunicationDeps {
   getRoute?: () => RequestRoute | null;
   /** 调用方插件 id（写入通信日志）。 */
   pluginId: string;
+  /** Host-owned permission and runtime checks. Missing access fails closed. */
+  authorization?: PluginAuthorization;
 }
 
 function unavailableError(operation: string) {
@@ -40,6 +47,7 @@ export function createPluginCommunicationApi(
   deps: PluginCommunicationDeps,
 ): PluginCommunicationApi {
   const { getSession, getRoute, pluginId } = deps;
+  const authorization = deps.authorization ?? deniedPluginAuthorization;
   const pluginMeta = {
     source: "plugin" as const,
     pluginId,
@@ -47,22 +55,55 @@ export function createPluginCommunicationApi(
   };
   return {
     async readRegisters(req) {
+      const allowed = authorization.check("read");
+      if (!allowed.ok) return allowed;
       const session = getSession();
       if (session === null) return fail(unavailableError("read"));
-      const route = getRoute?.() ?? session.getCurrentRoute();
-      return session.readRegisters(req.address, req.quantity, {
-        ...pluginMeta,
-        route,
+      const cancelToken = createCancellationToken();
+      const unsubscribe = authorization.onRevoke(() => {
+        cancelToken.cancel();
+        session.cancelPendingRequests();
       });
+      try {
+        const result = await session.readRegisters(req.address, req.quantity, {
+          ...pluginMeta,
+          route: getRoute?.() ?? session.getCurrentRoute(),
+          cancelToken,
+          beforeSend: () => authorization.check("read"),
+        });
+        const current = authorization.check("read");
+        return current.ok ? result : current;
+      } finally {
+        unsubscribe();
+      }
     },
     async writeRegisters(req) {
+      const allowed = authorization.check("write");
+      if (!allowed.ok) return allowed;
       const session = getSession();
       if (session === null) return fail(unavailableError("write"));
-      const result = await session.writeRegisters(req.address, req.values, {
-        ...pluginMeta,
-        route: getRoute?.() ?? session.getCurrentRoute(),
+      const cancelToken = createCancellationToken();
+      const unsubscribe = authorization.onRevoke(() => {
+        cancelToken.cancel();
+        session.cancelPendingRequests();
       });
-      return result.ok ? ok(undefined) : result;
+      try {
+        const result = await session.writeRegisters(
+          req.address,
+          [...req.values],
+          {
+            ...pluginMeta,
+            route: getRoute?.() ?? session.getCurrentRoute(),
+            cancelToken,
+            beforeSend: () => authorization.check("write"),
+          },
+        );
+        const current = authorization.check("write");
+        if (!current.ok) return current;
+        return result.ok ? ok(undefined) : result;
+      } finally {
+        unsubscribe();
+      }
     },
   };
 }

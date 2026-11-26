@@ -38,7 +38,7 @@ function fakeWorkerFactory(
 
 /** 把消息从「Worker 侧」注入运行时。 */
 function emit(fake: FakeWorker, event: Record<string, unknown>): void {
-  fake.onmessage?.({ data: event } as MessageEvent);
+  fake.onmessage?.({ data: { version: 1, ...event } } as MessageEvent);
 }
 
 /** 手工时钟：捕获 schedule 回调，由用例决定何时超时（并记录 cancel 次数）。 */

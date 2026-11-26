@@ -10,6 +10,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import * as fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 
 const VIEW_TYPE = "mamep2026.mainPanel";
 // HostMessage v2 协议版本字面量（本测试包为 CJS/node10 解析，无法 import 共享包 TS 源码）。
@@ -793,6 +794,39 @@ async function runPluginHostLoop(): Promise<void> {
   const manifest = JSON.parse(
     await fs.readFile(manifestPath, "utf8"),
   ) as unknown;
+  assert.ok(typeof manifest === "object" && manifest !== null);
+  const normalizedManifest = {
+    requiredCapabilities: [],
+    permissions: [],
+    contributes: {},
+    ...manifest,
+  };
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (typeof value === "object" && value !== null) {
+      return Object.fromEntries(
+        Object.entries(value)
+          .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+          .map(([key, item]) => [key, canonical(item)]),
+      );
+    }
+    return value;
+  };
+  // The fixture models consent produced by the renderer confirmation step.
+  const approval = {
+    contentDigest: createHash("sha256")
+      .update(
+        JSON.stringify(
+          canonical({
+            manifest: normalizedManifest,
+            entrySource,
+            executionMode: "same-process",
+          }),
+        ),
+      )
+      .digest("hex"),
+    permissions: normalizedManifest.permissions,
+  };
   const TRANSFORM_ID = "builtin.address-adjust";
 
   const readAt = async (address: number): Promise<unknown> => {
@@ -825,10 +859,11 @@ async function runPluginHostLoop(): Promise<void> {
   // 1. 安装同进程可执行插件（渲染端 plugin-store-save 的等价载荷）。
   const saved = await rpcEnvelope("plugin-store-save", {
     data: {
-      schemaVersion: 4,
+      schemaVersion: 5,
       plugins: [
         {
-          manifest,
+          manifest: normalizedManifest,
+          approval,
           enabled: true,
           entrySource,
           executionMode: "same-process",
@@ -882,7 +917,7 @@ async function runPluginHostLoop(): Promise<void> {
 
     // 6. 卸载（空插件存储）→ 宿主注册表清空：即使表级配置仍开启也不再调整（无残留）。
     const cleared = await rpcEnvelope("plugin-store-save", {
-      data: { schemaVersion: 4, plugins: [] },
+      data: { schemaVersion: 5, plugins: [] },
     });
     assert.strictEqual(
       cleared.type,
@@ -912,7 +947,7 @@ async function runPluginHostLoop(): Promise<void> {
   } finally {
     // 兜底清理：确保插件存储为空（避免影响后续/重复运行）。
     await rpcEnvelope("plugin-store-save", {
-      data: { schemaVersion: 4, plugins: [] },
+      data: { schemaVersion: 5, plugins: [] },
     });
   }
 }

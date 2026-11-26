@@ -156,7 +156,7 @@ test("安装同进程可执行插件 → 主进程 plugins.json 落盘（含 exe
       entrySource?: string;
     }>;
   };
-  expect(stored.schemaVersion).toBe(4);
+  expect(stored.schemaVersion).toBe(5);
   expect(stored.plugins).toHaveLength(1);
   expect(stored.plugins[0]?.executionMode).toBe("same-process");
   expect(stored.plugins[0]?.enabled).toBe(true);

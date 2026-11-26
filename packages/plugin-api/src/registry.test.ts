@@ -127,7 +127,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     registry.setEnabled("installed-b", false);
 
     const data = registry.snapshot();
-    expect(data.schemaVersion).toBe(4);
+    expect(data.schemaVersion).toBe(5);
     expect(data.plugins.map((p) => p.manifest.id)).toEqual([
       "installed-a",
       "installed-b",
@@ -145,7 +145,7 @@ describe("PluginRegistry 来源标记与持久化（2026-08-30，ADR-038）", ()
     registry.register(manifest());
 
     registry.hydrate({
-      schemaVersion: 4,
+      schemaVersion: 5,
       plugins: [
         // 与内置同 id：跳过（内置优先），不产生加载错误。
         { manifest: manifest({ name: "Duplicate" }), enabled: false },
@@ -395,7 +395,13 @@ describe("PluginRegistry 同进程运行时（ADR-054：手动安装 + 用户授
     const result = await registry.invokeToolbarAction("acts", "a.b");
     expect(result.ok).toBe(true);
     expect(handle).toHaveBeenCalledTimes(1);
-    expect(communicationApiFactory).toHaveBeenCalledWith("acts");
+    expect(communicationApiFactory).toHaveBeenCalledWith(
+      "acts",
+      expect.objectContaining({
+        check: expect.any(Function),
+        onRevoke: expect.any(Function),
+      }),
+    );
   });
 
   it("invokeToolbarAction：无 handler → PLUGIN_ACTION_NOT_HANDLED；handler 抛错 → PLUGIN_HOOK_FAILED", async () => {

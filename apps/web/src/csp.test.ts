@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildWebCsp } from "./csp";
+import { PLUGIN_SANDBOX_LOADER_HASH } from "@mamep2026/platform-web/plugin-sandbox-loader";
 
 /**
  * 生产构建 CSP 回归保护（补齐 script-src）。
@@ -20,7 +21,10 @@ describe("buildWebCsp (docs/TECH_DESIGN.md §22.1)", () => {
       .split("; ")
       .find((directive) => directive.startsWith("script-src "));
 
-    expect(scriptSrc).toBe("script-src 'self' blob:");
+    expect(scriptSrc).toBe(
+      `script-src 'self' blob: '${PLUGIN_SANDBOX_LOADER_HASH}'`,
+    );
+    expect(scriptSrc).not.toContain("unsafe-inline");
   });
 
   it("保留既有基线指令", () => {

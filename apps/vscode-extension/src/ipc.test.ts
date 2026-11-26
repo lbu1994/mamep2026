@@ -358,7 +358,7 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     expect(pluginStore.load).toHaveBeenCalled();
     if (result.type === "response") {
       expect(result.payload).toEqual({
-        schemaVersion: 4,
+        schemaVersion: 5,
         plugins: [],
       });
     }
@@ -396,7 +396,7 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
       save: vi.fn(async () => ok(undefined)),
     };
     const data = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       plugins: [
         {
           manifest: {
@@ -430,7 +430,7 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     const onPluginStoreSaved = vi.fn();
     const result = await handleVscodeInvoke(
       request("plugin-store-save", {
-        data: { schemaVersion: 4, plugins: [] },
+        data: { schemaVersion: 5, plugins: [] },
       }),
       makeDeps({ pluginStore, onPluginStoreSaved }),
     );
@@ -455,7 +455,7 @@ describe("handleVscodeInvoke（VSCode 宿主 RPC 分发）", () => {
     const onPluginStoreSaved = vi.fn();
     const result = await handleVscodeInvoke(
       request("plugin-store-save", {
-        data: { schemaVersion: 4, plugins: [] },
+        data: { schemaVersion: 5, plugins: [] },
       }),
       makeDeps({ pluginStore, onPluginStoreSaved }),
     );

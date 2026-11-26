@@ -67,6 +67,10 @@ function setHostWithPlugin(
       // 安装入口为「预览 + 安装」两步（host 承担 entry 加载）。
       startPlugins: vi.fn(async () => undefined),
       previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
+      setPluginEnabled: vi.fn(async (id: string, enabled: boolean) => {
+        registry.setEnabled(id, enabled);
+        return { ok: true as const, value: undefined };
+      }),
       installPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
       ...overrides,
     } as unknown as AppHost,

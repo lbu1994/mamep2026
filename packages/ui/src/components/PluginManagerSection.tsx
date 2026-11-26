@@ -423,11 +423,28 @@ export function PluginManagerSection(): React.ReactNode {
                       />
                     </Tooltip>
                   ) : null}
+                  {registry?.getEntrySource(plugin.id) !== null &&
+                  !registry?.isEnabled(plugin.id) ? (
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        const source = registry?.getEntrySource(plugin.id);
+                        if (source != null) void handlePluginSourceText(source);
+                      }}
+                    >
+                      {t("plugins.confirmPermissions")}
+                    </Button>
+                  ) : null}
                   <Switch
                     size="small"
                     checked={registry?.isEnabled(plugin.id) ?? false}
-                    onChange={(checked) => {
-                      registry?.setEnabled(plugin.id, checked);
+                    onChange={async (checked) => {
+                      const result = await host?.setPluginEnabled(
+                        plugin.id,
+                        checked,
+                      );
+                      if (result !== undefined && !result.ok)
+                        message.error(t(result.error.userMessageKey));
                       forceRender((v) => v + 1);
                     }}
                   />

@@ -78,6 +78,8 @@ export type WriteOutcome =
 
 /** 读请求元数据（多寄存器 quantity 由 readRegisters 单独传入）。 */
 export interface ReadRegistersMeta {
+  /** Recheck host authorization before each physical send, including retries. */
+  beforeSend?: (() => Result<void>) | undefined;
   source: RequestSource;
   userAddress?: number;
   priority?: RequestPriority;
@@ -102,6 +104,9 @@ export interface ReadRequestContext {
 
 /** 写请求元数据（多寄存器 values 由 writeRegisters 传入）。 */
 export interface WriteRegistersMeta {
+  /** Recheck host authorization before each physical send, including retries. */
+  beforeSend?: (() => Result<void>) | undefined;
+  cancelToken?: CancellationToken;
   source: RequestSource;
   userAddress?: number;
   /** 插件写请求可指定 plugin-background；缺省保持 manual-write。 */
@@ -113,6 +118,7 @@ export interface WriteRegistersMeta {
 }
 
 interface ExchangeMeta {
+  beforeSend?: (() => Result<void>) | undefined;
   source: RequestSource;
   unitAddress: number;
   userAddress: number | null;
@@ -643,6 +649,11 @@ export class CommunicationSession {
     return closeResult;
   }
 
+  /** Settle cancelled queued requests without cancelling another caller's work. */
+  cancelPendingRequests(): void {
+    this.scheduler.removeCancelled();
+  }
+
   readRegister(
     sentAddress: number,
     meta: ReadRegistersMeta,
@@ -771,6 +782,7 @@ export class CommunicationSession {
         : () => this.executeWrite(sentAddress, values, meta, route.value);
     return this.scheduler.enqueue(run, {
       priority: meta.priority ?? "manual-write",
+      cancelToken: meta.cancelToken,
     });
   }
 
@@ -800,6 +812,7 @@ export class CommunicationSession {
       () => this.executeCodecWrite(entries, meta, route.value),
       {
         priority: meta.priority ?? "manual-write",
+        cancelToken: meta.cancelToken,
       },
     );
   }
@@ -822,6 +835,7 @@ export class CommunicationSession {
           FUNCTION_READ_HOLDING,
         quantity,
         pluginId: meta.pluginId ?? null,
+        beforeSend: meta.beforeSend,
       },
     );
     if (!decoded.ok) return decoded;
@@ -866,6 +880,7 @@ export class CommunicationSession {
           FUNCTION_WRITE_MULTIPLE,
         quantity: values.length,
         pluginId: meta.pluginId ?? null,
+        beforeSend: meta.beforeSend,
       },
     );
     if (!decoded.ok) return decoded;
@@ -909,6 +924,7 @@ export class CommunicationSession {
         functionCode: null,
         quantity: addresses.length,
         pluginId: meta.pluginId ?? null,
+        beforeSend: meta.beforeSend,
       },
     );
     if (!decoded.ok) return decoded;
@@ -939,6 +955,7 @@ export class CommunicationSession {
         functionCode: null,
         quantity: entries.length,
         pluginId: meta.pluginId ?? null,
+        beforeSend: meta.beforeSend,
       },
     );
     if (!decoded.ok) return decoded;
@@ -1025,7 +1042,12 @@ export class CommunicationSession {
         return fail(notConnectedError());
       }
 
+      const authorized = meta.beforeSend?.();
+      if (authorized !== undefined && !authorized.ok) return authorized;
       const attemptBundle = buildAttempt();
+      const stillAuthorized = meta.beforeSend?.();
+      if (stillAuthorized !== undefined && !stillAuthorized.ok)
+        return stillAuthorized;
       const { frame } = attemptBundle;
       const startedAt = this.options.clock.now();
       this.emitLog({
@@ -1053,6 +1075,11 @@ export class CommunicationSession {
           ? attemptBundle.parser
           : builtinParserFor(attemptBundle.expect);
       const exchange = this.startExchange(parser);
+      const sendAuthorization = meta.beforeSend?.();
+      if (sendAuthorization !== undefined && !sendAuthorization.ok) {
+        exchange.cancel("authorization-revoked-before-send");
+        return sendAuthorization;
+      }
       const writeResult = await this.options.transport.write(frame);
       if (!writeResult.ok) {
         exchange.cancel("write-failed");

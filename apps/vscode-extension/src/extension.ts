@@ -469,7 +469,11 @@ function getProdHtml(
 
   // Webview 专用 CSP：资源源用 webview.cspSource（VSCode 版本无关），'self' 保留兜底。
   // 策略内容见 ./webview/prod-csp.ts（含插件 Blob Worker 所需 worker-src）。
-  const csp = buildWebviewCsp(webview.cspSource);
+  const bundledCsp =
+    /<meta http-equiv="Content-Security-Policy" content="([^"]*)" \/>/.exec(
+      indexHtml,
+    )?.[1] ?? "";
+  const csp = buildWebviewCsp(webview.cspSource, bundledCsp);
 
   return (
     indexHtml

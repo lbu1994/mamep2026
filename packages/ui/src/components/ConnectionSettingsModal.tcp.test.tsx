@@ -64,6 +64,10 @@ function makeHost(caps: Partial<PlatformCapabilities>): {
     // 安装入口为「预览 + 安装」两步。
     startPlugins: vi.fn(async () => undefined),
     previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
+    setPluginEnabled: vi.fn(async () => ({
+      ok: true as const,
+      value: undefined,
+    })),
     installPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
     loadWorkspace: vi.fn(async () => ({
       ok: true as const,

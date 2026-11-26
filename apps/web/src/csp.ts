@@ -15,11 +15,14 @@
  * 'blob:。' violates 。 "script-src 'self'"）。故两条指令都需 `blob:`。
  * （dev 不注入 CSP，故此类问题只在打包产物暴露。）
  */
+import { PLUGIN_SANDBOX_LOADER_HASH } from "@mamep2026/platform-web/plugin-sandbox-loader";
+
 export function buildWebCsp(): string {
   return [
     "default-src 'self'",
     // 插件 entry 经 blob: URL 动态 import（同进程加载 / Worker 内加载）。
-    "script-src 'self' blob:",
+    // Permit only the fixed sandbox loader as inline script, including file:// builds.
+    `script-src 'self' blob: '${PLUGIN_SANDBOX_LOADER_HASH}'`,
     // 插件 Blob Worker（无此指令则回退到 script-src 'self'，blob: 被拦截）。
     "worker-src 'self' blob:",
     // antd CSS-in-JS 依赖内联 <style>，必须放行 unsafe-inline。

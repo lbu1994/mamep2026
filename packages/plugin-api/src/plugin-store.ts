@@ -9,13 +9,11 @@
  */
 import { z } from "zod";
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
+import { pluginApprovalSchema, type PluginApproval } from "./plugin-approval";
 import { pluginManifestSchema, type PluginManifest } from "./manifest";
 
-/**
- * 插件存储 schema 版本。所有插件一律由用户手动安装；记录包含
- * `executionMode`（安装时用户显式授权；缺省隔离执行）。旧版本存储迁移时清空已安装插件。
- */
-export const PLUGIN_STORE_SCHEMA_VERSION = 4 as const;
+/** Store v5 adds content-bound consent. Migration preserves v4 source without granting access. */
+export const PLUGIN_STORE_SCHEMA_VERSION = 5 as const;
 
 /**
  * 插件执行模式：isolated=隔离线程执行（默认，Web Worker /
@@ -25,6 +23,8 @@ export const PLUGIN_STORE_SCHEMA_VERSION = 4 as const;
 export type PluginExecutionMode = "isolated" | "same-process";
 
 export interface StoredPlugin {
+  /** User-approved content. Missing records require confirmation before execution. */
+  approval?: PluginApproval | undefined;
   manifest: PluginManifest;
   enabled: boolean;
   /** 单文件 JS 插件源码：可执行插件持久化用；纯清单插件无此字段。 */
@@ -46,6 +46,7 @@ export type PluginStoreSnapshot = Pick<
 
 /** 存储数据 Zod 校验（主进程/扩展宿主/测试在落盘前校验，与 manifest 校验一致）。 */
 export const storedPluginSchema = z.object({
+  approval: pluginApprovalSchema.optional(),
   manifest: pluginManifestSchema,
   enabled: z.boolean(),
   entrySource: z.string().optional(),
@@ -66,12 +67,7 @@ export function createEmptyPluginStoreData(): PluginStoreData {
   };
 }
 
-/**
- * 存储数据迁移：
- * - schemaVersion 4：严格校验，损坏/非法 → PLUGIN_STORE_SCHEMA_INVALID；
- * - schemaVersion 1/2/3：清空已安装插件并升级到 v4（插件需重新安装）；
- *   plugins 非数组视为损坏。
- */
+/** Validate v5, retain disabled v4 executables, and preserve the legacy v1-v3 empty-store migration. */
 export function migratePluginStoreData(
   input: unknown,
 ): Result<PluginStoreData> {
@@ -95,12 +91,37 @@ export function migratePluginStoreData(
       plugins: parsed.data.plugins.map((p) => ({
         manifest: p.manifest,
         enabled: p.enabled,
+        ...(p.approval !== undefined ? { approval: p.approval } : {}),
         ...(p.entrySource !== undefined ? { entrySource: p.entrySource } : {}),
         ...(p.executionMode !== undefined
           ? { executionMode: p.executionMode }
           : {}),
       })),
     });
+  }
+  // Preserve v4 source and settings without inferring consent from a manifest.
+  if (raw.schemaVersion === 4) {
+    const legacy = z
+      .object({
+        schemaVersion: z.literal(4),
+        plugins: z.array(storedPluginSchema.omit({ approval: true })),
+      })
+      .safeParse(input);
+    if (!legacy.success) return fail(schemaInvalidError(legacy.error.message));
+    return ok({
+      schemaVersion: PLUGIN_STORE_SCHEMA_VERSION,
+      plugins: legacy.data.plugins.map((plugin) => ({
+        ...plugin,
+        enabled: plugin.entrySource === undefined ? plugin.enabled : false,
+      })),
+    });
+  }
+  if (
+    raw.schemaVersion !== 1 &&
+    raw.schemaVersion !== 2 &&
+    raw.schemaVersion !== 3
+  ) {
+    return fail(schemaInvalidError("unsupported plugin store version"));
   }
   if (!Array.isArray(raw.plugins)) {
     return fail(
@@ -109,7 +130,7 @@ export function migratePluginStoreData(
       ),
     );
   }
-  // v1/v2/v3 → v4：清空已安装插件。
+  // Preserve the existing empty-store migration for v1-v3.
   return ok(createEmptyPluginStoreData());
 }
 

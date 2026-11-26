@@ -43,13 +43,19 @@ export function validatePermissions(
   permissions: unknown,
 ): Result<PermissionId[]> {
   const parsed = z.array(permissionIdSchema).safeParse(permissions);
-  if (!parsed.success) {
+  if (
+    !parsed.success ||
+    (parsed.data.includes("device-write") &&
+      !parsed.data.includes("communication"))
+  ) {
     return fail(
       createMamepError({
         code: PLUGIN_PERMISSION_DENIED,
         category: "plugin",
         userMessageKey: "errors.pluginPermissionDenied",
-        technicalMessage: parsed.error.message,
+        technicalMessage: parsed.success
+          ? "device-write requires communication"
+          : parsed.error.message,
       }),
     );
   }

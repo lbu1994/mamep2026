@@ -44,6 +44,47 @@ function makeFactory(api: ReturnType<typeof makeApi>) {
 }
 
 describe("NodePluginRemoteRuntime（ADR-044 Phase F-2）", () => {
+  it("rejects raw pre-activation and forged-identity requests in a real worker", async () => {
+    const api = makeApi();
+    const factory = vi.fn(() => api);
+    const entry = `
+      import { parentPort } from 'node:worker_threads';
+      async function rejected(id, pluginId) {
+        const result = await new Promise(resolve => {
+          function receive(message) {
+            if (message.type !== 'communication-response' || message.id !== id) return;
+            parentPort.off('message', receive);
+            resolve(message.result);
+          }
+          parentPort.on('message', receive);
+          parentPort.postMessage({ version: 1, type: 'communication-request', id, op: 'write',
+            payload: { pluginId, req: { address: 0, values: [123] } } });
+        });
+        if (result.ok || result.error.code !== 'PLUGIN_PERMISSION_DENIED') throw new Error('unexpected grant');
+      }
+      await rejected(91, 'owner');
+      export const manifest = { id: 'owner', name: 'Owner', description: 'Raw message test', version: '1.0.0',
+        apiVersion: '2.0', platform: { web: false, node: true }, permissions: ['communication'], contributes: {} };
+      export async function activate(ctx) {
+        await rejected(92, 'victim');
+        await ctx.communication.readRegisters({ address: 1, quantity: 1 });
+      }
+    `;
+    const runtime = new NodePluginRemoteRuntime(entry, factory);
+    try {
+      expect((await runtime.load()).ok).toBe(true);
+      await runtime.activate({ pluginId: "owner", communication: api });
+      expect(api.writeRegisters).not.toHaveBeenCalled();
+      expect(api.readRegisters).toHaveBeenCalledExactlyOnceWith({
+        address: 1,
+        quantity: 1,
+      });
+      expect(factory).not.toHaveBeenCalled();
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
   it("load：worker_threads 内 import entry 提取 manifest", async () => {
     const runtime = new NodePluginRemoteRuntime(ENTRY, makeFactory(makeApi()));
     const result = await runtime.load();

@@ -737,7 +737,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     expect(pluginStore.load).toHaveBeenCalled();
     if (result.type === "response") {
       expect(result.payload).toEqual({
-        schemaVersion: 4,
+        schemaVersion: 5,
         plugins: [],
       });
     }
@@ -772,7 +772,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
   it("plugin-store-save 转发载荷给主进程插件存储", async () => {
     const pluginStore = makePluginStore();
     const data = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       plugins: [{ manifest: manifestPayload, enabled: true }],
     };
     const result = await handleRequest(
@@ -788,7 +788,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     const onPluginStoreSaved = vi.fn();
     const result = await handleRequest(
       request("plugin-store-save", {
-        data: { schemaVersion: 4, plugins: [] },
+        data: { schemaVersion: 5, plugins: [] },
       }),
       makeDeps({ pluginStore, onPluginStoreSaved }),
     );
@@ -813,7 +813,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     const onPluginStoreSaved = vi.fn();
     const result = await handleRequest(
       request("plugin-store-save", {
-        data: { schemaVersion: 4, plugins: [] },
+        data: { schemaVersion: 5, plugins: [] },
       }),
       makeDeps({ pluginStore, onPluginStoreSaved }),
     );
@@ -837,7 +837,7 @@ describe("plugin-store kinds（2026-08-30，ADR-038 插件安装入口）", () =
     };
     const result = await handleRequest(
       request("plugin-store-save", {
-        data: { schemaVersion: 4, plugins: [] },
+        data: { schemaVersion: 5, plugins: [] },
       }),
       makeDeps({ pluginStore }),
     );

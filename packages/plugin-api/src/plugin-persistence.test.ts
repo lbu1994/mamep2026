@@ -40,7 +40,7 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
   it("start 不自行加载/hydrate（ADR-054：加载与注册由装配方承担）", () => {
     const registry = new PluginRegistry();
     const { store } = makeStore({
-      schemaVersion: 4,
+      schemaVersion: 5,
       plugins: [{ manifest: manifest(), enabled: false }],
     });
     const coordinator = new PluginPersistenceCoordinator(registry, store);
@@ -149,7 +149,7 @@ describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
     );
     await coordinator.flush();
     const last = saves[saves.length - 1];
-    expect(last?.schemaVersion).toBe(4);
+    expect(last?.schemaVersion).toBe(5);
     expect(last?.plugins[0]?.executionMode).toBe("same-process");
   });
 });

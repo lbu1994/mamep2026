@@ -66,6 +66,28 @@ DOM 快照工作，详见
 缺少真实按键样本时，测试仍然失败。这些浏览器检查不能证明 Electron、VSCode、Android
 或真实硬件的性能。
 
+## 插件通信授权的针对性检查
+
+以下用例使用模拟传输、进程内存储或真实浏览器，不连接真实设备。它们分别检查
+权限矩阵、运行实例失效、撤销队列请求、安装批准与恢复，以及沙箱的实际浏览器边界。
+
+```powershell
+pnpm --filter @mamep2026/plugin-api test
+pnpm --filter @mamep2026/application exec vitest run src/plugin-communication.test.ts src/plugin-authorization.test.ts
+pnpm --filter @mamep2026/platform-web exec vitest run src/plugin-remote-runtime.test.ts src/plugin-execution-probe.test.ts
+pnpm --filter @mamep2026/platform-node exec vitest run src/plugin-remote-runtime.test.ts src/host-plugin-runtime.test.ts
+pnpm --filter @mamep2026/web exec vitest run src/plugin-authorization.test.ts src/app-host.test.ts
+pnpm --filter @mamep2026/e2e-web exec playwright test plugin-exec.spec.ts plugin-authorization.spec.ts
+pnpm build
+$env:NO_PROXY = 'localhost,127.0.0.1,[::1]'
+pnpm --filter @mamep2026/e2e-web exec playwright test -c playwright.plugin-production.config.ts
+```
+
+生产专项使用 18474 端口和系统 Edge，检查生产 CSP 下使用精确哈希授权的沙箱引导脚本。
+设置 `NO_PROXY` 是为了避免环境 HTTP 代理把未监听的本地端口误判为可访问服务。
+运行前先构建当前源码。浏览器检查不能代替 Electron、VSCode、Android 宿主运行或
+真实 RTU/TCP 设备验证。设计说明见[插件通信授权](architecture/ports/plugin-api/插件通信授权.md)。
+
 ## 环境要点与坑
 
 - 包管理 **pnpm 11**；原生依赖构建白名单在 `pnpm-workspace.yaml` 的 `allowBuilds`。pnpm 会自动往该文件追加占位键，修改时必须检查 YAML 键是否重复。

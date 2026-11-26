@@ -62,6 +62,10 @@ export function makeHost(
     platform: overrides.platform ?? "browser",
     startPlugins: vi.fn(async () => undefined),
     previewPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
+    setPluginEnabled: vi.fn(async () => ({
+      ok: true as const,
+      value: undefined,
+    })),
     installPluginEntry: vi.fn(async () => pluginEntryUnavailable()),
     loadWorkspace: vi.fn(async () => ({
       ok: true as const,

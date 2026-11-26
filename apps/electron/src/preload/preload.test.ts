@@ -323,7 +323,7 @@ describe("preload 白名单桥", () => {
       messageId: "m",
       kind: "plugin-store-load",
       ok: true,
-      payload: { schemaVersion: 4, plugins: [] },
+      payload: { schemaVersion: 5, plugins: [] },
     });
     const result = await bridge.pluginStoreLoad();
     expect(invoke).toHaveBeenCalledWith(
@@ -335,7 +335,7 @@ describe("preload 白名单桥", () => {
     );
     expect(result).toEqual({
       ok: true,
-      value: { schemaVersion: 4, plugins: [] },
+      value: { schemaVersion: 5, plugins: [] },
     });
   });
 
@@ -348,7 +348,7 @@ describe("preload 白名单桥", () => {
       ok: true,
       payload: null,
     });
-    const data = { schemaVersion: 4 as const, plugins: [] };
+    const data = { schemaVersion: 5 as const, plugins: [] };
     const result = await bridge.pluginStoreSave(data);
     expect(invoke).toHaveBeenCalledWith(
       MAMEP_IPC_INVOKE_CHANNEL,

@@ -372,6 +372,7 @@ export const en = {
     install: "Install Plugin",
     installUnsupported:
       "Plugin installation is not supported in this environment.",
+    confirmPermissions: "Review permissions",
     installConfirmTitle: "Install this plugin?",
     installConfirmWarning:
       "You are about to install an untrusted third-party plugin. It may access the device or file capabilities declared in its manifest. Only continue if you trust its source.",
@@ -989,6 +990,7 @@ export const zh: TranslationResources = {
     // 插件安装入口（PRD §8.3 P1）。
     install: "安装插件",
     installUnsupported: "当前环境不支持安装插件。",
+    confirmPermissions: "确认权限",
     installConfirmTitle: "安装此插件？",
     installConfirmWarning:
       "你将安装一个未受信任的第三方插件。它可能访问清单中声明的设备或文件能力。请仅在信任其来源时继续。",

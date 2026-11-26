@@ -8,6 +8,18 @@ import { buildWebviewCsp } from "./prod-csp";
 describe("buildWebviewCsp (docs/TECH_DESIGN.md §22.2)", () => {
   const CSP_SOURCE = "vscode-webview://abc";
 
+  it("preserves only exact SHA-256 script hashes from the bundled policy", () => {
+    const hash = `sha256-${"A".repeat(43)}=`;
+    const csp = buildWebviewCsp(
+      CSP_SOURCE,
+      `default-src 'none'; script-src 'self' '${hash}' 'unsafe-inline' https://external.invalid; style-src 'sha256-${"B".repeat(43)}='`,
+    );
+    const script = csp
+      .split("; ")
+      .find((entry) => entry.startsWith("script-src "));
+    expect(script).toBe(`script-src ${CSP_SOURCE} 'self' blob: '${hash}'`);
+  });
+
   it("放行 Blob Worker（插件隔离运行时）", () => {
     const workerSrc = buildWebviewCsp(CSP_SOURCE)
       .split("; ")

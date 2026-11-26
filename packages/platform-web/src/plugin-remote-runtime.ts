@@ -1,58 +1,52 @@
 /**
- * 浏览器 Web Worker 插件隔离运行时。
- *
- * 实现 plugin-api 的 PluginRemoteRuntime：第三方单文件 JS 插件 entry 在 Web Worker
- * （Blob URL）中加载执行，经 postMessage 协议（见 plugin-worker-bootstrap.ts）与主线程
- * 隔离桥通信。插件唯一外部通道为 PluginCommunicationApi 代理——Worker 内发起的
- * readRegisters/writeRegisters 请求经消息往返到主线程注入的 communicationApi
- * （宿主装配为经统一 RequestScheduler 的真实通信面），响应回发 Worker。
- *
- * 安全边界：Worker 全局无 DOM / 无 Node API；插件 entry 须自包含（单文件，无外部 import）；
- * 加载/激活失败经 Result / 错误隔离（PLUGIN_LOAD_FAILED / PLUGIN_HOOK_FAILED）。
+ * Web plugin bridge. The default factory creates a Worker inside an opaque-origin iframe.
+ * Only a host-bound activation API may submit device requests; all incoming events are validated.
  */
 import type { PluginManifest } from "@mamep2026/plugin-api";
 import type {
   PluginCommunicationApi,
   PluginRemoteRuntime,
 } from "@mamep2026/plugin-api";
+import {
+  pluginPermissionDenied,
+  pluginWorkerEventSchema,
+  type PluginWorkerEvent,
+} from "@mamep2026/plugin-api";
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
+import {
+  createSandboxedPluginWorker,
+  type PluginWorkerEndpoint,
+} from "./plugin-sandbox-worker";
 import { PLUGIN_WORKER_BOOTSTRAP } from "./plugin-worker-bootstrap";
 
-/** 通信面工厂：按插件 id 动态构造（Worker 消息携带真实 pluginId，日志正确记录）。 */
+/** Legacy factory argument retained for source compatibility; activation supplies the bound API. */
 export type PluginCommunicationApiFactory = (
   pluginId: string,
 ) => PluginCommunicationApi;
 
-/** Worker 工厂注入面（单测注入 fake；生产缺省用全局 Worker）。 */
-export type PluginWorkerFactory = (scriptBlobUrl: string) => Worker;
+/** Injectable Worker endpoint; production uses a Worker owned by an opaque-origin iframe. */
+export type PluginWorkerFactory = (
+  scriptBlobUrl: string,
+) => PluginWorkerEndpoint;
 
-function defaultWorkerFactory(scriptBlobUrl: string): Worker {
-  return new Worker(scriptBlobUrl);
+function defaultWorkerFactory(_scriptBlobUrl: string): PluginWorkerEndpoint {
+  return createSandboxedPluginWorker(PLUGIN_WORKER_BOOTSTRAP);
 }
 
 /** Worker → 主线程消息（插件侧事件）。 */
-type PluginWorkerEvent =
-  | { type: "ready"; manifest: unknown }
-  | { type: "load-error"; message: string }
-  | { type: "activated" }
-  | { type: "deactivated" }
-  | { type: "error"; message: string }
-  | {
-      type: "communication-request";
-      id: number;
-      op: "read" | "write";
-      payload: {
-        pluginId: string;
-        req: { address: number; quantity?: number; values?: number[] };
-      };
-    };
-
 export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
   private readonly entrySource: string;
-  private readonly communicationApiFactory: PluginCommunicationApiFactory;
+  private binding: { pluginId: string; api: PluginCommunicationApi } | null =
+    null;
   private readonly workerFactory: PluginWorkerFactory;
-  private worker: Worker | null = null;
+  private worker: PluginWorkerEndpoint | null = null;
   private disposed = false;
+  private invalidate: (() => void) | null = null;
+
+  setInvalidationHandler(handler: () => void): void {
+    this.invalidate = handler;
+  }
+  private bootstrapUrl: string | null = null;
   /** 待处理消息队列：init/activate/deactivate 的 resolve（按消息顺序 FIFO）。 */
   private waiters: Array<{
     resolve: (value: PluginWorkerEvent) => void;
@@ -64,7 +58,8 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
     options: { workerFactory?: PluginWorkerFactory } = {},
   ) {
     this.entrySource = entrySource;
-    this.communicationApiFactory = communicationApiFactory;
+    // Kept as a constructor compatibility argument; messages cannot select a factory.
+    void communicationApiFactory;
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
   }
 
@@ -76,13 +71,15 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
     if (this.worker !== null) {
       return fail(this.runtimeError("plugin runtime already loaded"));
     }
-    let worker: Worker;
+    let worker: PluginWorkerEndpoint;
     try {
       const bootstrapUrl = URL.createObjectURL(
         new Blob([PLUGIN_WORKER_BOOTSTRAP], { type: "text/javascript" }),
       );
+      this.bootstrapUrl = bootstrapUrl;
       worker = this.workerFactory(bootstrapUrl);
     } catch (err) {
+      await this.dispose();
       return fail(
         createMamepError({
           code: "PLUGIN_LOAD_FAILED",
@@ -94,10 +91,15 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
     }
     this.worker = worker;
     worker.onmessage = (event: MessageEvent) => {
-      void this.handleWorkerMessage(event.data as PluginWorkerEvent);
+      this.handleWorkerMessage(event.data);
     };
     worker.onerror = (event: ErrorEvent) => {
-      this.waiter("error", { type: "error", message: event.message });
+      this.waiter("error", {
+        version: 1,
+        type: "error",
+        message: event.message,
+      });
+      void this.dispose();
     };
 
     try {
@@ -142,6 +144,7 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
     if (this.worker === null) {
       throw new Error("plugin worker not loaded");
     }
+    this.binding = { pluginId: ctx.pluginId, api: ctx.communication };
     const event = await this.postAndWait({
       type: "activate",
       pluginId: ctx.pluginId,
@@ -155,6 +158,7 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
   }
 
   async deactivate(): Promise<void> {
+    this.binding = null;
     if (this.worker === null) return;
     const event = await this.postAndWait({ type: "deactivate" });
     if (event.type === "error") {
@@ -164,10 +168,21 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
 
   /** 关闭隔离线程（terminate）。 */
   async dispose(): Promise<void> {
+    const invalidate = this.invalidate;
+    this.invalidate = null;
+    invalidate?.();
     const worker = this.worker;
     this.worker = null;
+    if (this.bootstrapUrl !== null) URL.revokeObjectURL(this.bootstrapUrl);
+    this.bootstrapUrl = null;
     this.disposed = true;
-    this.waiters = [];
+    this.binding = null;
+    for (const waiter of this.waiters.splice(0))
+      waiter.resolve({
+        version: 1,
+        type: "error",
+        message: "plugin runtime disposed",
+      });
     if (worker !== null) {
       worker.terminate();
     }
@@ -177,7 +192,15 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
     const worker = this.worker;
     if (worker === null) throw new Error("plugin worker not created");
     const result = await new Promise<PluginWorkerEvent>((resolve) => {
-      this.waiters.push({ resolve });
+      const timer = setTimeout(() => {
+        void this.dispose();
+      }, 10000);
+      this.waiters.push({
+        resolve: (event) => {
+          clearTimeout(timer);
+          resolve(event);
+        },
+      });
       worker.postMessage(message);
     });
     return result;
@@ -196,7 +219,15 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
     }
   }
 
-  private handleWorkerMessage(event: PluginWorkerEvent): void {
+  private handleWorkerMessage(input: unknown): void {
+    if (this.disposed) return;
+    const parsed = pluginWorkerEventSchema.safeParse(input);
+    if (!parsed.success) {
+      this.binding = null;
+      void this.dispose();
+      return;
+    }
+    const event = parsed.data;
     switch (event.type) {
       case "communication-request": {
         // 插件通信代理桥：主线程注入的通信面执行后回发响应。
@@ -217,27 +248,30 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
   private async handleCommunicationRequest(
     event: Extract<PluginWorkerEvent, { type: "communication-request" }>,
   ): Promise<void> {
-    const { id, op, payload } = event;
-    const api = this.communicationApiFactory(payload.pluginId);
+    const binding = this.binding;
+    const worker = this.worker;
     let result: Result<unknown>;
-    if (op === "read") {
-      result = await api.readRegisters({
-        address: payload.req.address,
-        quantity: payload.req.quantity ?? 1,
-      });
+    if (binding === null || event.payload.pluginId !== binding.pluginId) {
+      result = fail(
+        pluginPermissionDenied("runtime identity is not authorized"),
+      );
     } else {
-      result = await api.writeRegisters({
-        address: payload.req.address,
-        values: payload.req.values ?? [],
+      try {
+        result =
+          event.op === "read"
+            ? await binding.api.readRegisters(event.payload.req)
+            : await binding.api.writeRegisters(event.payload.req);
+      } catch (error) {
+        result = fail(this.runtimeError(String(error)));
+      }
+    }
+    if (worker !== null && this.worker === worker && this.binding === binding) {
+      worker.postMessage({
+        type: "communication-response",
+        id: event.id,
+        result,
       });
     }
-    this.worker?.postMessage({
-      type: "communication-response",
-      id,
-      result: result.ok
-        ? { ok: true, value: result.value }
-        : { ok: false, error: result.error },
-    });
   }
 
   private runtimeError(technicalMessage: string) {

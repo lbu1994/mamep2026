@@ -1,18 +1,17 @@
 /**
- * Node worker_threads 插件隔离运行时。
- *
- * 实现 plugin-api 的 PluginRemoteRuntime：第三方单文件 JS 插件 entry 在 worker_threads
- * （eval module，见 plugin-node-worker-bootstrap.ts）中加载执行，经与浏览器端一致的
- * postMessage 协议与主线程隔离桥通信。Electron 主进程 / VSCode Extension Host 装配用。
- *
- * 安全边界：worker_threads 内插件代码无宿主全局（electron / vscode / 主进程能力），
- * 唯一外部通道为 PluginCommunicationApi 代理桥（read/write 经统一调度器）。
+ * Node worker_threads plugin bridge. Device requests use the host-bound activation API.
+ * A Node thread is not an operating-system sandbox; this bridge does not restrict Node imports.
  */
 import { Worker } from "node:worker_threads";
 import type {
   PluginCommunicationApi,
   PluginManifest,
   PluginRemoteRuntime,
+} from "@mamep2026/plugin-api";
+import {
+  pluginPermissionDenied,
+  pluginWorkerEventSchema,
+  type PluginWorkerEvent,
 } from "@mamep2026/plugin-api";
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
 import { PLUGIN_NODE_WORKER_BOOTSTRAP } from "./plugin-node-worker-bootstrap";
@@ -22,27 +21,17 @@ export type PluginCommunicationApiFactory = (
   pluginId: string,
 ) => PluginCommunicationApi;
 
-type PluginWorkerEvent =
-  | { type: "ready"; manifest: unknown }
-  | { type: "load-error"; message: string }
-  | { type: "activated" }
-  | { type: "deactivated" }
-  | { type: "error"; message: string }
-  | {
-      type: "communication-request";
-      id: number;
-      op: "read" | "write";
-      payload: {
-        pluginId: string;
-        req: { address: number; quantity?: number; values?: number[] };
-      };
-    };
-
 export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
   private readonly entrySource: string;
-  private readonly communicationApiFactory: PluginCommunicationApiFactory;
+  private binding: { pluginId: string; api: PluginCommunicationApi } | null =
+    null;
   private worker: Worker | null = null;
   private disposed = false;
+  private invalidate: (() => void) | null = null;
+
+  setInvalidationHandler(handler: () => void): void {
+    this.invalidate = handler;
+  }
   private waiters: Array<{ resolve: (value: PluginWorkerEvent) => void }> = [];
 
   constructor(
@@ -50,7 +39,8 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
     communicationApiFactory: PluginCommunicationApiFactory,
   ) {
     this.entrySource = entrySource;
-    this.communicationApiFactory = communicationApiFactory;
+    // Kept as a constructor compatibility argument; messages cannot select a factory.
+    void communicationApiFactory;
   }
 
   async load(): Promise<Result<PluginManifest>> {
@@ -76,11 +66,12 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
       );
     }
     this.worker = worker;
-    worker.on("message", (message: PluginWorkerEvent) => {
+    worker.on("message", (message: unknown) => {
       this.handleWorkerMessage(message);
     });
     worker.on("error", (err: Error) => {
-      this.waiter({ type: "error", message: err.message });
+      this.waiter({ version: 1, type: "error", message: err.message });
+      void this.dispose();
     });
 
     try {
@@ -124,6 +115,7 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
     if (this.worker === null) {
       throw new Error("plugin worker not loaded");
     }
+    this.binding = { pluginId: ctx.pluginId, api: ctx.communication };
     const event = await this.postAndWait({
       type: "activate",
       pluginId: ctx.pluginId,
@@ -137,6 +129,7 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
   }
 
   async deactivate(): Promise<void> {
+    this.binding = null;
     if (this.worker === null) return;
     const event = await this.postAndWait({ type: "deactivate" });
     if (event.type === "error") {
@@ -145,10 +138,19 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
   }
 
   async dispose(): Promise<void> {
+    const invalidate = this.invalidate;
+    this.invalidate = null;
+    invalidate?.();
     const worker = this.worker;
     this.worker = null;
     this.disposed = true;
-    this.waiters = [];
+    this.binding = null;
+    for (const waiter of this.waiters.splice(0))
+      waiter.resolve({
+        version: 1,
+        type: "error",
+        message: "plugin runtime disposed",
+      });
     if (worker !== null) {
       await worker.terminate();
     }
@@ -158,7 +160,15 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
     const worker = this.worker;
     if (worker === null) throw new Error("plugin worker not created");
     return await new Promise<PluginWorkerEvent>((resolve) => {
-      this.waiters.push({ resolve });
+      const timer = setTimeout(() => {
+        void this.dispose();
+      }, 10000);
+      this.waiters.push({
+        resolve: (event) => {
+          clearTimeout(timer);
+          resolve(event);
+        },
+      });
       worker.postMessage(message);
     });
   }
@@ -170,7 +180,15 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
     }
   }
 
-  private handleWorkerMessage(event: PluginWorkerEvent): void {
+  private handleWorkerMessage(input: unknown): void {
+    if (this.disposed) return;
+    const parsed = pluginWorkerEventSchema.safeParse(input);
+    if (!parsed.success) {
+      this.binding = null;
+      void this.dispose();
+      return;
+    }
+    const event = parsed.data;
     switch (event.type) {
       case "communication-request":
         void this.handleCommunicationRequest(event);
@@ -188,27 +206,30 @@ export class NodePluginRemoteRuntime implements PluginRemoteRuntime {
   private async handleCommunicationRequest(
     event: Extract<PluginWorkerEvent, { type: "communication-request" }>,
   ): Promise<void> {
-    const { id, op, payload } = event;
-    const api = this.communicationApiFactory(payload.pluginId);
+    const binding = this.binding;
+    const worker = this.worker;
     let result: Result<unknown>;
-    if (op === "read") {
-      result = await api.readRegisters({
-        address: payload.req.address,
-        quantity: payload.req.quantity ?? 1,
-      });
+    if (binding === null || event.payload.pluginId !== binding.pluginId) {
+      result = fail(
+        pluginPermissionDenied("runtime identity is not authorized"),
+      );
     } else {
-      result = await api.writeRegisters({
-        address: payload.req.address,
-        values: payload.req.values ?? [],
+      try {
+        result =
+          event.op === "read"
+            ? await binding.api.readRegisters(event.payload.req)
+            : await binding.api.writeRegisters(event.payload.req);
+      } catch (error) {
+        result = fail(this.runtimeError(String(error)));
+      }
+    }
+    if (worker !== null && this.worker === worker && this.binding === binding) {
+      worker.postMessage({
+        type: "communication-response",
+        id: event.id,
+        result,
       });
     }
-    this.worker?.postMessage({
-      type: "communication-response",
-      id,
-      result: result.ok
-        ? { ok: true, value: result.value }
-        : { ok: false, error: result.error },
-    });
   }
 
   private runtimeError(technicalMessage: string) {

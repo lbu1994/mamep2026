@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * HostPluginRuntime 单测。
  *
@@ -10,6 +11,7 @@ import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
 import { createCodecRegistry } from "@mamep2026/communication";
 import {
   createEmptyPluginStoreData,
+  pluginApprovalContent,
   type PluginExecutionMode,
   type PluginStoreData,
   type PluginStorePort,
@@ -30,7 +32,7 @@ class MemoryPluginStore implements PluginStorePort {
   }
 
   setPlugins(plugins: StoredPlugin[]): void {
-    this.data = { schemaVersion: 4, plugins };
+    this.data = { schemaVersion: 5, plugins };
   }
 
   async load(): Promise<Result<PluginStoreData>> {
@@ -102,13 +104,14 @@ function storedPlugin(opts: {
   executionMode?: PluginExecutionMode;
   source?: string;
   manifest?: unknown;
+  apiVersion?: string;
 }): StoredPlugin {
-  return {
+  const record: StoredPlugin = {
     manifest: {
       id: opts.pluginId,
       name: opts.pluginId,
       version: "1.0.0",
-      apiVersion: "2.0",
+      apiVersion: opts.apiVersion ?? "2.0",
       description: "host plugin test",
       platform: { web: true, node: true },
       requiredCapabilities: [],
@@ -126,6 +129,19 @@ function storedPlugin(opts: {
       ? { executionMode: opts.executionMode }
       : { executionMode: "same-process" as const }),
   };
+  record.approval = {
+    contentDigest: createHash("sha256")
+      .update(
+        pluginApprovalContent(
+          record.manifest,
+          record.entrySource,
+          record.executionMode,
+        ),
+      )
+      .digest("hex"),
+    permissions: [...record.manifest.permissions],
+  };
+  return record;
 }
 
 function activations(): string[] {
@@ -358,6 +374,7 @@ describe("HostPluginRuntime（ADR-055）", () => {
       storedPlugin({
         pluginId: "alpha",
         source: entrySource({ pluginId: "alpha", apiVersion: "9.0" }),
+        apiVersion: "9.0",
       }),
     ]);
     const runtime = createHostPluginRuntime({

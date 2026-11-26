@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * 宿主侧插件执行面。
  *
@@ -35,6 +36,9 @@ import {
 import { ok, type AddressTransform } from "@mamep2026/domain";
 import {
   PluginRegistry,
+  matchesPluginApproval,
+  pluginApprovalContent,
+  type PluginApproval,
   createAddressTransformRegistry,
   pluginManifestSchema,
   runtimeFromLocalEntry,
@@ -71,10 +75,12 @@ function manifestIdOf(manifest: unknown): string {
   return "";
 }
 
-/** 同一份 same-process 插件集合的标识（id + entrySource），用于判断是否需全量重建。 */
-function setSignature(desired: Map<string, { entrySource: string }>): string {
+/** Compare approved content, including the manifest and execution mode, before rebuilding. */
+function setSignature(
+  desired: Map<string, { entrySource: string; approval: PluginApproval }>,
+): string {
   return [...desired.entries()]
-    .map(([id, value]) => `${id}@${value.entrySource}`)
+    .map(([id, value]) => `${id}@${value.approval.contentDigest}`)
     .sort()
     .join("|");
 }
@@ -159,7 +165,11 @@ export class HostPluginRuntime {
       }
       const desired = new Map<
         string,
-        { manifest: PluginManifest; entrySource: string }
+        {
+          manifest: PluginManifest;
+          entrySource: string;
+          approval: PluginApproval;
+        }
       >();
       for (const entry of stored.value.plugins) {
         if (entry.executionMode !== "same-process") continue;
@@ -174,7 +184,21 @@ export class HostPluginRuntime {
           );
           continue;
         }
+        if (
+          entry.approval === undefined ||
+          !(await matchesPluginApproval(entry, async (content) =>
+            createHash("sha256").update(content).digest("hex"),
+          ))
+        ) {
+          this.report(
+            entry.manifest.id,
+            "PLUGIN_PERMISSION_DENIED",
+            "plugin requires renewed installation consent",
+          );
+          continue;
+        }
         desired.set(entry.manifest.id, {
+          approval: entry.approval,
           manifest: parsed.data,
           entrySource: entry.entrySource,
         });
@@ -203,7 +227,14 @@ export class HostPluginRuntime {
 
   /** 全量重建：注销全部 → 新建 dataType / addressTransform 注册表 → 重新加载并激活。 */
   private async rebuild(
-    desired: Map<string, { manifest: PluginManifest; entrySource: string }>,
+    desired: Map<
+      string,
+      {
+        manifest: PluginManifest;
+        entrySource: string;
+        approval: PluginApproval;
+      }
+    >,
   ): Promise<void> {
     for (const pluginId of [...this.loaded.keys()]) {
       this.registry.unregister(pluginId);
@@ -222,7 +253,22 @@ export class HostPluginRuntime {
         );
         continue;
       }
-      const registered = this.registry.register(entryResult.value.manifest, {
+      const parsed = pluginManifestSchema.safeParse(entryResult.value.manifest);
+      if (
+        !parsed.success ||
+        pluginApprovalContent(parsed.data, next.entrySource, "same-process") !==
+          pluginApprovalContent(next.manifest, next.entrySource, "same-process")
+      ) {
+        this.report(
+          pluginId,
+          "PLUGIN_PERMISSION_DENIED",
+          "plugin manifest changed during restore",
+        );
+        continue;
+      }
+      const registered = this.registry.register(parsed.data, {
+        approval: next.approval,
+        approvedPermissions: next.approval.permissions,
         source: "installed",
         runtime: runtimeFromLocalEntry(entryResult.value),
         entrySource: next.entrySource,

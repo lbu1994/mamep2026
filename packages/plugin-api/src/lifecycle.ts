@@ -41,6 +41,8 @@ export interface PluginRuntime {
  * activate 在隔离线程执行插件 activate；唯一外部通道为 PluginCommunicationApi 代理桥。
  */
 export interface PluginRemoteRuntime {
+  /** Notify the host before a crashed or disposed runtime can leave queued work behind. */
+  setInvalidationHandler?(handler: () => void): void;
   /** 在隔离线程加载 entry 并提取 manifest（单文件 JS 的 manifest 在 entry 内）。 */
   load(): Promise<Result<PluginManifest>>;
   /** 在隔离线程执行插件 activate（失败 → PLUGIN_HOOK_FAILED 错误隔离）。 */

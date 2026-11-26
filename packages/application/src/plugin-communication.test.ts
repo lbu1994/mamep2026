@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { CommunicationSession } from "@mamep2026/communication";
 import type { CommunicationLogEvent } from "@mamep2026/communication";
-import { createDefaultRtuProfile } from "@mamep2026/domain";
+import { ok, createDefaultRtuProfile } from "@mamep2026/domain";
 import {
   FakeTransport,
   ScriptedModbusRtuDevice,
@@ -31,6 +31,7 @@ describe("createPluginCommunicationApi（ADR-039）", () => {
     expect((await session.connect()).ok).toBe(true);
 
     const api = createPluginCommunicationApi({
+      authorization: { check: () => ok(undefined), onRevoke: () => () => {} },
       getSession: () => session,
       pluginId: "test-plugin",
     });
@@ -53,6 +54,7 @@ describe("createPluginCommunicationApi（ADR-039）", () => {
 
   it("无会话 → PLUGIN_RUNTIME_NOT_AVAILABLE 能力错误（category plugin）", async () => {
     const api = createPluginCommunicationApi({
+      authorization: { check: () => ok(undefined), onRevoke: () => () => {} },
       getSession: () => null,
       pluginId: "orphan",
     });

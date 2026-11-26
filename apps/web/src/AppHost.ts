@@ -30,6 +30,7 @@ import { createPluginCommunicationApi } from "@mamep2026/application";
 import {
   createWebPluginRemoteRuntime,
   loadWebPluginEntry,
+  hashPluginContent,
 } from "@mamep2026/platform-web";
 import type {
   TraceIdentity,
@@ -67,6 +68,11 @@ import {
   PluginRegistry,
   pluginManifestSchema,
   runtimeFromLocalEntry,
+  createPluginApproval,
+  matchesPluginApproval,
+  pluginApprovalContent,
+  pluginPermissionDenied,
+  createUnavailableCommunicationApi,
 } from "@mamep2026/plugin-api";
 import type {
   PluginExecutionMode,
@@ -252,6 +258,11 @@ export class BrowserAppHost
     (sample: TraceSampleEvent) => void
   >();
 
+  private pluginPreview: { source: string; manifest: PluginManifest } | null =
+    null;
+  private hostDisposed = false;
+  private readonly pluginEnableRequests = new Map<string, object>();
+
   constructor(options: AppHostOptions) {
     this.baseCapabilities = options.capabilities ?? browserCapabilities;
     this.platformHost = options.platform;
@@ -274,7 +285,7 @@ export class BrowserAppHost
       contributionRegistry: this.contributionRegistry,
       // 同进程 runtime 的插件通信面按 pluginId 绑定（插件外部化）：
       // 请求经统一调度器执行，日志携带来源插件 id。
-      communicationApiFactory: (pluginId) =>
+      communicationApiFactory: (pluginId, authorization) =>
         createPluginCommunicationApi({
           getSession: () => this.rtu.getSession(),
           getRoute: () =>
@@ -283,6 +294,7 @@ export class BrowserAppHost
               protocol: "rtu",
             },
           pluginId,
+          authorization,
         }),
       // 同步贡献注册面：插件 activate 经 ctx.registries 注册同步能力。
       ...(options.syncRegistries !== undefined
@@ -366,8 +378,9 @@ export class BrowserAppHost
    * 3. 启动持久化协调器（订阅后续注册/启停/卸载事件）。
    */
   async startPlugins(): Promise<void> {
-    if (this.pluginStore === null) return;
+    if (this.pluginStore === null || this.hostDisposed) return;
     const loaded = await this.pluginStore.load();
+    if (this.hostDisposed) return;
     if (!loaded.ok) {
       this.appendPluginMessage("errors.pluginStoreError", loaded.error.code);
       return;
@@ -376,44 +389,130 @@ export class BrowserAppHost
       // 单个 Worker/线程启动仍可能占用主线程；插件之间主动让出宏任务，
       // 避免多个插件恢复被 React 合并为一帧长任务。
       await this.yieldToMainThread();
+      if (this.hostDisposed) return;
       await this.registerStoredPlugin(stored);
+      if (this.hostDisposed) return;
     }
     this.pluginPersistence?.start();
   }
 
-  /**
-   * 预览可执行插件 entry：按 executionMode 加载 entry 并校验 manifest（**不注册**）。
-   * 安装确认框据此展示插件信息；确认后再调 installPluginEntry（安装时会重新加载一次）。
-   */
+  /** Preview only in isolation and release the runtime before returning its manifest. */
   async previewPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
   ): Promise<Result<PluginManifest>> {
-    const loaded = await this.loadEntryExecutable(entrySource, executionMode);
+    void executionMode;
+    if (this.hostDisposed) return fail(pluginPermissionDenied("host disposed"));
+    this.pluginPreview = null;
+    const loaded = await this.loadEntryExecutable(entrySource, "isolated");
     if (!loaded.ok) return loaded;
-    return ok(loaded.value.manifest);
+    try {
+      if (this.hostDisposed)
+        return fail(pluginPermissionDenied("host disposed"));
+      this.pluginPreview = {
+        source: entrySource,
+        manifest: loaded.value.manifest,
+      };
+      return ok(structuredClone(loaded.value.manifest));
+    } finally {
+      await loaded.value.remoteRuntime?.dispose();
+    }
   }
 
-  /**
-   * 安装可执行插件：按 executionMode 装配执行面并注册为 installed 插件
-   * （持久化由 PluginPersistenceCoordinator 承担）。entry 内嵌的 manifest 为权威清单。
-   */
+  /** Bind user consent to the previewed content before loading the selected execution mode. */
   async installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
   ): Promise<Result<PluginManifest>> {
+    const preview = this.pluginPreview;
+    this.pluginPreview = null;
+    if (
+      this.hostDisposed ||
+      preview === null ||
+      preview.source !== entrySource
+    ) {
+      return fail(
+        pluginPermissionDenied("installation requires a matching preview"),
+      );
+    }
+    const approval = await createPluginApproval(
+      { manifest: preview.manifest, entrySource, executionMode },
+      hashPluginContent,
+    );
+    if (this.hostDisposed) return fail(pluginPermissionDenied("host disposed"));
     const loaded = await this.loadEntryExecutable(entrySource, executionMode);
     if (!loaded.ok) return loaded;
     const { manifest, localEntry, remoteRuntime } = loaded.value;
-    return this.pluginRegistry.register(manifest, {
+    if (
+      this.hostDisposed ||
+      pluginApprovalContent(manifest, entrySource, executionMode) !==
+        pluginApprovalContent(preview.manifest, entrySource, executionMode)
+    ) {
+      await remoteRuntime?.dispose();
+      return fail(
+        pluginPermissionDenied("plugin content changed after preview"),
+      );
+    }
+    if (
+      this.pluginRegistry.getSource(manifest.id) === "installed" &&
+      !this.pluginRegistry.isEnabled(manifest.id)
+    ) {
+      this.pluginRegistry.unregister(manifest.id);
+    }
+    const result = this.pluginRegistry.register(manifest, {
       source: "installed",
       entrySource,
       executionMode,
+      approval,
+      approvedPermissions: approval.permissions,
       ...(localEntry !== undefined
         ? { runtime: runtimeFromLocalEntry(localEntry) }
         : {}),
       ...(remoteRuntime !== undefined ? { remoteRuntime } : {}),
     });
+    if (!result.ok) await remoteRuntime?.dispose();
+    return result;
+  }
+
+  /** Enable a retained executable only after checking its saved approval. */
+  async setPluginEnabled(
+    pluginId: string,
+    enabled: boolean,
+  ): Promise<Result<void>> {
+    const request = {};
+    this.pluginEnableRequests.set(pluginId, request);
+    if (!enabled) {
+      this.pluginRegistry.setEnabled(pluginId, false);
+      return ok(undefined);
+    }
+    const stored = this.pluginRegistry
+      .snapshot()
+      .plugins.find((plugin) => plugin.manifest.id === pluginId);
+    const isRegistrationCurrent =
+      this.pluginRegistry.captureRegistration(pluginId);
+    if (stored?.entrySource === undefined) {
+      this.pluginRegistry.setEnabled(pluginId, true);
+      return ok(undefined);
+    }
+    if (!(await matchesPluginApproval(stored, hashPluginContent))) {
+      return fail(
+        pluginPermissionDenied("plugin requires renewed installation consent"),
+      );
+    }
+    if (this.hostDisposed) return fail(pluginPermissionDenied("host disposed"));
+    const isCurrent = () =>
+      this.pluginEnableRequests.get(pluginId) === request &&
+      isRegistrationCurrent();
+    if (!isCurrent())
+      return fail(pluginPermissionDenied("enable request was revoked"));
+    const registered = await this.registerStoredPlugin(
+      { ...stored, enabled: true },
+      isCurrent,
+      true,
+    );
+    return registered && this.pluginRegistry.isEnabled(pluginId)
+      ? ok(undefined)
+      : fail(pluginPermissionDenied("plugin could not be enabled"));
   }
 
   /** 加载 entry 并装配执行面（不注册）；同进程 / 隔离按 executionMode 分支。 */
@@ -450,36 +549,74 @@ export class BrowserAppHost
     return ok({ manifest: parsed.data, remoteRuntime });
   }
 
-  /**
-   * 注册存储中的插件（启动恢复）：可执行插件先加载执行面再注册
-   * （manifest 以 entry 为准，插件包升级随之生效）；纯清单插件按存储清单注册。
-   */
-  private async registerStoredPlugin(stored: StoredPlugin): Promise<void> {
+  /** Restore metadata first; only enabled records with matching consent may execute. */
+  private async registerStoredPlugin(
+    stored: StoredPlugin,
+    isCurrent = () => true,
+    replace = false,
+  ): Promise<boolean> {
+    if (this.hostDisposed || !isCurrent()) return false;
     const { entrySource, executionMode } = stored;
-    if (entrySource === undefined || executionMode === undefined) {
+    if (entrySource === undefined) {
       this.registerStoredManifest(stored.manifest, stored.enabled);
-      return;
+      return this.pluginRegistry.isEnabled(stored.manifest.id);
+    }
+    const approved = await matchesPluginApproval(stored, hashPluginContent);
+    if (this.hostDisposed || !isCurrent()) return false;
+    if (!stored.enabled || !approved || executionMode === undefined) {
+      this.pluginRegistry.register(stored.manifest, {
+        source: "installed",
+        entrySource,
+        enabled: false,
+        ...(executionMode !== undefined ? { executionMode } : {}),
+        ...(approved && stored.approval !== undefined
+          ? { approval: stored.approval }
+          : {}),
+      });
+      if (!approved)
+        this.appendPluginMessage(
+          "errors.pluginPermissionDenied",
+          `plugin ${stored.manifest.id} requires renewed installation consent`,
+        );
+      return false;
     }
     const loaded = await this.loadEntryExecutable(entrySource, executionMode);
     if (!loaded.ok) {
-      // 执行面加载失败（entry 损坏 / 不兼容 API）：插件不注册（不登记贡献点），仅记录错误。
       this.appendPluginMessage("errors.pluginLoadFailed", loaded.error.code);
-      return;
+      return false;
     }
     const { manifest, localEntry, remoteRuntime } = loaded.value;
+    if (
+      this.hostDisposed ||
+      !isCurrent() ||
+      pluginApprovalContent(manifest, entrySource, executionMode) !==
+        pluginApprovalContent(stored.manifest, entrySource, executionMode)
+    ) {
+      await remoteRuntime?.dispose();
+      this.appendPluginMessage(
+        "errors.pluginPermissionDenied",
+        "plugin manifest changed during restore",
+      );
+      return false;
+    }
+    if (replace) this.pluginRegistry.unregister(stored.manifest.id);
     const result = this.pluginRegistry.register(manifest, {
       source: "installed",
       entrySource,
       executionMode,
+      ...(stored.approval !== undefined
+        ? {
+            approval: stored.approval,
+            approvedPermissions: stored.approval.permissions,
+          }
+        : {}),
       ...(localEntry !== undefined
         ? { runtime: runtimeFromLocalEntry(localEntry) }
         : {}),
       ...(remoteRuntime !== undefined ? { remoteRuntime } : {}),
     });
-    if (!result.ok) return;
-    if (stored.enabled !== this.pluginRegistry.isEnabled(manifest.id)) {
-      this.pluginRegistry.setEnabled(manifest.id, stored.enabled);
-    }
+    if (!result.ok) await remoteRuntime?.dispose();
+    return result.ok;
   }
 
   /** 纯清单插件注册 + 恢复启用状态（无执行面，activate/deactivate 均不存在）。 */
@@ -509,16 +646,9 @@ export class BrowserAppHost
 
   /** 插件隔离运行时：Web Worker 加载 entry；通信面按插件 id 绑定。 */
   private createRemoteRuntime(entrySource: string): PluginRemoteRuntime {
-    return createWebPluginRemoteRuntime(entrySource, (pluginId) =>
-      createPluginCommunicationApi({
-        getSession: () => this.rtu.getSession(),
-        getRoute: () =>
-          this.rtu.getSession()?.getCurrentRoute() ?? {
-            unitAddress: this.currentSlaveAddress,
-            protocol: "rtu",
-          },
-        pluginId,
-      }),
+    return createWebPluginRemoteRuntime(
+      entrySource,
+      createUnavailableCommunicationApi,
     );
   }
 
@@ -756,6 +886,11 @@ export class BrowserAppHost
    * 集合，避免旧 host 残留订阅导致事件重复投递（如 comm-log 一条变两条）。
    */
   async dispose(): Promise<void> {
+    this.hostDisposed = true;
+    this.pluginPreview = null;
+    this.pluginEnableRequests.clear();
+    this.pluginPersistence?.dispose();
+    this.pluginRegistry.dispose();
     this.connectionListeners.clear();
     this.commLogListeners.clear();
     this.messageListeners.clear();

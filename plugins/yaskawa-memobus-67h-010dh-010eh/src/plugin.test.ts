@@ -9,6 +9,7 @@ import {
   createAddressTransformRegistry,
   createDataTypeRegistry,
   runtimeFromLocalEntry,
+  type PermissionId,
   type PluginCommunicationApi,
   type PluginSyncRegistries,
 } from "@mamep2026/plugin-api";
@@ -25,6 +26,7 @@ import {
 function makeHarness(
   options: {
     communicationApiFactory?: (pluginId: string) => PluginCommunicationApi;
+    approvedPermissions?: PermissionId[];
   } = {},
 ) {
   const contributionRegistry = new ContributionPointRegistry();
@@ -55,6 +57,8 @@ function makeHarness(
     runtime: runtimeFromLocalEntry(pluginEntry),
     entrySource: "export const manifest = {};",
     executionMode: "same-process",
+    // Simulate host consent explicitly; manifest declarations alone grant no access.
+    approvedPermissions: options.approvedPermissions ?? [],
   });
   return { registry, contributionRegistry, codecRegistry, result };
 }
@@ -153,7 +157,10 @@ describe("Yaskawa MEMOBUS 插件（ADR-041；ADR-054 单文件手动安装）", 
         ),
       }),
     );
-    const { registry } = makeHarness({ communicationApiFactory });
+    const { registry } = makeHarness({
+      communicationApiFactory,
+      approvedPermissions: ["communication", "device-write"],
+    });
 
     expect(
       registry.canHandleToolbarAction(
@@ -174,5 +181,53 @@ describe("Yaskawa MEMOBUS 插件（ADR-041；ADR-054 单文件手动安装）", 
     );
     expect(ram.ok).toBe(true);
     expect(writes[1]).toEqual({ address: 0x0910, values: [0] });
+
+    registry.setEnabled(YASKAWA_MEMOBUS_PLUGIN_ID, false);
+    expect(
+      (
+        await registry.invokeToolbarAction(
+          YASKAWA_MEMOBUS_PLUGIN_ID,
+          "yaskawa.enter-rom",
+        )
+      ).ok,
+    ).toBe(false);
+    expect(writes).toHaveLength(2);
+    registry.unregister(YASKAWA_MEMOBUS_PLUGIN_ID);
+    expect(
+      (
+        await registry.invokeToolbarAction(
+          YASKAWA_MEMOBUS_PLUGIN_ID,
+          "yaskawa.enter-ram",
+        )
+      ).ok,
+    ).toBe(false);
+    expect(writes).toHaveLength(2);
   });
+
+  it.each([
+    { approvedPermissions: [] },
+    { approvedPermissions: ["communication"] },
+    { approvedPermissions: ["device-write"] },
+  ] satisfies { approvedPermissions: PermissionId[] }[])(
+    "rejects ROM/RAM writes without both host-approved permissions: $approvedPermissions",
+    async ({ approvedPermissions }) => {
+      const writeRegisters = vi.fn(async () => ok(undefined));
+      const { registry } = makeHarness({
+        approvedPermissions,
+        communicationApiFactory: () => ({
+          readRegisters: vi.fn(async () => ok([1])),
+          writeRegisters,
+        }),
+      });
+      for (const action of ["yaskawa.enter-rom", "yaskawa.enter-ram"]) {
+        expect(
+          await registry.invokeToolbarAction(YASKAWA_MEMOBUS_PLUGIN_ID, action),
+        ).toMatchObject({
+          ok: false,
+          error: { code: "PLUGIN_PERMISSION_DENIED" },
+        });
+      }
+      expect(writeRegisters).not.toHaveBeenCalled();
+    },
+  );
 });

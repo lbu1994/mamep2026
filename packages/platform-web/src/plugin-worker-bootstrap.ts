@@ -1,17 +1,6 @@
 /**
- * 插件隔离 Worker 引导脚本。
- *
- * 主线程把该源码作为 Blob 创建 Web Worker；Worker 内动态 import 单文件 JS 插件
- * （entrySource，须自包含无外部 import），提取 manifest / activate / deactivate，
- * 经 postMessage 协议与主线程隔离桥通信：
- *
- * - 主 → Worker：`init{entrySource}` / `activate{pluginId}` / `deactivate` /
- *   `communication-response{id,result}`
- * - Worker → 主：`ready{manifest}` / `load-error{message}` / `activated` /
- *   `deactivated` / `error{message}` / `communication-request{id,op,payload}`
- *
- * 插件唯一外部通道为 communication（readRegisters/writeRegisters 经消息往返
- * 主线程统一调度器）；Worker 全局无 DOM / 无 Node API，天然能力受限（白名单）。
+ * Worker bootstrap for the versioned plugin message bridge.
+ * The host creates this Worker inside an opaque-origin iframe with a restrictive CSP.
  */
 export const PLUGIN_WORKER_BOOTSTRAP = `
 self.onmessage = function (event) {
@@ -49,7 +38,7 @@ function callMain(op, payload) {
   return new Promise(function (resolve) {
     var id = nextId++;
     pendingMap[id] = resolve;
-    self.postMessage({ type: "communication-request", id: id, op: op, payload: payload });
+    self.postMessage({ version: 1, type: "communication-request", id: id, op: op, payload: payload });
   });
 }
 
@@ -73,10 +62,10 @@ function init(entrySource) {
       manifestValue = mod.manifest;
       activateFn = typeof mod.activate === "function" ? mod.activate : null;
       deactivateFn = typeof mod.deactivate === "function" ? mod.deactivate : null;
-      self.postMessage({ type: "ready", manifest: manifestValue });
+      self.postMessage({ version: 1, type: "ready", manifest: manifestValue });
     })
     .catch(function (err) {
-      self.postMessage({ type: "load-error", message: String((err && err.message) || err) });
+      self.postMessage({ version: 1, type: "load-error", message: String((err && err.message) || err) });
     });
 }
 
@@ -86,9 +75,9 @@ function runActivate(pluginId) {
       if (!activateFn) throw new Error("plugin entry has no activate export");
       return activateFn({ pluginId: pluginId, communication: communicationApi(pluginId) });
     })
-    .then(function () { self.postMessage({ type: "activated" }); })
+    .then(function () { self.postMessage({ version: 1, type: "activated" }); })
     .catch(function (err) {
-      self.postMessage({ type: "error", message: String((err && err.message) || err) });
+      self.postMessage({ version: 1, type: "error", message: String((err && err.message) || err) });
     });
 }
 
@@ -96,6 +85,6 @@ function runDeactivate() {
   return Promise.resolve()
     .then(function () { if (deactivateFn) return deactivateFn(); })
     .catch(function () { /* deactivate 失败不阻断关闭 */ })
-    .then(function () { self.postMessage({ type: "deactivated" }); });
+    .then(function () { self.postMessage({ version: 1, type: "deactivated" }); });
 }
 `;
