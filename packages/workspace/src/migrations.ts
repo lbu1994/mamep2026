@@ -50,6 +50,7 @@
 import {
   createMamepError,
   BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID,
+  validateWorkspaceExpansion,
   type Result,
 } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
@@ -343,6 +344,9 @@ export function migrateData(
 ): Result<Record<string, unknown>> {
   let current = data;
   let version = typeof data.schemaVersion === "number" ? data.schemaVersion : 1;
+  // Validate all counts before any migration can allocate register metadata.
+  const expansion = validateWorkspaceExpansion(data, version);
+  if (!expansion.ok) return expansion;
   const sorted = [...migrationList].sort(
     (a, b) => a.fromVersion - b.fromVersion,
   );

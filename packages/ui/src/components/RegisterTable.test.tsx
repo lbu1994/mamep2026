@@ -72,6 +72,29 @@ function buildRowSuccess(
   return { [firstRowId()]: { kind } };
 }
 
+it("shows an error without changing rows when tree expansion exceeds the limit", () => {
+  initI18n();
+  const before = useAppStore.getState();
+  const workspace = createEmptyWorkspace();
+  const sheet = workspace.sheets[0];
+  const row = sheet?.rows[0];
+  if (sheet === undefined || row === undefined)
+    throw new Error("missing fixture row");
+  row.registerCount = 1e12;
+  useAppStore.setState({ workspace, host: null });
+  const view = render(<RegisterTable sheetId={sheet.sheetId} />);
+  try {
+    expect(screen.getByRole("alert").textContent).toBe(
+      "The workspace file is invalid or corrupted.",
+    );
+    expect(useAppStore.getState().workspace).toBe(workspace);
+    expect(row.registerCount).toBe(1e12);
+  } finally {
+    view.unmount();
+    useAppStore.setState(before);
+  }
+});
+
 describe("RegisterTable 三态状态点", () => {
   beforeEach(() => {
     initI18n();

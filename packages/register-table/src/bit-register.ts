@@ -13,6 +13,7 @@
  * - 纯函数、不可变、不依赖 UI/store；设备请求路径不经过本模块。
  */
 import {
+  BITS_PER_REGISTER,
   createMamepError,
   RawRegisterValue,
   type RegisterBitComments,
@@ -30,8 +31,8 @@ import {
   type DataTypeResolver,
 } from "@mamep2026/data-conversion";
 
-/** 每个 16 位寄存器的位数（位明细行数）。 */
-export const BITS_PER_REGISTER = 16;
+/** Share the bit-detail width with workspace allocation checks. */
+export { BITS_PER_REGISTER } from "@mamep2026/domain";
 
 /** 单个位的取值。 */
 export type BitValue = 0 | 1;

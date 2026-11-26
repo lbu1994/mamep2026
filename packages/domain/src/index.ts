@@ -10,3 +10,4 @@ export * from "./result";
 export * from "./slave-address";
 export * from "./tcp-profile";
 export * from "./workspace-model";
+export * from "./workspace-limits";

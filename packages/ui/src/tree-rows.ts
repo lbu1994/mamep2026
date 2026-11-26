@@ -9,8 +9,12 @@
  *   位行编辑/注释经 app-store 的 setRegisterBit / setBitComment 路由回所属寄存器行；
  * - 纯函数，便于 jsdom 单测。
  */
-import type { RegisterRow, RowId } from "@mamep2026/domain";
-import { singleRegisterDataType } from "@mamep2026/domain";
+import type { RegisterRow, RowId, Result } from "@mamep2026/domain";
+import {
+  singleRegisterDataType,
+  validateRowExpansion,
+  ok,
+} from "@mamep2026/domain";
 import { formatRawValue } from "@mamep2026/data-conversion";
 import { BITS_PER_REGISTER, buildBitEntries } from "@mamep2026/register-table";
 
@@ -132,9 +136,12 @@ function buildBitRows(
   }));
 }
 
-/** 从表内行列表构造树形数据（children 在范围行 / 二进制行的位明细上生成）。 */
-export function buildTreeRows(rows: readonly RegisterRow[]): TreeRow[] {
-  return rows.map((row) => {
+/** Build register and bit children, or return a structured error before allocation. */
+export function buildTreeRows(rows: readonly RegisterRow[]): Result<TreeRow[]> {
+  // Validate the whole input before allocating any register or bit children.
+  const expansion = validateRowExpansion(rows);
+  if (!expansion.ok) return expansion;
+  const treeRows = rows.map((row) => {
     // 单寄存器行：binary 时展开位明细。
     if (row.registerCount <= 1) {
       if (!supportsBitDetail(row.dataType)) return row;
@@ -183,6 +190,7 @@ export function buildTreeRows(rows: readonly RegisterRow[]): TreeRow[] {
     }
     return { ...row, children } as TreeRow;
   });
+  return ok(treeRows);
 }
 
 /** 位明细行数（每寄存器 16 位）；供 UI/测试引用。 */

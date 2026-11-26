@@ -1561,7 +1561,10 @@ describe("commitCellText（Data 单元格提交校验）", () => {
     // 原始值单一事实源随提交同步（子行 / 位明细数据源）。
     expect(row?.registerValues?.map((v) => v.value)).toEqual([0xffff, 0x0000]);
     // 子行显示与父行文本一致。
-    const parent = buildTreeRows(row === undefined ? [] : [row])[0] as {
+    const tree = buildTreeRows(row === undefined ? [] : [row]);
+    expect(tree.ok).toBe(true);
+    if (!tree.ok) throw new Error(tree.error.technicalMessage);
+    const parent = tree.value[0] as {
       children?: VirtualChildRow[];
     };
     expect(parent.children?.map((c) => c.__virtualChild.dataText)).toEqual([

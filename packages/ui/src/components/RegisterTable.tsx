@@ -4302,7 +4302,9 @@ const RegisterTableContent = memo(function RegisterTableContent({
             {t("table.rowCount", { count: rows.length })}
           </span>
         </div>
-        {tableReady ? (
+        {!treeRows.ok ? (
+          <div role="alert">{t(treeRows.error.userMessageKey)}</div>
+        ) : tableReady ? (
           <DndContext
             modifiers={[restrictToVerticalAxis]}
             onDragStart={handleDragStart}
@@ -4333,7 +4335,7 @@ const RegisterTableContent = memo(function RegisterTableContent({
                     size="small"
                     rowKey="rowId"
                     columns={columns}
-                    dataSource={treeRows}
+                    dataSource={treeRows.value}
                     pagination={false}
                     bordered
                     rowClassName={(_record, index) =>

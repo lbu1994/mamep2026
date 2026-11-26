@@ -7,14 +7,26 @@
  */
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { App as AntApp } from "antd";
 import {
   createEmptyWorkspace,
+  createEmptyRow,
+  createRegisterSheet,
   ok,
+  workspaceSchemaVersion,
+  type Result,
+  type Workspace,
   type PlatformCapabilities,
 } from "@mamep2026/domain";
-import { serializeWorkspace } from "@mamep2026/workspace";
+import { parseWorkspace, serializeWorkspace } from "@mamep2026/workspace";
+import { cancelWorkspaceImportPreparation } from "../workspace-transfer";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import type { AppHost } from "../host";
@@ -77,6 +89,7 @@ function draftName(): string | undefined {
 }
 
 beforeEach(() => {
+  cancelWorkspaceImportPreparation();
   initI18n();
   useAppStore.setState({
     host: makeHost(),
@@ -158,6 +171,76 @@ describe("WorkspaceFileActions 导出", () => {
 });
 
 describe("WorkspaceFileActions 导入（file 能力，桌面端）", () => {
+  it.each([3, workspaceSchemaVersion])(
+    "rejects excessive counts at version %s before preview and preserves workspace/history",
+    async (schemaVersion) => {
+      const host = makeHost({ workspaceImport: "file" });
+      const content = JSON.stringify({
+        ...createEmptyWorkspace(),
+        schemaVersion,
+        sheets: [
+          {
+            ...createRegisterSheet("Rejected", 0),
+            rows: [{ ...createEmptyRow(), registerCount: 1e12 }],
+          },
+        ],
+      });
+      vi.mocked(host.openTextFile).mockResolvedValue(ok({ content }));
+      useAppStore.setState({ host });
+      const before = useAppStore.getState();
+      renderActions();
+      fireEvent.click(screen.getByRole("button", { name: "Import Workspace" }));
+      await waitFor(() =>
+        expect(screen.getByText("Import failed.")).toBeTruthy(),
+      );
+      const after = useAppStore.getState();
+      expect(after.workspace).toBe(before.workspace);
+      expect(after.undoStack).toBe(before.undoStack);
+      expect(after.redoStack).toBe(before.redoStack);
+      expect(after.workspaceImportDraft).toBeNull();
+    },
+  );
+
+  it.each([true, false])(
+    "ignores a parser result after cancellation (valid=%s)",
+    async (valid) => {
+      const host = makeHost({ workspaceImport: "file" });
+      const content = validWorkspaceJson("Cancelled");
+      vi.mocked(host.openTextFile).mockResolvedValue(ok({ content }));
+      const pending = deferred<Result<Workspace>>();
+      const parser = vi.fn(() => pending.promise);
+      useAppStore.setState({ host, workspaceImportParser: parser });
+      const before = useAppStore.getState();
+      renderActions();
+      fireEvent.click(screen.getByRole("button", { name: "Import Workspace" }));
+      await waitFor(() => expect(parser).toHaveBeenCalledTimes(1));
+      cancelWorkspaceImportPreparation();
+      await act(async () => {
+        pending.resolve(
+          parseWorkspace(
+            valid
+              ? JSON.parse(content)
+              : {
+                  ...createEmptyWorkspace(),
+                  sheets: [
+                    {
+                      ...createRegisterSheet("Rejected", 0),
+                      rows: [{ ...createEmptyRow(), registerCount: 1e12 }],
+                    },
+                  ],
+                },
+          ),
+        );
+      });
+      const after = useAppStore.getState();
+      expect(after.workspace).toBe(before.workspace);
+      expect(after.undoStack).toBe(before.undoStack);
+      expect(after.redoStack).toBe(before.redoStack);
+      expect(after.workspaceImportDraft).toBeNull();
+      expect(screen.queryByText("Import failed.")).toBeNull();
+    },
+  );
+
   it("经 openTextFile 读取文本并置入导入草稿", async () => {
     const host = makeHost({ workspaceImport: "file" });
     (
@@ -299,6 +382,28 @@ describe("WorkspaceFileActions 导入（upload 能力，浏览器端）", () => 
     await waitFor(() => {
       expect(screen.getByText("Import failed.")).toBeTruthy();
     });
+    expect(useAppStore.getState().workspace).toBe(before);
+  });
+
+  it("rejects a small uploaded file with an excessive current-format count", async () => {
+    const before = useAppStore.getState().workspace;
+    const content = JSON.stringify({
+      ...createEmptyWorkspace(),
+      sheets: [
+        {
+          ...createRegisterSheet("Rejected", 0),
+          rows: [{ ...createEmptyRow(), registerCount: 1e12 }],
+        },
+      ],
+    });
+    renderActions();
+    selectFile(
+      new File([content], "oversized-count.json", { type: "application/json" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Import failed.")).toBeTruthy(),
+    );
+    expect(useAppStore.getState().workspaceImportDraft).toBeNull();
     expect(useAppStore.getState().workspace).toBe(before);
   });
 });

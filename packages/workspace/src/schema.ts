@@ -6,6 +6,8 @@ import {
   createMamepError,
   DEFAULT_SIDEBAR_WIDTH,
   defaultConfig,
+  MAX_ROW_REGISTER_COUNT,
+  validateWorkspaceExpansion,
   workspaceSchemaVersion,
   type Result,
   type Workspace,
@@ -29,7 +31,13 @@ const rowSchema = z.object({
   addressDraft: z.string(),
   addressValue: z.number().int().min(0).max(65535).nullable(),
   /** 覆盖的连续寄存器数：默认 1（单寄存器）；老数据缺省补默认，由 v2→v3 迁移补齐 */
-  registerCount: z.number().int().min(1).default(1),
+  registerCount: z
+    .number()
+    .finite()
+    .int()
+    .min(1)
+    .max(MAX_ROW_REGISTER_COUNT)
+    .default(1),
   dataType: dataTypeSchema,
   pollingEnabled: z.boolean(),
   traceEnabled: z.boolean(),
@@ -168,7 +176,7 @@ const pluginStateSchema = z.object({
   permissions: z.array(z.string()),
 });
 
-export const workspaceSchema = z.object({
+const workspaceObjectSchema = z.object({
   schemaVersion: z.number().int(),
   workspaceId: z.string(),
   name: z.string(),
@@ -216,6 +224,17 @@ export const workspaceSchema = z.object({
     }),
   ),
 });
+
+// Reject excessive expansion before Zod clones the workspace and nested arrays.
+export const workspaceSchema = z
+  .unknown()
+  .superRefine((input, context) => {
+    const expansion = validateWorkspaceExpansion(input);
+    if (!expansion.ok) {
+      context.addIssue({ code: "custom", message: expansion.error.technicalMessage });
+    }
+  })
+  .pipe(workspaceObjectSchema);
 
 export type WorkspaceData = z.infer<typeof workspaceSchema>;
 

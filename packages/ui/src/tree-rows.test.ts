@@ -4,7 +4,56 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyRow, newRowId, type RegisterRow } from "@mamep2026/domain";
 import { BITS_PER_REGISTER } from "@mamep2026/register-table";
-import { buildTreeRows, isVirtualBitRow, isVirtualChildRow } from "./tree-rows";
+import { buildTreeRows as buildTreeRowsResult, isVirtualBitRow, isVirtualChildRow } from "./tree-rows";
+
+function buildTreeRows(rows: readonly RegisterRow[]) {
+  const result = buildTreeRowsResult(rows);
+  if (!result.ok) throw new Error(result.error.technicalMessage);
+  return result.value;
+}
+
+describe("tree expansion limits", () => {
+  it("builds exactly the allowed number of parent and register rows", () => {
+    const result = buildTreeRowsResult([
+      makeRow({ registerCount: 65_536 }), makeRow({ registerCount: 34_462 }),
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.technicalMessage);
+    const count = result.value.reduce((total, row) => total + 1 +
+      ("children" in row && Array.isArray(row.children) ? row.children.length : 0), 0);
+    expect(count).toBe(100_000);
+  });
+
+  it.each([NaN, Infinity, -Infinity, 0, -1, 1.5, 65_537, 1e12])(
+    "rejects invalid count %s before generating children", (registerCount) => {
+      expect(buildTreeRowsResult([makeRow({ registerCount })])).toMatchObject({
+        ok: false, error: { code: "WORKSPACE_SCHEMA_INVALID" },
+      });
+    },
+  );
+
+  it("rejects the entire table when valid range counts exceed the shared budget", () => {
+    expect(buildTreeRowsResult([
+      makeRow({ registerCount: 50_000 }), makeRow({ registerCount: 50_000 }),
+    ]).ok).toBe(false);
+  });
+
+  it("counts bit children and preserves input on rejection", () => {
+    const row = makeRow({ registerCount: 6_000, dataType: "binary" });
+    const before = structuredClone(row);
+    expect(buildTreeRowsResult([row]).ok).toBe(false);
+    expect(row).toEqual(before);
+  });
+
+  it("counts child metadata overrides, including binary under a hex parent", () => {
+    const row = makeRow({
+      registerCount: 6_000,
+      dataType: "hex",
+      registers: Array.from({ length: 6_000 }, () => ({ name: "", comment: "", dataType: "binary" })),
+    });
+    expect(buildTreeRowsResult([row]).ok).toBe(false);
+  });
+});
 
 function makeRow(overrides: Partial<RegisterRow> = {}): RegisterRow {
   const row = createEmptyRow();
