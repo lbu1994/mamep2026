@@ -29,6 +29,7 @@ import { RtuSessionHost } from "@mamep2026/application";
 import { createPluginCommunicationApi } from "@mamep2026/application";
 import {
   createWebPluginRemoteRuntime,
+  createWebPluginPreviewRuntime,
   loadWebPluginEntry,
   hashPluginContent,
 } from "@mamep2026/platform-web";
@@ -258,8 +259,12 @@ export class BrowserAppHost
     (sample: TraceSampleEvent) => void
   >();
 
-  private pluginPreview: { source: string; manifest: PluginManifest } | null =
-    null;
+  private pluginPreview: {
+    source: string;
+    manifest: PluginManifest;
+    signal?: AbortSignal;
+  } | null = null;
+  private pendingPluginPreview: AbortController | null = null;
   private hostDisposed = false;
   private readonly pluginEnableRequests = new Map<string, object>();
 
@@ -400,22 +405,45 @@ export class BrowserAppHost
   async previewPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
+    signal?: AbortSignal,
   ): Promise<Result<PluginManifest>> {
     void executionMode;
     if (this.hostDisposed) return fail(pluginPermissionDenied("host disposed"));
+    this.pendingPluginPreview?.abort();
     this.pluginPreview = null;
-    const loaded = await this.loadEntryExecutable(entrySource, "isolated");
-    if (!loaded.ok) return loaded;
+    if (signal?.aborted)
+      return fail(pluginPermissionDenied("preview cancelled"));
+    const request = new AbortController();
+    this.pendingPluginPreview = request;
+    const runtime = createWebPluginPreviewRuntime(entrySource);
+    let disposal: Promise<void> | undefined;
+    const dispose = () => (disposal ??= runtime.dispose());
+    const cancel = () => request.abort();
+    const release = () => {
+      void dispose();
+    };
+    signal?.addEventListener("abort", cancel, { once: true });
+    request.signal.addEventListener("abort", release, { once: true });
     try {
-      if (this.hostDisposed)
-        return fail(pluginPermissionDenied("host disposed"));
+      const loaded = await runtime.load();
+      if (this.hostDisposed || request.signal.aborted)
+        return fail(pluginPermissionDenied("preview cancelled"));
+      if (!loaded.ok) return loaded;
+      const parsed = pluginManifestSchema.safeParse(loaded.value);
+      if (!parsed.success)
+        return fail(pluginManifestInvalidError(parsed.error.message));
       this.pluginPreview = {
         source: entrySource,
-        manifest: loaded.value.manifest,
+        manifest: parsed.data,
+        ...(signal !== undefined ? { signal } : {}),
       };
-      return ok(structuredClone(loaded.value.manifest));
+      return ok(structuredClone(parsed.data));
     } finally {
-      await loaded.value.remoteRuntime?.dispose();
+      signal?.removeEventListener("abort", cancel);
+      request.signal.removeEventListener("abort", release);
+      await dispose();
+      if (this.pendingPluginPreview === request)
+        this.pendingPluginPreview = null;
     }
   }
 
@@ -429,6 +457,7 @@ export class BrowserAppHost
     if (
       this.hostDisposed ||
       preview === null ||
+      preview.signal?.aborted ||
       preview.source !== entrySource
     ) {
       return fail(
@@ -439,12 +468,14 @@ export class BrowserAppHost
       { manifest: preview.manifest, entrySource, executionMode },
       hashPluginContent,
     );
-    if (this.hostDisposed) return fail(pluginPermissionDenied("host disposed"));
+    if (this.hostDisposed || preview.signal?.aborted)
+      return fail(pluginPermissionDenied("installation cancelled"));
     const loaded = await this.loadEntryExecutable(entrySource, executionMode);
     if (!loaded.ok) return loaded;
     const { manifest, localEntry, remoteRuntime } = loaded.value;
     if (
       this.hostDisposed ||
+      preview.signal?.aborted ||
       pluginApprovalContent(manifest, entrySource, executionMode) !==
         pluginApprovalContent(preview.manifest, entrySource, executionMode)
     ) {
@@ -887,6 +918,8 @@ export class BrowserAppHost
    */
   async dispose(): Promise<void> {
     this.hostDisposed = true;
+    this.pendingPluginPreview?.abort();
+    this.pendingPluginPreview = null;
     this.pluginPreview = null;
     this.pluginEnableRequests.clear();
     this.pluginPersistence?.dispose();

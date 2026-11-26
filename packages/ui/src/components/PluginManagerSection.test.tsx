@@ -1,6 +1,12 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { App as AntApp } from "antd";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { App as AntApp, ConfigProvider } from "antd";
 import { PluginRegistry, type PluginManifest } from "@mamep2026/plugin-api";
 import type { OpenTextFileResponse } from "@mamep2026/platform-api";
 import { browserCapabilities, type Result } from "@mamep2026/domain";
@@ -577,6 +583,102 @@ describe("PluginManagerSection", () => {
     const entrySource =
       "export const manifest = {...};\nexport function activate(ctx) {}";
 
+    it("aborts consent when the user cancels the confirmation", async () => {
+      let signal: AbortSignal | undefined;
+      const installPluginEntry = vi.fn();
+      setHostWithPlugin(new PluginRegistry(), {
+        capabilities: executableCaps,
+        previewPluginEntry: vi.fn<AppHost["previewPluginEntry"]>(
+          async (_source, _mode, previewSignal) => {
+            signal = previewSignal;
+            return { ok: true, value: manifestJson };
+          },
+        ),
+        installPluginEntry,
+      });
+      renderSection();
+      await pickPluginSourceFile(entrySource);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(signal?.aborted).toBe(true);
+      expect(installPluginEntry).not.toHaveBeenCalled();
+    });
+
+    it.each(["unmount", "close"] as const)(
+      "cancels pending preview on %s without showing a late confirmation",
+      async (action) => {
+        let signal: AbortSignal | undefined;
+        let resolvePreview:
+          ((result: Result<PluginManifest>) => void) | undefined;
+        const previewPluginEntry = vi.fn(
+          (_source: string, _mode: unknown, previewSignal?: AbortSignal) => {
+            signal = previewSignal;
+            return new Promise<Result<PluginManifest>>((resolve) => {
+              resolvePreview = resolve;
+            });
+          },
+        );
+        const installPluginEntry = vi.fn();
+        setHostWithPlugin(new PluginRegistry(), {
+          capabilities: executableCaps,
+          previewPluginEntry,
+          installPluginEntry,
+        });
+        const view = renderSection();
+        fireEvent.change(screen.getByTestId("plugin-manifest-file-input"), {
+          target: {
+            files: [
+              new File([entrySource], "plugin.mjs", {
+                type: "text/javascript",
+              }),
+            ],
+          },
+        });
+        await waitFor(() => expect(previewPluginEntry).toHaveBeenCalledOnce());
+        if (action === "unmount") view.unmount();
+        else
+          view.rerender(
+            <AntApp>
+              <PluginManagerSection active={false} />
+            </AntApp>,
+          );
+        expect(signal?.aborted).toBe(true);
+        await act(async () => {
+          resolvePreview?.({ ok: true, value: manifestJson });
+        });
+        expect(screen.queryByText("Install this plugin?")).toBeNull();
+        expect(installPluginEntry).not.toHaveBeenCalled();
+      },
+    );
+
+    it("destroys an open confirmation when settings closes", async () => {
+      let signal: AbortSignal | undefined;
+      const installPluginEntry = vi.fn();
+      setHostWithPlugin(new PluginRegistry(), {
+        capabilities: executableCaps,
+        previewPluginEntry: async (_source, _mode, previewSignal) => {
+          signal = previewSignal;
+          return { ok: true, value: manifestJson };
+        },
+        installPluginEntry,
+      });
+      // Disable CSS motion: this test checks dialog ownership, not animation timing.
+      const section = (active: boolean) => (
+        <ConfigProvider theme={{ token: { motion: false } }}>
+          <AntApp>
+            <PluginManagerSection active={active} />
+          </AntApp>
+        </ConfigProvider>
+      );
+      const view = render(section(true));
+      await pickPluginSourceFile(entrySource);
+      view.rerender(section(false));
+      expect(signal?.aborted).toBe(true);
+      await waitFor(() =>
+        expect(screen.queryAllByText("Install this plugin?")).toHaveLength(0),
+      );
+      expect(installPluginEntry).not.toHaveBeenCalled();
+    });
+
     it("预览（隔离）→ 确认框展示清单与执行模式 → 按默认隔离安装", async () => {
       const registry = new PluginRegistry();
       const previewPluginEntry = vi.fn(
@@ -602,7 +704,11 @@ describe("PluginManagerSection", () => {
       await pickPluginSourceFile(entrySource);
 
       // 预览：先用隔离模式加载 entry 提取 manifest（不注册）。
-      expect(previewPluginEntry).toHaveBeenCalledWith(entrySource, "isolated");
+      expect(previewPluginEntry).toHaveBeenCalledWith(
+        entrySource,
+        "isolated",
+        expect.any(AbortSignal),
+      );
       expect(
         screen.getAllByText("Install this plugin?").length,
       ).toBeGreaterThan(0);

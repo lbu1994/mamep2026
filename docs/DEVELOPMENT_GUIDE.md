@@ -77,11 +77,17 @@ pnpm --filter @mamep2026/application exec vitest run src/plugin-communication.te
 pnpm --filter @mamep2026/platform-web exec vitest run src/plugin-remote-runtime.test.ts src/plugin-execution-probe.test.ts
 pnpm --filter @mamep2026/platform-node exec vitest run src/plugin-remote-runtime.test.ts src/host-plugin-runtime.test.ts
 pnpm --filter @mamep2026/web exec vitest run src/plugin-authorization.test.ts src/app-host.test.ts
+pnpm --filter @mamep2026/web exec vitest run src/plugin-preview.test.ts
+pnpm --filter @mamep2026/ui exec vitest run src/components/PluginManagerSection.test.tsx src/components/SettingsDrawer.test.tsx
 pnpm --filter @mamep2026/e2e-web exec playwright test plugin-exec.spec.ts plugin-authorization.spec.ts
 pnpm build
 $env:NO_PROXY = 'localhost,127.0.0.1,[::1]'
 pnpm --filter @mamep2026/e2e-web exec playwright test -c playwright.plugin-production.config.ts
 ```
+
+预览生命周期回归覆盖确认前读写拒绝、取消后连接不恢复请求、重复预览、加载超时、
+Host 销毁和确认后重新加载。单测使用模拟端点与模拟设备，不代表真实设备验证。
+生产浏览器用例使用系统 Edge 检查实际 Worker 退出及关闭 Settings 时的回收。
 
 生产专项使用 18474 端口和系统 Edge，检查生产 CSP 下使用精确哈希授权的沙箱引导脚本。
 设置 `NO_PROXY` 是为了避免环境 HTTP 代理把未监听的本地端口误判为可访问服务。

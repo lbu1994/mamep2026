@@ -8,6 +8,7 @@ import type {
   PluginRemoteRuntime,
 } from "@mamep2026/plugin-api";
 import {
+  createUnavailableCommunicationApi,
   pluginPermissionDenied,
   pluginWorkerEventSchema,
   type PluginWorkerEvent,
@@ -184,6 +185,8 @@ export class WebPluginRemoteRuntime implements PluginRemoteRuntime {
         message: "plugin runtime disposed",
       });
     if (worker !== null) {
+      worker.onmessage = null;
+      worker.onerror = null;
       worker.terminate();
     }
   }
@@ -295,4 +298,20 @@ export function createWebPluginRemoteRuntime(
     communicationApiFactory,
     options,
   );
+}
+
+/** Preview has no activation, device API, or application storage access. */
+export function createWebPluginPreviewRuntime(
+  entrySource: string,
+  options: { workerFactory?: PluginWorkerFactory } = {},
+): Pick<PluginRemoteRuntime, "load" | "dispose"> {
+  const runtime = new WebPluginRemoteRuntime(
+    entrySource,
+    createUnavailableCommunicationApi,
+    options,
+  );
+  return {
+    load: () => runtime.load(),
+    dispose: () => runtime.dispose(),
+  };
 }

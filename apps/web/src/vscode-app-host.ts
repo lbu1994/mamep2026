@@ -453,8 +453,9 @@ export class VscodeAppHost
   previewPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
+    signal?: AbortSignal,
   ): Promise<Result<PluginManifest>> {
-    return this.inner.previewPluginEntry(entrySource, executionMode);
+    return this.inner.previewPluginEntry(entrySource, executionMode, signal);
   }
 
   /** 安装可执行插件：委托 inner（注册 + 持久化）。 */

@@ -34,6 +34,10 @@ export function createSandboxedPluginWorker(
     terminate: () => {
       if (terminated) return;
       terminated = true;
+      endpoint.onmessage = null;
+      endpoint.onerror = null;
+      frame.onload = null;
+      channel.port1.onmessage = null;
       channel.port1.postMessage({ kind: "terminate" });
       channel.port1.close();
       channel.port2.close();

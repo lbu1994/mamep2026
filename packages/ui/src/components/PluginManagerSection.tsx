@@ -6,7 +6,7 @@
  * （manifest JSON 或单文件 JS）、启用/禁用、卸载（仅 installed）、加载错误展示；
  * 安装/卸载确认继续用 `App.useApp().modal.confirm`（渲染到 body portal，不受 Drawer 影响）。
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { App as AntApp } from "antd";
 import Button from "antd/es/button";
@@ -38,13 +38,34 @@ function permissionLabel(
   return labelKey !== undefined ? t(labelKey) : permission;
 }
 
-export function PluginManagerSection(): React.ReactNode {
+export function PluginManagerSection({
+  active = true,
+}: {
+  active?: boolean;
+}): React.ReactNode {
   const { t } = useTranslation();
   const { message, modal } = AntApp.useApp();
   const host = useAppStore((s) => s.host);
   const registry = host?.pluginRegistry ?? null;
   const [, forceRender] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeHostRef = useRef<typeof host>(null);
+  const installationRef = useRef<{
+    controller: AbortController;
+    destroy?: () => void;
+  } | null>(null);
+
+  // Closing settings or replacing the host cancels loading and removes its dialog.
+  useEffect(() => {
+    activeHostRef.current = active ? host : null;
+    return () => {
+      activeHostRef.current = null;
+      const installation = installationRef.current;
+      installationRef.current = null;
+      installation?.controller.abort();
+      installation?.destroy?.();
+    };
+  }, [active, host]);
 
   const plugins = registry?.list() ?? [];
   const loadErrors = registry?.getLoadErrors() ?? [];
@@ -56,12 +77,21 @@ export function PluginManagerSection(): React.ReactNode {
    * 3) 按所选模式安装（同进程 = 用户显式授权：插件代码获得与应用同等权限）。
    */
   const handlePluginSourceText = async (text: string): Promise<void> => {
-    if (registry === null || host === null) return;
+    if (registry === null || host === null || activeHostRef.current !== host)
+      return;
     if (!host.capabilities.executablePlugins) {
       message.error(t("plugins.executableUnsupported"));
       return;
     }
-    const preview = await host.previewPluginEntry(text, "isolated");
+    installationRef.current?.controller.abort();
+    installationRef.current?.destroy?.();
+    const installation: NonNullable<typeof installationRef.current> = {
+      controller: new AbortController(),
+    };
+    installationRef.current = installation;
+    const { signal } = installation.controller;
+    const preview = await host.previewPluginEntry(text, "isolated", signal);
+    if (signal.aborted) return;
     if (!preview.ok) {
       message.error(t(preview.error.userMessageKey));
       return;
@@ -69,7 +99,7 @@ export function PluginManagerSection(): React.ReactNode {
     const manifest = preview.value;
     // 执行模式：默认隔离线程；同进程需在下方选项里显式选择（插件与应用同权限）。
     const executionModeRef = { current: "isolated" as PluginExecutionMode };
-    void modal.confirm({
+    const dialog = modal.confirm({
       title: t("plugins.installConfirmTitle"),
       content: (
         <div>
@@ -127,11 +157,19 @@ export function PluginManagerSection(): React.ReactNode {
       okText: t("plugins.installConfirmOk"),
       cancelText: t("connection.cancel"),
       okButtonProps: { danger: true },
+      onCancel: () => installation.controller.abort(),
+      afterClose: () => {
+        installation.controller.abort();
+        if (installationRef.current === installation)
+          installationRef.current = null;
+      },
       onOk: async () => {
+        if (signal.aborted) return;
         const result = await host.installPluginEntry(
           text,
           executionModeRef.current,
         );
+        if (signal.aborted) return;
         if (!result.ok) {
           message.error(t(result.error.userMessageKey));
           return;
@@ -140,6 +178,7 @@ export function PluginManagerSection(): React.ReactNode {
         forceRender((v) => v + 1);
       },
     });
+    installation.destroy = () => dialog.destroy();
   };
 
   /** 已读取的插件文件文本：JSON = 清单注册（既有路径）；JS = 单文件可执行插件（隔离加载）。 */

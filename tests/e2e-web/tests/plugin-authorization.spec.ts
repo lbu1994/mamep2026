@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Worker } from "@playwright/test";
 import { STORAGE_ATTACK_ENTRY } from "../../plugin-storage-attack";
 import {
   applicationStorageContent,
@@ -9,7 +9,10 @@ import {
 
 async function openPlugins(page: Page, baseURL?: string) {
   await page.goto(`${baseURL ?? "http://localhost:5173"}/?mockTransport=1`);
-  await expect(page.locator('[data-startup-hydrated="true"]')).toBeVisible();
+  // Workspace hydration includes a worker import; wait for readiness before testing plugins.
+  await expect(page.locator('[data-startup-hydrated="true"]')).toBeVisible({
+    timeout: 30000,
+  });
   if (baseURL !== undefined) {
     const connection = page
       .locator(".ant-modal-container")
@@ -73,11 +76,19 @@ test("sandbox blocks application storage and preview communication, and cancella
   baseURL,
 }) => {
   const errors: string[] = [];
+  const liveWorkers = new Set<Worker>();
+  let workerCount = 0;
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
   await openPlugins(page, baseURL);
+  // Track plugin workers only; workspace parsing owns a separate long-lived worker.
+  page.on("worker", (worker) => {
+    workerCount++;
+    liveWorkers.add(worker);
+    worker.on("close", () => liveWorkers.delete(worker));
+  });
   const baseline = await page.locator('iframe[title="Plugin runtime"]').count();
   for (let attempt = 0; attempt < 2; attempt++) {
     const dialog = await preview(page);
@@ -89,8 +100,38 @@ test("sandbox blocks application storage and preview communication, and cancella
     await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(
       baseline,
     );
+    await expect.poll(() => liveWorkers.size).toBe(0);
   }
+  expect(workerCount).toBe(2);
   expect(errors).toEqual([]);
+});
+
+test("closing settings releases a preview still evaluating top-level code", async ({
+  page,
+  baseURL,
+}) => {
+  await openPlugins(page, baseURL);
+  const workerStarted = page.waitForEvent("worker");
+  await page.getByTestId("plugin-manifest-file-input").setInputFiles({
+    name: "pending-preview.mjs",
+    mimeType: "text/javascript",
+    buffer: Buffer.from("await new Promise(() => {});" + ENTRY),
+  });
+  const worker = await workerStarted;
+  const workerClosed = worker.waitForEvent("close");
+  await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(1);
+  await page
+    .locator(".settings-drawer")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await workerClosed;
+  await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+  await expect(
+    page.getByText("Install this plugin?", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Failed to load the plugin entry.", { exact: true }),
+  ).toHaveCount(0);
 });
 
 test("opaque origin protects workspace, backup and consent even through a nested Worker", async ({

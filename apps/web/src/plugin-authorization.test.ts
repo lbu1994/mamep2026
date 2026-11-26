@@ -11,6 +11,7 @@ import {
 } from "@mamep2026/plugin-api";
 import {
   createWebPluginRemoteRuntime,
+  createWebPluginPreviewRuntime,
   loadWebPluginEntry,
 } from "@mamep2026/platform-web";
 import { BrowserAppHost } from "./AppHost";
@@ -34,6 +35,7 @@ vi.mock("@mamep2026/platform-web", async (importOriginal) => {
   return {
     ...original,
     createWebPluginRemoteRuntime: vi.fn(),
+    createWebPluginPreviewRuntime: vi.fn(),
     loadWebPluginEntry: vi.fn(),
     hashPluginContent: hash,
   };
@@ -53,7 +55,7 @@ const runtimes: PluginRemoteRuntime[] = [];
 beforeEach(() => {
   vi.clearAllMocks();
   runtimes.length = 0;
-  vi.mocked(createWebPluginRemoteRuntime).mockImplementation(() => {
+  const createRuntime = () => {
     const runtime: PluginRemoteRuntime = {
       load: vi.fn(async () => ok(manifest)),
       activate: vi.fn(async () => {}),
@@ -62,7 +64,9 @@ beforeEach(() => {
     };
     runtimes.push(runtime);
     return runtime;
-  });
+  };
+  vi.mocked(createWebPluginRemoteRuntime).mockImplementation(createRuntime);
+  vi.mocked(createWebPluginPreviewRuntime).mockImplementation(createRuntime);
   vi.mocked(loadWebPluginEntry).mockResolvedValue(
     ok({ manifest, activate: () => {} }),
   );
@@ -84,6 +88,90 @@ function fixture(plugins: StoredPlugin[] = []) {
 }
 
 describe("host consent and runtime lifecycle", () => {
+  it.each(["cancel", "host", "replace"] as const)(
+    "releases a pending preview immediately on %s and rejects its late manifest",
+    async (action) => {
+      const { host } = fixture();
+      const controller = new AbortController();
+      let resolveLoad:
+        ((value: ReturnType<typeof ok<typeof manifest>>) => void) | undefined;
+      const dispose = vi.fn(async () => {});
+      vi.mocked(createWebPluginPreviewRuntime).mockReturnValueOnce({
+        load: () =>
+          new Promise((resolve) => {
+            resolveLoad = resolve;
+          }),
+        dispose,
+      });
+      const pending = host.previewPluginEntry(
+        "old",
+        "isolated",
+        controller.signal,
+      );
+      if (action === "cancel") controller.abort();
+      if (action === "host") await host.dispose();
+      if (action === "replace")
+        await host.previewPluginEntry("new", "isolated");
+      expect(dispose).toHaveBeenCalledOnce();
+      resolveLoad?.(ok(manifest));
+      expect((await pending).ok).toBe(false);
+      expect(dispose).toHaveBeenCalledOnce();
+      if (action === "replace") {
+        expect((await host.installPluginEntry("new", "isolated")).ok).toBe(
+          true,
+        );
+      } else {
+        expect((await host.installPluginEntry("old", "isolated")).ok).toBe(
+          false,
+        );
+      }
+      await host.dispose();
+    },
+  );
+
+  it("revokes a completed preview on cancel and reloads only newly confirmed source", async () => {
+    const { host } = fixture();
+    const controller = new AbortController();
+    await host.previewPluginEntry("source", "isolated", controller.signal);
+    controller.abort();
+    expect((await host.installPluginEntry("source", "isolated")).ok).toBe(
+      false,
+    );
+    expect(createWebPluginRemoteRuntime).not.toHaveBeenCalled();
+    await host.previewPluginEntry("source", "isolated");
+    expect((await host.installPluginEntry("source", "isolated")).ok).toBe(true);
+    expect(createWebPluginRemoteRuntime).toHaveBeenCalledOnce();
+    expect(runtimes[0]?.dispose).toHaveBeenCalledOnce();
+    expect(runtimes[1]?.dispose).toHaveBeenCalledOnce();
+    await host.dispose();
+  });
+
+  it("releases the preview when load throws or manifest validation fails", async () => {
+    const { host } = fixture();
+    const dispose = vi.fn(async () => {});
+    vi.mocked(createWebPluginPreviewRuntime).mockReturnValueOnce({
+      load: async () => {
+        throw new Error("load failed");
+      },
+      dispose,
+    });
+    await expect(host.previewPluginEntry("throws", "isolated")).rejects.toThrow(
+      "load failed",
+    );
+    expect(dispose).toHaveBeenCalledOnce();
+    vi.mocked(createWebPluginPreviewRuntime).mockReturnValueOnce({
+      load: async () => ok({ ...manifest, id: "" }),
+      dispose,
+    });
+    expect((await host.previewPluginEntry("invalid", "isolated")).ok).toBe(
+      false,
+    );
+    expect(dispose).toHaveBeenCalledTimes(2);
+    expect((await host.installPluginEntry("invalid", "isolated")).ok).toBe(
+      false,
+    );
+    await host.dispose();
+  });
   it.each(["mode", "manifest", "permissions", "missing"] as const)(
     "rejects %s tampering on restart and explicit enable before executing source",
     async (change) => {

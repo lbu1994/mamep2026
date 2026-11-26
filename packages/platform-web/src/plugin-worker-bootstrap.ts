@@ -53,7 +53,7 @@ function init(entrySource) {
   return Promise.resolve()
     .then(function () {
       var url = URL.createObjectURL(new Blob([entrySource], { type: "text/javascript" }));
-      return import(url);
+      return import(url).finally(function () { URL.revokeObjectURL(url); });
     })
     .then(function (mod) {
       if (!mod || typeof mod !== "object" || !mod.manifest) {

@@ -243,10 +243,11 @@ export interface PluginHost {
    * 无插件存储端口的宿主为 no-op（无手动安装能力）。
    */
   startPlugins(): Promise<void>;
-  /** 预览可执行插件 entry（不注册）。 */
+  /** Preview in isolation and dispose before returning; abort revokes pending consent. */
   previewPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
+    signal?: AbortSignal,
   ): Promise<Result<PluginManifest>>;
   /** 安装可执行插件，并按 executionMode 装配执行面。 */
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<Result<void>>;

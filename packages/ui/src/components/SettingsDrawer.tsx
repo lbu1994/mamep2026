@@ -370,7 +370,7 @@ export function SettingsDrawer({
           <Typography.Text type="secondary">{t("app.loading")}</Typography.Text>
         }
       >
-        <PluginManagerSection />
+        <PluginManagerSection active={open} />
       </Suspense>
       {settingsContributions.length > 0 && (
         <div className="plugin-settings" data-testid="plugin-settings">
