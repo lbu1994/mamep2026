@@ -1,11 +1,11 @@
 import { expect, test, type Page, type Worker } from "@playwright/test";
-import { STORAGE_ATTACK_ENTRY } from "../../plugin-storage-attack";
+import { STORAGE_ATTACK_ENTRY } from "@mamep2026/e2e-fixtures/storage-attack";
 import {
   applicationStorageContent,
   copyWorkspaceToBackup,
   readApplicationStorage,
   tamperStoredPlugin,
-} from "../../plugin-storage-helpers";
+} from "@mamep2026/e2e-fixtures/storage-helpers";
 
 async function openPlugins(page: Page, baseURL?: string) {
   await page.goto(`${baseURL ?? "http://localhost:5173"}/?mockTransport=1`);

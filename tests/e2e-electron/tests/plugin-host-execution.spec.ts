@@ -29,8 +29,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expectNoConsoleErrors } from "../no-console-guard";
-import { STORAGE_ATTACK_ENTRY } from "../../plugin-storage-attack";
-import { applicationStorageContent } from "../../plugin-storage-helpers";
+import { STORAGE_ATTACK_ENTRY } from "@mamep2026/e2e-fixtures/storage-attack";
+import { applicationStorageContent } from "@mamep2026/e2e-fixtures/storage-helpers";
 
 const require = createRequire(import.meta.url);
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -50,11 +50,16 @@ let page: Page;
 const consoleErrors: string[] = [];
 
 async function launch(userDataDirPath: string): Promise<void> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && key !== "ELECTRON_RUN_AS_NODE") env[key] = value;
+  }
+  env.MAMEP_USER_DATA_DIR = userDataDirPath;
   app = await _electron.launch({
     executablePath: require("electron"),
     args: ["dist-electron/main.js"],
     cwd: REPO_ROOT,
-    env: { ...process.env, MAMEP_USER_DATA_DIR: userDataDirPath },
+    env,
   });
   page = await app.firstWindow();
   page.on("console", (msg) => {

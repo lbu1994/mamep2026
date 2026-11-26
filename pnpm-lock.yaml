@@ -999,6 +999,9 @@ importers:
 
   tests/e2e-android:
     devDependencies:
+      '@mamep2026/e2e-fixtures':
+        specifier: workspace:*
+        version: link:../e2e-fixtures
       '@mamep2026/typescript-config':
         specifier: workspace:*
         version: link:../../tooling/typescript-config
@@ -1011,6 +1014,9 @@ importers:
 
   tests/e2e-electron:
     devDependencies:
+      '@mamep2026/e2e-fixtures':
+        specifier: workspace:*
+        version: link:../e2e-fixtures
       '@mamep2026/typescript-config':
         specifier: workspace:*
         version: link:../../tooling/typescript-config
@@ -1024,8 +1030,23 @@ importers:
         specifier: 'catalog:'
         version: 6.0.3
 
+  tests/e2e-fixtures:
+    devDependencies:
+      '@mamep2026/typescript-config':
+        specifier: workspace:*
+        version: link:../../tooling/typescript-config
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.62.1
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
   tests/e2e-vscode:
     devDependencies:
+      '@mamep2026/e2e-fixtures':
+        specifier: workspace:*
+        version: link:../e2e-fixtures
       '@mamep2026/typescript-config':
         specifier: workspace:*
         version: link:../../tooling/typescript-config
@@ -1053,6 +1074,9 @@ importers:
 
   tests/e2e-web:
     devDependencies:
+      '@mamep2026/e2e-fixtures':
+        specifier: workspace:*
+        version: link:../e2e-fixtures
       '@mamep2026/typescript-config':
         specifier: workspace:*
         version: link:../../tooling/typescript-config
@@ -7637,7 +7661,7 @@ snapshots:
 
   '@types/minimatch@6.0.0':
     dependencies:
-      minimatch: 10.2.6
+      minimatch: 11.0.9
     optional: true
 
   '@types/mocha@10.0.10': {}

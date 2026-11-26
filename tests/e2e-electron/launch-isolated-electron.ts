@@ -19,10 +19,16 @@ export async function launchIsolatedElectron(options: {
 }> {
   const userDataDir = await mkdtemp(path.join(tmpdir(), "mamep-electron-e2e-"));
   try {
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined && key !== "ELECTRON_RUN_AS_NODE")
+        env[key] = value;
+    }
     const app = await _electron.launch({
       executablePath: options.executablePath,
       args: [options.mainEntry, `--user-data-dir=${userDataDir}`],
       cwd: options.cwd,
+      env,
     });
     return { app, userDataDir };
   } catch (error) {

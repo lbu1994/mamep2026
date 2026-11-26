@@ -12,6 +12,7 @@
     "lint": "eslint ."
   },
   "devDependencies": {
+    "@mamep2026/e2e-fixtures": "workspace:*",
     "@mamep2026/typescript-config": "workspace:*",
     "@playwright/test": "catalog:",
     "electron": "^43.4.0",

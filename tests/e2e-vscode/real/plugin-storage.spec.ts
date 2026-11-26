@@ -21,12 +21,12 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { STORAGE_ATTACK_ENTRY } from "../../plugin-storage-attack";
+import { STORAGE_ATTACK_ENTRY } from "@mamep2026/e2e-fixtures/storage-attack";
 import {
   applicationStorageContent,
   copyWorkspaceToBackup,
   readApplicationStorage,
-} from "../../plugin-storage-helpers";
+} from "@mamep2026/e2e-fixtures/storage-helpers";
 import { isKnownVSCodeWebviewShellPageError } from "./known-upstream-errors";
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
