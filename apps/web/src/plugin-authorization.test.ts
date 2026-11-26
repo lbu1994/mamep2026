@@ -88,6 +88,86 @@ function fixture(plugins: StoredPlugin[] = []) {
 }
 
 describe("host consent and runtime lifecycle", () => {
+  it.each(["same-process", "isolated"] as const)(
+    "restores disabled %s metadata, loads once on enable, and stays disabled after another restart",
+    async (executionMode) => {
+      const record: StoredPlugin = {
+        manifest,
+        enabled: false,
+        entrySource: "disabled source",
+        executionMode,
+      };
+      record.approval = await createPluginApproval(record, hash);
+      const activate = vi.fn();
+      const deactivate = vi.fn();
+      vi.mocked(loadWebPluginEntry).mockResolvedValue(
+        ok({ manifest, activate, deactivate }),
+      );
+      const { host, store } = fixture([record]);
+      try {
+        await host.startPlugins();
+        expect(host.pluginRegistry.snapshot().plugins).toEqual([record]);
+        expect(host.pluginRegistry.getRuntime(manifest.id)).toBeUndefined();
+        expect(host.pluginRegistry.getLifecycleState(manifest.id)).toBe(
+          "registered",
+        );
+        expect(loadWebPluginEntry).not.toHaveBeenCalled();
+        expect(createWebPluginRemoteRuntime).not.toHaveBeenCalled();
+        expect(createWebPluginPreviewRuntime).not.toHaveBeenCalled();
+        expect(activate).not.toHaveBeenCalled();
+        expect(runtimes).toHaveLength(0);
+
+        expect((await host.setPluginEnabled(manifest.id, true)).ok).toBe(true);
+        expect(host.pluginRegistry.isEnabled(manifest.id)).toBe(true);
+        if (executionMode === "same-process") {
+          expect(loadWebPluginEntry).toHaveBeenCalledExactlyOnceWith(
+            record.entrySource,
+          );
+          expect(activate).toHaveBeenCalledOnce();
+          expect(createWebPluginRemoteRuntime).not.toHaveBeenCalled();
+        } else {
+          expect(createWebPluginRemoteRuntime).toHaveBeenCalledOnce();
+          expect(runtimes[0]?.load).toHaveBeenCalledOnce();
+          expect(runtimes[0]?.activate).toHaveBeenCalledOnce();
+          expect(loadWebPluginEntry).not.toHaveBeenCalled();
+        }
+
+        expect((await host.setPluginEnabled(manifest.id, false)).ok).toBe(true);
+        expect(host.pluginRegistry.snapshot().plugins).toEqual([record]);
+        expect(store.save.mock.calls.at(-1)?.[0].plugins).toEqual([record]);
+        if (executionMode === "same-process") {
+          expect(deactivate).toHaveBeenCalledOnce();
+          expect(activate).toHaveBeenCalledOnce();
+        } else {
+          expect(runtimes[0]?.deactivate).toHaveBeenCalledOnce();
+          expect(runtimes[0]?.dispose).toHaveBeenCalledOnce();
+          expect(runtimes[0]?.activate).toHaveBeenCalledOnce();
+        }
+
+        const restarted = fixture(host.pluginRegistry.snapshot().plugins);
+        const imports = vi.mocked(loadWebPluginEntry).mock.calls.length;
+        const creations = vi.mocked(createWebPluginRemoteRuntime).mock.calls
+          .length;
+        try {
+          await restarted.host.startPlugins();
+          expect(restarted.host.pluginRegistry.snapshot().plugins).toEqual([
+            record,
+          ]);
+          expect(loadWebPluginEntry).toHaveBeenCalledTimes(imports);
+          expect(createWebPluginRemoteRuntime).toHaveBeenCalledTimes(creations);
+          expect(createWebPluginPreviewRuntime).not.toHaveBeenCalled();
+          expect(
+            restarted.host.pluginRegistry.getRuntime(manifest.id),
+          ).toBeUndefined();
+        } finally {
+          await restarted.host.dispose();
+        }
+      } finally {
+        await host.dispose();
+      }
+    },
+  );
+
   it.each(["cancel", "host", "replace"] as const)(
     "releases a pending preview immediately on %s and rejects its late manifest",
     async (action) => {

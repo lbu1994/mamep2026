@@ -71,6 +71,93 @@ async function preview(page: Page, source = ENTRY, name = "Sandbox verified") {
   return dialog;
 }
 
+for (const mode of ["same-process", "isolated"] as const) {
+  test(`disabled ${mode} restore never executes entry and explicit enable loads once`, async ({
+    page,
+    baseURL,
+  }) => {
+    const calls: string[] = [];
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.text().startsWith("SEC-04:")) calls.push(message.text());
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+    const source = `
+console.log("SEC-04:entry");
+export const manifest = { id: "disabled-restore", name: "Disabled restore", version: "1.0.0",
+  apiVersion: "2.0", description: "Disabled restore regression", platform: { web: true, node: false },
+  permissions: [], contributes: {} };
+export function activate() { console.log("SEC-04:activate"); }
+export function deactivate() { console.log("SEC-04:deactivate"); }
+`;
+    await openPlugins(page, baseURL);
+    const dialog = await preview(page, source, "Disabled restore");
+    if (mode === "same-process")
+      await dialog.getByText("Same process", { exact: false }).click();
+    await dialog.getByRole("button", { name: "Install", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    const row = page
+      .getByTestId("plugin-manager")
+      .locator(".ant-listy-item")
+      .filter({ hasText: "Disabled restore" });
+    const toggle = row.getByRole("switch");
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect
+      .poll(() => calls.filter((call) => call === "SEC-04:activate").length)
+      .toBe(1);
+
+    const savedPlugins = async () =>
+      (await readApplicationStorage(page)).plugins;
+    await expect
+      .poll(savedPlugins)
+      .toMatchObject({ plugins: [{ enabled: true }] });
+    // An enabled restart is the control: the same source must execute normally.
+    calls.length = 0;
+    await openPlugins(page, baseURL);
+    await expect.poll(() => calls).toEqual(["SEC-04:entry", "SEC-04:activate"]);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect
+      .poll(savedPlugins)
+      .toMatchObject({ plugins: [{ enabled: false }] });
+    await expect.poll(() => calls.at(-1)).toBe("SEC-04:deactivate");
+    const disabledRecord = await savedPlugins();
+    expect(disabledRecord).toMatchObject({
+      plugins: [{ entrySource: source, executionMode: mode, enabled: false }],
+    });
+
+    calls.length = 0;
+    await openPlugins(page, baseURL);
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+    expect(calls).toEqual([]);
+    expect(await savedPlugins()).toEqual(disabledRecord);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect.poll(() => calls).toEqual(["SEC-04:entry", "SEC-04:activate"]);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect
+      .poll(() => calls)
+      .toEqual(["SEC-04:entry", "SEC-04:activate", "SEC-04:deactivate"]);
+    await expect
+      .poll(savedPlugins)
+      .toMatchObject({ plugins: [{ enabled: false }] });
+    await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+
+    calls.length = 0;
+    await openPlugins(page, baseURL);
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator('iframe[title="Plugin runtime"]')).toHaveCount(0);
+    expect(calls).toEqual([]);
+    expect(await savedPlugins()).toEqual(disabledRecord);
+    expect(errors).toEqual([]);
+  });
+}
+
 test("sandbox blocks application storage and preview communication, and cancellation releases the runtime", async ({
   page,
   baseURL,
