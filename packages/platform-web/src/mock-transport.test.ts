@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appendCrc, crc16Modbus } from "@mamep2026/protocol-modbus";
 import { MockTransport } from "./mock-transport";
 
@@ -8,6 +8,33 @@ async function flush(): Promise<void> {
 }
 
 describe("MockTransport", () => {
+  it("records response completion after injected latency and cancels pending responses on close", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    try {
+      await transport.open();
+      transport.setResponseDelayMs(120);
+      const received = vi.fn();
+      transport.onData(received);
+      const request = appendCrc(Uint8Array.from([1, 3, 0, 1, 0, 1]));
+      await transport.write(request);
+      await vi.advanceTimersByTimeAsync(119);
+      expect(received).not.toHaveBeenCalled();
+      expect(transport.getTraffic().map((entry) => entry.direction)).toEqual(["request"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(received).toHaveBeenCalledTimes(1);
+      expect(transport.getTraffic().map((entry) => entry.direction)).toEqual(["request", "response"]);
+      await transport.write(request);
+      await transport.close();
+      await vi.advanceTimersByTimeAsync(120);
+      expect(received).toHaveBeenCalledTimes(1);
+      expect(() => transport.setResponseDelayMs(Infinity)).toThrow();
+    } finally {
+      await transport.close();
+      vi.useRealTimers();
+    }
+  });
+
   it("responds to FC03 reads with the stored register value", async () => {
     const transport = new MockTransport();
     await transport.open();

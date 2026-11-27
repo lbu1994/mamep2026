@@ -9,6 +9,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -493,6 +494,8 @@ function writeVerifyOptionMs(value: WriteVerifyOptionValue): number | null {
 // 组件内部 editing/草稿状态不影响行级 MemoRow 的引用比较（P2 优化保持不变）。
 
 interface EditableCellValueProps {
+  /** Subscribe to equal-value reads only while editing this row. */
+  readRowId?: RowId | undefined;
   /** 单元格值：非编辑态显示；进入编辑态时作为初始草稿。 */
   value: string;
   /** 稳定列身份：供跨语言测试和自动化定位，不随显示文案变化。 */
@@ -515,6 +518,7 @@ interface EditableCellValueProps {
 
 function EditableCellValue({
   value,
+  readRowId,
   columnKey,
   ariaLabel,
   error = false,
@@ -530,6 +534,11 @@ function EditableCellValue({
     value: string;
     baseValue: string;
   } | null>(null);
+  const readCompletion = useAppStore((state) =>
+    (editing || optimisticValue !== null) && readRowId !== undefined
+      ? state.rowReadCompletions[readRowId]
+      : undefined,
+  );
   const inputRef = useRef<InputRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   // 防重入：Enter 提交后输入框卸载可能再触发 blur，用 ref 跳过重复提交。
@@ -540,6 +549,37 @@ function EditableCellValue({
   // （如自动化 fill+立即 Enter / 用户快速输入），commit 闭包读到旧 draft 会误判
   // "未修改"而跳过提交（real e2e 发现）。commit 改读 ref 根治。
   const draftRef = useRef(value);
+  const externalRevision = useRef(0);
+  const committedRead = useRef({ value, readCompletion });
+  const [previousRead, setPreviousRead] = useState({ value, readCompletion });
+  if (
+    columnKey === "data" &&
+    (previousRead.value !== value ||
+      previousRead.readCompletion !== readCompletion)
+  ) {
+    // Reconcile before rendering the input, including equal-value reads.
+    setPreviousRead({ value, readCompletion });
+    if (previousRead.value !== value || readCompletion !== undefined) {
+      setDraft(value);
+      setOptimisticValue(null);
+    }
+  }
+  useLayoutEffect(() => {
+    if (columnKey !== "data") return;
+    // Device reads replace the active draft and invalidate a queued local commit.
+    if (
+      committedRead.current.value !== value ||
+      (readCompletion !== undefined &&
+        committedRead.current.readCompletion !== readCompletion)
+    ) {
+      externalRevision.current += 1;
+      draftRef.current = value;
+    }
+    committedRead.current = { value, readCompletion };
+  }, [columnKey, value, readCompletion]);
+  useEffect(() => () => {
+    externalRevision.current += 1;
+  }, []);
   useEffect(() => {
     editingRef.current = editing;
   }, [editing]);
@@ -582,6 +622,10 @@ function EditableCellValue({
     editingRef.current = false;
     if (restoreFocus) restoreFocusRef.current = true;
     const nextValue = draftRef.current;
+    const readAtCommit =
+      readRowId === undefined
+        ? undefined
+        : useAppStore.getState().rowReadCompletions[readRowId];
     // 先同步结束编辑并显示提交值，让 1000 行表的可见单元格立即反馈；
     // Store/自动保存/轮询目标更新随后在独立任务执行，不阻塞 Enter 的下一帧。
     flushSync(() => {
@@ -594,7 +638,17 @@ function EditableCellValue({
     if (nextValue === value) return;
     // Store 提交放到下一宏任务：Enter 事件只负责结束编辑并绘制乐观值，避免 1000 行
     // 表格的级联更新挤入 Event Timing；后续用户点击发生在新的任务，可读到已提交值。
-    window.setTimeout(() => onCommit(nextValue), 0);
+    const revision = externalRevision.current;
+    window.setTimeout(() => {
+      const latestRead =
+        readRowId === undefined
+          ? undefined
+          : useAppStore.getState().rowReadCompletions[readRowId];
+      if (revision === externalRevision.current && latestRead === readAtCommit) {
+        onCommit(nextValue);
+        setOptimisticValue(null);
+      }
+    }, 0);
   };
 
   if (editing) {
@@ -985,6 +1039,11 @@ function WpControl({
   const statusId = useId();
   const localReasonId = useId();
   const failure = useAppStore((s) => s.rowResults[rowId]);
+  // Display seconds without re-rendering the control on every fast response.
+  const lastReadSecond = useAppStore((s) => {
+    const completedAt = s.rowReadCompletions[rowId]?.receivedAt;
+    return completedAt === undefined ? undefined : Math.floor(completedAt / 1000);
+  });
   // 可撤销（§24.4「修改轮询设置」）：经 store.setPollingEnabled 入撤销栈。
   const setPollingEnabled = useAppStore((s) => s.setPollingEnabled);
   const reason = !communicationAvailable
@@ -1022,8 +1081,18 @@ function WpControl({
             : failureDetail === null
               ? t("table.wpStateFailure")
               : t("table.wpStateFailureDetail", { detail: failureDetail });
+  const lastUpdateLabel = lastReadSecond === undefined
+    ? t("table.lastUpdateUnknown")
+    : t("table.lastUpdateAt", {
+        time: new Date(lastReadSecond * 1000).toLocaleTimeString(i18n.language, {
+          hour12: false,
+        }),
+      });
+  const statusDescription = pollingState === "off"
+    ? statusLabel
+    : `${statusLabel} · ${lastUpdateLabel}`;
   const tooltipTitle =
-    reason ?? (pollingState === "off" ? t("table.wpHint") : statusLabel);
+    reason ?? (pollingState === "off" ? t("table.wpHint") : statusDescription);
   return (
     <>
       <PollingTooltip title={tooltipTitle}>
@@ -1057,7 +1126,7 @@ function WpControl({
         </span>
       </PollingTooltip>
       <span id={statusId} className="register-table__sr-only">
-        {statusLabel}
+        {statusDescription}
       </span>
       {reason !== null && communicationAvailable ? (
         <span id={localReasonId} className="register-table__sr-only">
@@ -1288,6 +1357,7 @@ function DataControl({
   return (
     <EditableCellValue
       value={cellText}
+      readRowId={rowId}
       columnKey="data"
       ariaLabel={ariaLabel}
       // 空值占位「—」：区分「尚未读取/无值」与「有值」，纯 UI 派生，不进入草稿。
@@ -1724,6 +1794,7 @@ const ChildDataCell = memo(function ChildDataCell({
   return (
     <EditableCellValue
       value={row.cellText}
+      readRowId={row.__virtualChild.parentRowId}
       columnKey="data"
       ariaLabel={ariaLabel}
       // 空值占位「—」：区分「尚未读取/无值」与「有值」。

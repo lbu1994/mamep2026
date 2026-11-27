@@ -203,6 +203,56 @@ Android 的 `tests/e2e-android/tests/plugin-runtime.spec.ts` 包含同一攻击�
 该套件会安装 APK 并清空测试应用数据，必须使用已准备的测试设备；桌面浏览器结果不能
 作为 Android 真机结果。
 
+## Data、后台轮询与 VSCode 生命周期专项
+
+在仓库根执行局部回归：
+
+```powershell
+pnpm --filter @mamep2026/ui exec vitest run src/components/RegisterTable.data-regression.test.tsx
+pnpm --filter @mamep2026/application exec vitest run src/background-suspend.test.ts
+pnpm --filter @mamep2026/vscode-extension exec vitest run src/extension.lifecycle.test.ts src/dev-fake-serial.test.ts
+pnpm --filter @mamep2026/e2e-web exec playwright test tests/data-polling-lifecycle.spec.ts --headed
+```
+
+浏览器用例使用系统 Edge 和开发环境模拟传输，记录请求与响应完成时间，覆盖 Data 编辑与
+轮询并行、读失败、关闭回读、Type 切换、真实标签页隐藏与恢复，以及响应时延变化。
+后台用例独立启动 Edge，再用公开 CDP 接口连接并保留默认后台策略；普通 Playwright
+页面的焦点模拟不能证明真实 `visibilityState` 切换。用例排除没有操作系统窗口的预加载
+页面，并确认两个标签页属于同一窗口。切换后断言实际隐藏及停止发送，返回
+前台后检查请求和响应交替，不使用配置周期作为实测结果。交通记录只保留最近 256 项。
+后台静默观测使用连续两段 1.2 秒窗口，不覆盖长期休眠或操作系统挂起。
+报告和时间线附件位于 `tests/e2e-web/test-results/`。本机代理拦截 localhost 时，在该
+PowerShell 会话设置 `$env:NO_PROXY = "localhost,127.0.0.1,::1"`。
+
+VSCode 专项需要先构建生产 Webview；可以显式指定已安装的 Code.exe：
+
+```powershell
+pnpm build:vscode
+pnpm --filter @mamep2026/e2e-vscode build
+Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+$env:MAMEP_VSCODE_EXECUTABLE = "C:/Program Files/Microsoft VS Code/Code.exe"
+$env:MAMEP_E2E_SCOPE = "lifecycle"
+node tests/e2e-vscode/scripts/run-e2e.mjs
+Remove-Item Env:\MAMEP_E2E_SCOPE
+pnpm --filter @mamep2026/e2e-vscode exec playwright test -c playwright.lifecycle.config.ts
+```
+
+宿主专项覆盖隐藏后继续通信、关闭释放轮询与 Trace、重开离线以及等待扩展停用完成。
+UI 专项通过真实命令面板执行窗口重载，要求 serializer 自动恢复快照且不连接设备；
+随后关闭重开，再检查离线状态。使用隔离用户目录，不修改日常 VSCode 配置。
+模拟串口在 UI 专项中设置 40 ms 响应延迟；`MAMEP_FAKE_SERIAL_DELAY_MS` 只影响开发
+模拟串口，默认仍为 0，关闭端口会取消尚未交付的响应。
+JSON 报告与 trace 位于 `tests/e2e-vscode/test-results/lifecycle.json` 和
+`tests/e2e-vscode/test-results/lifecycle/`。宿主专项用户目录位于同级 `lifecycle-profile/`。
+
+单测另外检查日志/RPC 订阅解除、迟到响应丢弃、插件运行时停用，以及相同值成功读取
+覆盖草稿并阻止已排队的旧提交。插件运行时属于扩展：关闭面板不卸载插件，停用扩展才
+释放运行时。成功读取时间取 UI 接收结果时刻，显示到秒；它包含宿主桥延迟，不表示设备
+采样时间。失败保留最后成功时间，新会话在首次成功读取前显示未知。
+
+上述测试使用模拟设备，不能替代物理串口、TCP 设备、Electron 窗口后台或 Android
+Activity/USB 的实际行为验证；这些剩余验收仍在 `ToDoList.md` 中保留。
+
 ## Android USB 接收聚合专项
 
 原生回归位于

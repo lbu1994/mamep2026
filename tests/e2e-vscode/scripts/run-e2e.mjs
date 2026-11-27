@@ -56,9 +56,18 @@ process.env.MAMEP_PLUGIN_MANIFEST_PATH = path.join(PLUGIN_DIR, "manifest.json");
 
 try {
   const code = await runTests({
+    ...(process.env.MAMEP_VSCODE_EXECUTABLE
+      ? { vscodeExecutablePath: process.env.MAMEP_VSCODE_EXECUTABLE }
+      : {}),
     extensionDevelopmentPath,
     extensionTestsPath,
-    launchArgs: [],
+    launchArgs: process.env.MAMEP_E2E_SCOPE === "lifecycle"
+      ? [
+          "--user-data-dir", path.join(ROOT, "tests/e2e-vscode/test-results/lifecycle-profile"),
+          "--extensions-dir", path.join(ROOT, "tests/e2e-vscode/test-results/lifecycle-extensions"),
+          "--skip-welcome", "--skip-release-notes", "--disable-updates", "--disable-telemetry",
+        ]
+      : [],
   });
   if (code !== 0) {
     console.error(`[e2e-vscode] tests exited with code ${code}`);

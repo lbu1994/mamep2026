@@ -240,6 +240,8 @@ export interface AppStoreState {
   pollingKeys: Record<string, string>;
   /** 当前会话中每行最近一次轮询结果；不持久化，加载工作区或重新开启 WP 时清除。 */
   pollingOutcomes: Record<RowId, "success" | "failure" | undefined>;
+  /** Successful read delivery time and identity; session-only, including unchanged values. */
+  rowReadCompletions: Record<RowId, { receivedAt: number } | undefined>;
   /** 行操作结果三态状态点（纯 UI 会话状态，不持久化，§19.2 同 selectedRowIds）。 */
   rowResults: Record<RowId, RowFailure | undefined>;
   rowDirty: Record<RowId, boolean>;
@@ -766,6 +768,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
   traceWindows: {},
   pollingKeys: {},
   pollingOutcomes: {},
+  rowReadCompletions: {},
   selectedRowIds: [],
   clipboardPayload: null,
   clipboardWriteStatus: null,
@@ -817,6 +820,7 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       undoStack: [],
       redoStack: [],
       pollingOutcomes: {},
+      rowReadCompletions: {},
     }));
   },
   setLoaded: () =>
@@ -824,7 +828,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       workspace: ensureCoreSheets(state.workspace),
       loaded: true,
     })),
-  setConnectionState: (connectionState) => set({ connectionState }),
+  setConnectionState: (connectionState) =>
+    set((state) => ({
+      connectionState,
+      rowReadCompletions:
+        connectionState === state.connectionState
+          ? state.rowReadCompletions
+          : {},
+    })),
   setConnectionModalOpen: (connectionModalOpen) => set({ connectionModalOpen }),
   setSerialSelection: (selectedSerialHandle, selectedSerialPortId) =>
     set({ selectedSerialHandle, selectedSerialPortId }),
@@ -1491,7 +1502,12 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         return state;
       }
       const updated = deleteRows(sheet, state.selectedRowIds);
+      const rowReadCompletions = { ...state.rowReadCompletions };
+      for (const rowId of state.selectedRowIds) {
+        delete rowReadCompletions[rowId];
+      }
       return {
+        rowReadCompletions,
         workspace: {
           ...state.workspace,
           sheets: state.workspace.sheets.map((s) =>
@@ -1794,7 +1810,10 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       },
     );
     // Publish deletion, replacement, selection and history as one state change.
+    const rowReadCompletions = { ...state.rowReadCompletions };
+    for (const row of before.rows) delete rowReadCompletions[row.rowId];
     set({
+      rowReadCompletions,
       workspace: removed.workspace,
       activeSheetId: removed.activeSheetId,
       ...history,
@@ -2339,6 +2358,14 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
 
   recordManualResult: (rowId, result, kind, options) =>
     set((state) => {
+      const readSucceeded =
+        result.ok &&
+        (kind === "read" ||
+          options?.writeOutcome?.kind === "write-succeeded-verify-matched" ||
+          options?.writeOutcome?.kind === "write-succeeded-verify-mismatched");
+      const rowReadCompletions = readSucceeded
+        ? { ...state.rowReadCompletions, [rowId]: { receivedAt: Date.now() } }
+        : state.rowReadCompletions;
       const next = applyManualResult(
         {
           rowResults: state.rowResults,
@@ -2354,11 +2381,15 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
       if (
         next.rowResults === state.rowResults &&
         next.rowDirty === state.rowDirty &&
-        next.rowSuccess === state.rowSuccess
+        next.rowSuccess === state.rowSuccess &&
+        next.cellValidationErrors === state.cellValidationErrors &&
+        rowReadCompletions === state.rowReadCompletions
       ) {
         return state;
       }
       return {
+        rowReadCompletions,
+        cellValidationErrors: next.cellValidationErrors,
         rowResults: next.rowResults,
         rowDirty: next.rowDirty,
         rowSuccess: next.rowSuccess,
@@ -2366,6 +2397,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
     }),
   recordPollResult: (rowId, result) =>
     set((state) => {
+      const rowReadCompletions = result.ok
+        ? { ...state.rowReadCompletions, [rowId]: { receivedAt: Date.now() } }
+        : state.rowReadCompletions;
       const next = applyPollResultStatus(
         {
           rowResults: state.rowResults,
@@ -2385,7 +2419,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         next.rowResults === state.rowResults &&
         next.rowDirty === state.rowDirty &&
         next.rowSuccess === state.rowSuccess &&
-        pollingOutcomes === state.pollingOutcomes
+        pollingOutcomes === state.pollingOutcomes &&
+        next.cellValidationErrors === state.cellValidationErrors &&
+        rowReadCompletions === state.rowReadCompletions
       ) {
         return state;
       }
@@ -2394,6 +2430,8 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         rowDirty: next.rowDirty,
         rowSuccess: next.rowSuccess,
         pollingOutcomes,
+        rowReadCompletions,
+        cellValidationErrors: next.cellValidationErrors,
       };
     }),
   recordRowEdit: (rowId, before, after) =>

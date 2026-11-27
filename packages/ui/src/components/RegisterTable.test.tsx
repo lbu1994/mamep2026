@@ -1949,7 +1949,7 @@ describe("RegisterTable WP 轮询状态", () => {
     expect(
       document.getElementById(wpSwitch?.getAttribute("aria-describedby") ?? "")
         ?.textContent,
-    ).toBe("Polling on, waiting for response");
+    ).toBe("Polling on, waiting for response · Last successful update: unknown");
 
     useAppStore.setState({
       pollingOutcomes: { [first.rowId]: "success" },
@@ -1979,7 +1979,7 @@ describe("RegisterTable WP 轮询状态", () => {
     expect(
       document.getElementById(wpSwitch?.getAttribute("aria-describedby") ?? "")
         ?.textContent,
-    ).toBe("Polling failed: No response from the device within the timeout.");
+    ).toBe("Polling failed: No response from the device within the timeout. · Last successful update: unknown");
 
     useAppStore.getState().setPollingEnabled(first.rowId, false);
     await waitFor(() => {

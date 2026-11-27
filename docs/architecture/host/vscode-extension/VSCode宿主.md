@@ -56,6 +56,12 @@ RTU Slave Address 与 TCP Unit ID 都按表保存。活动表切换时，Webview
 
 面板关闭和扩展停用都必须调用会话 dispose，取消未完成请求并断开活动连接，防止串口占用和事件订阅残留。分发 VSIX 时，SerialPort 原生绑定必须与 VSCode Extension Host 的 Node ABI、CPU 架构和平台匹配；扩展开发路径可运行不代表打包产物已完成原生模块验证。
 
+隐藏面板或切换编辑器标签不等于关闭。`retainContextWhenHidden: true` 保留 UI 上下文，
+`backgroundLifecycle: false` 保留 Extension Host 中的持续通信；重新可见时推送当前主题。
+关闭面板会清除轮询和 Trace 配置，重新打开和 serializer 恢复后保持离线。扩展停用返回
+Promise，等待会话释放；宿主插件在扩展停用时注销。完整规则见
+[资源释放与生命周期](../lifecycle/资源释放.md)。
+
 颜色主题桥使用：
 
 - request `get-color-theme` 查询当前浅/深主题；

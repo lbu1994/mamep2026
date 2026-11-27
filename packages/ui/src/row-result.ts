@@ -127,14 +127,22 @@ export function applyManualResult(
     ? // 写入成功但回读不一致/回读失败：显示失败态（§18.2）。
       setFailure(state.rowResults, rowId, writeFailureFromOutcome(writeOutcome))
     : removeFailure(state.rowResults, rowId);
+  const readCompleted =
+    kind === "read" ||
+    writeOutcome?.kind === "write-succeeded-verify-matched" ||
+    writeOutcome?.kind === "write-succeeded-verify-mismatched";
+  const cellValidationErrors = readCompleted
+    ? removeValidationError(state.cellValidationErrors, `${rowId}:data`)
+    : state.cellValidationErrors;
   if (
     rowResults === state.rowResults &&
     rowDirty === state.rowDirty &&
-    rowSuccess === state.rowSuccess
+    rowSuccess === state.rowSuccess &&
+    cellValidationErrors === state.cellValidationErrors
   ) {
     return state;
   }
-  return { ...state, rowResults, rowDirty, rowSuccess };
+  return { ...state, rowResults, rowDirty, rowSuccess, cellValidationErrors };
 }
 
 /**
@@ -156,10 +164,18 @@ export function applyPollResultStatus(
   }
   const rowResults = removeFailure(state.rowResults, rowId);
   const rowDirty = removeDirty(state.rowDirty, rowId);
-  if (rowResults === state.rowResults && rowDirty === state.rowDirty) {
+  const cellValidationErrors = removeValidationError(
+    state.cellValidationErrors,
+    `${rowId}:data`,
+  );
+  if (
+    rowResults === state.rowResults &&
+    rowDirty === state.rowDirty &&
+    cellValidationErrors === state.cellValidationErrors
+  ) {
     return state;
   }
-  return { ...state, rowResults, rowDirty };
+  return { ...state, rowResults, rowDirty, cellValidationErrors };
 }
 
 /**

@@ -207,6 +207,12 @@ export class SessionHostCore {
 
   /** 释放全部资源（Webview 关闭 / 扩展停用 / 卸载）：断开会话并清空状态。 */
   async dispose(): Promise<void> {
+    // Closing the owner discards tasks; reconnecting must not restart them.
+    this.pollingTargets = [];
+    this.activeTraces.clear();
+    this.backgroundSuspended = false;
+    for (const batch of this.activeBatches.values()) batch.cancel();
+    this.activeBatches.clear();
     await this.disconnect();
     this.polling = null;
     this.trace = null;

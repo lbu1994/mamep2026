@@ -57,6 +57,7 @@ function appendCrc(bytes: Uint8Array): Uint8Array {
 
 class DevFakeSerialPort implements SerialPortLike {
   private opened = false;
+  private readonly responseTimers = new Set<ReturnType<typeof setTimeout>>();
   private readonly dataListeners = new Set<(chunk: Uint8Array) => void>();
   private readonly errorListeners = new Set<(error: unknown) => void>();
   private readonly closeListeners = new Set<() => void>();
@@ -71,12 +72,27 @@ class DevFakeSerialPort implements SerialPortLike {
 
   async close(): Promise<void> {
     this.opened = false;
+    for (const timer of this.responseTimers) clearTimeout(timer);
+    this.responseTimers.clear();
     for (const listener of this.closeListeners) listener();
   }
 
   async write(data: Uint8Array): Promise<void> {
     const response = this.respond(data);
-    if (response !== null) this.simulateData(response);
+    if (response === null) return;
+    const configuredDelay = Number(process.env.MAMEP_FAKE_SERIAL_DELAY_MS ?? 0);
+    const delayMs = Number.isFinite(configuredDelay)
+      ? Math.max(0, Math.min(5000, configuredDelay))
+      : 0;
+    if (delayMs === 0) this.simulateData(response);
+    else {
+      // Model device latency without changing the production serial adapter.
+      const timer = setTimeout(() => {
+        this.responseTimers.delete(timer);
+        if (this.opened) this.simulateData(response);
+      }, delayMs);
+      this.responseTimers.add(timer);
+    }
   }
 
   async drain(): Promise<void> {

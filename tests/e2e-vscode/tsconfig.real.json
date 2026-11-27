@@ -14,6 +14,7 @@
     "real",
     "unit",
     "playwright.real.config.ts",
-    "playwright.storage.config.ts"
+    "playwright.storage.config.ts",
+    "playwright.lifecycle.config.ts"
   ]
 }

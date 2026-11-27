@@ -511,18 +511,20 @@ function getProdHtml(
   );
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
   for (const disposable of panelDisposables) disposable.dispose();
   panelDisposables = [];
   panel = undefined;
   // 扩展停用（§22.2）：释放会话（断开连接/释放串口），避免端口残留占用。
-  void deps?.session.dispose();
+  const sessionDisposal = deps?.session.dispose();
   // 释放宿主侧插件执行面：注销插件并清空宿主注册表。
   hostPluginsRef?.dispose();
   hostPluginsRef = undefined;
   // 停止 dev/e2e 假 TCP 设备（若已启动）。
   if (fakeTcpServer !== null) {
-    void fakeTcpServer.stop();
+    await fakeTcpServer.stop();
     fakeTcpServer = null;
   }
+  await sessionDisposal;
+  deps = undefined;
 }

@@ -64,6 +64,58 @@ async function connect(h: ReturnType<typeof createHarness>): Promise<void> {
 }
 
 describe("SessionHostCore 后台挂起/恢复（ADR-050 Phase 3）", () => {
+  it("discards polling and Trace configuration when disposed, including while hidden", async () => {
+    const h = createHarness();
+    await connect(h);
+    h.host.updatePollingTargets([{ key: "row-a", sheetId: "sheet-a", address: 1 }]);
+    h.host.traceStart("trace-a", 2, 50);
+    h.host.pauseBackground();
+    await h.host.dispose();
+    const sendsAtClose = h.transport.sentFrames.length;
+    await connect(h);
+    h.host.resumeBackground();
+    h.clock.advance(10_000);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames).toHaveLength(sendsAtClose);
+    expect(h.events.onPollResult).not.toHaveBeenCalled();
+    expect(h.events.onTraceSample).not.toHaveBeenCalled();
+    await h.host.dispose();
+  });
+
+  it("waits for each response and never catches up after a long background pause", async () => {
+    const h = createHarness();
+    expect((await h.host.connect({
+      profile: { ...createDefaultRtuProfile(), requestTimeoutMs: 1000, retryCount: 0 },
+      transport: h.transport, slaveAddress: 1, portLabel: "FAKE-1",
+    })).ok).toBe(true);
+    h.transport.device = null;
+    h.host.updatePollingTargets([{ key: "row-a", sheetId: "sheet-a", address: 1 }]);
+    h.clock.advance(1);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames).toHaveLength(1);
+    h.clock.advance(80);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames).toHaveLength(1);
+    h.host.pauseBackground();
+    const request = h.transport.sentFrames[0];
+    if (!request) throw new Error("Missing request");
+    const response = h.device.handleFrame(request);
+    if (!response) throw new Error("Missing response");
+    h.transport.simulateData(response);
+    await flushMicrotasks();
+    h.clock.advance(60_000);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames).toHaveLength(1);
+    h.host.resumeBackground();
+    h.clock.advance(1);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames).toHaveLength(2);
+    h.clock.advance(160);
+    await flushMicrotasks();
+    expect(h.transport.sentFrames).toHaveLength(2);
+    await h.host.dispose();
+  });
+
   it("挂起后停止轮询：不再产生轮询结果", async () => {
     const h = createHarness();
     await connect(h);

@@ -37,6 +37,9 @@ export class MockTransport implements TransportPort {
   private readonly dataListeners = new Set<(chunk: Uint8Array) => void>();
   private readonly errorListeners = new Set<(error: MamepError) => void>();
   private readonly closeListeners = new Set<() => void>();
+  private responseDelayMs = 0;
+  private readonly responseTimers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly traffic: Array<{ direction: "request" | "response"; timestamp: number }> = [];
 
   constructor(rules: readonly MockRangeRule[] = DEFAULT_MOCK_RULES) {
     this.rules = rules;
@@ -64,6 +67,8 @@ export class MockTransport implements TransportPort {
 
   async close(): Promise<Result<void>> {
     this.openFlag = false;
+    for (const timer of this.responseTimers) clearTimeout(timer);
+    this.responseTimers.clear();
     for (const listener of this.closeListeners) listener();
     return ok(undefined);
   }
@@ -79,9 +84,33 @@ export class MockTransport implements TransportPort {
         }),
       );
     }
-    // 模拟设备处理：异步响应（微任务），模拟真实设备延迟。
-    queueMicrotask(() => this.handleFrame(bytes));
+    this.recordTraffic("request");
+    if (this.responseDelayMs === 0) {
+      queueMicrotask(() => { if (this.openFlag) this.handleFrame(bytes); });
+    } else {
+      const timer = setTimeout(() => {
+        this.responseTimers.delete(timer);
+        if (this.openFlag) this.handleFrame(bytes);
+      }, this.responseDelayMs);
+      this.responseTimers.add(timer);
+    }
     return ok(undefined);
+  }
+
+  /** Set bounded device latency for browser lifecycle regression runs. */
+  setResponseDelayMs(delayMs: number): void {
+    if (!Number.isFinite(delayMs) || delayMs < 0 || delayMs > 5000)
+      throw new Error("Mock response delay must be between 0 and 5000 ms");
+    this.responseDelayMs = delayMs;
+  }
+
+  getTraffic(): Array<{ direction: "request" | "response"; timestamp: number }> {
+    return this.traffic.map((event) => ({ ...event }));
+  }
+
+  private recordTraffic(direction: "request" | "response"): void {
+    this.traffic.push({ direction, timestamp: performance.now() });
+    if (this.traffic.length > 256) this.traffic.shift();
   }
 
   isOpen(): boolean {
@@ -385,6 +414,7 @@ export class MockTransport implements TransportPort {
 
   private respond(body: Uint8Array): void {
     const frame = appendCrc(body);
+    this.recordTraffic("response");
     for (const listener of this.dataListeners) listener(frame);
   }
 }
@@ -392,6 +422,8 @@ export class MockTransport implements TransportPort {
 /** E2E 钩子：dev 模式下挂到 window 供 Playwright 预置/断言寄存器与基础表值。 */
 export function installMockHooks(transport: MockTransport): void {
   (window as unknown as { __mamepMock?: unknown }).__mamepMock = {
+    setResponseDelayMs: (delayMs: number) => transport.setResponseDelayMs(delayMs),
+    getTraffic: () => transport.getTraffic(),
     setRegister: (address: number, value: number) =>
       transport.setRegister(address, value),
     getRegister: (address: number) => transport.getRegister(address),

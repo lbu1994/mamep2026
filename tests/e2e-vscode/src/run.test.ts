@@ -600,8 +600,33 @@ async function runPanelCloseRelease(): Promise<void> {
   });
   assert.strictEqual(connect.type, "response", "connect before close");
 
+  // Hide the real Webview behind another editor; host communication must continue.
+  const editor = await vscode.workspace.openTextDocument({ content: "Lifecycle regression" });
+  await vscode.window.showTextDocument(editor, vscode.ViewColumn.One);
+  assert.strictEqual(panel.visible, false, "editor switch must hide the panel");
+  assert.deepStrictEqual((await rpcEnvelope("session-get-state")).payload, { connectionState: "connected" });
+  assert.strictEqual((await rpcEnvelope("session-read-row", { row: registerRow(1, ""), route: RTU_ROUTE })).type, "response");
+  panel.reveal(vscode.ViewColumn.One);
+
+  assert.strictEqual((await rpcEnvelope("session-update-polling-targets", {
+    rows: [{ key: "lifecycle-poll", sheetId: "lifecycle-sheet", address: 1, route: RTU_ROUTE }],
+  })).type, "response");
+  assert.strictEqual((await rpcEnvelope("session-trace-start", {
+    key: "lifecycle-trace", address: 2, speedMs: 50, route: RTU_ROUTE,
+  })).type, "response");
+  const beforeRunning = await sessionStats();
+  await sleep(200);
+  assert.ok((await sessionStats()).requestFrames > beforeRunning.requestFrames, "continuous tasks must send before close");
+
   await panel.dispose();
   await sleep(300);
+
+  assert.deepStrictEqual((await rpcEnvelope("session-get-state")).payload, { connectionState: "disconnected" });
+  const afterClose = await sessionStats();
+  await vscode.commands.executeCommand("mamep2026.openMainPanel");
+  await sleep(300);
+  assert.deepStrictEqual((await rpcEnvelope("session-get-state")).payload, { connectionState: "disconnected" });
+  assert.deepStrictEqual(await sessionStats(), afterClose, "reopened panel must remain offline and silent");
 
   // 关闭面板后会话已释放：重新连接应成功（串口未被占用 EBUSY）。
   const reconnect = await rpcEnvelope("session-connect", {
@@ -614,6 +639,9 @@ async function runPanelCloseRelease(): Promise<void> {
     "response",
     "reconnect after panel close should succeed (session released)",
   );
+  const afterReconnect = await sessionStats();
+  await sleep(200);
+  assert.deepStrictEqual(await sessionStats(), afterReconnect, "old polling and Trace must not restart on reconnect");
   await rpcEnvelope("session-disconnect");
 }
 
@@ -1013,6 +1041,17 @@ export async function run(): Promise<void> {
     rpcSeen,
     "webview should send a typed RPC request (get-color-theme / get-capabilities)",
   );
+
+  if (process.env.MAMEP_E2E_SCOPE === "lifecycle") {
+    await runPanelCloseRelease();
+    const extension = vscode.extensions.all.find((candidate) =>
+      candidate.packageJSON.name === "@mamep2026/vscode-extension");
+    assert.ok(extension, "extension must be registered");
+    const entry = await import(`${extension.extensionPath}/dist/extension.js`) as { deactivate(): Promise<void> };
+    await entry.deactivate();
+    console.log("[lifecycle] real Webview hide, close, reopen, task cleanup and awaited deactivation passed");
+    return;
+  }
 
   // 5. VSCode RTU 闭环（硬性 P0）：枚举 → 连接 → 写 → 读 → 断开。
   await runRtuLoop();
