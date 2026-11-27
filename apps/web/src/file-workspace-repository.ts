@@ -10,8 +10,9 @@ import type {
   Workspace,
   WorkspaceRecoveryInfo,
 } from "@mamep2026/domain";
-import { ok } from "@mamep2026/domain";
+import { ok, fail, createMamepError } from "@mamep2026/domain";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
+import { workspaceLoadResponseSchema } from "@mamep2026/platform-api";
 import type { MamepHostApi } from "@mamep2026/platform-api";
 import {
   parseWorkspaceTextOffMainThread,
@@ -21,6 +22,7 @@ import {
 export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
   private readonly bridge: Pick<
     MamepHostApi,
+    | "workspaceRecovery"
     | "workspaceLoad"
     | "workspaceSave"
     | "workspaceClear"
@@ -32,6 +34,7 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
   constructor(
     bridge: Pick<
       MamepHostApi,
+      | "workspaceRecovery"
       | "workspaceLoad"
       | "workspaceSave"
       | "workspaceClear"
@@ -46,11 +49,74 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
     if (!result.ok) return result;
     // 主进程 load 恒返回序列化 JSON 字符串；JSON.parse、迁移、Schema 校验和重建
     // 全部经 Worker，主线程不反序列化 1000 行快照。
-    this.recoveryInfo = result.value.recoveryInfo ?? null;
+    const checked = workspaceLoadResponseSchema.safeParse(result.value);
+    if (!checked.success)
+      return fail(
+        createMamepError({
+          code: "PERSISTENCE_LOAD_INVALID",
+          category: "persistence",
+          severity: "error",
+          retryable: false,
+          userMessageKey: "errors.persistenceError",
+          technicalMessage: "Invalid workspace response",
+        }),
+      );
+    this.recoveryInfo = checked.data.recoveryInfo;
     return parseWorkspaceTextOffMainThread(result.value.content);
   }
 
+  private async recovery(action: "restore" | "export") {
+    const result = await this.bridge.workspaceRecovery?.(action);
+    if (result === undefined)
+      return fail(
+        createMamepError({
+          code: "PERSISTENCE_RECOVERY_UNAVAILABLE",
+          category: "persistence",
+          severity: "error",
+          retryable: false,
+          userMessageKey: "errors.persistenceError",
+          technicalMessage: "Recovery is unavailable",
+        }),
+      );
+    if (!result.ok) return result;
+    const parsed = workspaceLoadResponseSchema.safeParse(result.value);
+    if (!parsed.success)
+      return fail(
+        createMamepError({
+          code: "PERSISTENCE_RECOVERY_INVALID",
+          category: "persistence",
+          severity: "error",
+          retryable: false,
+          userMessageKey: "errors.persistenceError",
+          technicalMessage: "Invalid recovery response",
+        }),
+      );
+    this.recoveryInfo = parsed.data.recoveryInfo;
+    return ok(parsed.data.content);
+  }
+
+  async recover(): Promise<Result<Workspace>> {
+    const result = await this.recovery("restore");
+    return result.ok ? parseWorkspaceTextOffMainThread(result.value) : result;
+  }
+
+  exportRecovery(): Promise<Result<string>> {
+    return this.recovery("export");
+  }
+
   async save(workspace: Workspace): Promise<Result<void>> {
+    // Do not start serialization that could finish after Main unlocks recovery.
+    if (this.recoveryInfo?.pending)
+      return fail(
+        createMamepError({
+          code: "PERSISTENCE_RECOVERY_PENDING",
+          category: "persistence",
+          severity: "error",
+          retryable: false,
+          userMessageKey: "errors.persistenceError",
+          technicalMessage: "Confirm recovery or reset before saving",
+        }),
+      );
     const serialized = await serializeWorkspaceOffMainThread(workspace);
     if (!serialized.ok) return serialized;
     const result = await this.bridge.workspaceSave(serialized.value.serialized);
@@ -62,6 +128,7 @@ export class FileWorkspaceRepository implements WorkspaceRepositoryPort {
   async clear(): Promise<Result<void>> {
     const result = await this.bridge.workspaceClear();
     if (!result.ok) return result;
+    this.recoveryInfo = null;
     return ok(undefined);
   }
 

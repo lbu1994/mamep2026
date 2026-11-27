@@ -1,7 +1,7 @@
 /**
  * 崩溃后状态恢复（PRD §8.3）浏览器 E2E（mockTransport=1）：
  * - 关闭丢数据：编辑后关闭/重载不丢数据（autosave 兜底 + flush best-effort）；
- * - 损坏恢复：预置损坏主记录 + 合法备份 → reload 恢复 + RecoveryBanner 展示（无需按钮）。
+ * - 损坏恢复：预置损坏主记录 + 合法备份 → reload 后预览、取消并确认恢复。
  * 全程无 console 错误。
  */
 import { expect, test, type Page } from "@playwright/test";
@@ -117,9 +117,17 @@ test("损坏恢复：损坏主记录 + 合法备份 → reload 恢复 + Recovery
   await expect(page.locator(".ant-layout-header")).toContainText("Online", {
     timeout: 15000,
   });
-  // RecoveryBanner 展示（恢复数据来自备份），且无恢复失败横幅。
+  // Recovery stays pending until the user confirms the backup preview.
   const banner = page.getByTestId("recovery-banner");
   await expect(banner).toBeVisible();
+  await expect(banner).toContainText("Changes are not being saved");
+  expect(await readWorkspaceMain(page)).toEqual({ schemaVersion: "broken" });
+  await page.getByRole("button", { name: "Review recovery" }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(await readWorkspaceMain(page)).toEqual({ schemaVersion: "broken" });
+  await page.getByRole("button", { name: "Review recovery" }).click();
+  await page.getByRole("button", { name: "Restore this backup" }).click();
   await expect(banner).toContainText("recovered from backup");
+  await expect.poll(() => readWorkspaceMain(page)).toEqual(main);
   expect(errors).toEqual([]);
 });

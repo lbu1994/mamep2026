@@ -186,4 +186,31 @@ describe("FileWorkspaceRepository", () => {
       errorCode: null,
     });
   });
+  it("rejects temporary saves in Renderer before serialization can outlive recovery", async () => {
+    const workspace = createEmptyWorkspace();
+    const { bridge, saveCalls } = makeBridge({
+      workspaceLoad: async () => ({
+        ok: true,
+        value: {
+          content: serializeWorkspace(workspace),
+          recoveryInfo: {
+            recovered: true,
+            source: "fresh",
+            pending: true,
+            recoveredAt: 1,
+            backupTimestamp: null,
+            errorCode: null,
+          },
+        },
+      }),
+    });
+    const repo = new FileWorkspaceRepository(bridge);
+    await repo.load();
+    const result = await repo.save(workspace);
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_RECOVERY_PENDING" },
+    });
+    expect(saveCalls).toEqual([]);
+  });
 });

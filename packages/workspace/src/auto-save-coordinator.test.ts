@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Result } from "@mamep2026/domain";
 import {
   createEmptyWorkspace,
@@ -117,5 +117,26 @@ describe("AutoSaveCoordinator", () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
     // 两次保存串行执行（无并发重入）。
     expect(repo.saved.length).toBeGreaterThanOrEqual(1);
+  });
+  it("discards temporary edits queued before recovery confirmation", async () => {
+    vi.useFakeTimers();
+    try {
+      const repo = new InMemoryRepository();
+      const coordinator = new AutoSaveCoordinator(repo, realTimerDeps(500));
+      coordinator.scheduleSave({
+        ...createEmptyWorkspace(),
+        name: "Temporary",
+      });
+      coordinator.discardPending();
+      await vi.advanceTimersByTimeAsync(1000);
+      await coordinator.flush();
+      expect(repo.saved).toEqual([]);
+      const restored = { ...createEmptyWorkspace(), name: "Restored" };
+      coordinator.scheduleSave(restored);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(repo.saved).toEqual([restored]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

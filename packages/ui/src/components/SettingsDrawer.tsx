@@ -129,6 +129,9 @@ export function SettingsDrawer({
       if (result.ok) {
         // Publish the reset workspace with all core types in one update.
         setWorkspace(ensureCoreSheets(result.value));
+        useAppStore
+          .getState()
+          .setWorkspaceRecovery(host.getWorkspaceRecoveryInfo());
         appendMessage({
           timestamp: Date.now(),
           level: "info",

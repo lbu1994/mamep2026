@@ -9,6 +9,7 @@ import type {
 } from "@mamep2026/domain";
 import { createEmptyWorkspace, createMamepError } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
+import { recoveryPreview } from "@mamep2026/workspace";
 import type { WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import { openDB } from "idb";
 import {
@@ -62,6 +63,34 @@ function persistenceError(
   });
 }
 
+/** Reject values JSON would silently drop or change; keep the stored original untouched. */
+function originalText(value: unknown): string {
+  return JSON.stringify(
+    { missing: value === undefined, data: value ?? null },
+    function (this: Record<string, unknown>, key: string, item: unknown) {
+      const original = this[key];
+      if (
+        original === undefined ||
+        typeof original === "bigint" ||
+        typeof original === "function" ||
+        typeof original === "symbol" ||
+        (typeof original === "number" &&
+          (!Number.isFinite(original) || Object.is(original, -0))) ||
+        (typeof original === "object" &&
+          original !== null &&
+          !Array.isArray(original) &&
+          Object.getPrototypeOf(original) !== Object.prototype &&
+          Object.getPrototypeOf(original) !== null)
+      ) {
+        throw new Error(
+          "The original record contains a value that JSON cannot preserve",
+        );
+      }
+      return item;
+    },
+  );
+}
+
 export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
   private readonly store: KeyValueStore;
   /** 最近一次 `load()` 的恢复元数据。 */
@@ -71,11 +100,31 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
     this.store = store;
   }
 
+  private original: unknown = undefined;
+  private originalExport: string | null = null;
+  private candidate: { raw: unknown; workspace: Workspace } | null = null;
+  private archiveKey: string | null = null;
+
   async load(): Promise<Result<Workspace>> {
+    this.candidate = null;
+    this.archiveKey = null;
+    this.originalExport = null;
+    this.recoveryInfo = {
+      recovered: true,
+      source: "fresh",
+      pending: true,
+      recoveredAt: Date.now(),
+      backupTimestamp: null,
+      errorCode: "PERSISTENCE_LOADING",
+    };
     try {
       const raw = await this.store.get(MAIN_KEY);
-      if (raw === undefined) {
-        // 首次启动（无持久化数据）：正常空工作区，不视为恢复。
+      const parsed =
+        raw === undefined ? null : await parseWorkspaceOffMainThread(raw);
+      if (
+        parsed?.ok ||
+        (raw === undefined && (await this.store.get(BACKUP_KEY)) === undefined)
+      ) {
         this.recoveryInfo = {
           recovered: false,
           source: "none",
@@ -83,56 +132,178 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
           backupTimestamp: null,
           errorCode: null,
         };
-        return ok(createEmptyWorkspace());
+        return parsed ?? ok(createEmptyWorkspace());
       }
-      const parsed = await parseWorkspaceOffMainThread(raw);
-      if (parsed.ok) {
-        this.recoveryInfo = {
-          recovered: false,
-          source: "none",
-          recoveredAt: Date.now(),
-          backupTimestamp: null,
-          errorCode: null,
-        };
-        return parsed;
-      }
-
-      // 损坏恢复：尝试读取备份。
-      const backup = await this.store.get(BACKUP_KEY);
-      if (backup !== undefined) {
-        const backupParsed = await parseWorkspaceOffMainThread(backup);
-        if (backupParsed.ok) {
-          this.recoveryInfo = {
-            recovered: true,
-            source: "backup",
-            recoveredAt: Date.now(),
-            backupTimestamp: null,
-            errorCode: null,
+      this.original = structuredClone(raw);
+      this.recoveryInfo = {
+        recovered: true,
+        source: "fresh",
+        pending: true,
+        recoveredAt: Date.now(),
+        backupTimestamp: null,
+        errorCode:
+          parsed !== null && !parsed.ok
+            ? parsed.error.code
+            : "PERSISTENCE_MAIN_MISSING",
+      };
+      // Keep the stored value unchanged. IndexedDB records are objects, not file bytes.
+      const sourceText = originalText(raw);
+      this.originalExport = JSON.stringify(
+        {
+          version: 1,
+          source: MAIN_KEY,
+          capturedAt: this.recoveryInfo.recoveredAt,
+          encoding: "json-value",
+          missing: raw === undefined,
+          data: raw ?? null,
+        },
+        null,
+        2,
+      );
+      const bytes = new TextEncoder().encode(sourceText);
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      const id = Array.from(new Uint8Array(digest), (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      ).join("");
+      const archiveKey = `workspace-recovery-${id}`;
+      if ((await this.store.get(archiveKey)) === undefined)
+        await this.store.put(archiveKey, {
+          version: 1,
+          source: MAIN_KEY,
+          capturedAt: this.recoveryInfo.recoveredAt,
+          encoding: "json-value",
+          missing: raw === undefined,
+          data: this.original ?? null,
+        });
+      const archive: unknown = await this.store.get(archiveKey);
+      if (
+        typeof archive !== "object" ||
+        archive === null ||
+        !("data" in archive) ||
+        originalText(
+          "missing" in archive && archive.missing === true
+            ? undefined
+            : archive.data,
+        ) !== originalText(this.original)
+      )
+        throw new Error("Recovery archive does not match the original");
+      this.archiveKey = archiveKey;
+      this.recoveryInfo.archiveId = archiveKey;
+      const backupRaw = await this.store.get(BACKUP_KEY);
+      if (backupRaw !== undefined) {
+        const backup = await parseWorkspaceOffMainThread(backupRaw);
+        if (backup.ok) {
+          this.candidate = {
+            raw: structuredClone(backupRaw),
+            workspace: backup.value,
           };
-          return backupParsed;
+          this.recoveryInfo.preview = recoveryPreview(backup.value);
         }
       }
-      // 主与备份均不可用：以空工作区保持可操作，记录恢复失败来源。
+      return ok(createEmptyWorkspace());
+    } catch {
       this.recoveryInfo = {
+        ...this.recoveryInfo,
         recovered: true,
         source: "fresh",
+        pending: true,
         recoveredAt: Date.now(),
         backupTimestamp: null,
-        errorCode: parsed.error.code ?? null,
+        errorCode: "PERSISTENCE_RECOVERY_PREPARE_FAILED",
       };
-      return parsed;
+      return ok(createEmptyWorkspace());
+    }
+  }
+
+  private blocked(): Result<never> {
+    return fail(
+      persistenceError(
+        "PERSISTENCE_RECOVERY_PENDING",
+        "Confirm recovery or reset before saving",
+      ),
+    );
+  }
+
+  /** Export the archived stored value and its source without workspace normalization. */
+  async exportRecovery(): Promise<Result<string>> {
+    try {
+      if (this.archiveKey === null)
+        return this.originalExport === null
+          ? this.blocked()
+          : ok(this.originalExport);
+      const archive = await this.store.get(this.archiveKey);
+      if (archive === undefined) throw new Error("Recovery archive is missing");
+      originalText(archive);
+      if (
+        typeof archive !== "object" ||
+        archive === null ||
+        !("data" in archive) ||
+        originalText(
+          "missing" in archive && archive.missing === true
+            ? undefined
+            : archive.data,
+        ) !== originalText(this.original)
+      )
+        throw new Error("Recovery archive changed");
+      return ok(JSON.stringify(archive, null, 2));
     } catch (cause) {
-      this.recoveryInfo = {
-        recovered: true,
-        source: "fresh",
-        recoveredAt: Date.now(),
-        backupTimestamp: null,
-        errorCode: "PERSISTENCE_LOAD_FAILED",
-      };
       return fail(
         persistenceError(
-          "PERSISTENCE_LOAD_FAILED",
-          cause instanceof Error ? cause.message : String(cause),
+          "PERSISTENCE_EXPORT_FAILED",
+          "Could not export the original record",
+          cause,
+        ),
+      );
+    }
+  }
+
+  private async assertOriginalUnchanged(): Promise<void> {
+    if (this.archiveKey === null)
+      throw new Error("Recovery archive is unavailable");
+    const archive: unknown = await this.store.get(this.archiveKey);
+    if (
+      typeof archive !== "object" ||
+      archive === null ||
+      !("data" in archive) ||
+      originalText(
+        "missing" in archive && archive.missing === true
+          ? undefined
+          : archive.data,
+      ) !== originalText(this.original)
+    )
+      throw new Error("Recovery archive changed");
+    const current = await this.store.get(MAIN_KEY);
+    if (originalText(current) !== originalText(this.original))
+      throw new Error("The source changed; reload the preview");
+  }
+
+  /** Apply a confirmed backup without rotating the damaged record over it. */
+  async recover(): Promise<Result<Workspace>> {
+    if (
+      !this.recoveryInfo?.pending ||
+      this.archiveKey === null ||
+      this.candidate === null
+    )
+      return this.blocked();
+    try {
+      await this.assertOriginalUnchanged();
+      const backup = await this.store.get(BACKUP_KEY);
+      if (originalText(backup) !== originalText(this.candidate.raw))
+        throw new Error("The backup changed; reload the preview");
+      await this.store.put(MAIN_KEY, this.candidate.raw);
+      this.recoveryInfo = {
+        ...this.recoveryInfo,
+        pending: false,
+        source: "backup",
+        errorCode: null,
+        recoveredAt: Date.now(),
+      };
+      return ok(this.candidate.workspace);
+    } catch (cause) {
+      return fail(
+        persistenceError(
+          "PERSISTENCE_RECOVERY_FAILED",
+          "Could not replace the damaged workspace",
           cause,
         ),
       );
@@ -140,10 +311,12 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
   }
 
   async save(workspace: Workspace): Promise<Result<void>> {
+    if (this.recoveryInfo?.pending) return this.blocked();
     try {
       // 完整 Schema 校验与 JSON 转换在 Worker 中执行；此处只做 IndexedDB 写入。
       const serialized = await serializeWorkspaceOffMainThread(workspace);
       if (!serialized.ok) return serialized;
+      if (this.recoveryInfo?.pending) return this.blocked();
       // 先轮转备份，再写主记录。
       const previous = await this.store.get(MAIN_KEY);
       if (previous !== undefined) {
@@ -164,8 +337,13 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
 
   async clear(): Promise<Result<void>> {
     try {
+      if (this.recoveryInfo?.pending) {
+        if (this.archiveKey === null) return this.blocked();
+        await this.assertOriginalUnchanged();
+      }
       await this.store.delete(MAIN_KEY);
       await this.store.delete(BACKUP_KEY);
+      this.recoveryInfo = null;
       return ok(undefined);
     } catch (cause) {
       return fail(
@@ -207,6 +385,7 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
 
   /** 导入工作区数据（parse + 校验后按 save() 同形态落盘，§19.1）。 */
   async import(serialized: string): Promise<Result<void>> {
+    if (this.recoveryInfo?.pending) return this.blocked();
     try {
       const parsed = await parseWorkspaceTextOffMainThread(serialized);
       if (!parsed.ok) return parsed;
@@ -227,6 +406,7 @@ export class IndexedDBWorkspaceRepository implements WorkspaceRepositoryPort {
 
   /** 创建当前工作区备份（主记录 → 备份轮转，§19.1）。 */
   async createBackup(): Promise<Result<void>> {
+    if (this.recoveryInfo?.pending) return this.blocked();
     try {
       const previous = await this.store.get(MAIN_KEY);
       if (previous !== undefined) {

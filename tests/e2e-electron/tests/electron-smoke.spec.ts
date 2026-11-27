@@ -178,6 +178,7 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       // 工作区文件仓储桥（增 create-backup）：
       // 主进程应用数据目录版本化 JSON。
       "workspaceLoad",
+      "workspaceRecovery",
       "workspaceSave",
       "workspaceClear",
       "workspaceCreateBackup",

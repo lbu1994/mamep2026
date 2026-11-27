@@ -78,6 +78,10 @@ export interface HostIdentity {
 
 /** 工作区加载、恢复和自动保存。 */
 export interface WorkspaceHost {
+  /** Restore a backup only after the user confirms its preview. */
+  recoverWorkspace?(): Promise<Result<Workspace>>;
+  /** Export preserved source data and provenance without workspace parsing. */
+  exportWorkspaceRecovery?(): Promise<Result<string>>;
   loadWorkspace(): Promise<Result<Workspace>>;
   /** 清除全部持久化数据并返回全新默认工作区（§16.5.5 用户重置损坏工作区）。 */
   resetWorkspace(): Promise<Result<Workspace>>;

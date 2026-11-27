@@ -127,6 +127,11 @@ const api: MamepHostApi = {
     });
   },
   /** 加载主进程文件仓储工作区（workspace-load）。 */
+  workspaceRecovery(
+    action: "restore" | "export",
+  ): Promise<Result<WorkspaceLoadResponse>> {
+    return invoke<WorkspaceLoadResponse>("workspace-recovery", { action });
+  },
   workspaceLoad(): Promise<Result<WorkspaceLoadResponse>> {
     return invoke<WorkspaceLoadResponse>("workspace-load", {});
   },

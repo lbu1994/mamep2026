@@ -457,6 +457,7 @@ describe("createVscodeBridge（HostMessage v2 编解码）", () => {
         "sessionWriteRow",
         "workspaceClear",
         "workspaceLoad",
+        "workspaceRecovery",
         "workspaceSave",
         "workspaceCreateBackup",
       ].sort(),

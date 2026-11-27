@@ -398,6 +398,14 @@ export class ElectronAppHost
     return this.inner.loadWorkspace();
   }
 
+  recoverWorkspace(): Promise<Result<Workspace>> {
+    return this.inner.recoverWorkspace();
+  }
+
+  exportWorkspaceRecovery(): Promise<Result<string>> {
+    return this.inner.exportWorkspaceRecovery();
+  }
+
   resetWorkspace(): Promise<Result<Workspace>> {
     return this.inner.resetWorkspace();
   }

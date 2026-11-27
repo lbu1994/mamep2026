@@ -6,7 +6,12 @@
  */
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultRtuProfile, RegisterAddress } from "@mamep2026/domain";
+import {
+  createDefaultRtuProfile,
+  RegisterAddress,
+  createEmptyWorkspace,
+  ok,
+} from "@mamep2026/domain";
 import type { CommunicationLogEvent } from "@mamep2026/communication";
 import { RegisterTableService } from "@mamep2026/register-table";
 import { InMemoryWorkspaceRepository } from "@mamep2026/test-kit";
@@ -167,5 +172,41 @@ describe("BrowserAppHost 浏览器兼容性检测（2026-09-02，PRD §8.3 / §1
     });
     expect(host.browserCompatibility.usable).toBe(true);
     expect(host.supportsWebSerial()).toBe(true);
+  });
+});
+
+describe("workspace recovery save isolation", () => {
+  it("discards saves from before and during a delayed recovery", async () => {
+    const restored = { ...createEmptyWorkspace(), name: "Restored" };
+    let finishRecovery: (() => void) | undefined;
+    const barrier = new Promise<void>((resolve) => {
+      finishRecovery = resolve;
+    });
+    const repository = Object.assign(new InMemoryWorkspaceRepository(), {
+      recover: async () => {
+        await barrier;
+        return ok(restored);
+      },
+    });
+    const save = vi.spyOn(repository, "save");
+    const host = new BrowserAppHost({
+      platform: null,
+      repository,
+      mockTransport: true,
+    });
+    try {
+      host.scheduleSave({ ...createEmptyWorkspace(), name: "Before" });
+      const result = host.recoverWorkspace();
+      host.scheduleSave({ ...createEmptyWorkspace(), name: "During" });
+      finishRecovery?.();
+      expect((await result).ok).toBe(true);
+      await host.flush();
+      expect(save).not.toHaveBeenCalled();
+      host.scheduleSave(restored);
+      await host.flush();
+      expect(save).toHaveBeenCalledExactlyOnceWith(restored);
+    } finally {
+      await host.dispose();
+    }
   });
 });

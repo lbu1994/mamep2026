@@ -409,9 +409,23 @@ export const workspaceSchemaVersion = 10;
  * 不改变 `load()` 的 `Result<Workspace>` 成功契约。
  * - `source:"none"`：主数据完好（正常恢复，不提示）；
  * - `source:"backup"`：主数据损坏，从备份恢复（提示来源=备份、恢复时间）；
- * - `source:"fresh"`：主+备份均不可用，应用以空工作区保持可操作（提示恢复失败已重置）。
+ * - `source:"fresh"`: a default workspace; `pending` means the stored original is unchanged.
  */
 export interface WorkspaceRecoveryInfo {
+  /** Writes remain blocked until recovery or an explicit reset succeeds. */
+  pending?: boolean | undefined;
+  /** Durable archive reference; absent when archiving failed. */
+  archiveId?: string | undefined;
+  /** Validated backup summary. The backup is not applied before confirmation. */
+  preview?:
+    | {
+        name: string;
+        sheets: number;
+        rows: number;
+        connections: number;
+        schemaVersion: number;
+      }
+    | undefined;
   /** 是否发生了恢复（备份恢复 / 重建为空工作区）。 */
   recovered: boolean;
   /** 恢复来源。 */

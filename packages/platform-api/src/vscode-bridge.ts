@@ -238,6 +238,8 @@ export function createVscodeBridge(
       }),
     // ---- 工作区文件仓储：VSCode filesystem 维持 unsupported，
     // 宿主返回能力错误；转发保留契约一致性（VscodeHostApi 继承 MamepHostApi）。----
+    workspaceRecovery: (action: "restore" | "export") =>
+      postRequest<WorkspaceLoadResponse>("workspace-recovery", { action }),
     workspaceLoad: () =>
       postRequest<WorkspaceLoadResponse>("workspace-load", {}),
     workspaceSave: (content: string) =>

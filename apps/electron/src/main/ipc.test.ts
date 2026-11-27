@@ -889,3 +889,32 @@ describe("extractMessageId", () => {
     expect(extractMessageId({ messageId: 123 })).toBe("");
   });
 });
+
+describe("workspace recovery IPC", () => {
+  it("exports without restoring and returns the confirmed workspace only on restore", async () => {
+    const workspace = createEmptyWorkspace();
+    const recover = vi.fn(async () => ok(workspace));
+    const exportRecovery = vi.fn(async () => ok("original envelope"));
+    const deps = makeDeps({
+      workspace: { ...makeWorkspaceRepo(), recover, exportRecovery },
+    });
+    const exported = await handleRequest(
+      request("workspace-recovery", { action: "export" }),
+      deps,
+    );
+    expect(exported).toMatchObject({
+      type: "response",
+      payload: { content: "original envelope" },
+    });
+    expect(recover).not.toHaveBeenCalled();
+    const restored = await handleRequest(
+      request("workspace-recovery", { action: "restore" }),
+      deps,
+    );
+    expect(restored).toMatchObject({
+      type: "response",
+      payload: { content: serializeWorkspace(workspace) },
+    });
+    expect(recover).toHaveBeenCalledTimes(1);
+  });
+});

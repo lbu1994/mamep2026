@@ -923,3 +923,54 @@ describe("host-message plugin runtime kinds（2026-08-31，ADR-039）", () => {
     expect(parsed.success).toBe(true);
   });
 });
+
+describe("workspace recovery request boundary", () => {
+  it.each(["restore", "export"])("accepts the fixed %s action", (action) => {
+    expect(
+      parseHostMessage({
+        protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+        type: "request",
+        messageId: "recovery",
+        kind: "workspace-recovery",
+        payload: { action },
+      }).ok,
+    ).toBe(true);
+  });
+  it.each([
+    { action: "delete" },
+    { action: "restore", path: "C:/other.json" },
+    {},
+  ])("rejects arbitrary operations and file paths", (payload) => {
+    expect(
+      parseHostMessage({
+        protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+        type: "request",
+        messageId: "recovery",
+        kind: "workspace-recovery",
+        payload,
+      }).ok,
+    ).toBe(false);
+  });
+  it("rejects malformed recovery summaries", () => {
+    expect(
+      workspaceLoadResponseSchema.safeParse({
+        content: "{}",
+        recoveryInfo: {
+          recovered: true,
+          source: "fresh",
+          recoveredAt: 1,
+          backupTimestamp: null,
+          errorCode: null,
+          pending: true,
+          preview: {
+            name: "Backup",
+            sheets: -1,
+            rows: 1,
+            connections: 0,
+            schemaVersion: 10,
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+});

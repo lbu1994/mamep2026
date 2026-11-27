@@ -34,6 +34,13 @@ export class AutoSaveCoordinator {
     return this.status;
   }
 
+  /** Discard temporary edits before replacing the workspace with a confirmed backup. */
+  discardPending(): void {
+    this.timerHandle?.cancel();
+    this.timerHandle = null;
+    this.pending = null;
+  }
+
   onStatusChange(listener: (status: SaveStatus) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

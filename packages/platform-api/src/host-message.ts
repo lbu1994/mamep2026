@@ -92,6 +92,7 @@ export const HOST_REQUEST_KINDS = [
   "workspace-clear",
   // 崩溃后状态恢复：主进程将当前工作区文件轮转为备份。
   "workspace-create-backup",
+  "workspace-recovery",
   // 插件存储：已安装插件清单 + 启用状态经主进程/扩展宿主持久化。
   "plugin-store-load",
   "plugin-store-save",
@@ -282,6 +283,17 @@ export type OpenTextFileResponse = z.infer<typeof openTextFileResponseSchema>;
  * 供 UI 恢复提示；`source:"none"`=正常（不提示）/`"backup"`=从备份恢复/`"fresh"`=重建为空。
  */
 export const workspaceRecoveryInfoSchema = z.object({
+  pending: z.boolean().optional(),
+  archiveId: z.string().optional(),
+  preview: z
+    .object({
+      name: z.string(),
+      sheets: z.number().int().nonnegative(),
+      rows: z.number().int().nonnegative(),
+      connections: z.number().int().nonnegative(),
+      schemaVersion: z.number().int().positive(),
+    })
+    .optional(),
   recovered: z.boolean(),
   source: z.enum(["none", "backup", "fresh"]),
   recoveredAt: z.number(),
@@ -522,6 +534,11 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     ...requestBase,
+    kind: z.literal("workspace-recovery"),
+    payload: z.object({ action: z.enum(["restore", "export"]) }).strict(),
+  }),
+  z.object({
+    ...requestBase,
     kind: z.literal("plugin-store-load"),
     // 插件存储：返回已安装插件清单 + 启用状态（空 store 返回空数组）。
     payload: z.object({}),
@@ -742,6 +759,10 @@ export interface MamepHostApi {
    * 当前工作区文件轮转为 .bak（§19.1 createBackup）。
    */
   workspaceCreateBackup(): Promise<Result<null>>;
+  /** Restore a confirmed backup or export the preserved source. No paths are accepted. */
+  workspaceRecovery?(
+    action: "restore" | "export",
+  ): Promise<Result<WorkspaceLoadResponse>>;
 
   /**
    * 加载插件存储（plugin-store-load）：返回已安装插件清单 + 启用状态。

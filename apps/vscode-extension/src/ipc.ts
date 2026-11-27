@@ -446,6 +446,7 @@ export async function handleVscodeRequest(
             : undefined,
         ),
       );
+    case "workspace-recovery":
     case "workspace-load":
     case "workspace-save":
     case "workspace-clear":

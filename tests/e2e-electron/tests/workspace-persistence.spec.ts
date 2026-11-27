@@ -3,7 +3,7 @@
  * - 能力矩阵翻转：filesystem === "full"；
  * - 修改工作区（新增表）→ 主进程自动保存落盘为 userData/workspace.json（含改动）；
  * - 关闭 → 同 userData 重启 → 会话恢复（新表仍在）；
- * - 预置损坏主文件 + 合法备份 → 启动从备份恢复（自愈写回）；
+ * - 预置损坏主文件 + 合法备份 → 启动预览并确认恢复；
  * - 全程无 console 错误。
  * userData 经 MAMEP_USER_DATA_DIR 注入临时目录，不污染真实用户数据。
  */
@@ -213,7 +213,7 @@ test("关闭后同 userData 重启 → 会话恢复（新表仍在）", async ()
   }
 });
 
-test("损坏主文件 + 合法备份 → 启动从备份恢复（自愈写回）", async () => {
+test("损坏主文件 + 合法备份 → 启动预览并确认恢复", async () => {
   const userDataDir = await makeUserDataDir();
   // 第一会话：等待应用自身自动保存落盘（生成合法工作区 JSON 作为备份基础）。
   const first = await launchApp(userDataDir);
@@ -226,8 +226,10 @@ test("损坏主文件 + 合法备份 → 启动从备份恢复（自愈写回）
   // 以应用生成的合法 JSON 为基础构造备份（改表名为 RecoveredSheet），并破坏主文件。
   const mainPath = path.join(userDataDir, "workspace.json");
   const raw = JSON.parse(await readFile(mainPath, "utf8")) as {
+    name: string;
     sheets: Array<{ name: string }>;
   };
+  raw.name = "RecoveredWorkspace";
   raw.sheets[0]!.name = "RecoveredSheet";
   await writeFile(
     path.join(userDataDir, "workspace.json.bak"),
@@ -236,18 +238,37 @@ test("损坏主文件 + 合法备份 → 启动从备份恢复（自愈写回）
   );
   await writeFile(mainPath, "{ broken json !!!", "utf8");
 
-  // 第二会话：启动从备份恢复（自愈写回）。
+  // 第二会话：启动预览并确认恢复。
   const { app, page, consoleErrors } = await launchApp(userDataDir);
   try {
+    await closeConnectionModal(page);
+    const banner = page.getByTestId("recovery-banner");
+    await expect(banner).toContainText("Changes are not being saved");
+    expect(await readFile(mainPath, "utf8")).toBe("{ broken json !!!");
+    await page.getByRole("button", { name: "Review recovery" }).click();
+    await expect(page.getByRole("dialog")).toContainText("RecoveredWorkspace");
+    const exported = await callBridge<{
+      ok: boolean;
+      value: { content: string };
+    }>(page, "workspaceRecovery", "export");
+    expect(exported.ok).toBe(true);
+    expect(
+      Buffer.from(JSON.parse(exported.value.content).data, "base64").toString(
+        "utf8",
+      ),
+    ).toBe("{ broken json !!!");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(await readFile(mainPath, "utf8")).toBe("{ broken json !!!");
+    await page.getByRole("button", { name: "Review recovery" }).click();
+    await page.getByRole("button", { name: "Restore this backup" }).click();
     await expect(page.locator(".ant-layout-sider")).toContainText(
       "RecoveredSheet",
       { timeout: 5000 },
     );
-    // 恢复提示：从备份恢复时展示 RecoveryBanner（纯信息、无按钮）。
-    const banner = page.getByTestId("recovery-banner");
+    // Confirmation succeeded; the banner now reports the persisted backup.
     await expect(banner).toBeVisible();
     await expect(banner).toContainText("recovered from backup");
-    // 自愈：主文件被备份内容写回。
+    // Only the confirmed backup is written to the main file.
     await waitForWorkspaceFile(userDataDir, '"RecoveredSheet"');
     const mainContent = await readFile(mainPath, "utf8");
     const parsed = JSON.parse(mainContent) as {

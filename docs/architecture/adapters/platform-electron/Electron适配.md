@@ -7,6 +7,7 @@ Electron 使用应用数据目录 `app.getPath("userData")` 下的版本化 JSON
     workspace.json
     workspace.json.bak
     workspace.json.tmp
+    workspace-recovery/<SHA-256>.json
 
 主进程 `WorkspaceFileRepository` 实现完整 `WorkspaceRepositoryPort`，负责路径、序列化输入
 校验、原子保存和备份恢复。Renderer 的 `FileWorkspaceRepository` 只是 preload 白名单桥，
@@ -31,19 +32,27 @@ Windows 下若目标文件已存在导致重命名失败，只允许在显式处
 
 加载语义：
 
-- 主文件不存在视为首次启动，返回空工作区；
+- 主文件和备份均不存在视为首次启动；仅主文件缺失时预览仍存在的备份；
 - 主文件通过 `parseWorkspace` 后正常返回；
-- 主文件损坏且 `.bak` 有效时从备份恢复，并把备份内容尽力自愈写回主文件；
-- 主文件与备份都不可用时返回结构化加载错误，由 UI 进入既有恢复流程；
+- 主文件损坏时先以独占创建、刷新和只读文件权限保存原始字节及来源，再验证 `.bak`；
+- 加载返回临时默认工作区，旁路元数据 `pending: true` 阻止保存、导入和备份轮转；
+- 用户预览并确认后才替换主文件，保留有效 `.bak`；来源、归档或备份变化时拒绝恢复；
+- 归档或恢复写入失败时保持保护状态；没有有效备份时允许导出，归档成功后才可显式重置；
 - 主文件与备份坚持单份轮转，每次保存覆盖旧 `.bak`，无需额外定时清理；
-- `reset/clear` 删除主文件和备份；显式导出或导入通过仓储端口完成，不绕开校验。
+- `reset/clear` 删除主文件和备份，保留原文归档；显式导出或导入通过仓储端口完成，不绕开校验。
 
 Electron 与 Renderer 使用专用工作区请求 kind：
 
 - `workspace-load`：返回序列化工作区和可选 `recoveryInfo`；
 - `workspace-save`：接收完整序列化内容，主进程先校验再原子落盘；
 - `workspace-clear`：删除主文件与备份；
-- `workspace-create-backup`：把当前主文件轮转为最近一份有效备份。
+- `workspace-create-backup`：把当前主文件轮转为最近一份有效备份；
+- `workspace-recovery`：仅接受 `restore` 或 `export`，不接受 Renderer 指定文件路径。
+  响应沿用经过 Schema 校验的 `{ content, recoveryInfo }`；恢复内容是工作区 JSON，
+  导出内容是独立的版本 1 归档，文件原始字节位于 Base64 `data` 字段。
+
+归档按原始内容的 SHA-256 命名；重新打开同一损坏文件复用原归档，不覆盖采集时间。
+恢复前验证归档仍保留同样原始字节，重置也不删除归档。
 
 输入经过 HostMessage 白名单和 Zod 校验。持久化错误使用 `persistence` category、稳定的
 `PERSISTENCE_LOAD_FAILED` / `PERSISTENCE_WRITE_FAILED` / `PERSISTENCE_CLEAR_FAILED` 代码，
@@ -52,7 +61,6 @@ Electron 与 Renderer 使用专用工作区请求 kind：
 自动化测试可通过 `MAMEP_USER_DATA_DIR` 在 app ready 前把 `userData` 指向临时目录，验证
 自动保存、重启恢复、损坏恢复和清理，同时避免污染真实用户数据。该环境变量是测试隔离门控，
 不是生产配置入口。
-
 
 ## 2. Electron IPC
 
@@ -69,5 +77,3 @@ Electron 与 Renderer 使用专用工作区请求 kind：
 - 不允许 Renderer 加载任意 Node.js 模块；
 - 外部链接通过受控方式打开；
 - Content Security Policy 明确配置。
-
-

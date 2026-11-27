@@ -81,6 +81,7 @@ describe("preload 白名单桥", () => {
       "workspaceClear",
       "workspaceCreateBackup",
       "workspaceLoad",
+      "workspaceRecovery",
       "workspaceSave",
     ]);
     expect(bridge.platform).toBe("electron");

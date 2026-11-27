@@ -392,6 +392,45 @@ export async function handleRequest(
             : undefined,
         ),
       );
+    case "workspace-recovery":
+      return sessionResult(message, async () => {
+        if (message.payload.action === "export") {
+          const result = await deps.workspace.exportRecovery?.();
+          if (result === undefined)
+            return fail(
+              createMamepError({
+                code: "PERSISTENCE_RECOVERY_UNAVAILABLE",
+                category: "persistence",
+                severity: "error",
+                retryable: false,
+                userMessageKey: "errors.persistenceError",
+                technicalMessage: "Recovery export is unavailable",
+              }),
+            );
+          if (!result.ok) return result;
+          return ok({
+            content: result.value,
+            recoveryInfo: deps.workspace.getRecoveryInfo(),
+          } satisfies WorkspaceLoadResponse);
+        }
+        const result = await deps.workspace.recover?.();
+        if (result === undefined)
+          return fail(
+            createMamepError({
+              code: "PERSISTENCE_RECOVERY_UNAVAILABLE",
+              category: "persistence",
+              severity: "error",
+              retryable: false,
+              userMessageKey: "errors.persistenceError",
+              technicalMessage: "Recovery is unavailable",
+            }),
+          );
+        if (!result.ok) return result;
+        return ok({
+          content: serializeWorkspace(result.value),
+          recoveryInfo: deps.workspace.getRecoveryInfo(),
+        } satisfies WorkspaceLoadResponse);
+      });
     case "workspace-load":
       // Electron 文件持久化：主进程文件仓储 load → 序列化 JSON 字符串。
       // recoveryInfo：旁路返回最近一次加载的恢复元数据（备份恢复等）。

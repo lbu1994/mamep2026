@@ -269,8 +269,9 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "",
       "## Reset & recovery",
       "",
-      "- **Reset Workspace**: restores the default workspace and erases saved data.",
-      "- A **recovery banner** appears when the app restores from the last good backup.",
+      "- **Reset Workspace**: restores the default workspace and erases the main record and backup. Recovery archives are retained.",
+      "- **Export original data** saves a recovery archive with source information, not a workspace import file. Platforms without file export keep the original locally.",
+      "- If stored data is damaged, **Review recovery** previews the backup before you confirm. Changes are not saved while recovery is pending. Cancel preserves the original and backup.",
     ]),
     "zh-CN": md([
       "# 工作区",
@@ -289,8 +290,9 @@ export const HELP_CONTENT: Record<HelpTabId, LocalizedText> = {
       "",
       "## 重置与恢复",
       "",
-      "- **重置工作区**：恢复默认工作区并清除已保存数据。",
-      "- 若应用从最近一次完好备份恢复，会显示**恢复提示横幅**。",
+      "- **重置工作区**：恢复默认工作区并清除主数据和备份，保留损坏原文归档。",
+      "- **导出原始数据**保存含来源信息的恢复归档，不是工作区导入文件。不支持文件导出的平台仍保留本地原文。",
+      "- 存储损坏时，点击**查看恢复预览**检查备份并确认恢复。确认前不保存修改，取消保留原文和备份。",
     ]),
   },
   "settings-theme": {

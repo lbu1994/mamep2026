@@ -224,3 +224,25 @@ Android 的 `tests/e2e-android/tests/plugin-runtime.spec.ts` 包含同一攻击�
 - Electron 侧单测：`apps/electron`（IPC 校验/分发 + Preload 白名单桥 + Web Serial 权限模块 `serial-permissions.ts`）、`apps/web`（ElectronAppHost 复用浏览器路径：能力翻转、选口/取消、FC03/FC10 闭环、工作区委托）；E2E 在 `tests/e2e-electron/`（Playwright + Electron，`pnpm test:e2e:electron` 自动先 `build:electron` 再启动生产构建窗口断言：preload 白名单桥、能力矩阵、debug 探针、剪贴板、Renderer 安全边界、串口授权 + RTU 读写闭环（fake `navigator.serial` 注入）、无 console 错误、关窗退出）。
 - 浏览器端 E2E：Playwright 使用系统 Edge（`channel: "msedge"`），配置在 `tests/e2e-web/playwright.config.ts`；以 `?mockTransport=1` 启用 dev 内置模拟 Modbus RTU 传输（生产构建不启用）。工作流见 [浏览器端自动化测试](architecture/quality/testing/浏览器端自动化.md)。
 - dev server 是后台长驻进程，会话中可能被系统清理；测试前先确认 5173 端口，停了就重启 `pnpm dev`。
+
+## 工作区损坏恢复专项检查
+
+```powershell
+pnpm --filter @mamep2026/electron exec vitest run src/main/workspace-file-repository.test.ts src/main/ipc.test.ts src/preload/preload.test.ts
+pnpm --filter @mamep2026/platform-web exec vitest run src/indexeddb-repository.test.ts
+pnpm --filter @mamep2026/platform-api exec vitest run src/host-message.test.ts
+pnpm --filter @mamep2026/workspace exec vitest run src/auto-save-coordinator.test.ts
+pnpm --filter @mamep2026/ui exec vitest run src/components/RecoveryBanner.test.tsx src/components/SettingsDrawer.test.tsx
+pnpm --filter @mamep2026/web exec vitest run src/file-workspace-repository.test.ts src/app-host.test.ts src/electron-app-host.test.ts src/vscode-app-host.test.ts src/android-app-host.test.ts
+pnpm build:electron
+$env:ELECTRON_RUN_AS_NODE = $null
+pnpm --filter @mamep2026/e2e-electron exec playwright test tests/workspace-persistence.spec.ts
+# 浏览器用例需要已有 pnpm dev 服务，使用系统 Edge。
+pnpm --filter @mamep2026/e2e-web exec playwright test tests/crash-recovery.spec.ts
+```
+
+文件仓储用例使用临时目录；IndexedDB 单测使用注入的键值存储；组件测试使用 jsdom。
+浏览器 E2E 检查真实 IndexedDB、预览取消和确认恢复；Electron E2E 使用生产 Renderer、
+Main/Preload 桥与隔离 `userData`，检查原文字节、预览、导出、确认及重启。
+这些检查不连接真实设备，也不能代替 Android 真机或 VSCode 实际 Webview 的平台验收。
+`ELECTRON_RUN_AS_NODE` 仅在当前测试终端清除，避免 Electron 被作为 Node 启动。

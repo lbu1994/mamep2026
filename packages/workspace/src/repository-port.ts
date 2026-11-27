@@ -9,9 +9,13 @@ import type {
 } from "@mamep2026/domain";
 
 export interface WorkspaceRepositoryPort {
+  /** Apply the validated backup after user confirmation. */
+  recover?(): Promise<Result<Workspace>>;
+  /** Export the preserved source and provenance without parsing it as a workspace. */
+  exportRecovery?(): Promise<Result<string>>;
   load(): Promise<Result<Workspace>>;
   save(workspace: Workspace): Promise<Result<void>>;
-  /** 清除全部持久化数据（用户重置损坏工作区用，§16.5.5）。 */
+  /** Clear the main record and backup after explicit reset; retain recovery archives. */
   clear(): Promise<Result<void>>;
   /** 重置为全新工作区（清空持久化数据；语义等同 `clear`，§19.1）。 */
   reset(): Promise<Result<void>>;

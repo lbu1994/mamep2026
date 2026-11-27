@@ -734,13 +734,64 @@ export class BrowserAppHost
     );
   }
 
+  private replacingWorkspace = false;
+
   async loadWorkspace(): Promise<Result<Workspace>> {
-    const result = await this.repository.load();
-    if (result.ok) return ok(this.seedMockDefaultSheet(result.value));
-    return result;
+    const retryingRecovery =
+      this.repository.getRecoveryInfo()?.pending === true;
+    if (retryingRecovery) {
+      this.replacingWorkspace = true;
+      this.autoSave.discardPending();
+    }
+    try {
+      const result = await this.repository.load();
+      if (result.ok) return ok(this.seedMockDefaultSheet(result.value));
+      return result;
+    } finally {
+      if (retryingRecovery) this.replacingWorkspace = false;
+    }
+  }
+
+  async recoverWorkspace(): Promise<Result<Workspace>> {
+    // Block edits queued while IPC and parsing complete, as well as the old timer.
+    this.replacingWorkspace = true;
+    this.autoSave.discardPending();
+    try {
+      const result = await this.repository.recover?.();
+      if (result !== undefined) return result;
+      return fail(
+        createMamepError({
+          code: "PERSISTENCE_RECOVERY_UNAVAILABLE",
+          category: "persistence",
+          severity: "error",
+          retryable: false,
+          userMessageKey: "errors.persistenceError",
+          technicalMessage: "Recovery is unavailable",
+        }),
+      );
+    } finally {
+      this.autoSave.discardPending();
+      this.replacingWorkspace = false;
+    }
+  }
+
+  async exportWorkspaceRecovery(): Promise<Result<string>> {
+    const result = await this.repository.exportRecovery?.();
+    if (result !== undefined) return result;
+    return fail(
+      createMamepError({
+        code: "PERSISTENCE_RECOVERY_UNAVAILABLE",
+        category: "persistence",
+        severity: "error",
+        retryable: false,
+        userMessageKey: "errors.persistenceError",
+        technicalMessage: "Recovery export is unavailable",
+      }),
+    );
   }
 
   async resetWorkspace(): Promise<Result<Workspace>> {
+    this.autoSave.discardPending();
     const cleared = await this.repository.clear();
     if (!cleared.ok) return cleared;
     const fresh = this.createFreshWorkspace();
@@ -790,6 +841,7 @@ export class BrowserAppHost
   }
 
   scheduleSave(workspace: Workspace): void {
+    if (this.replacingWorkspace) return;
     this.autoSave.scheduleSave(workspace);
   }
 

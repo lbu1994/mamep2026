@@ -50,37 +50,40 @@ describe("IndexedDBWorkspaceRepository", () => {
     }
   });
 
-  it("recovers from a corrupted main record using the backup", async () => {
+  it("restores a corrupted main record only after confirmation", async () => {
     const store = memoryStore();
-    const repo = new IndexedDBWorkspaceRepository(store);
     const workspace = createEmptyWorkspace();
-    await repo.save(workspace);
-    // 第二次保存时才会把上次主记录轮转为备份。
-    await repo.save(workspace);
-
-    // 破坏主记录。
-    await store.put("workspace", JSON.parse('{"schemaVersion":"broken"}'));
-    const result = await repo.load();
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.workspaceId).toBe(workspace.workspaceId);
-    }
-  });
-
-  it("returns a structured persistence error when both records are corrupted", async () => {
-    const store = memoryStore();
-    await store.put("workspace", JSON.parse('{"schemaVersion":"broken"}'));
+    await store.put("workspace", { schemaVersion: "broken" });
     await store.put(
       "workspace-backup",
-      JSON.parse('{"schemaVersion":"broken"}'),
+      JSON.parse(serializeWorkspace(workspace)),
     );
     const repo = new IndexedDBWorkspaceRepository(store);
-    const result = await repo.load();
+    const preview = await repo.load();
+    expect(preview.ok && preview.value.workspaceId).not.toBe(
+      workspace.workspaceId,
+    );
+    expect(repo.getRecoveryInfo()?.pending).toBe(true);
+    const restored = await repo.recover();
+    expect(restored.ok && restored.value.workspaceId).toBe(
+      workspace.workspaceId,
+    );
+  });
+
+  it("keeps a failed recovery pending with a structured persistence error", async () => {
+    const store = memoryStore();
+    await store.put("workspace", { schemaVersion: "broken" });
+    await store.put("workspace-backup", { schemaVersion: "broken" });
+    const repo = new IndexedDBWorkspaceRepository(store);
+    await repo.load();
+    expect(repo.getRecoveryInfo()).toMatchObject({
+      pending: true,
+      errorCode: "WORKSPACE_SCHEMA_INVALID",
+    });
+    const result = await repo.recover();
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.category).toBe("persistence");
-      expect(result.error.code).toBe("WORKSPACE_SCHEMA_INVALID");
-    }
+    if (!result.ok) expect(result.error.category).toBe("persistence");
+    expect(await store.get("workspace")).toEqual({ schemaVersion: "broken" });
   });
 
   it("round-trips a serialized snapshot through the same schema", async () => {
@@ -139,8 +142,9 @@ describe("IndexedDBWorkspaceRepository", () => {
     expect(result.ok).toBe(true);
     expect(repo.getRecoveryInfo()).toMatchObject({
       recovered: true,
-      source: "backup",
-      errorCode: null,
+      source: "fresh",
+      pending: true,
+      preview: { name: workspace.name },
     });
   });
 
@@ -214,5 +218,97 @@ describe("IndexedDBWorkspaceRepository", () => {
     expect(backup.ok).toBe(true);
     const backupRaw = await store.get("workspace-backup");
     expect(JSON.parse(JSON.stringify(backupRaw)).name).toBe("BackupSrc");
+  });
+  it("keeps original and backup unchanged until confirmation and exports the source", async () => {
+    const store = memoryStore();
+    const original = { schemaVersion: "broken", text: "original text" };
+    const workspace = { ...createEmptyWorkspace(), name: "Backup" };
+    const backup = JSON.parse(serializeWorkspace(workspace));
+    await store.put("workspace", original);
+    await store.put("workspace-backup", backup);
+    const repo = new IndexedDBWorkspaceRepository(store);
+    await repo.load();
+    expect(await store.get("workspace")).toEqual(original);
+    expect((await repo.save(createEmptyWorkspace())).ok).toBe(false);
+    expect((await repo.import(serializeWorkspace(workspace))).ok).toBe(false);
+    expect((await repo.createBackup()).ok).toBe(false);
+    const exported = await repo.exportRecovery();
+    expect(exported.ok && JSON.parse(exported.value)).toMatchObject({
+      version: 1,
+      source: "workspace",
+      data: original,
+    });
+    const archiveId = repo.getRecoveryInfo()?.archiveId;
+    await repo.load();
+    expect(repo.getRecoveryInfo()?.archiveId).toBe(archiveId);
+    const restored = await repo.recover();
+    expect(restored.ok && restored.value.name).toBe("Backup");
+    expect(await store.get("workspace")).toEqual(backup);
+    expect(await store.get("workspace-backup")).toEqual(backup);
+    expect(repo.getRecoveryInfo()).toMatchObject({
+      source: "backup",
+      pending: false,
+    });
+  });
+
+  it("blocks reset and saves after archive failure, and allows a retry", async () => {
+    const inner = memoryStore();
+    const original = { schemaVersion: "broken" };
+    await inner.put("workspace", original);
+    let denyArchive = true;
+    const store = {
+      ...inner,
+      async put(key: string, value: unknown) {
+        if (denyArchive && key.startsWith("workspace-recovery-"))
+          throw new Error("quota");
+        await inner.put(key, value);
+      },
+    };
+    const repo = new IndexedDBWorkspaceRepository(store);
+    await repo.load();
+    expect(repo.getRecoveryInfo()?.archiveId).toBeUndefined();
+    expect((await repo.clear()).ok).toBe(false);
+    expect((await repo.save(createEmptyWorkspace())).ok).toBe(false);
+    expect(await inner.get("workspace")).toEqual(original);
+    denyArchive = false;
+    await repo.load();
+    const archiveId = repo.getRecoveryInfo()?.archiveId;
+    expect(archiveId).toBeDefined();
+    expect((await repo.clear()).ok).toBe(true);
+    expect(await inner.get(archiveId ?? "")).toMatchObject({ data: original });
+  });
+
+  it("keeps recovery pending when writes fail or the source changes", async () => {
+    const inner = memoryStore();
+    await inner.put("workspace", { schemaVersion: "broken" });
+    await inner.put(
+      "workspace-backup",
+      JSON.parse(serializeWorkspace(createEmptyWorkspace())),
+    );
+    const repo = new IndexedDBWorkspaceRepository({
+      ...inner,
+      async put(key, value) {
+        if (key === "workspace") throw new Error("write failed");
+        await inner.put(key, value);
+      },
+    });
+    await repo.load();
+    expect((await repo.recover()).ok).toBe(false);
+    expect(repo.getRecoveryInfo()?.pending).toBe(true);
+    await inner.put("workspace", { changed: true });
+    expect((await repo.recover()).ok).toBe(false);
+    expect((await repo.clear()).ok).toBe(false);
+    expect(await inner.get("workspace")).toEqual({ changed: true });
+  });
+  it("does not silently change non-JSON original values during export", async () => {
+    const store = memoryStore();
+    const original = { schemaVersion: "broken", value: Number.NaN };
+    await store.put("workspace", original);
+    const repo = new IndexedDBWorkspaceRepository(store);
+    await repo.load();
+    expect(repo.getRecoveryInfo()?.pending).toBe(true);
+    expect((await repo.exportRecovery()).ok).toBe(false);
+    expect((await repo.clear()).ok).toBe(false);
+    expect(await store.get("workspace")).toEqual(original);
   });
 });

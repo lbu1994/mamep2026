@@ -509,6 +509,28 @@ export const en = {
   },
   // ---- 崩溃后状态恢复（PRD §8.3）----
   recovery: {
+    pending:
+      "Workspace recovery needs confirmation. Changes are not being saved.",
+    archived:
+      "The original data is archived. Review the backup before replacing it.",
+    archiveFailed:
+      "The original could not be archived. Saving and reset are blocked. Retry after fixing storage access.",
+    review: "Review recovery",
+    retry: "Reload preview",
+    exportOriginal: "Export original data",
+    confirm: "Restore this backup",
+    confirmDescription:
+      "Confirm to replace the damaged stored workspace and discard temporary edits made in this session. Cancel keeps the original and backup unchanged. Recovery does not connect to devices.",
+    noBackup:
+      "No valid backup is available. Export the original data first. You can explicitly reset the workspace in Settings after archiving succeeds.",
+    backupTime: "Backup time",
+    unknownTime: "Unknown",
+    exportDescription:
+      "The export includes the source and capture time. File bytes are preserved as Base64; IndexedDB records keep their stored JSON values. Keep this file for recovery; it is not a workspace import file.",
+    exportUnsupported:
+      "File export is not available on this platform. The original remains in local storage.",
+    actionFailed: "Recovery action failed: {{detail}}",
+
     recoveredBackup:
       "Workspace recovered from backup ({{time}}). Some recent changes may be lost.",
     recoveredFresh:
@@ -1125,6 +1147,24 @@ export const zh: TranslationResources = {
   },
   // ---- 崩溃后状态恢复（PRD §8.3）----
   recovery: {
+    pending: "工作区恢复需要确认，当前修改尚未保存。",
+    archived: "已归档原始数据。请预览备份，再确认是否替换。",
+    archiveFailed:
+      "无法归档原始数据，已阻止保存和重置。请解决存储访问问题后重试。",
+    review: "查看恢复预览",
+    retry: "重新加载预览",
+    exportOriginal: "导出原始数据",
+    confirm: "恢复此备份",
+    confirmDescription:
+      "确认后将替换损坏的持久化工作区，并丢弃本次会话的临时编辑。取消将保留原文和备份。恢复不会连接设备。",
+    noBackup:
+      "没有可用的有效备份。请先导出原始数据；归档成功后，可在 Settings 中明确重置工作区。",
+    backupTime: "备份时间",
+    unknownTime: "未知",
+    exportDescription:
+      "导出文件包含来源和采集时间。文件原始字节以 Base64 保留，IndexedDB 记录保留存储的 JSON 值。请妥善保存用于恢复；此文件不是工作区导入文件。",
+    exportUnsupported: "此平台暂不支持文件导出，原文仍保留在本地存储中。",
+    actionFailed: "恢复操作失败：{{detail}}",
     recoveredBackup: "工作区已从备份恢复（{{time}}），最近的更改可能丢失。",
     recoveredFresh: "工作区恢复失败，已重置为空工作区。",
   },

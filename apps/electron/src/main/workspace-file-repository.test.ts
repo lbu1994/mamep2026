@@ -1,7 +1,7 @@
 /**
  * WorkspaceFileRepository 单测（docs/TECH_DESIGN.md §19.4）。
  * 注入临时目录（os.tmpdir + mkdtemp），覆盖：roundtrip、原子替换与 .bak 轮转、损坏恢复
- * （自愈写回）、双坏错误、无文件空工作区、clear、v1→v4 迁移、错误映射（category persistence）。
+ * （归档及确认）、双坏保护、无文件空工作区、clear、v1→v4 迁移、错误映射（category persistence）。
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -9,7 +9,14 @@ import {
   workspaceSchemaVersion,
 } from "@mamep2026/domain";
 import { serializeWorkspace } from "@mamep2026/workspace";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { WorkspaceFileRepository } from "./workspace-file-repository";
@@ -83,36 +90,110 @@ describe("WorkspaceFileRepository", () => {
     expect(backupContent).toBe(serializeWorkspace(w1));
   });
 
-  it("损坏主文件 + 合法备份 → 从备份恢复并自愈写回主文件", async () => {
+  it("archives exact bytes and waits for confirmation before applying the backup", async () => {
     const { repo, dir } = await makeRepo();
     const workspace = { ...createEmptyWorkspace(), name: "Recovered" };
-    // 保存两次：第二次保存把第一次的主文件轮转为 .bak（备份内容 = workspace）。
     await repo.save(workspace);
-    await repo.save({ ...createEmptyWorkspace(), name: "Second" });
-    // 破坏主文件，备份保留上一次内容。
-    await writeFile(path.join(dir, MAIN_FILE), "{ broken json", "utf8");
+    await repo.save(createEmptyWorkspace());
+    const original = Buffer.from([0xff, 0xfe, 0x7b, 0x00]);
+    await writeFile(path.join(dir, MAIN_FILE), original);
     const loaded = await repo.load();
-    expect(loaded.ok).toBe(true);
-    if (loaded.ok) {
-      expect(loaded.value).toEqual(workspace);
-    }
-    // 自愈：主文件被写回为合法内容。
-    const mainContent = await readIfExists(path.join(dir, MAIN_FILE));
-    expect(mainContent).toBe(serializeWorkspace(workspace));
+    expect(loaded.ok && loaded.value.name).not.toBe("Recovered");
+    expect(repo.getRecoveryInfo()).toMatchObject({
+      pending: true,
+      preview: { name: "Recovered", sheets: 1 },
+    });
+    expect(await readFile(path.join(dir, MAIN_FILE))).toEqual(original);
+    expect((await repo.save(createEmptyWorkspace())).ok).toBe(false);
+    expect(
+      (await repo.import(serializeWorkspace(createEmptyWorkspace()))).ok,
+    ).toBe(false);
+    expect((await repo.createBackup()).ok).toBe(false);
+    const exported = await repo.exportRecovery();
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+    const archive = JSON.parse(exported.value);
+    expect(archive.source).toBe(path.join(dir, MAIN_FILE));
+    expect(Buffer.from(archive.data, "base64")).toEqual(original);
+    const recovered = await repo.recover();
+    expect(recovered.ok && recovered.value).toEqual(workspace);
+    expect(await readFile(path.join(dir, MAIN_FILE), "utf8")).toBe(
+      serializeWorkspace(workspace),
+    );
+    expect(await readFile(path.join(dir, BACKUP_FILE), "utf8")).toBe(
+      serializeWorkspace(workspace),
+    );
+    expect(repo.getRecoveryInfo()).toMatchObject({
+      pending: false,
+      source: "backup",
+    });
+    expect((await repo.save(createEmptyWorkspace())).ok).toBe(true);
   });
 
-  it("主文件与备份皆损坏 → 返回结构化错误（category persistence）", async () => {
+  it("retains both damaged files and allows explicit reset only after archiving", async () => {
     const { repo, dir } = await makeRepo();
-    await writeFile(path.join(dir, MAIN_FILE), "{ broken", "utf8");
-    await writeFile(path.join(dir, BACKUP_FILE), "also broken", "utf8");
-    const loaded = await repo.load();
-    expect(loaded.ok).toBe(false);
-    if (!loaded.ok) {
-      // 与浏览器 IndexedDBWorkspaceRepository 一致：返回主文件解析错误（非 LOAD_FAILED）。
-      expect(loaded.error.code).toBe("WORKSPACE_SCHEMA_INVALID");
-      expect(loaded.error.category).toBe("persistence");
-      expect(loaded.error.userMessageKey).toBe("errors.workspaceSchemaInvalid");
-    }
+    await writeFile(path.join(dir, MAIN_FILE), "{ broken");
+    await writeFile(path.join(dir, BACKUP_FILE), "also broken");
+    expect((await repo.load()).ok).toBe(true);
+    expect(repo.getRecoveryInfo()?.preview).toBeUndefined();
+    expect((await repo.recover()).ok).toBe(false);
+    expect((await repo.exportRecovery()).ok).toBe(true);
+    expect((await repo.clear()).ok).toBe(true);
+    expect(await readdir(path.join(dir, "workspace-recovery"))).toHaveLength(1);
+    expect(repo.getRecoveryInfo()).toBeNull();
+  });
+
+  it("blocks every mutation when archiving fails", async () => {
+    const { repo, dir } = await makeRepo();
+    const backup = serializeWorkspace(createEmptyWorkspace());
+    await writeFile(path.join(dir, MAIN_FILE), "broken");
+    await writeFile(path.join(dir, BACKUP_FILE), backup);
+    await writeFile(path.join(dir, "workspace-recovery"), "not a directory");
+    await repo.load();
+    expect(repo.getRecoveryInfo()).toMatchObject({
+      pending: true,
+      errorCode: "PERSISTENCE_RECOVERY_PREPARE_FAILED",
+    });
+    for (const result of [
+      await repo.save(createEmptyWorkspace()),
+      await repo.clear(),
+      await repo.createBackup(),
+      await repo.import(backup),
+      await repo.recover(),
+    ])
+      expect(result.ok).toBe(false);
+    expect(await readFile(path.join(dir, MAIN_FILE), "utf8")).toBe("broken");
+    expect(await readFile(path.join(dir, BACKUP_FILE), "utf8")).toBe(backup);
+  });
+
+  it("rejects a changed source or backup and reuses the archive after restart", async () => {
+    const { repo, dir } = await makeRepo();
+    const workspace = createEmptyWorkspace();
+    await writeFile(path.join(dir, MAIN_FILE), "broken");
+    await writeFile(path.join(dir, BACKUP_FILE), serializeWorkspace(workspace));
+    await repo.load();
+    const reopened = new WorkspaceFileRepository(dir);
+    await reopened.load();
+    expect(await readdir(path.join(dir, "workspace-recovery"))).toHaveLength(1);
+    await writeFile(path.join(dir, MAIN_FILE), "changed");
+    expect((await repo.recover()).ok).toBe(false);
+    expect((await repo.clear()).ok).toBe(false);
+    await writeFile(path.join(dir, MAIN_FILE), "broken");
+    await writeFile(path.join(dir, BACKUP_FILE), "changed backup");
+    expect((await reopened.recover()).ok).toBe(false);
+    expect(await readFile(path.join(dir, MAIN_FILE), "utf8")).toBe("broken");
+  });
+
+  it("offers a surviving backup when the main file is missing", async () => {
+    const { repo, dir } = await makeRepo();
+    const backup = createEmptyWorkspace();
+    await writeFile(path.join(dir, BACKUP_FILE), serializeWorkspace(backup));
+    await repo.load();
+    expect(repo.getRecoveryInfo()).toMatchObject({
+      pending: true,
+      preview: { name: backup.name },
+    });
+    expect((await repo.recover()).ok).toBe(true);
   });
 
   it("v1 数据经 parseWorkspace 迁移到当前 schemaVersion（v1→v8）", async () => {
@@ -155,5 +236,31 @@ describe("WorkspaceFileRepository", () => {
     const { repo } = await makeRepo();
     const cleared = await repo.clear();
     expect(cleared.ok).toBe(true);
+  });
+  it("keeps the original and backup when recovery cannot write a temporary file", async () => {
+    const { repo, dir } = await makeRepo();
+    const backup = serializeWorkspace(createEmptyWorkspace());
+    await writeFile(path.join(dir, MAIN_FILE), "broken");
+    await writeFile(path.join(dir, BACKUP_FILE), backup);
+    await repo.load();
+    await mkdir(path.join(dir, "workspace.json.tmp"));
+    expect((await repo.recover()).ok).toBe(false);
+    expect(repo.getRecoveryInfo()?.pending).toBe(true);
+    expect(await readFile(path.join(dir, MAIN_FILE), "utf8")).toBe("broken");
+    expect(await readFile(path.join(dir, BACKUP_FILE), "utf8")).toBe(backup);
+  });
+  it("keeps separate archives for a missing main file and literal missing text", async () => {
+    const { repo, dir } = await makeRepo();
+    await writeFile(
+      path.join(dir, BACKUP_FILE),
+      serializeWorkspace(createEmptyWorkspace()),
+    );
+    await repo.load();
+    const missingArchive = repo.getRecoveryInfo()?.archiveId;
+    await writeFile(path.join(dir, MAIN_FILE), "missing");
+    await repo.load();
+    expect(repo.getRecoveryInfo()?.archiveId).toBeDefined();
+    expect(repo.getRecoveryInfo()?.archiveId).not.toBe(missingArchive);
+    expect((await repo.recover()).ok).toBe(true);
   });
 });
