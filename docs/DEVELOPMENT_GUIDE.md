@@ -66,6 +66,19 @@ DOM 快照工作，详见
 缺少真实按键样本时，测试仍然失败。这些浏览器检查不能证明 Electron、VSCode、Android
 或真实硬件的性能。
 
+## 插件 codec 撤销的针对性检查
+
+```powershell
+pnpm --filter @mamep2026/communication test
+pnpm --filter @mamep2026/plugin-api test
+pnpm --filter @mamep2026/platform-node exec vitest run src/host-plugin-runtime.test.ts
+pnpm --filter @mamep2026/web exec vitest run src/sync-registries.test.ts src/app-host.test.ts src/plugin-authorization.test.ts
+```
+
+这些检查使用内存存储、真实单文件模块加载、模拟传输和虚拟时钟，覆盖插件禁用、卸载、
+重新启用、同名重装、源码更新、激活失败、宿主释放、同步期间再次保存及旧请求失效。
+它们不代表 Electron/VSCode 生产桥、Android 真机或真实串口/TCP 设备验证。
+
 ## 插件通信授权的针对性检查
 
 SEC-05 生命周期和配额回归使用以下入口。插件 API 用例使用虚拟计时器和注入端点，
@@ -199,7 +212,7 @@ Android 的 `tests/e2e-android/tests/plugin-runtime.spec.ts` 包含同一攻击�
   - 弃用/错误用法会导致 dev console.error，破坏 e2e「无 console 错误」断言。
   - 组件测试（`packages/ui`）用 jsdom，BottomPanel 类组件需包 `<AntApp>`（`App.useApp()`）；`turbo` 跑 typecheck/lint 会进 TUI 备用缓冲区吞输出，用 `$env:TURBO_UI="0"; pnpm typecheck` 流式输出。
 - **生产 CSP 与可执行插件**：四端生产产物注入的 CSP 必须**同时**放行 `worker-src 'self' blob:` 与 **`script-src 'self' blob:`**。只放行 `worker-src` 会失败，因为 Worker 内部（以及同进程路径）对 **blob: URL 的动态 `import()`** 由 `script-src` 管控；缺 `blob:` 时报 `Loading the script 'blob:…' violates … "script-src 'self'"`，表现为安装可执行插件时提示 `Failed to load the plugin entry.`（`errors.pluginLoadFailed`）。**dev server 不注入 CSP，e2e-web（dev）无法覆盖该问题**：CSP / 产物类改动必须用生产产物验证（`build:electron` + Electron e2e、`build:vscode` + VSCode e2e）。回归保护：`apps/web/src/csp.test.ts`、`apps/vscode-extension/src/webview/prod-csp.test.ts`。
-- **宿主侧插件执行面**：宿主（Electron 主进程 / VSCode 扩展宿主）侧插件**只能**经 `PluginStorePort` 加载（`@mamep2026/platform-node/plugin` 的 `HostPluginRuntime`），**不得**在 `main.ts` / `extension.ts` 里静态 import 插件包；`sync()` 按「已启用 same-process 插件集合签名（id + entrySource）」比对，**变化即全量重建** dataType/addressTransform 注册表（这两个注册表无注销 API，复用旧表会让卸载/禁用插件的变换继续生效）。VSCode 的插件 entrySource 存 `globalState`（单插件约 0.5MB，VSCode 会提示 `large extension state detected`，体积大时应落盘）。
+- **宿主侧插件执行面**：宿主（Electron 主进程 / VSCode 扩展宿主）侧插件**只能**经 `PluginStorePort` 加载（`@mamep2026/platform-node/plugin` 的 `HostPluginRuntime`），**不得**在 `main.ts` / `extension.ts` 里静态 import 插件包；`sync()` 按已启用 same-process 插件的 ID 与批准内容摘要比较，变化时先撤销插件 codec 范围，再重建 dataType/addressTransform 注册表（这两个注册表无注销 API，复用旧表会让卸载/禁用插件的变换继续生效）。同步期间的新保存会触发再次读取最新存储。VSCode 的插件 entrySource 存 `globalState`（单插件约 0.5MB，VSCode 会提示 `large extension state detected`，体积大时应落盘）。
 - **构建代码分割（懒加载 + rolldown 自动分包）**：四端渲染器共用 `apps/web/vite.config.ts`。应用与 antd 使用 rolldown 自动分包，仅将完整 `react-dom` 包隔离为独立 chunk，不设置 `maxSize`、不按包内部模块继续切分。历史上 `react` / `antd` / `vendor` 自定义分组曾把 `@ant-design/colors` 基类与子类拆开，导致 Electron 白屏，禁止恢复。纯领域/契约包声明 `sideEffects: false`，antd 组件使用稳定深路径导入；每个 Web 构建都会执行 `scripts/verify-web-bundle-budget.mjs`，要求任一 JS chunk ≤ 400 KiB、首屏 gzip ≤ 450 KiB。UI 侧懒加载使用 `React.lazy` + 每组件独立 `<Suspense>` + `useOpenedOnce` 门控；连接设置在宿主就绪后加载，兼容性/恢复横幅按条件加载。**浏览器 dev 不打包**，分包改动必须验证四端生产产物。jsdom 单测里懒加载组件首次挂载要异步等待。
 - **平台宿主懒加载边界**：`App.tsx` 先同步渲染启动骨架，首帧后动态加载共享组合根 `host-assembly.ts` / `platform-context.ts`；`loadPlatformHostFactory` 再按平台动态 `import()` 专属宿主。开发服务器使用 `host-factories/loader.ts` 做运行时平台探测；生产构建把 `./host-factories/loader` 别名到 `loader.browser.ts` / `loader.electron.ts` / `loader.vscode.ts` / `loader.android.ts`，只保留共享 Browser Host 与目标平台工厂，Vite 构建会校验其他工厂或 `@capacitor/*` 不得进入产物。Android 探测只走 `@mamep2026/platform-android/detect-android` 纯子路径，禁止从 Android 包根入口导入探测函数；`@capacitor/core` / `@capacitor/app` **只能**从 `host-factories/android.ts` 经 `/capacitor`、`/capacitor-app` 子路径可达。装配取消必须用 `AbortSignal`，并在每个 `await` 后检查 `aborted`。启动骨架由 `useAppStore.hostStatus` 驱动，失败时保持「无 Host 可操作」。首屏字节口径为「HTML + 入口 + `modulepreload` + CSS」。
 

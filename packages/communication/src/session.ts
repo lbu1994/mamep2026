@@ -430,6 +430,8 @@ export class CommunicationSession {
   private readonly protocol: string;
   /** 自定义协议 codec（protocol 为 codecId 时非空；内置 rtu/tcp 为 null，走内置路径）。 */
   private readonly codec: ProtocolCodec | null;
+  /** Captured registration identity; a replacement requires a new session. */
+  private readonly isCodecCurrent: () => boolean;
   /** TCP Unit ID（MBAP 单元标识，默认 0）：连接后可经 setUnitId 动态更新。 */
   private unitId: number;
   /** 当前从站地址（RTU）：连接后可动态更新（每表独立设置）。 */
@@ -443,13 +445,15 @@ export class CommunicationSession {
     // 通用注册表）：内置 rtu/tcp 走既有内置路径（双轨零回归）；
     // codecId 从注册表解析，未知即构造期报错（不静默回退）。
     if (this.protocol !== "rtu" && this.protocol !== "tcp") {
-      const codec = options.codecRegistry?.get(this.protocol);
-      if (!codec) {
+      const lease = options.codecRegistry?.capture(this.protocol);
+      if (!lease) {
         throw codecNotFoundError(this.protocol);
       }
-      this.codec = codec;
+      this.codec = lease.codec;
+      this.isCodecCurrent = lease.isCurrent;
     } else {
       this.codec = null;
+      this.isCodecCurrent = () => true;
     }
     this.unitId = options.unitId ?? 0;
     this.slaveAddress = options.slaveAddress ?? 1;
@@ -659,7 +663,7 @@ export class CommunicationSession {
     meta: ReadRegistersMeta,
   ): Promise<Result<number>> {
     return this.readRegisters(sentAddress, 1, meta).then((result) =>
-      result.ok ? ok(result.value[0] ?? 0) : result,
+      this.codecResult(result.ok ? ok(result.value[0] ?? 0) : result),
     );
   }
 
@@ -669,6 +673,9 @@ export class CommunicationSession {
     quantity: number,
     meta: ReadRegistersMeta,
   ): Promise<Result<number[]>> {
+    if (!this.isCodecCurrent()) {
+      return Promise.resolve(fail(cancelledError("codec-revoked")));
+    }
     if (this.stateMachine.getState() !== "connected") {
       return Promise.resolve(fail(notConnectedError()));
     }
@@ -703,7 +710,7 @@ export class CommunicationSession {
         group: meta.group,
         cancelToken: meta.cancelToken,
       })
-      .then((result) => result);
+      .then((result) => this.codecResult(result));
   }
 
   /**
@@ -714,6 +721,9 @@ export class CommunicationSession {
     addresses: number[],
     meta: ReadRegistersMeta,
   ): Promise<Result<number[]>> {
+    if (!this.isCodecCurrent()) {
+      return Promise.resolve(fail(cancelledError("codec-revoked")));
+    }
     if (this.codec === null) {
       return Promise.resolve(fail(codecRequiredError()));
     }
@@ -734,7 +744,7 @@ export class CommunicationSession {
         group: meta.group,
         cancelToken: meta.cancelToken,
       })
-      .then((result) => result);
+      .then((result) => this.codecResult(result));
   }
 
   writeRegister(
@@ -751,6 +761,9 @@ export class CommunicationSession {
     values: number[],
     meta: WriteRegistersMeta,
   ): Promise<Result<WriteOutcome>> {
+    if (!this.isCodecCurrent()) {
+      return Promise.resolve(fail(cancelledError("codec-revoked")));
+    }
     if (this.stateMachine.getState() !== "connected") {
       return Promise.resolve(fail(notConnectedError()));
     }
@@ -780,10 +793,12 @@ export class CommunicationSession {
               route.value,
             )
         : () => this.executeWrite(sentAddress, values, meta, route.value);
-    return this.scheduler.enqueue(run, {
-      priority: meta.priority ?? "manual-write",
-      cancelToken: meta.cancelToken,
-    });
+    return this.scheduler
+      .enqueue(run, {
+        priority: meta.priority ?? "manual-write",
+        cancelToken: meta.cancelToken,
+      })
+      .then((result) => this.codecResult(result));
   }
 
   /**
@@ -794,6 +809,9 @@ export class CommunicationSession {
     entries: CodecWriteEntry[],
     meta: WriteRegistersMeta,
   ): Promise<Result<WriteOutcome>> {
+    if (!this.isCodecCurrent()) {
+      return Promise.resolve(fail(cancelledError("codec-revoked")));
+    }
     if (this.codec === null) {
       return Promise.resolve(fail(codecRequiredError()));
     }
@@ -808,13 +826,19 @@ export class CommunicationSession {
     }
     const route = this.resolveRequestRoute(meta.route);
     if (!route.ok) return Promise.resolve(route);
-    return this.scheduler.enqueue(
-      () => this.executeCodecWrite(entries, meta, route.value),
-      {
+    return this.scheduler
+      .enqueue(() => this.executeCodecWrite(entries, meta, route.value), {
         priority: meta.priority ?? "manual-write",
         cancelToken: meta.cancelToken,
-      },
-    );
+      })
+      .then((result) => this.codecResult(result));
+  }
+
+  /** Recheck after the scheduler resolves, before exposing a result to callers. */
+  private codecResult<T>(result: Result<T>): Result<T> {
+    return this.isCodecCurrent()
+      ? result
+      : fail(cancelledError("codec-revoked"));
   }
 
   private async executeRead(
@@ -927,6 +951,7 @@ export class CommunicationSession {
         beforeSend: meta.beforeSend,
       },
     );
+    if (!this.isCodecCurrent()) return fail(cancelledError("codec-revoked"));
     if (!decoded.ok) return decoded;
     if (decoded.value.kind === "exception") {
       return fail(this.mapCodecException(codec, decoded.value.exceptionCode));
@@ -958,6 +983,7 @@ export class CommunicationSession {
         beforeSend: meta.beforeSend,
       },
     );
+    if (!this.isCodecCurrent()) return fail(cancelledError("codec-revoked"));
     if (!decoded.ok) return decoded;
     if (decoded.value.kind === "exception") {
       return fail(this.mapCodecException(codec, decoded.value.exceptionCode));
@@ -1042,12 +1068,15 @@ export class CommunicationSession {
         return fail(notConnectedError());
       }
 
+      if (!this.isCodecCurrent()) return fail(cancelledError("codec-revoked"));
       const authorized = meta.beforeSend?.();
       if (authorized !== undefined && !authorized.ok) return authorized;
+      if (!this.isCodecCurrent()) return fail(cancelledError("codec-revoked"));
       const attemptBundle = buildAttempt();
       const stillAuthorized = meta.beforeSend?.();
       if (stillAuthorized !== undefined && !stillAuthorized.ok)
         return stillAuthorized;
+      if (!this.isCodecCurrent()) return fail(cancelledError("codec-revoked"));
       const { frame } = attemptBundle;
       const startedAt = this.options.clock.now();
       this.emitLog({
@@ -1080,6 +1109,10 @@ export class CommunicationSession {
         exchange.cancel("authorization-revoked-before-send");
         return sendAuthorization;
       }
+      if (!this.isCodecCurrent()) {
+        exchange.cancel("codec-revoked");
+        return fail(cancelledError("codec-revoked"));
+      }
       const writeResult = await this.options.transport.write(frame);
       if (!writeResult.ok) {
         exchange.cancel("write-failed");
@@ -1099,6 +1132,18 @@ export class CommunicationSession {
       exchange.startTimeout();
 
       const single = await exchange.promise;
+      if (!this.isCodecCurrent()) {
+        this.emitExchangeLog(
+          new Uint8Array(0),
+          attempt,
+          startedAt,
+          meta,
+          "failure",
+          "CANCELLED",
+          null,
+        );
+        return fail(cancelledError("codec-revoked"));
+      }
       if (single.ok) {
         const decoded = single.value.result as TDecoded;
         if (decoded.kind === "exception") {
@@ -1293,6 +1338,8 @@ export class CommunicationSession {
     });
 
     unsubscribeData = this.options.transport.onData((chunk) => {
+      // Keep the serial exchange bounded, but never call a revoked plugin parser.
+      if (!this.isCodecCurrent()) return;
       const parsed = parser.push(chunk);
       if (!parsed.done) return;
       if (parsed.outcome.ok) {

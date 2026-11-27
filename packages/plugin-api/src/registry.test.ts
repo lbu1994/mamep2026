@@ -461,6 +461,11 @@ describe("PluginRegistry 同进程运行时（ADR-054：手动安装 + 用户授
     const registry = new PluginRegistry({
       syncRegistries: {
         codec: { register: codecRegister, list: () => ["custom"] },
+        createCodecScope: () => ({
+          register: codecRegister,
+          list: () => ["custom"],
+          dispose: () => {},
+        }),
         dataType: {
           register: dataTypeRegister,
           get: () => undefined,

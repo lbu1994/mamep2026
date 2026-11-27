@@ -8,7 +8,10 @@ import { createHash } from "node:crypto";
  */
 import { describe, expect, it, vi } from "vitest";
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
-import { createCodecRegistry } from "@mamep2026/communication";
+import {
+  createCodecRegistry,
+  registerBasicTablesCodecs,
+} from "@mamep2026/communication";
 import {
   createEmptyPluginStoreData,
   pluginApprovalContent,
@@ -497,5 +500,83 @@ describe("HostPluginRuntime（ADR-055）", () => {
     await runtime.sync();
     expect(runtime.listLoadedPluginIds()).toEqual([]);
     expect(load).toHaveBeenCalledOnce();
+  });
+});
+
+describe("host codec generations", () => {
+  it.each(["disable", "uninstall", "dispose", "source"] as const)(
+    "revokes old codec leases on %s",
+    async (change) => {
+      const store = new MemoryPluginStore();
+      const codecs = createCodecRegistry();
+      registerBasicTablesCodecs(codecs);
+      const coreIds = codecs.list();
+      const record = storedPlugin({
+        pluginId: "vendor",
+        source: entrySource({ pluginId: "vendor", protocolId: "vendor-codec" }),
+      });
+      store.setPlugins([record]);
+      const runtime = createHostPluginRuntime({ store, codecRegistry: codecs });
+      await runtime.sync();
+      const lease = codecs.capture("vendor-codec");
+      expect(lease?.isCurrent()).toBe(true);
+      if (change === "dispose") runtime.dispose();
+      else {
+        store.setPlugins(
+          change === "uninstall"
+            ? []
+            : [
+                change === "disable"
+                  ? { ...record, enabled: false }
+                  : storedPlugin({
+                      pluginId: "vendor",
+                      source: record.entrySource + "\n// Updated source",
+                    }),
+              ],
+        );
+        await runtime.sync();
+      }
+      expect(lease?.isCurrent()).toBe(false);
+      expect(codecs.list()).toEqual(
+        change === "source" ? [...coreIds, "vendor-codec"] : coreIds,
+      );
+      if (change !== "dispose") {
+        store.setPlugins([record]);
+        await runtime.sync();
+        expect(codecs.get("vendor-codec")).toBeDefined();
+        expect(lease?.isCurrent()).toBe(false);
+      }
+      runtime.dispose();
+      expect(codecs.list()).toEqual(coreIds);
+    },
+  );
+
+  it("coalesces a second sync while a stale store load is pending", async () => {
+    const store = new MemoryPluginStore();
+    const record = storedPlugin({
+      pluginId: "vendor",
+      source: entrySource({ pluginId: "vendor", protocolId: "vendor-codec" }),
+    });
+    store.setPlugins([record]);
+    const runtime = createHostPluginRuntime({ store });
+    await runtime.sync();
+    const lease = runtime.getCodecRegistry().capture("vendor-codec");
+    const snapshot = await store.load();
+    let release: (value: Result<PluginStoreData>) => void = () => {};
+    const pending = new Promise<Result<PluginStoreData>>((resolve) => {
+      release = resolve;
+    });
+    const load = vi.spyOn(store, "load").mockReturnValueOnce(pending);
+    const first = runtime.sync();
+    await Promise.resolve();
+    expect(load).toHaveBeenCalledTimes(1);
+    store.setPlugins([]);
+    const second = runtime.sync();
+    release(snapshot);
+    await Promise.all([first, second]);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(lease?.isCurrent()).toBe(false);
+    expect(runtime.getCodecRegistry().get("vendor-codec")).toBeUndefined();
+    runtime.dispose();
   });
 });

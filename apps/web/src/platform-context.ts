@@ -17,7 +17,7 @@ import {
 } from "@mamep2026/data-conversion";
 import {
   createAddressTransformRegistry,
-  type PluginSyncRegistries,
+  type PluginHostSyncRegistries,
 } from "@mamep2026/plugin-api";
 import type { CompatibilityEnv, KeyValueStore } from "@mamep2026/platform-web";
 // IndexedDB KV（浏览器 / Android 共用能力）：四端构建共用该模块，非平台专属依赖。
@@ -30,7 +30,7 @@ export interface PlatformHostContext {
   /** 数据类型解析器：装配后注入 UI store。 */
   dataTypeResolver: DataTypeResolver;
   /** 同步贡献注册面：插件 `activate(ctx)` 的唯一注入点。 */
-  syncRegistries: PluginSyncRegistries;
+  syncRegistries: PluginHostSyncRegistries;
   /** 地址变换解析：表级 Address Adjust 经此解析。 */
   resolveAddressTransform: (transformId: string) => AddressTransform | null;
   /** dev mock 传输（`?mockTransport=1`，仅 dev 生效；浏览器/Android 使用）。 */

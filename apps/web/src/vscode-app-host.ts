@@ -62,7 +62,7 @@ import type {
   PluginManifest,
   PluginRegistry,
   PluginStorePort,
-  PluginSyncRegistries,
+  PluginHostSyncRegistries,
 } from "@mamep2026/plugin-api";
 import {
   buildVscodeTheme,
@@ -100,7 +100,7 @@ export interface VscodeAppHostOptions {
   /** 插件存储（默认 BridgePluginStore 经 vscode-bridge；测试注入内存仓储）。 */
   pluginStore?: PluginStorePort | undefined;
   /** 同步贡献注册面：透传 inner，供插件 activate 经 ctx.registries 注册。 */
-  syncRegistries?: PluginSyncRegistries | undefined;
+  syncRegistries?: PluginHostSyncRegistries | undefined;
   /** 地址变换解析：透传 inner（本地只读会话不用于通信）。 */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
   /**

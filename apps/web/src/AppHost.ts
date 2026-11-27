@@ -81,7 +81,7 @@ import type {
   PluginManifest,
   PluginRemoteRuntime,
   PluginStorePort,
-  PluginSyncRegistries,
+  PluginHostSyncRegistries,
   StoredPlugin,
 } from "@mamep2026/plugin-api";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
@@ -135,7 +135,7 @@ export interface AppHostOptions {
    * 同步贡献注册面：插件 `activate(ctx)` 经 `ctx.registries` 注册
    * codec / dataType / addressTransform；由组合根（apps/web App.tsx）装配后注入注册表。
    */
-  syncRegistries?: PluginSyncRegistries | undefined;
+  syncRegistries?: PluginHostSyncRegistries | undefined;
   /**
    * 地址变换解析：经 address-adjust 插件的
    * AddressTransformRegistry 解析 transformId → 变换；缺省不调整（核心不再内置变换）。

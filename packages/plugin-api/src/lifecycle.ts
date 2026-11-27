@@ -154,6 +154,13 @@ export interface PluginSyncRegistries {
   readonly addressTransform: AddressTransformRegistry;
 }
 
+/** Host-only factory. Each activation receives a fresh, revocable codec scope. */
+export interface PluginHostSyncRegistries extends PluginSyncRegistries {
+  createCodecScope(pluginId: string): PluginSyncRegistries["codec"] & {
+    dispose(): void;
+  };
+}
+
 /** 传给 activate/deactivate 的插件上下文。 */ export interface PluginContext {
   pluginId: string;
   /** 唯一通信面（不暴露 Transport / socket 句柄，经统一调度器）。 */

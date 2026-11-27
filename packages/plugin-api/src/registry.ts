@@ -40,6 +40,7 @@ import {
   type PluginRemoteRuntime,
   type PluginRuntime,
   type PluginSyncRegistries,
+  type PluginHostSyncRegistries,
 } from "./lifecycle";
 import {
   createUnavailableCommunicationApi,
@@ -84,11 +85,11 @@ export interface PluginRegistryOptions {
    * 同步贡献注册面：插件 `activate(ctx)` 经 `ctx.registries` 注册
    * codec/dataType/addressTransform。未提供则用「不可用」兜底（注册返回能力错误）。
    */
-  syncRegistries?: PluginSyncRegistries;
+  syncRegistries?: PluginHostSyncRegistries;
 }
 
 /** 同步注册面不可用时的兜底（未注入注册表的宿主 / 测试）。 */
-export function createUnavailableSyncRegistries(): PluginSyncRegistries {
+export function createUnavailableSyncRegistries(): PluginHostSyncRegistries {
   const unavailable = () =>
     fail(
       createMamepError({
@@ -101,6 +102,11 @@ export function createUnavailableSyncRegistries(): PluginSyncRegistries {
     );
   return {
     codec: { register: unavailable, list: () => [] },
+    createCodecScope: () => ({
+      register: unavailable,
+      list: () => [],
+      dispose: () => {},
+    }),
     dataType: { register: unavailable, get: () => undefined, list: () => [] },
     addressTransform: {
       register: unavailable,
@@ -125,6 +131,7 @@ interface RegisteredPlugin {
   approval: PluginApproval | undefined;
   grantedPermissions: readonly PermissionId[];
   generation: object;
+  syncRegistries?: PluginSyncRegistries;
   revokeListeners: Set<() => void>;
   stopping?: Promise<void>;
   disposing?: Promise<void>;
@@ -144,7 +151,7 @@ export class PluginRegistry {
       ) => PluginCommunicationApi)
     | undefined;
   /** 同步贡献注册面：注入到插件 `ctx.registries`。 */
-  private readonly syncRegistries: PluginSyncRegistries;
+  private readonly syncRegistries: PluginHostSyncRegistries;
   /** 变更版本号（注册/启停/生命周期变化时自增）：UI 消费方响应式订阅用。 */
   private version = 0;
   private disposed = false;
@@ -453,7 +460,7 @@ export class PluginRegistry {
     const ctx: PluginContext = {
       pluginId,
       communication: access.api,
-      registries: this.syncRegistries,
+      registries: this.registriesFor(pluginId, plugin),
     };
     try {
       const result = plugin.runtime.handleToolbarAction.call(
@@ -635,7 +642,7 @@ export class PluginRegistry {
     const ctx: PluginContext = {
       pluginId,
       communication: this.createAccess(pluginId, false).api,
-      registries: this.syncRegistries,
+      registries: this.registriesFor(pluginId, plugin),
     };
     try {
       const result = plugin.runtime.activate(ctx);
@@ -683,7 +690,7 @@ export class PluginRegistry {
     const ctx: PluginContext = {
       pluginId,
       communication: this.createAccess(pluginId, false).api,
-      registries: this.syncRegistries,
+      registries: this.registriesFor(pluginId, plugin),
     };
     withPluginDeadline(
       () => plugin.remoteRuntime?.activate(ctx),
@@ -784,9 +791,29 @@ export class PluginRegistry {
     });
   }
 
+  /** Bind codec registration to this activation without exposing host disposal controls. */
+  private registriesFor(
+    pluginId: string,
+    plugin: RegisteredPlugin,
+  ): PluginSyncRegistries {
+    if (plugin.syncRegistries !== undefined) return plugin.syncRegistries;
+    const scope = this.syncRegistries.createCodecScope(pluginId);
+    plugin.revokeListeners.add(() => scope.dispose());
+    plugin.syncRegistries = {
+      codec: {
+        register: (codec) => scope.register(codec),
+        list: () => scope.list(),
+      },
+      dataType: this.syncRegistries.dataType,
+      addressTransform: this.syncRegistries.addressTransform,
+    };
+    return plugin.syncRegistries;
+  }
+
   /** Revoke every retained API before lifecycle hooks can run. */
   private revoke(plugin: RegisteredPlugin): void {
     plugin.generation = {};
+    delete plugin.syncRegistries;
     for (const listener of [...plugin.revokeListeners]) listener();
     plugin.revokeListeners.clear();
   }

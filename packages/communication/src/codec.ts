@@ -6,7 +6,13 @@
  *
  * 本文件协议无关：不 import protocol-modbus / protocol-memobus（保持分层，AGENTS §8.1）。
  */
-import type { MamepError, Result } from "@mamep2026/domain";
+import {
+  createMamepError,
+  fail,
+  ok,
+  type MamepError,
+  type Result,
+} from "@mamep2026/domain";
 
 /** 读请求：寄存器编号列表（可连续可不连续；是否允许非连续由 codec 决定）。 */
 export interface CodecReadRequest {
@@ -70,24 +76,89 @@ export interface ProtocolCodec {
   mapException?(exceptionCode: number): MamepError;
 }
 
-/** 通用 codec 注册表（1B）。 */
+/** One plugin activation owns this scope. Disposal permanently rejects registration. */
+export interface CodecRegistrationScope {
+  register(codec: ProtocolCodec): Result<void>;
+  list(): string[];
+  dispose(): void;
+}
+
+/** A session retains this registration; replacement never revives an old lease. */
+export interface CodecLease {
+  readonly codec: ProtocolCodec;
+  isCurrent(): boolean;
+}
+
+/** Core registrations and plugin activation scopes share one lookup surface. */
 export interface CodecRegistry {
+  /** Register a core codec. Plugin scopes cannot replace it. */
   register(codec: ProtocolCodec): void;
   get(id: string): ProtocolCodec | undefined;
   list(): string[];
+  /** Capture the current registration, including its identity. */
+  capture(id: string): CodecLease | undefined;
+  /** Create a fresh generation owned by pluginId; disposal only removes its entries. */
+  createScope(pluginId: string): CodecRegistrationScope;
 }
 
 export function createCodecRegistry(): CodecRegistry {
-  const codecs = new Map<string, ProtocolCodec>();
+  const codecs = new Map<
+    string,
+    { codec: ProtocolCodec; owner: object | null }
+  >();
+  const list = () => Array.from(codecs.keys());
   return {
     register(codec) {
-      codecs.set(codec.protocolId, codec);
+      codecs.set(codec.protocolId, { codec, owner: null });
     },
     get(id) {
-      return codecs.get(id);
+      return codecs.get(id)?.codec;
     },
-    list() {
-      return Array.from(codecs.keys());
+    list,
+    capture(id) {
+      const entry = codecs.get(id);
+      return entry === undefined
+        ? undefined
+        : {
+            codec: entry.codec,
+            isCurrent: () => codecs.get(id) === entry,
+          };
+    },
+    createScope(pluginId) {
+      const owner = { pluginId };
+      let disposed = false;
+      return {
+        register(codec) {
+          const current = codecs.get(codec.protocolId);
+          if (
+            disposed ||
+            codec.protocolId === "rtu" ||
+            codec.protocolId === "tcp" ||
+            (current !== undefined && current.owner !== owner)
+          ) {
+            return fail(
+              createMamepError({
+                code: disposed ? "CODEC_SCOPE_REVOKED" : "CODEC_ID_CONFLICT",
+                category: "plugin",
+                retryable: false,
+                userMessageKey: "errors.pluginRuntimeNotAvailable",
+                technicalMessage: disposed
+                  ? `codec scope revoked for plugin ${pluginId}`
+                  : `codec ${codec.protocolId} is owned by core or another plugin generation`,
+              }),
+            );
+          }
+          codecs.set(codec.protocolId, { codec, owner });
+          return ok(undefined);
+        },
+        list: () => (disposed ? [] : list()),
+        dispose() {
+          disposed = true;
+          for (const [id, entry] of codecs) {
+            if (entry.owner === owner) codecs.delete(id);
+          }
+        },
+      };
     },
   };
 }

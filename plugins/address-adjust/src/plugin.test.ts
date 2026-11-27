@@ -8,6 +8,8 @@ import {
   createAddressTransformRegistry,
   createDataTypeRegistry,
   createUnavailableCommunicationApi,
+  createUnavailableSyncRegistries,
+  type PluginHostSyncRegistries,
   runtimeFromLocalEntry,
   type PluginContext,
   type PluginSyncRegistries,
@@ -19,7 +21,7 @@ import {
   resolveAddressAdjustTransform,
 } from "./address-adjust-transform";
 
-function makeRegistry(registries?: PluginSyncRegistries) {
+function makeRegistry(registries?: PluginHostSyncRegistries) {
   const contributionRegistry = new ContributionPointRegistry();
   for (const point of BUILTIN_CONTRIBUTION_POINTS) {
     contributionRegistry.registerPoint(point);
@@ -33,8 +35,9 @@ function makeRegistry(registries?: PluginSyncRegistries) {
 /** 测试用同步注册面（真地址变换注册表 + 假 codec 注册面）。 */
 function makeSyncRegistries(
   addressTransform = createAddressTransformRegistry(),
-): PluginSyncRegistries {
+): PluginHostSyncRegistries {
   return {
+    createCodecScope: createUnavailableSyncRegistries().createCodecScope,
     codec: { register: () => ok(undefined), list: () => [] },
     dataType: createDataTypeRegistry(),
     addressTransform,

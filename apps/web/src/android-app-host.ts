@@ -55,7 +55,7 @@ import type {
   PluginRegistry,
   PluginRuntime,
   PluginStorePort,
-  PluginSyncRegistries,
+  PluginHostSyncRegistries,
 } from "@mamep2026/plugin-api";
 import type { SaveStatus, WorkspaceRepositoryPort } from "@mamep2026/workspace";
 import type {
@@ -89,7 +89,7 @@ export interface AndroidAppHostOptions {
   pluginStore?: PluginStorePort | undefined;
   codecRegistry?: CodecRegistry | undefined;
   /** 同步贡献注册面：透传 inner，供插件 activate 经 ctx.registries 注册。 */
-  syncRegistries?: PluginSyncRegistries | undefined;
+  syncRegistries?: PluginHostSyncRegistries | undefined;
   resolveAddressTransform?:
     ((transformId: string) => AddressTransform | null) | undefined;
   /** 平台宿主（默认用注入的 bridge 构造 `AndroidPlatformHost`；测试可注入）。 */

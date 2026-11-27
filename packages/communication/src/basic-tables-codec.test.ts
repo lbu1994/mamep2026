@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { appendCrc, crc16Modbus } from "@mamep2026/protocol-modbus";
 import { createDefaultRtuProfile } from "@mamep2026/domain";
 import { BasicTablesRtuCodec } from "./basic-tables-codec";
-import type { CodecExpect } from "./codec";
+import { createCodecRegistry, type CodecExpect } from "./codec";
 import { CommunicationSession } from "./session";
 import { FakeTransport } from "./testing/fake-transport";
 import { ManualClock, advanceUntil } from "./testing/manual-clock";
@@ -215,19 +215,14 @@ describe("BasicTablesRtuCodec 会话闭环（FakeTransport 回帧）", () => {
   }> {
     const transport = new FakeTransport();
     const clock = new ManualClock();
+    const codecRegistry = createCodecRegistry();
+    codecRegistry.register(new BasicTablesRtuCodec("coil"));
     const session = new CommunicationSession({
       transport,
       clock,
       config: createDefaultRtuProfile(),
       protocol: "modbus-basic-tables:coil",
-      codecRegistry: {
-        register: () => undefined,
-        get: (id: string) =>
-          id === "modbus-basic-tables:coil"
-            ? new BasicTablesRtuCodec("coil")
-            : undefined,
-        list: () => ["modbus-basic-tables:coil"],
-      },
+      codecRegistry,
       slaveAddress: 1,
       onLog: () => undefined,
       onStateChange: () => undefined,

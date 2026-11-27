@@ -7,11 +7,12 @@ import {
   PLUGIN_API_VERSION,
   PluginRegistry,
   createAddressTransformRegistry,
+  createUnavailableSyncRegistries,
   createDataTypeRegistry,
   runtimeFromLocalEntry,
   type PermissionId,
   type PluginCommunicationApi,
-  type PluginSyncRegistries,
+  type PluginHostSyncRegistries,
 } from "@mamep2026/plugin-api";
 import * as pluginEntry from "./plugin";
 import {
@@ -34,14 +35,9 @@ function makeHarness(
     contributionRegistry.registerPoint(point);
   }
   const codecRegistry = createCodecRegistry();
-  const registries: PluginSyncRegistries = {
-    codec: {
-      register: (codec) => {
-        codecRegistry.register(codec);
-        return ok(undefined);
-      },
-      list: () => codecRegistry.list(),
-    },
+  const registries: PluginHostSyncRegistries = {
+    codec: createUnavailableSyncRegistries().codec,
+    createCodecScope: (pluginId) => codecRegistry.createScope(pluginId),
     dataType: createDataTypeRegistry(),
     addressTransform: createAddressTransformRegistry(),
   };

@@ -64,7 +64,7 @@ import type {
   PluginManifest,
   PluginRegistry,
   PluginStorePort,
-  PluginSyncRegistries,
+  PluginHostSyncRegistries,
 } from "@mamep2026/plugin-api";
 import {
   BrowserPlatformHost,
@@ -103,7 +103,7 @@ export interface ElectronAppHostOptions {
   /** codec 注册表：RTU 本地路径复用浏览器 AppHost，按活动表协议路由。 */
   codecRegistry?: CodecRegistry | undefined;
   /** 同步贡献注册面：透传 inner，供插件 activate 经 ctx.registries 注册。 */
-  syncRegistries?: PluginSyncRegistries | undefined;
+  syncRegistries?: PluginHostSyncRegistries | undefined;
   /** 地址变换解析：透传 inner（RTU 本地会话按表应用）。 */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appendCrc } from "@mamep2026/protocol-modbus";
 import {
   createDefaultRtuProfile,
@@ -159,7 +159,9 @@ function makeCodecSession(opts?: {
   const clock = new ManualClock();
   const transport = new FakeTransport();
   const registry = createCodecRegistry();
-  registry.register(new FakeMemobusCodec());
+  const scope = registry.createScope("vendor");
+  const codec = new FakeMemobusCodec();
+  scope.register(codec);
   const session = new CommunicationSession({
     transport,
     clock,
@@ -168,7 +170,7 @@ function makeCodecSession(opts?: {
     codecRegistry: registry,
     ...(opts?.onLog !== undefined ? { onLog: opts.onLog } : {}),
   });
-  return { clock, transport, session };
+  return { clock, transport, session, registry, scope, codec };
 }
 
 function makeRtuSession() {
@@ -367,5 +369,113 @@ describe("CommunicationSession codec path (ADR-040)", () => {
     const result = await promise;
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("REQUEST_TIMEOUT");
+  });
+});
+
+describe("codec generation revocation", () => {
+  it("allows a new session to use a reinstalled codec while the old session stays revoked", async () => {
+    const { session, scope, registry, codec } = makeCodecSession();
+    await session.connect();
+    scope.dispose();
+    registry.createScope("vendor").register(codec);
+    const clock = new ManualClock();
+    const transport = new FakeTransport();
+    const replacement = new CommunicationSession({
+      transport,
+      clock,
+      config: createDefaultRtuProfile(),
+      protocol: codec.protocolId,
+      codecRegistry: registry,
+    });
+    await replacement.connect();
+    const pending = replacement.readRegistersAt([1], { source: "manual-read" });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(readResponse(1, [77]));
+    expect(await pending).toEqual(ok([77]));
+    expect(
+      await session.readRegister(1, { source: "manual-read" }),
+    ).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
+    await session.disconnect();
+    await replacement.disconnect();
+  });
+
+  it.each(["read", "write"] as const)(
+    "drains an in-flight %s, drops its result and refuses queued work",
+    async (operation) => {
+      const { session, transport, clock, scope, registry, codec } =
+        makeCodecSession();
+      const parse = vi.spyOn(codec, "decodeResponse");
+      await session.connect();
+      const first =
+        operation === "read"
+          ? session.readRegistersAt([1], { source: "manual-read" })
+          : session.writeRegistersAt([{ address: 1, value: 2 }], {
+              source: "manual-write",
+            });
+      await advanceUntil(clock, () => transport.sentFrames.length === 1);
+      const queued = session.readRegisters(2, 1, { source: "manual-read" });
+      scope.dispose();
+      registry.createScope("vendor").register(codec);
+      transport.simulateData(
+        operation === "read" ? readResponse(1, [55]) : writeResponse(1, 1),
+      );
+      let finished = false;
+      void first.then(() => {
+        finished = true;
+      });
+      await advanceUntil(clock, () => finished, 100);
+      expect(await first).toMatchObject({
+        ok: false,
+        error: { code: "CANCELLED", technicalMessage: "codec-revoked" },
+      });
+      expect(await queued).toMatchObject({
+        ok: false,
+        error: { code: "CANCELLED" },
+      });
+      expect(parse).not.toHaveBeenCalled();
+      expect(transport.sentFrames).toHaveLength(1);
+      for (const result of await Promise.all([
+        session.readRegisters(1, 1, { source: "manual-read" }),
+        session.readRegistersAt([1], { source: "manual-read" }),
+        session.writeRegisters(1, [2], { source: "manual-write" }),
+        session.writeRegistersAt([{ address: 1, value: 2 }], {
+          source: "manual-write",
+        }),
+      ]))
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: "CANCELLED" },
+        });
+      expect(transport.sentFrames).toHaveLength(1);
+      await session.disconnect();
+    },
+  );
+
+  it("drops a response completed just before revocation", async () => {
+    const { session, transport, clock, scope } = makeCodecSession();
+    await session.connect();
+    const pending = session.readRegistersAt([1], { source: "manual-read" });
+    await advanceUntil(clock, () => transport.sentFrames.length === 1);
+    transport.simulateData(readResponse(1, [55]));
+    scope.dispose();
+    expect(await pending).toMatchObject({
+      ok: false,
+      error: { code: "CANCELLED" },
+    });
+    await session.disconnect();
+  });
+
+  it("rechecks the lease after request log callbacks before sending", async () => {
+    const { session, transport, scope } = makeCodecSession({
+      onLog: (event) => {
+        if (event.direction === "request") scope.dispose();
+      },
+    });
+    await session.connect();
+    expect(
+      await session.readRegistersAt([1], { source: "manual-read" }),
+    ).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
+    expect(transport.sentFrames).toHaveLength(0);
+    await session.disconnect();
   });
 });

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createCodecRegistry } from "@mamep2026/communication";
 import { createDataTypeResolver } from "@mamep2026/data-conversion";
-import { ok } from "@mamep2026/domain";
 import {
   BUILTIN_CONTRIBUTION_POINTS,
   ContributionPointRegistry,
   PLUGIN_API_VERSION,
   PluginRegistry,
   createAddressTransformRegistry,
+  createUnavailableSyncRegistries,
   runtimeFromLocalEntry,
-  type PluginSyncRegistries,
+  type PluginHostSyncRegistries,
 } from "@mamep2026/plugin-api";
 import * as pluginEntry from "./plugin";
 import {
@@ -29,14 +29,9 @@ function makeHarness() {
   for (const point of BUILTIN_CONTRIBUTION_POINTS) {
     contributionRegistry.registerPoint(point);
   }
-  const registries: PluginSyncRegistries = {
-    codec: {
-      register: (codec) => {
-        codecRegistry.register(codec);
-        return ok(undefined);
-      },
-      list: () => codecRegistry.list(),
-    },
+  const registries: PluginHostSyncRegistries = {
+    codec: createUnavailableSyncRegistries().codec,
+    createCodecScope: (pluginId) => codecRegistry.createScope(pluginId),
     dataType: dataTypeResolver,
     addressTransform: createAddressTransformRegistry(),
   };
