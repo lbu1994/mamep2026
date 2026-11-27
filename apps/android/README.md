@@ -34,7 +34,7 @@ Android 客户端使用 Capacitor 容器承载**同一份共享 UI**；平台差
   Qinheng CH340/CH341A，以及通用 CDC/ACM（CH343、CH9102、MCP2221、Arduino 等）。
 - 权限：连接时若无权限会调 `UsbManager.requestPermission`（系统弹窗），最长等 30s；拒绝 → `errors.serialPermissionDenied`。
   重新插拔后需再次授权（Android 语义）。
-- 读回聚合：原生侧按 **10ms 空闲窗口**合并为一帧后投递（避免分片事件风暴，远小于 300ms 超时预算）。
+- 读回聚合：原生侧保留 **10ms 空闲窗口**，缓冲达到 **4096 字节**或首字节起 **50ms** 时分块投递。分块不代表完整协议帧；帧解析仍由共享 JS 层完成。
 - 参数：`baudRate / dataBits / stopBits / parity / flowControl` 直接透传；驱动不支持所请求流控时
   **按参数不支持如实报错**（不静默忽略）。
 - 拔线：发 `closed(USB_DETACHED)` → 会话置 failed + 提示；**不做 USB 自动重连**，自动重连仅适用于 TCP。

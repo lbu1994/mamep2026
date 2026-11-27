@@ -45,8 +45,28 @@ BLE UART 与经典蓝牙 SPP 不属于当前已交付传输。BLE 需要在连�
 
 USB 串口支持设备枚举、连接时请求权限、参数透传和 detach 错误映射。驱动不支持
 的流控或链路参数必须在打开前拒绝，不得静默忽略。设备拔出转换为结构化断开错误，
-不自动重连。原生入站数据先按空闲窗口聚合成较完整的帧片段，再以 base64 通过桥
-传递；读线程和权限请求必须由关闭路径释放。
+不自动重连。原生入站数据聚合为有界字节块，再以 base64 通过桥传递；读线程和权限
+请求必须由关闭路径释放。
+
+### USB 接收聚合
+
+**Base behavior**：每次输入都向可增长缓冲追加数据，并重置 10ms 空闲回调。
+持续输入可以一直推迟投递，导致原生缓冲持续增长。
+
+**Current behavior**：[UsbReceiveAggregator](../../../../apps/android/android/app/src/main/java/com/mamep2026/app/UsbReceiveAggregator.kt)
+为每次连接持有固定 4096 字节缓冲。达到容量立即投递；单次输入超过容量时按顺序
+拆分，不丢弃或重排字节。非空缓冲在最近输入后 10ms 或首字节后 50ms 到期，取较早者。
+新输入只能推迟空闲期限，不能推迟该批首字节的期限。计时采用单调 uptime；
+Handler 调度延迟可能推迟实际回调执行，后续输入也检查期限并投递到期数据。
+
+聚合器最多保留一个待执行回调。投递与关闭使用同一实例锁；关闭等待正在执行的
+投递返回，再丢弃剩余字节、取消回调并拒绝旧读线程输入。已提交给 Capacitor 的事件
+无法撤回。[原生插件](../../../../apps/android/android/app/src/main/java/com/mamep2026/app/MamepTransportPlugin.kt)
+在主动断开、设备拔出、读线程错误、切换传输和宿主销毁时关闭聚合器；每个新连接
+创建独立实例，旧实例的错误回调不能关闭新连接。
+
+容量限制只覆盖原生聚合缓冲，不声明 USB 驱动、Capacitor 或 WebView 队列的总内存上限。
+字节块边界不代表协议帧边界；原生层不加入 Modbus、CRC、请求超时或重试语义。
 
 桥契约采用与 HostMessage v2 相同的安全姿态：版本化信封 + Zod 校验 + 方法白名单（`packages/platform-android/src/bridge-contract.ts`）。
 

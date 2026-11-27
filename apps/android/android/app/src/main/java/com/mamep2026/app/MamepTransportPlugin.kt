@@ -12,6 +12,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -25,7 +26,6 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.hoho.android.usbserial.util.SerialInputOutputManager
-import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.CountDownLatch
@@ -40,15 +40,15 @@ import java.util.concurrent.TimeUnit
  * 契约（与 packages/platform-android/src/bridge-contract.ts 一一对应）：
  * - 方法白名单：listSerialPorts / openSerial / openTcp / write / close；
  * - 字节以 base64 字符串传递（Capacitor JSObject 为 JSON 语义）；
- * - 事件：data（**整帧聚合**后单次投递）/ closed / error；
+ * - Events: data (bounded byte chunks), closed, and error.
  * - 一次只允许一个活动传输（打开新的会先关闭旧的）；
  * - 错误码：TCP_CONNECT_FAILED / TCP_OPEN_FAILED / NOT_OPEN / WRITE_FAILED / REMOTE_CLOSED /
  * CONNECTION_RESET / USB_PERMISSION_DENIED / USB_DEVICE_NOT_FOUND / USB_DEVICE_BUSY /
  * USB_DRIVER_UNSUPPORTED / USB_PARAMETERS_UNSUPPORTED / USB_OPEN_FAILED / USB_ENUMERATE_FAILED /
  * USB_DETACHED / PLUGIN_UNAVAILABLE（由 JS 侧映射为项目错误）。
  *
- * 读回聚合：TCP 用 `available()` 立即吸收；USB 串口是流式字节，改用 **10ms 空闲窗口**聚合
- * （用户决策 Q6），既避免分片事件风暴，也远小于 300ms 请求超时预算。
+ * USB emits at 4096 bytes, 10 ms idle, or 50 ms from the first byte.
+ * Chunk boundaries do not represent protocol frame boundaries.
  */
 @CapacitorPlugin(name = "MamepTransport")
 class MamepTransportPlugin : Plugin() {
@@ -63,11 +63,10 @@ class MamepTransportPlugin : Plugin() {
     private var detachReceiver: BroadcastReceiver? = null
     private var permissionReceiver: BroadcastReceiver? = null
 
-    /** USB 空闲窗口聚合（单线程 Handler，与 ioManager 回调线程间用锁保护）。 */
+    /** Each USB reader owns its buffer and scheduled callback until close. */
     private val aggregationHandler = Handler(Looper.getMainLooper())
-    private val pending = ByteArrayOutputStream()
-    private val pendingLock = Any()
-    private val flushPending = Runnable { flushPendingData() }
+    private val usbReceiveLock = Any()
+    private var usbReceiveAggregator: UsbReceiveAggregator? = null
 
     @Volatile
     private var running = false
@@ -364,14 +363,18 @@ class MamepTransportPlugin : Plugin() {
     /** 停止读线程并关闭传输（TCP socket 与 USB 串口；幂等）。 */
     private fun closeActiveTransport() {
         // ---- USB ----
-        aggregationHandler.removeCallbacks(flushPending)
+        val io = synchronized(usbReceiveLock) {
+            usbReceiveAggregator?.close()
+            usbReceiveAggregator = null
+            val activeManager = usbIoManager
+            usbIoManager = null
+            activeManager
+        }
         unregisterReceiver(detachReceiver)
         detachReceiver = null
         unregisterReceiver(permissionReceiver)
         permissionReceiver = null
 
-        val io = usbIoManager
-        usbIoManager = null
         if (io != null) {
             try {
                 io.stop()
@@ -397,7 +400,6 @@ class MamepTransportPlugin : Plugin() {
                 Log.w(TAG, "closing usb connection failed: ${error.message}")
             }
         }
-        synchronized(pendingLock) { pending.reset() }
 
         // ---- TCP ----
         running = false
@@ -530,7 +532,10 @@ class MamepTransportPlugin : Plugin() {
                 if (intent?.action != UsbManager.ACTION_USB_DEVICE_DETACHED) return
                 val detached = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
                 if (detached == null || detached.deviceName != deviceName) return
-                notifyDetached()
+                synchronized(usbReceiveLock) {
+                    if (detachReceiver !== this) return
+                    notifyDetached()
+                }
             }
         }
         detachReceiver = receiver
@@ -556,40 +561,43 @@ class MamepTransportPlugin : Plugin() {
         notifyListeners("closed", payload)
     }
 
-    /** USB 读线程：ioManager 回调累积字节，空闲 [USB_AGGREGATION_IDLE_MS] 后单次投递。 */
+    /** Starts a reader with bounded aggregation and callbacks scoped to this reader. */
     private fun startUsbReader(port: UsbSerialPort) {
+        val aggregator = UsbReceiveAggregator(
+            nowMillis = SystemClock::uptimeMillis,
+            scheduleAt = { task, deadline ->
+                aggregationHandler.postAtTime(task, deadline)
+                Unit
+            },
+            cancel = { task -> aggregationHandler.removeCallbacks(task) },
+            emit = { bytes ->
+                val payload = JSObject()
+                payload.put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                payload.put("bytes", bytes.size)
+                notifyListeners("data", payload)
+            },
+        )
         val manager = SerialInputOutputManager(port, object : SerialInputOutputManager.Listener {
             override fun onNewData(data: ByteArray) {
-                if (data.isEmpty()) return
-                synchronized(pendingLock) { pending.write(data) }
-                aggregationHandler.removeCallbacks(flushPending)
-                aggregationHandler.postDelayed(flushPending, USB_AGGREGATION_IDLE_MS)
+                aggregator.accept(data)
             }
 
             override fun onRunError(e: Exception) {
-                if (usbPort == null) return
-                val payload = JSObject()
-                payload.put("code", "CONNECTION_RESET")
-                payload.put("message", e.message ?: "usb serial read failed")
-                notifyListeners("error", payload)
+                synchronized(usbReceiveLock) {
+                    if (usbReceiveAggregator !== aggregator) return
+                    aggregator.close()
+                    val payload = JSObject()
+                    payload.put("code", "CONNECTION_RESET")
+                    payload.put("message", e.message ?: "usb serial read failed")
+                    notifyListeners("error", payload)
+                }
             }
         })
-        usbIoManager = manager
-        manager.start()
-    }
-
-    /** 把累积字节合并为一次 data 事件（无数据则不发）。 */
-    private fun flushPendingData() {
-        val bytes = synchronized(pendingLock) {
-            if (pending.size() == 0) return
-            val out = pending.toByteArray()
-            pending.reset()
-            out
+        synchronized(usbReceiveLock) {
+            usbReceiveAggregator = aggregator
+            usbIoManager = manager
+            manager.start()
         }
-        val payload = JSObject()
-        payload.put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))
-        payload.put("bytes", bytes.size)
-        notifyListeners("data", payload)
     }
 
     private companion object {
@@ -597,6 +605,5 @@ class MamepTransportPlugin : Plugin() {
         const val ACTION_USB_PERMISSION = "com.mamep2026.app.USB_PERMISSION"
         const val USB_PERMISSION_TIMEOUT_MS = 30_000L
         const val USB_WRITE_TIMEOUT_MS = 1_000
-        const val USB_AGGREGATION_IDLE_MS = 10L
     }
 }

@@ -184,6 +184,32 @@ Android 的 `tests/e2e-android/tests/plugin-runtime.spec.ts` 包含同一攻击�
 该套件会安装 APK 并清空测试应用数据，必须使用已准备的测试设备；桌面浏览器结果不能
 作为 Android 真机结果。
 
+## Android USB 接收聚合专项
+
+原生回归位于
+[UsbReceiveAggregatorTest.kt](../apps/android/android/app/src/test/java/com/mamep2026/app/UsbReceiveAggregatorTest.kt)。
+在已按 Android 构建说明准备 JDK、SDK 并完成 Capacitor sync 的环境中，从仓库根运行：
+
+```powershell
+Push-Location apps/android/android
+try {
+  .\gradlew.bat :app:testDebugUnitTest --tests com.mamep2026.app.UsbReceiveAggregatorTest
+} finally {
+  Pop-Location
+}
+pnpm --filter @mamep2026/platform-android test
+```
+
+原生单测使用可控时钟和回调队列，直接执行生产聚合器，覆盖空闲投递、持续输入、
+容量边界、超大分片、调度延迟、关闭清理和旧回调。JS 包单测检查桥事件、错误映射
+及传输生命周期。上述检查均属离线验证，不能证明真实 USB 吞吐、拔插或内存表现。
+
+真机验证需已授权 Android 设备与可持续发送已知字节序列的 USB 串口对端。记录设备、
+系统、APK 版本、串口参数、发送时长及输入/接收字节数；覆盖短于 10ms 间隔的持续输入、
+正常请求响应、主动关闭、物理拔出及重新连接。保留接收顺序、数据缺失/重复、事件延迟、
+`adb shell dumpsys meminfo com.mamep2026.app` 的发送前/中/后采样和停止后的回调证据。
+采集结束停止对端发送并关闭测试连接；吞吐和内存采样不等于测量 OOM 阈值。
+
 ## 环境要点与坑
 
 - 包管理 **pnpm 11**；原生依赖构建白名单在 `pnpm-workspace.yaml` 的 `allowBuilds`。pnpm 会自动往该文件追加占位键，修改时必须检查 YAML 键是否重复。
