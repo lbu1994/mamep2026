@@ -199,6 +199,45 @@ async function fillNumber(
   await input.fill(value);
 }
 
+/**
+ * 等待 Modal 打开动画收束后再交互。
+ *
+ * antd Modal 在 `afterOpenChange(nextOpen=true)` 中执行表单初始化 reset；仅等待容器
+ * visible 可能在 reset 前点击协议，导致初始化把用户切换回默认 RTU。等待当前 Modal
+ * 子树的动画完成后，再断言协议状态，可避免把初始化竞态误判为产品缺陷。
+ */
+async function waitForModalInitialization(
+  frame: Frame,
+  modal: Locator,
+): Promise<void> {
+  await expect(modal).toBeVisible();
+  await frame.evaluate(() => {
+    const dialog = document.querySelector(".ant-modal");
+    if (!(dialog instanceof HTMLElement)) {
+      throw new Error("Modal is mounted but .ant-modal is unavailable");
+    }
+    return Promise.all(
+      dialog
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+}
+
+/** 等待 Modal 初始化完成后切换 TCP，并确认协议与参数区域已同步。 */
+async function selectTcpProtocol(frame: Frame, modal: Locator): Promise<void> {
+  await waitForModalInitialization(frame, modal);
+  const tcpOption = modal.getByRole("radio", { name: "Modbus TCP" });
+  const tcpRegion = modal.getByRole("region", { name: "Modbus TCP" });
+  // antd Segmented 的 radio input 仅供可访问性树使用，实际可点击的是可见 item。
+  await modal
+    .locator(".ant-segmented-item")
+    .filter({ hasText: "Modbus TCP" })
+    .click();
+  await expect(tcpOption).toBeChecked({ timeout: 5000 });
+  await expect(tcpRegion).toBeVisible({ timeout: 5000 });
+}
+
 /** 首行填入地址（HEX 4 位）并提交。 */
 async function setRowAddress(frame: Frame, addressHex: string): Promise<void> {
   const table = frame.locator(".register-table-tabs .ant-tabs-content-active");
@@ -327,10 +366,7 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     await modal.waitFor({ timeout: 30_000 });
 
     // 切到 Modbus TCP（Segmented）。
-    await modal
-      .locator(".ant-segmented-item")
-      .filter({ hasText: "Modbus TCP" })
-      .click();
+    await selectTcpProtocol(frame, modal);
 
     // host（占位符 192.168.1.10 的 Input）。
     const tcp = tcpConfig();
@@ -593,10 +629,7 @@ test("真实 Modbus TCP（UI 级）：连接 + 全场景矩阵", async ({
     const modal = frame.locator(".ant-modal-container:visible");
     await modal.waitFor({ timeout: 10_000 });
     const tcp = tcpConfig();
-    await modal
-      .locator(".ant-segmented-item")
-      .filter({ hasText: "Modbus TCP" })
-      .click();
+    await selectTcpProtocol(frame, modal);
     await modal.getByPlaceholder("192.168.1.10").fill(tcp.host);
     await fillNumber(modal, "TCP Port", String(tcp.port));
     await fillNumber(modal, "Unit ID", String(tcp.unitId));

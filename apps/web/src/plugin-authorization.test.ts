@@ -518,7 +518,8 @@ describe("host consent and runtime lifecycle", () => {
   it("does not persist runtime teardown as plugin uninstall", async () => {
     const { host, store } = fixture([{ manifest, enabled: true }]);
     await host.startPlugins();
-    host.pluginRegistry.setEnabled(manifest.id, false);
+    await host.pluginRegistry.setEnabled(manifest.id, false);
+    await host.flushPlugins();
     expect(store.save).toHaveBeenCalled();
     const count = store.save.mock.calls.length;
     await host.dispose();

@@ -152,6 +152,9 @@ test("Renderer 安全边界：无 Node 权限、桥仅白名单方法", async ()
       // 插件存储桥：主进程 userData plugins.json 持久化。
       "pluginStoreLoad",
       "pluginStoreSave",
+      // 插件宿主执行状态与失败重试：preload 仍为显式白名单方法。
+      "hostPluginState",
+      "reloadHostPlugin",
       // 插件运行时桥： 契约，宿主返回能力错误。
       "pluginContributionQuery",
       "pluginRpc",
