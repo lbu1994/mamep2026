@@ -37,7 +37,7 @@
 - **可执行插件**（如 `yaskawa-memobus-67h-010dh-010eh`、`custom-function-code`、`address-adjust`）：
   除 manifest 外还有单文件 JS entry（`export const manifest` + `export function activate(ctx)`），
   用于贡献 `codec` / `dataType` / `addressTransform` 等**同步纯函数**；安装时须由用户显式授权
-  **同进程执行**。本插件**不需要**这些。
+  **同进程执行**，Manifest 必须声明 `executionRequirements: { version: 1, requiredExecution: "same-process" }`。本插件**不需要**这些。
 
 ---
 

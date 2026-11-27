@@ -42,6 +42,17 @@ describe("content-bound plugin consent", () => {
         ...approved,
         manifest: {
           ...manifest,
+          executionRequirements: {
+            version: 1 as const,
+            requiredExecution: "isolated" as const,
+            reason: "Changed requirements",
+          },
+        },
+      },
+      {
+        ...approved,
+        manifest: {
+          ...manifest,
           permissions: ["communication", "device-write"] as const,
         },
       },
@@ -70,18 +81,18 @@ describe("content-bound plugin consent", () => {
     });
     expect(migrated).toEqual({
       ok: true,
-      value: { schemaVersion: 5, plugins: [{ ...record, enabled: false }] },
+      value: { schemaVersion: 6, plugins: [{ ...record, enabled: false }] },
     });
   });
 
-  it("round-trips approval in v5 and rejects future schema versions", async () => {
+  it("round-trips approval in v6 and rejects future schema versions", async () => {
     const approved = {
       ...record,
       approval: await createPluginApproval(record, hash),
     };
     expect(
-      migratePluginStoreData({ schemaVersion: 5, plugins: [approved] }),
-    ).toEqual({ ok: true, value: { schemaVersion: 5, plugins: [approved] } });
+      migratePluginStoreData({ schemaVersion: 6, plugins: [approved] }),
+    ).toEqual({ ok: true, value: { schemaVersion: 6, plugins: [approved] } });
     expect(
       migratePluginStoreData({ schemaVersion: 99, plugins: [approved] }).ok,
     ).toBe(false);

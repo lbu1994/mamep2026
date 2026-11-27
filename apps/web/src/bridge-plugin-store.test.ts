@@ -23,7 +23,7 @@ const manifest = {
 };
 
 const emptyStore: PluginStoreDataResponse = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   plugins: [],
 };
 
@@ -60,7 +60,7 @@ describe("BridgePluginStore", () => {
     const bridge = makeBridge();
     const store = new BridgePluginStore(bridge);
     const data = {
-      schemaVersion: 5 as const,
+      schemaVersion: 6 as const,
       plugins: [{ manifest, enabled: true }],
     };
     const result = await store.save(data);

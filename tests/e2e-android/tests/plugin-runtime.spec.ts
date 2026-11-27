@@ -139,7 +139,7 @@ function pluginContribution(page: AppSession["page"]) {
 /** 经隐藏文件输入投递插件文件（绕过系统文件选择器）并在安全确认框中确认。 */
 async function installPluginByFile(options: {
   filePath: string;
-  /** `.mjs` 可执行插件：是否在确认框中选择「同进程执行」。 */
+  /** `.mjs` 可执行插件：是否预期插件声明同进程执行需求。 */
   sameProcess?: boolean;
 }): Promise<void> {
   const page = session.page;
@@ -152,9 +152,22 @@ async function installPluginByFile(options: {
     .filter({ hasText: "Install this plugin?" });
   await expect(confirm).toBeVisible({ timeout: 15_000 });
   if (options.sameProcess === true) {
-    await confirm.getByText("Same process", { exact: false }).click();
+    await expect(
+      confirm.getByRole("button", {
+        name: "Authorize same-process execution and install",
+        exact: true,
+      }),
+    ).toBeVisible();
   }
-  await confirm.getByRole("button", { name: "Install", exact: true }).click();
+  await confirm
+    .getByRole("button", {
+      name:
+        options.sameProcess === true
+          ? "Authorize same-process execution and install"
+          : "Install",
+      exact: true,
+    })
+    .click();
   await expect(
     page.getByText("Plugin installed.", { exact: true }).first(),
   ).toBeVisible({ timeout: 15_000 });
@@ -371,7 +384,12 @@ test("isolated plugin cannot access workspace, backup or consent, including afte
     .filter({ hasText: "Install this plugin?" });
   await expect(dialog).toContainText("Storage isolation regression");
   expect(await readApplicationStorage(page)).toEqual(before);
-  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await dialog
+    .getByRole("button", {
+      name: "Install",
+      exact: true,
+    })
+    .click();
   await expect(dialog).toBeHidden();
   const row = section
     .locator(".ant-listy-item")

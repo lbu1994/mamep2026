@@ -26,6 +26,7 @@ describe("example-panel 插件（panels 贡献示例，2026-09-12）", () => {
     expect(result.ok).toBe(true);
     expect(registry.getSource(EXAMPLE_PANEL_PLUGIN_ID)).toBe("installed");
     expect(registry.getRuntime(EXAMPLE_PANEL_PLUGIN_ID)).toBeUndefined();
+    expect(registry.getExecutionMode(EXAMPLE_PANEL_PLUGIN_ID)).toBeNull();
     expect(registry.getLifecycleState(EXAMPLE_PANEL_PLUGIN_ID)).toBe(
       "registered",
     );

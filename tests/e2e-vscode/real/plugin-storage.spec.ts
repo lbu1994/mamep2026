@@ -40,6 +40,7 @@ interface Plugin {
     version: string;
     apiVersion: string;
     description: string;
+    executionRequirements?: { version: 1; requiredExecution: Mode };
     platform: { web: boolean; node: boolean };
     permissions: string[];
     contributes: Record<string, never>;
@@ -47,10 +48,10 @@ interface Plugin {
   enabled: boolean;
   entrySource: string;
   executionMode: Mode;
-  approval?: { contentDigest: string; permissions: string[] };
+  approval?: { version: 1; contentDigest: string; permissions: string[] };
 }
 interface Store {
-  schemaVersion: 5;
+  schemaVersion: 6;
   plugins: Plugin[];
 }
 type Result<T> =
@@ -88,6 +89,7 @@ async function saveStore(frame: Frame, data: Store): Promise<void> {
 /** Compare the UI-created approval against an independent SHA-256 calculation. */
 function expectApproval(plugin: Plugin): void {
   const content = {
+    approvalVersion: 1,
     manifest: plugin.manifest,
     entrySource: plugin.entrySource,
     executionMode: plugin.executionMode,
@@ -104,6 +106,7 @@ function expectApproval(plugin: Plugin): void {
     return value;
   };
   expect(plugin.approval).toEqual({
+    version: 1,
     contentDigest: createHash("sha256")
       .update(JSON.stringify(sortKeys(content)))
       .digest("hex"),
@@ -457,8 +460,21 @@ async function approve(
     .filter({ hasText: "Install this plugin?" });
   await expect(dialog).toContainText(name);
   if (mode === "same-process")
-    await dialog.getByText("Same process", { exact: false }).click();
-  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+    await expect(
+      dialog.getByRole("button", {
+        name: "Authorize same-process execution and install",
+        exact: true,
+      }),
+    ).toBeVisible();
+  await dialog
+    .getByRole("button", {
+      name:
+        mode === "same-process"
+          ? "Authorize same-process execution and install"
+          : "Install",
+      exact: true,
+    })
+    .click();
   await expect(dialog).toBeHidden();
   await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
   await expect
@@ -501,9 +517,9 @@ storageTest(
     const forged = unapproved(
       "forged-storage",
       "Forged storage",
-      `self.postMessage({version:1,type:"plugin-store-save",data:{schemaVersion:5,plugins:[]}});\nexport const manifest = ${JSON.stringify({ ...attack.manifest, id: "forged-storage", name: "Forged storage" })}; export function activate() {}`,
+      `self.postMessage({version:1,type:"plugin-store-save",data:{schemaVersion:6,plugins:[]}});\nexport const manifest = ${JSON.stringify({ ...attack.manifest, id: "forged-storage", name: "Forged storage" })}; export function activate() {}`,
     );
-    await saveStore(frame, { schemaVersion: 5, plugins: [attack, forged] });
+    await saveStore(frame, { schemaVersion: 6, plugins: [attack, forged] });
     await run.close();
     frame = await run.launch();
     await expect
@@ -602,6 +618,10 @@ storageTest(
       const id = `consent-${change}`;
       const record = unapproved(id, `Consent ${change}`, "");
       record.manifest.platform.node = true;
+      record.manifest.executionRequirements = {
+        version: 1,
+        requiredExecution: change === "mode" ? "isolated" : "same-process",
+      };
       // Top-level markers detect imports even when activate later fails or is never called.
       record.entrySource = `
 if (typeof document !== "undefined") document.documentElement.setAttribute("data-${id}", "imported");
@@ -614,7 +634,7 @@ export function activate() {}
       return record;
     });
     let frame = await run.launch();
-    await saveStore(frame, { schemaVersion: 5, plugins: records });
+    await saveStore(frame, { schemaVersion: 6, plugins: records });
     await run.close();
     frame = await run.launch();
     for (const change of cases)

@@ -350,7 +350,7 @@ async function reconnectAsActiveSheet(p: Page): Promise<void> {
  * 经 Settings → Plugins 安装 custom-function-code 插件产物（插件一律手动安装）。
  * 生产构建下「Install Plugin」走主进程 `open-text-file` → `dialog.showOpenDialog`
  * （系统对话框无法自动化），故与 `plugin-host-execution.spec.ts` 同法用 `app.evaluate`
- * 桩替换对话框；该插件贡献 codec / dataType（同步纯函数），确认框中须选「同进程执行」。
+ * 桩替换对话框；该插件贡献 codec / dataType（同步纯函数），确认框中须授权声明的同进程执行。
  */
 async function installCustomFunctionCodePlugin(): Promise<void> {
   await app.evaluate(async ({ dialog }, entryPath) => {
@@ -376,8 +376,18 @@ async function installCustomFunctionCodePlugin(): Promise<void> {
     .locator(".ant-modal-container")
     .filter({ hasText: "Install this plugin?" });
   await expect(confirm).toBeVisible();
-  await confirm.getByText("Same process", { exact: false }).click();
-  await confirm.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(
+    confirm.getByRole("button", {
+      name: "Authorize same-process execution and install",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await confirm
+    .getByRole("button", {
+      name: "Authorize same-process execution and install",
+      exact: true,
+    })
+    .click();
   await expect(confirm).toBeHidden();
   await expect(section).toContainText("Custom Function Code");
 

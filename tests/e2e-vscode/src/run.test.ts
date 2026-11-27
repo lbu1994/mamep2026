@@ -814,10 +814,12 @@ async function runPluginHostLoop(): Promise<void> {
   };
   // The fixture models consent produced by the renderer confirmation step.
   const approval = {
+    version: 1,
     contentDigest: createHash("sha256")
       .update(
         JSON.stringify(
           canonical({
+            approvalVersion: 1,
             manifest: normalizedManifest,
             entrySource,
             executionMode: "same-process",
@@ -859,7 +861,7 @@ async function runPluginHostLoop(): Promise<void> {
   // 1. 安装同进程可执行插件（渲染端 plugin-store-save 的等价载荷）。
   const saved = await rpcEnvelope("plugin-store-save", {
     data: {
-      schemaVersion: 5,
+      schemaVersion: 6,
       plugins: [
         {
           manifest: normalizedManifest,
@@ -917,7 +919,7 @@ async function runPluginHostLoop(): Promise<void> {
 
     // 6. 卸载（空插件存储）→ 宿主注册表清空：即使表级配置仍开启也不再调整（无残留）。
     const cleared = await rpcEnvelope("plugin-store-save", {
-      data: { schemaVersion: 5, plugins: [] },
+      data: { schemaVersion: 6, plugins: [] },
     });
     assert.strictEqual(
       cleared.type,
@@ -947,7 +949,7 @@ async function runPluginHostLoop(): Promise<void> {
   } finally {
     // 兜底清理：确保插件存储为空（避免影响后续/重复运行）。
     await rpcEnvelope("plugin-store-save", {
-      data: { schemaVersion: 5, plugins: [] },
+      data: { schemaVersion: 6, plugins: [] },
     });
   }
 }

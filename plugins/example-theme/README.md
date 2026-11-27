@@ -34,7 +34,7 @@
 ## 纯数据 vs 可执行插件
 
 - **纯数据插件（本例子，主题色）**：整个插件 = 一份 `manifest.json`（或带类型的 TS 导出）。无 `entry`、无 runtime、不执行任何代码。
-- **可执行插件**（如 `yaskawa-memobus-67h-010dh-010eh`、`custom-function-code`、`address-adjust`）：除 manifest 外还有可在隔离线程执行的 `entry`（Web Worker / `worker_threads`）；安装时选**同进程执行**（用户显式授权）才能贡献 `codec`/`dataType`/`addressTransform` 等同步纯函数，隔离线程不能提供这些同步能力。本插件**不需要**任何这些。
+- **可执行插件**（如 `yaskawa-memobus-67h-010dh-010eh`、`custom-function-code`、`address-adjust`）：除 manifest 外还有可在隔离线程执行的 `entry`（Web Worker / `worker_threads`）；Manifest 声明 `executionRequirements: { version: 1, requiredExecution: "same-process" }` 并由用户授权同进程执行才能贡献 `codec`/`dataType`/`addressTransform` 等同步纯函数，隔离线程不能提供这些同步能力。本插件**不需要**任何这些。
 
 ## 最小可交付清单
 

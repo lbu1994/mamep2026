@@ -12,8 +12,8 @@ import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
 import { pluginApprovalSchema, type PluginApproval } from "./plugin-approval";
 import { pluginManifestSchema, type PluginManifest } from "./manifest";
 
-/** Store v5 adds content-bound consent. Migration preserves v4 source without granting access. */
-export const PLUGIN_STORE_SCHEMA_VERSION = 5 as const;
+/** Store v6 binds versioned consent to the plugin's declared execution requirements. */
+export const PLUGIN_STORE_SCHEMA_VERSION = 6 as const;
 
 /**
  * 插件执行模式：isolated=隔离线程执行（默认，Web Worker /
@@ -67,7 +67,7 @@ export function createEmptyPluginStoreData(): PluginStoreData {
   };
 }
 
-/** Validate v5, retain disabled v4 executables, and preserve the legacy v1-v3 empty-store migration. */
+/** Validate v6, retain disabled v4/v5 executables, and preserve the v1-v3 migration. */
 export function migratePluginStoreData(
   input: unknown,
 ): Result<PluginStoreData> {
@@ -99,11 +99,11 @@ export function migratePluginStoreData(
       })),
     });
   }
-  // Preserve v4 source and settings without inferring consent from a manifest.
-  if (raw.schemaVersion === 4) {
+  // Retain source and settings, but require consent under the declared execution policy.
+  if (raw.schemaVersion === 4 || raw.schemaVersion === 5) {
     const legacy = z
       .object({
-        schemaVersion: z.literal(4),
+        schemaVersion: z.union([z.literal(4), z.literal(5)]),
         plugins: z.array(storedPluginSchema.omit({ approval: true })),
       })
       .safeParse(input);

@@ -22,6 +22,11 @@ export const addressAdjustManifest: PluginManifest = {
   name: "Address Adjust",
   version: "1.0.0",
   apiVersion: PLUGIN_API_VERSION,
+  executionRequirements: {
+    version: 1,
+    requiredExecution: "same-process",
+    reason: "Registers a synchronous address transform.",
+  },
   description:
     "Built-in table-level Address Adjust: sent address = user address - 1.",
   author: "Mamep2026 Team",

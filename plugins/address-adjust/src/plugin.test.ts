@@ -57,6 +57,10 @@ describe("address-adjust 插件（ADR-054：用户手动安装的单文件插件
   it("单文件 entry 导出 manifest（apiVersion 跟随 PLUGIN_API_VERSION）", () => {
     expect(manifest.id).toBe(ADDRESS_ADJUST_PLUGIN_ID);
     expect(manifest.apiVersion).toBe(PLUGIN_API_VERSION);
+    expect(manifest.executionRequirements).toMatchObject({
+      version: 1,
+      requiredExecution: "same-process",
+    });
     expect(manifest.contributes.addressTransform).toMatchObject({
       id: "builtin.address-adjust",
     });

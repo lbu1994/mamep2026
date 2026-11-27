@@ -54,6 +54,7 @@ const runtimes: PluginRemoteRuntime[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete manifest.executionRequirements;
   runtimes.length = 0;
   const createRuntime = () => {
     const runtime: PluginRemoteRuntime = {
@@ -74,7 +75,7 @@ beforeEach(() => {
 
 function fixture(plugins: StoredPlugin[] = []) {
   const store = {
-    load: vi.fn(async () => ok<PluginStoreData>({ schemaVersion: 5, plugins })),
+    load: vi.fn(async () => ok<PluginStoreData>({ schemaVersion: 6, plugins })),
     save: vi.fn(async (_data: PluginStoreData) => ok(undefined)),
   };
   const host = new BrowserAppHost({
@@ -89,8 +90,55 @@ function fixture(plugins: StoredPlugin[] = []) {
 
 describe("host consent and runtime lifecycle", () => {
   it.each(["same-process", "isolated"] as const)(
+    "rejects a requested %s mode that differs from the manifest before loading",
+    async (requested) => {
+      manifest.executionRequirements = {
+        version: 1,
+        requiredExecution:
+          requested === "isolated" ? "same-process" : "isolated",
+      };
+      const { host } = fixture();
+      await host.previewPluginEntry("source", "isolated");
+      expect((await host.installPluginEntry("source", requested)).ok).toBe(
+        false,
+      );
+      expect(loadWebPluginEntry).not.toHaveBeenCalled();
+      expect(createWebPluginRemoteRuntime).not.toHaveBeenCalled();
+      await host.dispose();
+    },
+  );
+
+  it("installs a declared same-process plugin only after a matching preview and confirmation", async () => {
+    manifest.executionRequirements = {
+      version: 1,
+      requiredExecution: "same-process",
+      reason: "Registers a codec.",
+    };
+    const { host } = fixture();
+    expect((await host.installPluginEntry("source", "same-process")).ok).toBe(
+      false,
+    );
+    await host.previewPluginEntry("source", "isolated");
+    expect(loadWebPluginEntry).not.toHaveBeenCalled();
+    expect((await host.installPluginEntry("source", "same-process")).ok).toBe(
+      true,
+    );
+    expect(loadWebPluginEntry).toHaveBeenCalledExactlyOnceWith("source");
+    expect(host.pluginRegistry.snapshot().plugins[0]).toMatchObject({
+      manifest: { executionRequirements: manifest.executionRequirements },
+      executionMode: "same-process",
+      approval: { version: 1 },
+    });
+    await host.dispose();
+  });
+
+  it.each(["same-process", "isolated"] as const)(
     "restores disabled %s metadata, loads once on enable, and stays disabled after another restart",
     async (executionMode) => {
+      manifest.executionRequirements = {
+        version: 1,
+        requiredExecution: executionMode,
+      };
       const record: StoredPlugin = {
         manifest,
         enabled: false,
@@ -255,6 +303,10 @@ describe("host consent and runtime lifecycle", () => {
   it.each(["mode", "manifest", "permissions", "missing"] as const)(
     "rejects %s tampering on restart and explicit enable before executing source",
     async (change) => {
+      manifest.executionRequirements = {
+        version: 1,
+        requiredExecution: change === "mode" ? "isolated" : "same-process",
+      };
       const record: StoredPlugin = {
         manifest,
         enabled: true,
@@ -283,6 +335,10 @@ describe("host consent and runtime lifecycle", () => {
   );
 
   it("does not replace a same-source reinstall with an older enable operation", async () => {
+    manifest.executionRequirements = {
+      version: 1,
+      requiredExecution: "same-process",
+    };
     const record: StoredPlugin = {
       manifest,
       enabled: false,
@@ -309,6 +365,7 @@ describe("host consent and runtime lifecycle", () => {
     const enable = host.setPluginEnabled(manifest.id, true);
     await loading;
     host.pluginRegistry.unregister(manifest.id);
+    delete manifest.executionRequirements;
     await host.previewPluginEntry("source", "isolated");
     expect((await host.installPluginEntry("source", "isolated")).ok).toBe(true);
     release?.(ok({ manifest, activate: () => {} }));
@@ -321,6 +378,10 @@ describe("host consent and runtime lifecycle", () => {
   });
 
   it("does not import same-process code when the host closes during approval", async () => {
+    manifest.executionRequirements = {
+      version: 1,
+      requiredExecution: "same-process",
+    };
     const { host } = fixture();
     await host.previewPluginEntry("source", "same-process");
     const install = host.installPluginEntry("source", "same-process");
@@ -397,6 +458,10 @@ describe("host consent and runtime lifecycle", () => {
   });
 
   it("preserves unapproved or disabled executable records without evaluating source", async () => {
+    manifest.executionRequirements = {
+      version: 1,
+      requiredExecution: "same-process",
+    };
     const record: StoredPlugin = {
       manifest,
       enabled: true,
@@ -427,6 +492,10 @@ describe("host consent and runtime lifecycle", () => {
   });
 
   it("rejects a source change before importing approved same-process code", async () => {
+    manifest.executionRequirements = {
+      version: 1,
+      requiredExecution: "same-process",
+    };
     const record: StoredPlugin = {
       manifest,
       enabled: true,
@@ -469,7 +538,7 @@ describe("host consent and runtime lifecycle", () => {
     );
     const start = host.startPlugins();
     await host.dispose();
-    release?.(ok({ schemaVersion: 5, plugins: [{ manifest, enabled: true }] }));
+    release?.(ok({ schemaVersion: 6, plugins: [{ manifest, enabled: true }] }));
     await start;
     expect(host.pluginRegistry.list()).toEqual([]);
     expect(store.save).not.toHaveBeenCalled();

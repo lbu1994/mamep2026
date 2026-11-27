@@ -31,6 +31,11 @@ export const customFunctionManifest: PluginManifest = {
   name: "Custom Function Code",
   version: "1.0.0",
   apiVersion: PLUGIN_API_VERSION,
+  executionRequirements: {
+    version: 1,
+    requiredExecution: "same-process",
+    reason: "Registers a synchronous protocol codec and data type.",
+  },
   description:
     "Example plugin demonstrating a custom Modbus RTU protocol (0x65 read / 0x66 write) plus a plugin data type (ADR-043 E-3/E-4).",
   author: "Mamep2026 Team",

@@ -18,6 +18,15 @@ import { PERMISSION_IDS } from "./permissions";
  */
 export const PLUGIN_API_VERSION = "2.0" as const;
 
+/** Versioned execution requirements describe the runtime; they never grant consent. */
+export const pluginExecutionRequirementsSchema = z
+  .object({
+    version: z.literal(1),
+    requiredExecution: z.enum(["isolated", "same-process"]),
+    reason: z.string().trim().min(1).max(1000).optional(),
+  })
+  .strict();
+
 export const pluginManifestSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -26,6 +35,7 @@ export const pluginManifestSchema = z.object({
   description: z.string(),
   author: z.string().optional(),
   license: z.string().optional(),
+  executionRequirements: pluginExecutionRequirementsSchema.optional(),
   entry: z
     .object({
       web: z.string().min(1).optional(),
@@ -42,3 +52,10 @@ export const pluginManifestSchema = z.object({
 });
 
 export type PluginManifest = z.infer<typeof pluginManifestSchema>;
+
+/** Legacy manifests without requirements use isolation and cannot request escalation. */
+export function getRequiredPluginExecution(
+  manifest: PluginManifest,
+): "isolated" | "same-process" {
+  return manifest.executionRequirements?.requiredExecution ?? "isolated";
+}

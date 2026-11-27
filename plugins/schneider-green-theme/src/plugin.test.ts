@@ -30,6 +30,9 @@ describe("schneider-green-theme 插件（2026-09-08）", () => {
     expect(
       registry.getRuntime(SCHNEIDER_GREEN_THEME_PLUGIN_ID),
     ).toBeUndefined();
+    expect(
+      registry.getExecutionMode(SCHNEIDER_GREEN_THEME_PLUGIN_ID),
+    ).toBeNull();
     expect(registry.getLifecycleState(SCHNEIDER_GREEN_THEME_PLUGIN_ID)).toBe(
       "registered",
     );

@@ -68,6 +68,7 @@ import {
   PluginPersistenceCoordinator,
   PluginRegistry,
   pluginManifestSchema,
+  getRequiredPluginExecution,
   runtimeFromLocalEntry,
   createPluginApproval,
   matchesPluginApproval,
@@ -458,7 +459,7 @@ export class BrowserAppHost
     }
   }
 
-  /** Bind user consent to the previewed content before loading the selected execution mode. */
+  /** Bind consent to the preview; reject a mode that differs from the manifest before import. */
   async installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
@@ -473,6 +474,13 @@ export class BrowserAppHost
     ) {
       return fail(
         pluginPermissionDenied("installation requires a matching preview"),
+      );
+    }
+    if (executionMode !== getRequiredPluginExecution(preview.manifest)) {
+      return fail(
+        pluginPermissionDenied(
+          "execution mode differs from plugin requirements",
+        ),
       );
     }
     const approval = await createPluginApproval(

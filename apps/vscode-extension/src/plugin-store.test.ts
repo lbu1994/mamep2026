@@ -25,7 +25,7 @@ const manifest: PluginManifest = {
 };
 
 function storeData(): PluginStoreData {
-  return { schemaVersion: 5, plugins: [{ manifest, enabled: true }] };
+  return { schemaVersion: 6, plugins: [{ manifest, enabled: true }] };
 }
 
 function makeMemento(initial?: unknown): {
@@ -68,7 +68,7 @@ describe("GlobalStatePluginStore", () => {
             });
           }),
       });
-      const first = store.save({ schemaVersion: 5, plugins: [] });
+      const first = store.save({ schemaVersion: 6, plugins: [] });
       const latest = storeData();
       const second = store.save(latest);
       const read = store.load();
@@ -120,6 +120,10 @@ describe("GlobalStatePluginStore", () => {
     if (plugin === undefined) throw new Error("Plugin fixture missing");
     plugin.entrySource = "export function activate() {}";
     plugin.executionMode = "same-process";
+    plugin.manifest = {
+      ...plugin.manifest,
+      executionRequirements: { version: 1, requiredExecution: "same-process" },
+    };
     plugin.approval = await createPluginApproval(plugin, hash);
     const values = new Map<string, unknown>();
     const memento: KeyValueMemento = {
@@ -160,7 +164,7 @@ describe("GlobalStatePluginStore", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).toEqual({
-        schemaVersion: 5,
+        schemaVersion: 6,
         plugins: [],
       });
     }

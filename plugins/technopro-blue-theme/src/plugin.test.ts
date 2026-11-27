@@ -28,6 +28,9 @@ describe("technopro-blue-theme 插件（2026-09-08）", () => {
       "installed",
     );
     expect(registry.getRuntime(TECHNOPRO_BLUE_THEME_PLUGIN_ID)).toBeUndefined();
+    expect(
+      registry.getExecutionMode(TECHNOPRO_BLUE_THEME_PLUGIN_ID),
+    ).toBeNull();
     expect(registry.getLifecycleState(TECHNOPRO_BLUE_THEME_PLUGIN_ID)).toBe(
       "registered",
     );

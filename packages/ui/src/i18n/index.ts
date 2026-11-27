@@ -393,9 +393,9 @@ export const en = {
     // 执行模式：默认隔离线程；同进程需用户显式授权（插件与应用同权限）。
     //桌面端同进程 = 在宿主进程（Electron 主进程 / 扩展宿主）内执行（完整 Node 环境）。
     executionModeWarning:
-      "Same-process execution grants the plugin the application's own privileges: in the browser/webview it runs in the UI process, and on desktop hosts (Electron main process / VS Code extension host) it runs in the host process with full Node.js access (file system, network, subprocesses). Choose it only for plugins you fully trust.",
-    executionModeIsolated: "Isolated worker (recommended)",
-    executionModeSameProcess: "Same process (required for sync capabilities)",
+      "Same-process execution grants the plugin the application's own privileges: in the browser/webview it runs in the UI process, and on desktop hosts (Electron main process / VS Code extension host) it runs in the host process with full Node.js access (file system, network, subprocesses). This plugin requires same-process execution. Authorize it only if you fully trust the plugin.",
+    authorizeSameProcess: "Authorize same-process execution and install",
+    executionReason: "Plugin-provided reason: {{reason}}",
     entryIsolated: "Isolated worker",
   },
   help: {
@@ -1032,9 +1032,9 @@ export const zh: TranslationResources = {
     // 执行模式：默认隔离线程；同进程需用户显式授权（插件与应用同权限）。
     //桌面端同进程 = 在宿主进程（Electron 主进程 / 扩展宿主）内执行（完整 Node 环境）。
     executionModeWarning:
-      "同进程执行意味着该插件拥有与应用相同的权限：浏览器/Webview 中在界面进程内执行，桌面端（Electron 主进程 / VSCode 扩展宿主）则在宿主进程内执行并拥有完整 Node 能力（文件系统、网络、子进程）。请仅对你完全信任的插件选择此项。",
-    executionModeIsolated: "隔离线程（推荐）",
-    executionModeSameProcess: "同进程执行（贡献同步能力时必需）",
+      "同进程执行意味着该插件拥有与应用相同的权限：浏览器/Webview 中在界面进程内执行，桌面端（Electron 主进程 / VSCode 扩展宿主）则在宿主进程内执行并拥有完整 Node 能力（文件系统、网络、子进程）。此插件声明必须同进程执行。请仅在完全信任该插件时授权。",
+    authorizeSameProcess: "授权同进程执行并安装",
+    executionReason: "插件提供的原因：{{reason}}",
     entryIsolated: "隔离线程",
   },
   help: {

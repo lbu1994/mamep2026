@@ -58,6 +58,10 @@ describe("custom-function-code 插件（ADR-054：用户手动安装的单文件
   it("单文件 entry 导出 manifest（apiVersion 跟随 PLUGIN_API_VERSION）", () => {
     expect(pluginEntry.manifest.id).toBe(CUSTOM_FUNCTION_PLUGIN_ID);
     expect(pluginEntry.manifest.apiVersion).toBe(PLUGIN_API_VERSION);
+    expect(pluginEntry.manifest.executionRequirements).toMatchObject({
+      version: 1,
+      requiredExecution: "same-process",
+    });
   });
 
   it("装配：installed + same-process，activate 注册 codec 与插件 dataType", () => {

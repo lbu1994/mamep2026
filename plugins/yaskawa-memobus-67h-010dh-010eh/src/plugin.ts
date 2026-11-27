@@ -32,6 +32,11 @@ export const yaskawaMemobusManifest: PluginManifest = {
   name: "Yaskawa MEMOBUS",
   version: "1.0.0",
   apiVersion: PLUGIN_API_VERSION,
+  executionRequirements: {
+    version: 1,
+    requiredExecution: "same-process",
+    reason: "Registers the synchronous MEMOBUS protocol codec.",
+  },
   description:
     "Yaskawa MEMOBUS non-continuous read/write (67H 010DH/010EH) example protocol extension plugin.",
   author: "Mamep2026 Team",

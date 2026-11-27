@@ -253,8 +253,9 @@ export interface PluginHost {
     executionMode: PluginExecutionMode,
     signal?: AbortSignal,
   ): Promise<Result<PluginManifest>>;
-  /** 安装可执行插件，并按 executionMode 装配执行面。 */
+  /** Enable only records whose content and declared execution mode still match consent. */
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<Result<void>>;
+  /** Confirm the previewed source; executionMode must match the manifest requirements. */
   installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,

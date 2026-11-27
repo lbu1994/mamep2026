@@ -1,10 +1,11 @@
 import { z } from "zod";
-import type { PluginManifest } from "./manifest";
+import { getRequiredPluginExecution, type PluginManifest } from "./manifest";
 import { PERMISSION_IDS } from "./permissions";
 import type { PluginExecutionMode, StoredPlugin } from "./plugin-store";
 
 export const pluginApprovalSchema = z
   .object({
+    version: z.literal(1),
     contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
     permissions: z.array(z.enum(PERMISSION_IDS)),
   })
@@ -33,6 +34,7 @@ export function pluginApprovalContent(
 ): string {
   return JSON.stringify(
     canonical({
+      approvalVersion: 1,
       manifest,
       entrySource: entrySource ?? null,
       executionMode: executionMode ?? null,
@@ -46,6 +48,7 @@ export async function createPluginApproval(
   hash: PluginContentHasher,
 ): Promise<PluginApproval> {
   return {
+    version: 1,
     contentDigest: await hash(
       pluginApprovalContent(
         plugin.manifest,
@@ -62,6 +65,11 @@ export async function matchesPluginApproval(
   plugin: StoredPlugin,
   hash: PluginContentHasher,
 ): Promise<boolean> {
+  if (
+    plugin.entrySource !== undefined &&
+    plugin.executionMode !== getRequiredPluginExecution(plugin.manifest)
+  )
+    return false;
   const approval = pluginApprovalSchema.safeParse(plugin.approval);
   if (!approval.success) return false;
   const expected = await createPluginApproval(plugin, hash);

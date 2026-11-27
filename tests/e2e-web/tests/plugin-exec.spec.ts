@@ -115,10 +115,9 @@ test("安装单文件 JS 插件：隔离线程加载 manifest → 确认（Isola
     .filter({ hasText: "Install this plugin?" });
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText("E2E Exec");
-  await expect(confirm).toContainText("Isolated worker (recommended)");
-  await expect(confirm).toContainText(
-    "Same process (required for sync capabilities)",
-  );
+  await expect(confirm).toContainText("Isolated worker");
+  await expect(confirm.getByRole("radio")).toHaveCount(0);
+  await expect(confirm).not.toContainText("full Node.js access");
 
   // 确认安装 → 列表出现 + Installed 标签。
   await confirm.getByRole("button", { name: "Install", exact: true }).click();

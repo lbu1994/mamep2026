@@ -35,7 +35,7 @@ class MemoryPluginStore implements PluginStorePort {
   }
 
   setPlugins(plugins: StoredPlugin[]): void {
-    this.data = { schemaVersion: 5, plugins };
+    this.data = { schemaVersion: 6, plugins };
   }
 
   async load(): Promise<Result<PluginStoreData>> {
@@ -88,6 +88,7 @@ export const manifest = {
   name: ${JSON.stringify(opts.pluginId)},
   version: "1.0.0",
   apiVersion: ${JSON.stringify(opts.apiVersion ?? "2.0")},
+  executionRequirements: { version: 1, requiredExecution: "same-process" },
   description: "host plugin test",
   platform: { web: true, node: true },
   permissions: [],
@@ -115,6 +116,7 @@ function storedPlugin(opts: {
       name: opts.pluginId,
       version: "1.0.0",
       apiVersion: opts.apiVersion ?? "2.0",
+      executionRequirements: { version: 1, requiredExecution: "same-process" },
       description: "host plugin test",
       platform: { web: true, node: true },
       requiredCapabilities: [],
@@ -133,6 +135,7 @@ function storedPlugin(opts: {
       : { executionMode: "same-process" as const }),
   };
   record.approval = {
+    version: 1,
     contentDigest: createHash("sha256")
       .update(
         pluginApprovalContent(
@@ -152,6 +155,39 @@ function activations(): string[] {
   scope.__hostActivations = [];
   return scope.__hostActivations;
 }
+
+it("rejects same-process source whose approved manifest requires isolation before import", async () => {
+  const record = storedPlugin({ pluginId: "declared-isolated" });
+  record.manifest.executionRequirements = {
+    version: 1,
+    requiredExecution: "isolated",
+  };
+  record.entrySource = "globalThis.__unexpectedExecution = true;";
+  record.approval = {
+    version: 1,
+    contentDigest: createHash("sha256")
+      .update(
+        pluginApprovalContent(
+          record.manifest,
+          record.entrySource,
+          record.executionMode,
+        ),
+      )
+      .digest("hex"),
+    permissions: [],
+  };
+  const store = new MemoryPluginStore();
+  store.setPlugins([record]);
+  const onIssue = vi.fn();
+  const runtime = createHostPluginRuntime({ store, onIssue });
+  await runtime.sync();
+  expect(runtime.listLoadedPluginIds()).toEqual([]);
+  expect(onIssue).toHaveBeenCalledWith(
+    expect.objectContaining({ code: "PLUGIN_PERMISSION_DENIED" }),
+  );
+  expect(Reflect.get(globalThis, "__unexpectedExecution")).toBeUndefined();
+  runtime.dispose();
+});
 
 describe("HostPluginRuntime（ADR-055）", () => {
   it.each(["source", "mode", "manifest", "missing"] as const)(
@@ -494,7 +530,7 @@ describe("HostPluginRuntime（ADR-055）", () => {
     const syncing = runtime.sync();
     runtime.dispose();
     complete(
-      ok({ schemaVersion: 5, plugins: [storedPlugin({ pluginId: "late" })] }),
+      ok({ schemaVersion: 6, plugins: [storedPlugin({ pluginId: "late" })] }),
     );
     await syncing;
     await runtime.sync();

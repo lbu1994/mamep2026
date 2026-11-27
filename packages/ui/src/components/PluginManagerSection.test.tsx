@@ -583,25 +583,34 @@ describe("PluginManagerSection", () => {
     const entrySource =
       "export const manifest = {...};\nexport function activate(ctx) {}";
 
-    it("aborts consent when the user cancels the confirmation", async () => {
-      let signal: AbortSignal | undefined;
-      const installPluginEntry = vi.fn();
-      setHostWithPlugin(new PluginRegistry(), {
-        capabilities: executableCaps,
-        previewPluginEntry: vi.fn<AppHost["previewPluginEntry"]>(
-          async (_source, _mode, previewSignal) => {
-            signal = previewSignal;
-            return { ok: true, value: manifestJson };
-          },
-        ),
-        installPluginEntry,
-      });
-      renderSection();
-      await pickPluginSourceFile(entrySource);
-      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-      expect(signal?.aborted).toBe(true);
-      expect(installPluginEntry).not.toHaveBeenCalled();
-    });
+    it.each(["isolated", "same-process"] as const)(
+      "aborts %s consent when the user cancels the confirmation",
+      async (requiredExecution) => {
+        let signal: AbortSignal | undefined;
+        const installPluginEntry = vi.fn();
+        setHostWithPlugin(new PluginRegistry(), {
+          capabilities: executableCaps,
+          previewPluginEntry: vi.fn<AppHost["previewPluginEntry"]>(
+            async (_source, _mode, previewSignal) => {
+              signal = previewSignal;
+              return {
+                ok: true,
+                value: {
+                  ...manifestJson,
+                  executionRequirements: { version: 1, requiredExecution },
+                },
+              };
+            },
+          ),
+          installPluginEntry,
+        });
+        renderSection();
+        await pickPluginSourceFile(entrySource);
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        expect(signal?.aborted).toBe(true);
+        expect(installPluginEntry).not.toHaveBeenCalled();
+      },
+    );
 
     it.each(["unmount", "close"] as const)(
       "cancels pending preview on %s without showing a late confirmation",
@@ -713,11 +722,9 @@ describe("PluginManagerSection", () => {
         screen.getAllByText("Install this plugin?").length,
       ).toBeGreaterThan(0);
       expect(screen.getByText("Installed A")).toBeTruthy();
-      // 运行位置选择：默认隔离；同进程需显式选择。
-      expect(screen.getByText("Isolated worker (recommended)")).toBeTruthy();
-      expect(
-        screen.getByText("Same process (required for sync capabilities)"),
-      ).toBeTruthy();
+      expect(screen.getByText("Isolated worker")).toBeTruthy();
+      expect(screen.queryByRole("radio")).toBeNull();
+      expect(screen.queryByText(/full Node.js access/)).toBeNull();
 
       clickConfirmOk();
       await waitFor(() => {
@@ -728,7 +735,15 @@ describe("PluginManagerSection", () => {
       });
     });
 
-    it("选择同进程执行 → 安装时携带 same-process（用户显式授权）", async () => {
+    it("requires explicit consent for the declared same-process runtime", async () => {
+      const requiredManifest: PluginManifest = {
+        ...manifestJson,
+        executionRequirements: {
+          version: 1,
+          requiredExecution: "same-process",
+          reason: "Registers a codec.",
+        },
+      };
       const registry = new PluginRegistry();
       const installPluginEntry = vi.fn(
         async (): Promise<Result<PluginManifest>> => ({
@@ -741,7 +756,7 @@ describe("PluginManagerSection", () => {
         previewPluginEntry: vi.fn(
           async (): Promise<Result<PluginManifest>> => ({
             ok: true as const,
-            value: manifestJson,
+            value: requiredManifest,
           }),
         ),
         installPluginEntry,
@@ -750,10 +765,17 @@ describe("PluginManagerSection", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Install Plugin/i }));
       await pickPluginSourceFile(entrySource);
+      expect(screen.queryByRole("radio")).toBeNull();
+      expect(screen.getByText(/full Node.js access/)).toBeTruthy();
+      expect(
+        screen.getByText("Plugin-provided reason: Registers a codec."),
+      ).toBeTruthy();
+      expect(installPluginEntry).not.toHaveBeenCalled();
       fireEvent.click(
-        screen.getByText("Same process (required for sync capabilities)"),
+        screen.getByRole("button", {
+          name: "Authorize same-process execution and install",
+        }),
       );
-      clickConfirmOk();
 
       await waitFor(() => {
         expect(installPluginEntry).toHaveBeenCalledWith(

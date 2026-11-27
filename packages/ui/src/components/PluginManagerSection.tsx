@@ -14,7 +14,6 @@ import Descriptions from "antd/es/descriptions";
 import Empty from "antd/es/empty";
 import Flex from "antd/es/flex";
 import Listy from "antd/es/listy";
-import Radio from "antd/es/radio";
 import Space from "antd/es/space";
 import Switch from "antd/es/switch";
 import Tag from "antd/es/tag";
@@ -24,8 +23,8 @@ import { DeleteOutlined, UploadOutlined } from "@ant-design/icons";
 import {
   PERMISSION_LABEL_KEYS,
   pluginManifestSchema,
+  getRequiredPluginExecution,
   type PermissionId,
-  type PluginExecutionMode,
 } from "@mamep2026/plugin-api";
 import { useAppStore } from "../app-store";
 
@@ -73,8 +72,8 @@ export function PluginManagerSection({
   /**
    * 单文件 JS 插件安装：entry 含 manifest + activate。
    * 1) 预览（按隔离模式加载 entry 提取 manifest，**不注册**）；
-   * 2) §6.10.4 安全确认（含「运行位置」选择：隔离线程 / 同进程执行）；
-   * 3) 按所选模式安装（同进程 = 用户显式授权：插件代码获得与应用同等权限）。
+   * 2) Show the declared requirements and request consent before execution.
+   * 3) Install using the declared mode only after the user confirms.
    */
   const handlePluginSourceText = async (text: string): Promise<void> => {
     if (registry === null || host === null || activeHostRef.current !== host)
@@ -97,8 +96,8 @@ export function PluginManagerSection({
       return;
     }
     const manifest = preview.value;
-    // 执行模式：默认隔离线程；同进程需在下方选项里显式选择（插件与应用同权限）。
-    const executionModeRef = { current: "isolated" as PluginExecutionMode };
+    const executionMode = getRequiredPluginExecution(manifest);
+    const requiresSameProcess = executionMode === "same-process";
     const dialog = modal.confirm({
       title: t("plugins.installConfirmTitle"),
       content: (
@@ -106,28 +105,22 @@ export function PluginManagerSection({
           <Typography.Paragraph type="secondary">
             {t("plugins.installConfirmWarning")}
           </Typography.Paragraph>
-          <Typography.Paragraph type="warning">
-            {t("plugins.executionModeWarning")}
-          </Typography.Paragraph>
-          <Radio.Group
-            defaultValue="isolated"
-            onChange={(event) => {
-              executionModeRef.current =
-                event.target.value === "same-process"
-                  ? "same-process"
-                  : "isolated";
-            }}
-            options={[
-              {
-                label: t("plugins.executionModeIsolated"),
-                value: "isolated",
-              },
-              {
-                label: t("plugins.executionModeSameProcess"),
-                value: "same-process",
-              },
-            ]}
-          />
+          {requiresSameProcess ? (
+            <Typography.Paragraph type="warning">
+              {t("plugins.executionModeWarning")}
+            </Typography.Paragraph>
+          ) : (
+            <Typography.Paragraph>
+              {t("plugins.entryIsolated")}
+            </Typography.Paragraph>
+          )}
+          {manifest.executionRequirements?.reason !== undefined ? (
+            <Typography.Paragraph>
+              {t("plugins.executionReason", {
+                reason: manifest.executionRequirements.reason,
+              })}
+            </Typography.Paragraph>
+          ) : null}
           <Descriptions column={1} size="small" style={{ marginTop: 12 }}>
             <Descriptions.Item label={t("plugins.name")}>
               <Typography.Text strong>{manifest.name}</Typography.Text>
@@ -154,7 +147,11 @@ export function PluginManagerSection({
           </Descriptions>
         </div>
       ),
-      okText: t("plugins.installConfirmOk"),
+      okText: t(
+        requiresSameProcess
+          ? "plugins.authorizeSameProcess"
+          : "plugins.installConfirmOk",
+      ),
       cancelText: t("connection.cancel"),
       okButtonProps: { danger: true },
       onCancel: () => installation.controller.abort(),
@@ -165,10 +162,7 @@ export function PluginManagerSection({
       },
       onOk: async () => {
         if (signal.aborted) return;
-        const result = await host.installPluginEntry(
-          text,
-          executionModeRef.current,
-        );
+        const result = await host.installPluginEntry(text, executionMode);
         if (signal.aborted) return;
         if (!result.ok) {
           message.error(t(result.error.userMessageKey));

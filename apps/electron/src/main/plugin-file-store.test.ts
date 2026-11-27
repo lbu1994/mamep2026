@@ -33,7 +33,7 @@ const manifest: PluginManifest = {
 
 function storeData(name: string): PluginStoreData {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     plugins: [{ manifest: { ...manifest, id: name, name }, enabled: true }],
   };
 }
@@ -71,6 +71,10 @@ describe("PluginFileStore", () => {
     if (plugin === undefined) throw new Error("Plugin fixture missing");
     plugin.entrySource = "export function activate() {}";
     plugin.executionMode = "same-process";
+    plugin.manifest = {
+      ...plugin.manifest,
+      executionRequirements: { version: 1, requiredExecution: "same-process" },
+    };
     plugin.approval = await createPluginApproval(plugin, hash);
     expect((await repo.save(data)).ok).toBe(true);
     expect((await repo.save(data)).ok).toBe(true);

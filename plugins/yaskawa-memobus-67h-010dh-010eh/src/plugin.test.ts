@@ -63,6 +63,10 @@ describe("Yaskawa MEMOBUS 插件（ADR-041；ADR-054 单文件手动安装）", 
   it("单文件 entry 导出 manifest（apiVersion 跟随 PLUGIN_API_VERSION）", () => {
     expect(pluginEntry.manifest.id).toBe(YASKAWA_MEMOBUS_PLUGIN_ID);
     expect(pluginEntry.manifest.apiVersion).toBe(PLUGIN_API_VERSION);
+    expect(pluginEntry.manifest.executionRequirements).toMatchObject({
+      version: 1,
+      requiredExecution: "same-process",
+    });
   });
 
   it("装配：installed + same-process，activate 把 MemobusCodec 注册进会话 CodecRegistry", () => {

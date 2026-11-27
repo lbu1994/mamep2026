@@ -809,7 +809,7 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       kind: "plugin-store-save",
       payload: {
         data: {
-          schemaVersion: 5,
+          schemaVersion: 6,
           plugins: [
             {
               manifest: manifestPayload,
@@ -822,6 +822,59 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       },
     });
     expect(result.ok).toBe(true);
+  });
+
+  it("preserves execution requirements and versioned approval across the store bridge", () => {
+    const data = {
+      schemaVersion: 6,
+      plugins: [
+        {
+          manifest: {
+            ...manifestPayload,
+            requiredCapabilities: [],
+            executionRequirements: {
+              version: 1,
+              requiredExecution: "same-process",
+              reason: "Registers a codec.",
+            },
+          },
+          enabled: true,
+          entrySource: "source",
+          executionMode: "same-process",
+          approval: {
+            version: 1,
+            contentDigest: "a".repeat(64),
+            permissions: [],
+          },
+        },
+      ],
+    };
+    expect(pluginStoreDataResponseSchema.parse(data)).toEqual(data);
+    const request = parseHostMessage({
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "request",
+      messageId: "declared-execution",
+      kind: "plugin-store-save",
+      payload: { data },
+    });
+    expect(request).toMatchObject({ ok: true, value: { payload: { data } } });
+    expect(
+      pluginStoreDataResponseSchema.safeParse({
+        ...data,
+        plugins: [
+          {
+            ...data.plugins[0],
+            manifest: {
+              ...manifestPayload,
+              executionRequirements: {
+                version: 2,
+                requiredExecution: "same-process",
+              },
+            },
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects a plugin-store-save request without data", () => {
@@ -843,7 +896,7 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
       kind: "plugin-store-save",
       payload: {
         data: {
-          schemaVersion: 5,
+          schemaVersion: 6,
           plugins: [{ manifest: { id: "x" }, enabled: true }],
         },
       },
@@ -853,7 +906,7 @@ describe("host-message plugin-store kinds（2026-08-30，ADR-038 插件安装入
 
   it("validates a plugin store data response via pluginStoreDataResponseSchema", () => {
     const parsed = pluginStoreDataResponseSchema.safeParse({
-      schemaVersion: 5,
+      schemaVersion: 6,
       plugins: [{ manifest: manifestPayload, enabled: false }],
     });
     expect(parsed.success).toBe(true);

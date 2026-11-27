@@ -4,7 +4,7 @@
  * 插件不再随应用一次性安装：e2e 用例需要先经 Settings → Plugins → Install Plugin 安装
  * `pnpm build:plugins` 产出的插件文件（`release/plugins/<pluginId>/`），
  * 需要贡献同步能力（codec / dataType / addressTransform）的插件必须在安装确认框中选择
- * 「同进程执行」（Same process）——隔离线程无法提供同步纯函数。
+ * 插件声明要求的同进程执行——隔离线程无法提供同步纯函数。
  *
  * 注意：运行这些用例前需先执行 `pnpm build:plugins`（产物在 `release/` 下，已 gitignore）。
  */
@@ -23,7 +23,7 @@ export function pluginArtifact(pluginId: string, fileName: string): string {
 export async function openPluginsSection(page: Page) {
   if ((await page.locator(".settings-drawer.ant-drawer-open").count()) === 0) {
     await page
-    .getByRole("button", { name: "Settings", exact: true })
+      .getByRole("button", { name: "Settings", exact: true })
       .evaluate((el) => (el as HTMLElement).click());
     await page.waitForSelector(".settings-drawer.ant-drawer-open", {
       timeout: 15_000,
@@ -51,7 +51,7 @@ export async function closeSettings(page: Page): Promise<void> {
 
 /**
  * 安装插件文件（.json 清单 / .mjs 可执行 entry）。
- * `executionMode` 仅对 `.mjs` 生效：same-process = 在确认框中显式选择「同进程执行」。
+ * `executionMode` 仅对 `.mjs` 生效：same-process = 断言确认框要求授权同进程执行。
  */
 export async function installPluginFile(
   page: Page,
@@ -72,9 +72,22 @@ export async function installPluginFile(
     .filter({ hasText: "Install this plugin?" });
   await expect(confirm).toBeVisible();
   if (options.executionMode === "same-process") {
-    await confirm.getByText("Same process", { exact: false }).click();
+    await expect(
+      confirm.getByRole("button", {
+        name: "Authorize same-process execution and install",
+        exact: true,
+      }),
+    ).toBeVisible();
   }
-  await confirm.getByRole("button", { name: "Install", exact: true }).click();
+  await confirm
+    .getByRole("button", {
+      name:
+        options.executionMode === "same-process"
+          ? "Authorize same-process execution and install"
+          : "Install",
+      exact: true,
+    })
+    .click();
   await expect(confirm).toBeHidden();
   await expect(section).toContainText(options.pluginName);
   await closeSettings(page);

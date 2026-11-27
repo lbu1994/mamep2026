@@ -443,6 +443,14 @@ export const pluginManifestPayloadSchema = z.object({
   description: z.string(),
   author: z.string().optional(),
   license: z.string().optional(),
+  executionRequirements: z
+    .object({
+      version: z.literal(1),
+      requiredExecution: z.enum(["isolated", "same-process"]),
+      reason: z.string().trim().min(1).max(1000).optional(),
+    })
+    .strict()
+    .optional(),
   entry: z
     .object({
       web: z.string().min(1).optional(),
@@ -476,6 +484,7 @@ export type PluginManifestPayload = z.infer<typeof pluginManifestPayloadSchema>;
 export const storedPluginPayloadSchema = z.object({
   approval: z
     .object({
+      version: z.literal(1),
       contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
       permissions: pluginManifestPayloadSchema.shape.permissions,
     })
@@ -491,14 +500,14 @@ export const storedPluginPayloadSchema = z.object({
 export type StoredPluginPayload = z.infer<typeof storedPluginPayloadSchema>;
 
 export const pluginStoreDataPayloadSchema = z.object({
-  schemaVersion: z.literal(5),
+  schemaVersion: z.literal(6),
   plugins: z.array(storedPluginPayloadSchema),
 });
 export type PluginStoreDataPayload = z.infer<
   typeof pluginStoreDataPayloadSchema
 >;
 
-/** The host returns the same validated v5 representation that it stores. */
+/** The host returns the same validated v6 representation that it stores. */
 export const pluginStoreDataResponseSchema = pluginStoreDataPayloadSchema;
 export type PluginStoreDataResponse = z.infer<
   typeof pluginStoreDataResponseSchema

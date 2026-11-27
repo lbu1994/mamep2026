@@ -105,7 +105,12 @@ for (const failure of [
     `;
     const dialog = await preview(page, source, "Lifecycle budgets");
     await expect.poll(() => liveWorkers.size).toBe(0);
-    await dialog.getByRole("button", { name: "Install", exact: true }).click();
+    await dialog
+      .getByRole("button", {
+        name: "Install",
+        exact: true,
+      })
+      .click();
     // Loading has a 10-second contract; allow that deadline plus the modal update.
     await expect(dialog).toBeHidden({ timeout: 15000 });
     const row = page
@@ -148,7 +153,7 @@ for (const mode of ["same-process", "isolated"] as const) {
     const source = `
 console.log("SEC-04:entry");
 export const manifest = { id: "disabled-restore", name: "Disabled restore", version: "1.0.0",
-  apiVersion: "2.0", description: "Disabled restore regression", platform: { web: true, node: false },
+  apiVersion: "2.0", description: "Disabled restore regression", executionRequirements: { version: 1, requiredExecution: "${mode}" }, platform: { web: true, node: false },
   permissions: [], contributes: {} };
 export function activate() { console.log("SEC-04:activate"); }
 export function deactivate() { console.log("SEC-04:deactivate"); }
@@ -156,8 +161,21 @@ export function deactivate() { console.log("SEC-04:deactivate"); }
     await openPlugins(page, baseURL);
     const dialog = await preview(page, source, "Disabled restore");
     if (mode === "same-process")
-      await dialog.getByText("Same process", { exact: false }).click();
-    await dialog.getByRole("button", { name: "Install", exact: true }).click();
+      await expect(
+        dialog.getByRole("button", {
+          name: "Authorize same-process execution and install",
+          exact: true,
+        }),
+      ).toBeVisible();
+    await dialog
+      .getByRole("button", {
+        name:
+          mode === "same-process"
+            ? "Authorize same-process execution and install"
+            : "Install",
+        exact: true,
+      })
+      .click();
     await expect(dialog).toBeHidden();
     const row = page
       .getByTestId("plugin-manager")
@@ -299,7 +317,12 @@ test("opaque origin protects workspace, backup and consent even through a nested
     "Storage isolation regression",
   );
   expect(await readApplicationStorage(page)).toEqual(before);
-  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await dialog
+    .getByRole("button", {
+      name: "Install",
+      exact: true,
+    })
+    .click();
   await expect(dialog).toBeHidden();
   const row = page
     .getByTestId("plugin-manager")
@@ -331,12 +354,28 @@ for (const change of ["source", "mode", "approval"] as const) {
       ENTRY.slice(
         ENTRY.indexOf("export const manifest"),
         ENTRY.indexOf("export async function activate"),
+      ).replace(
+        "apiVersion:",
+        `executionRequirements: { version: 1, requiredExecution: "${change === "mode" ? "isolated" : "same-process"}" }, apiVersion:`,
       ) +
       'export function activate() { if (typeof document !== "undefined") document.documentElement.dataset.approvedPlugin = "executed"; }';
     const dialog = await preview(page, source);
     if (change !== "mode")
-      await dialog.getByText("Same process", { exact: false }).click();
-    await dialog.getByRole("button", { name: "Install", exact: true }).click();
+      await expect(
+        dialog.getByRole("button", {
+          name: "Authorize same-process execution and install",
+          exact: true,
+        }),
+      ).toBeVisible();
+    await dialog
+      .getByRole("button", {
+        name:
+          change === "mode"
+            ? "Install"
+            : "Authorize same-process execution and install",
+        exact: true,
+      })
+      .click();
     await expect(dialog).toBeHidden();
     await expect
       .poll(async () => (await readApplicationStorage(page)).plugins)
@@ -391,7 +430,7 @@ test("forged plugin-store-save message cannot reach persistence", async ({
     name: "forged-storage-message.mjs",
     mimeType: "text/javascript",
     buffer: Buffer.from(
-      `self.postMessage({version: 1, type: "plugin-store-save", data: {schemaVersion: 5, plugins: []}});` +
+      `self.postMessage({version: 1, type: "plugin-store-save", data: {schemaVersion: 6, plugins: []}});` +
         ENTRY.slice(
           ENTRY.indexOf("export const manifest"),
           ENTRY.indexOf("export async function activate"),
@@ -412,7 +451,12 @@ test("approved isolated plugin restores, disables and re-enables through a fresh
 }) => {
   await openPlugins(page, baseURL);
   const dialog = await preview(page);
-  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await dialog
+    .getByRole("button", {
+      name: "Install",
+      exact: true,
+    })
+    .click();
   await expect(dialog).toBeHidden();
   const row = page
     .getByTestId("plugin-manager")

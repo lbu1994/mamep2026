@@ -26,6 +26,7 @@ describe("yaskawa-blue-theme 插件（2026-09-08）", () => {
     expect(result.ok).toBe(true);
     expect(registry.getSource(YASKAWA_BLUE_THEME_PLUGIN_ID)).toBe("installed");
     expect(registry.getRuntime(YASKAWA_BLUE_THEME_PLUGIN_ID)).toBeUndefined();
+    expect(registry.getExecutionMode(YASKAWA_BLUE_THEME_PLUGIN_ID)).toBeNull();
     expect(registry.getLifecycleState(YASKAWA_BLUE_THEME_PLUGIN_ID)).toBe(
       "registered",
     );

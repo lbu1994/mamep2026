@@ -26,6 +26,7 @@ describe("example-theme 插件（2026-09-03 自 example-panel 剥离）", () => 
     expect(result.ok).toBe(true);
     expect(registry.getSource(EXAMPLE_THEME_PLUGIN_ID)).toBe("installed");
     expect(registry.getRuntime(EXAMPLE_THEME_PLUGIN_ID)).toBeUndefined();
+    expect(registry.getExecutionMode(EXAMPLE_THEME_PLUGIN_ID)).toBeNull();
     expect(registry.getLifecycleState(EXAMPLE_THEME_PLUGIN_ID)).toBe(
       "registered",
     );

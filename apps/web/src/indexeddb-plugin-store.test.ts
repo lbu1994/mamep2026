@@ -21,7 +21,7 @@ const manifest = {
 };
 
 function storeData(): PluginStoreData {
-  return { schemaVersion: 5, plugins: [{ manifest, enabled: true }] };
+  return { schemaVersion: 6, plugins: [{ manifest, enabled: true }] };
 }
 
 function makeKv(initial?: unknown): {
@@ -52,7 +52,7 @@ describe("IndexedDBPluginStore", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).toEqual({
-        schemaVersion: 5,
+        schemaVersion: 6,
         plugins: [],
       });
     }

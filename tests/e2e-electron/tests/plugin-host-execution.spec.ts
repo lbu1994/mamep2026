@@ -134,8 +134,18 @@ test("安装同进程可执行插件 → 主进程 plugins.json 落盘（含 exe
     .filter({ hasText: "Install this plugin?" });
   await expect(confirm).toBeVisible({ timeout: 10000 });
   // 执行模式：显式授权「同进程执行」（隔离线程无法贡献同步能力）。
-  await confirm.getByText("Same process", { exact: false }).click();
-  await confirm.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(
+    confirm.getByRole("button", {
+      name: "Authorize same-process execution and install",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await confirm
+    .getByRole("button", {
+      name: "Authorize same-process execution and install",
+      exact: true,
+    })
+    .click();
   await expect(confirm).toBeHidden({ timeout: 10000 });
   await expect(section).toContainText("Address Adjust", { timeout: 10000 });
   await closeSettings();
@@ -163,7 +173,7 @@ test("安装同进程可执行插件 → 主进程 plugins.json 落盘（含 exe
       entrySource?: string;
     }>;
   };
-  expect(stored.schemaVersion).toBe(5);
+  expect(stored.schemaVersion).toBe(6);
   expect(stored.plugins).toHaveLength(1);
   expect(stored.plugins[0]?.executionMode).toBe("same-process");
   expect(stored.plugins[0]?.enabled).toBe(true);
@@ -232,7 +242,12 @@ test("isolated plugin cannot access storage or the preload bridge; file tamperin
     .locator(".ant-modal-container")
     .filter({ hasText: "Install this plugin?" });
   await expect(dialog).toContainText("Storage isolation regression");
-  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await dialog
+    .getByRole("button", {
+      name: "Install",
+      exact: true,
+    })
+    .click();
   await expect(dialog).toBeHidden();
   const row = section
     .locator(".ant-listy-item")
