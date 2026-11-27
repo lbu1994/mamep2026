@@ -14,10 +14,15 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App as AntApp, ConfigProvider } from "antd";
-import { createEmptyWorkspace } from "@mamep2026/domain";
+import {
+  createDefaultRtuProfile,
+  createDefaultTcpProfile,
+  createEmptyWorkspace,
+} from "@mamep2026/domain";
 import { initI18n } from "../i18n";
 import { useAppStore } from "../app-store";
 import { WorkspaceImportModal } from "./WorkspaceImportModal";
+import { makeHost } from "../test/make-app-host";
 
 function renderModal(): void {
   render(
@@ -33,10 +38,57 @@ describe("WorkspaceImportModal", () => {
   beforeEach(() => {
     initI18n();
     useAppStore.setState({
+      host: null,
       workspace: createEmptyWorkspace(),
       workspaceImportDraft: null,
     });
   });
+
+  it.each(["browser", "electron", "vscode", "android"] as const)(
+    "warns about incompatible profiles on %s and preserves all imported values",
+    async (platform) => {
+      const user = userEvent.setup();
+      const { host } = makeHost(
+        { modbusTcp: platform !== "browser" },
+        { platform },
+      );
+      const imported = createEmptyWorkspace();
+      imported.connectionProfiles = [
+        {
+          ...createDefaultRtuProfile("Software flow"),
+          flowControl: "xon-xoff",
+        },
+        { ...createDefaultTcpProfile("Remote PLC"), host: "192.168.1.42" },
+      ];
+      useAppStore.setState({
+        host,
+        workspaceImportDraft: {
+          workspace: imported,
+          preview: {
+            name: imported.name,
+            sheets: 1,
+            rows: 0,
+            connections: 2,
+            schemaVersion: imported.schemaVersion,
+          },
+        },
+      });
+      renderModal();
+      const warning = screen.queryByText(/Some connections cannot be used/);
+      expect(warning !== null).toBe(
+        platform === "browser" || platform === "electron",
+      );
+      await user.click(screen.getByRole("button", { name: "Import" }));
+      await waitFor(() =>
+        expect(useAppStore.getState().workspaceImportDraft).toBeNull(),
+      );
+      expect(useAppStore.getState().workspace.connectionProfiles).toEqual(
+        imported.connectionProfiles,
+      );
+      expect(host.connect).not.toHaveBeenCalled();
+      expect(host.connectTcp).not.toHaveBeenCalled();
+    },
+  );
 
   it("无草稿时不展示预览内容", () => {
     renderModal();

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import Alert from "antd/es/alert";
 import Badge from "antd/es/badge";
 import Button from "antd/es/button";
+import ConfigProvider from "antd/es/config-provider";
 import Col from "antd/es/col";
 import Divider from "antd/es/divider";
 import Flex from "antd/es/flex";
@@ -31,7 +32,11 @@ import {
   type TcpConnectionProfile,
 } from "@mamep2026/domain";
 import type { ConnectionState } from "@mamep2026/communication";
-import type { SerialPortOption } from "@mamep2026/platform-api";
+import {
+  serialParameterSupport,
+  type SerialPortOption,
+} from "@mamep2026/platform-api";
+import { getConnectionSupportError } from "../connection-support";
 import { useAppStore } from "../app-store";
 import { runConnect } from "../connection-actions";
 import { usePluginContributions } from "../plugin/use-contributions";
@@ -142,32 +147,24 @@ export function ConnectionSettingsModal(): React.ReactNode {
       : createDefaultTcpProfile();
   const supportsTcp = host?.capabilities.modbusTcp ?? false;
   const supportsRtu = host?.capabilities.modbusRtu ?? true;
-  // 默认表单值跟随存储 profile 的协议（重开弹窗恢复上次选择的协议与参数）。
-  // 但平台只支持一种协议时（Android 仅 TCP / 浏览器仅 RTU），默认值必须落在该协议上：
-  // 否则隐藏的协议字段会把连接推到不可用的传输。
-  const onlySupportedProtocol: "rtu" | "tcp" | null =
-    supportsTcp === supportsRtu ? null : supportsTcp ? "tcp" : "rtu";
-  const defaultProfile =
-    onlySupportedProtocol === "tcp"
-      ? storedProfile?.protocol === "tcp"
-        ? storedProfile
-        : tcpBase
-      : onlySupportedProtocol === "rtu"
-        ? storedProfile?.protocol === "rtu"
-          ? storedProfile
-          : createDefaultRtuProfile()
-        : (storedProfile ?? createDefaultRtuProfile());
+  // Preserve stored values even when the current platform cannot use them.
+  const defaultProfile = storedProfile ?? (supportsRtu ? profile : tcpBase);
   const { control, handleSubmit, reset, getValues } =
     useForm<ConnectionSettingsValues>({
       resolver: zodResolver(settingsSchema),
       defaultValues: profileToValues(defaultProfile),
     });
-  // 当前协议（Segmented 选择）：RTU/TCP 表单互斥展示；能力门控隐藏不可用协议的入口。
-  const protocol =
-    useWatch({ control, name: "protocol" }) ?? onlySupportedProtocol ?? "rtu";
-  // 浏览器仅支持 RTU：协议 Segmented 单选项冗余 → 隐藏「协议」分组；两类都有则保留切换。
-  const showProtocolSwitcher =
-    (supportsRtu ? 1 : 0) + (supportsTcp ? 1 : 0) > 1;
+  const values = useWatch({ control });
+  const protocol = values.protocol ?? defaultProfile.protocol;
+  const serialSupport = serialParameterSupport[host?.platform ?? "browser"];
+  const currentValues = { ...profileToValues(defaultProfile), ...values };
+  const supportError =
+    host == null
+      ? null
+      : getConnectionSupportError(
+          host,
+          toProfile(currentValues, protocol === "tcp" ? tcpBase : profile),
+        );
 
   const supportsSerial = host?.supportsWebSerial() ?? false;
   const isMock = host?.isMockMode ?? false;
@@ -197,7 +194,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
 
   /** enumerated：枚举可用串口（打开弹窗 / 点击刷新时调用）；返回端口列表（供配置自动匹配）。 */
   const enumeratePorts = async (): Promise<SerialPortOption[]> => {
-    if (host === null || host === undefined) return [];
+    if (host == null || !supportsRtu || protocol !== "rtu" || serialBlocked)
+      return [];
     setEnumerating(true);
     try {
       const result = await host.enumerateSerialPorts();
@@ -213,7 +211,8 @@ export function ConnectionSettingsModal(): React.ReactNode {
   };
 
   const selectPort = async (portId?: string | null): Promise<void> => {
-    if (host === null || host === undefined) return;
+    if (host == null || !supportsRtu || protocol !== "rtu" || serialBlocked)
+      return;
     const result = await host.selectSerialPort(portId ?? null);
     if (result.ok && result.value !== null) {
       setSerialSelection(result.value, portId ?? null);
@@ -230,6 +229,11 @@ export function ConnectionSettingsModal(): React.ReactNode {
 
   const onSubmit = handleSubmit(async (values) => {
     if (host === null || host === undefined || !pluginsReady) return;
+    const error = getConnectionSupportError(
+      host,
+      toProfile(values, values.protocol === "tcp" ? tcpBase : profile),
+    );
+    if (error !== null || serialBlocked) return;
     // 需要选口（仅 RTU）：浏览器 picker（supportsSerial）或 enumerated 下拉（VSCode/Electron）均须先选。
     if (
       values.protocol !== "tcp" &&
@@ -286,6 +290,9 @@ export function ConnectionSettingsModal(): React.ReactNode {
       title={t("connection.title")}
       open={open}
       width={640}
+      styles={{
+        body: { maxHeight: "calc(100dvh - 240px)", overflowY: "auto" },
+      }}
       onCancel={() => setOpen(false)}
       afterOpenChange={(nextOpen) => {
         if (nextOpen) {
@@ -319,7 +326,10 @@ export function ConnectionSettingsModal(): React.ReactNode {
           type={connected ? "default" : "primary"}
           danger={connected}
           loading={connecting || disconnecting}
-          disabled={!connected && (serialBlocked || !pluginsReady)}
+          disabled={
+            !connected &&
+            (serialBlocked || supportError !== null || !pluginsReady)
+          }
           icon={connected ? <DisconnectOutlined /> : <ApiOutlined />}
           onClick={() => {
             if (connected) {
@@ -350,41 +360,45 @@ export function ConnectionSettingsModal(): React.ReactNode {
         <Controller
           name="protocol"
           control={control}
-          render={({ field }) =>
-            showProtocolSwitcher ? (
-              <ConnectionField label={t("connection.protocol")} compact>
-                <Segmented
-                  block
-                  value={field.value}
-                  onChange={(v) => field.onChange(v)}
-                  options={[
-                    ...(supportsRtu
-                      ? [
-                          {
-                            label: t("connection.protocolRtu"),
-                            value: "rtu" as const,
-                          },
-                        ]
-                      : []),
-                    ...(supportsTcp
-                      ? [
-                          {
-                            label: t("connection.protocolTcp"),
-                            value: "tcp" as const,
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
-              </ConnectionField>
-            ) : (
-              // 浏览器仅支持 RTU：隐藏「协议」分组，但保留隐藏 input 注册字段（保持 protocol 值稳定）。
-              <input type="hidden" {...field} />
-            )
-          }
+          render={({ field }) => (
+            <ConnectionField label={t("connection.protocol")} compact>
+              <Segmented
+                block
+                value={field.value}
+                onChange={(value) => {
+                  if (
+                    (value === "rtu" && supportsRtu) ||
+                    (value === "tcp" && supportsTcp)
+                  )
+                    field.onChange(value);
+                }}
+                options={[
+                  {
+                    label: t("connection.protocolRtu"),
+                    value: "rtu",
+                    disabled: !supportsRtu,
+                  },
+                  {
+                    label: t("connection.protocolTcp"),
+                    value: "tcp",
+                    disabled: !supportsTcp,
+                  },
+                ]}
+              />
+            </ConnectionField>
+          )}
         />
-        {protocol === "rtu" ? (
-          <>
+        {!supportsRtu || !supportsTcp ? (
+          <Typography.Paragraph type="secondary">
+            {t("connection.protocolUnsupported")}
+          </Typography.Paragraph>
+        ) : null}
+        <ConfigProvider
+          componentDisabled={
+            !supportsRtu || protocol !== "rtu" || serialBlocked
+          }
+        >
+          <section aria-label={t("connection.protocolRtu")}>
             <Divider
               titlePlacement="left"
               plain
@@ -462,12 +476,19 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   render={({ field }) => (
                     <ConnectionField label={t("connection.baudRate")}>
                       <Select
+                        aria-label={t("connection.baudRate")}
                         style={{ width: "100%" }}
                         value={field.value}
                         onChange={(v) => field.onChange(v)}
-                        options={[
-                          1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200,
-                        ].map((v) => ({ value: v, label: String(v) }))}
+                        options={Array.from(
+                          new Set([...serialSupport.baudRates, field.value]),
+                        ).map((v) => ({
+                          value: v,
+                          label: String(v),
+                          disabled:
+                            !serialSupport.customBaudRates &&
+                            !serialSupport.baudRates.includes(v),
+                        }))}
                       />
                     </ConnectionField>
                   )}
@@ -478,10 +499,12 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   render={({ field }) => (
                     <ConnectionField label={t("connection.dataBits")}>
                       <Select
+                        aria-label={t("connection.dataBits")}
                         style={{ width: "100%" }}
                         value={field.value}
                         onChange={(v) => field.onChange(v)}
                         options={[7, 8].map((v) => ({
+                          disabled: !serialSupport.dataBits.includes(v),
                           value: v,
                           label: `${v} BIT`,
                         }))}
@@ -495,12 +518,17 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="stopBits"
                   control={control}
                   render={({ field }) => (
-                    <ConnectionField label={t("connection.stopBits")}>
+                    <ConnectionField
+                      label={t("connection.stopBits")}
+                      hint={t("connection.stopBitsUnsupported")}
+                    >
                       <Select
+                        aria-label={t("connection.stopBits")}
                         style={{ width: "100%" }}
                         value={field.value}
                         onChange={(v) => field.onChange(v)}
-                        options={[1, 2].map((v) => ({
+                        options={[1, 1.5, 2].map((v) => ({
+                          disabled: !serialSupport.stopBits.includes(v),
                           value: v,
                           label: `${v} BIT`,
                         }))}
@@ -514,6 +542,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   render={({ field }) => (
                     <ConnectionField label={t("connection.parity")}>
                       <Select
+                        aria-label={t("connection.parity")}
                         style={{ width: "100%" }}
                         value={field.value}
                         onChange={(v) => field.onChange(v)}
@@ -530,8 +559,16 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   name="flowControl"
                   control={control}
                   render={({ field }) => (
-                    <ConnectionField label={t("connection.flowControl")}>
+                    <ConnectionField
+                      label={t("connection.flowControl")}
+                      hint={t(
+                        serialSupport.flowControl.includes("xon-xoff")
+                          ? "connection.driverParametersHint"
+                          : "connection.flowControlUnsupported",
+                      )}
+                    >
                       <Select
+                        aria-label={t("connection.flowControl")}
                         style={{ width: "100%" }}
                         value={field.value}
                         onChange={(v) => field.onChange(v)}
@@ -540,6 +577,14 @@ export function ConnectionSettingsModal(): React.ReactNode {
                           {
                             value: "rts-cts",
                             label: t("connection.flowRtsCts"),
+                            disabled:
+                              !serialSupport.flowControl.includes("rts-cts"),
+                          },
+                          {
+                            value: "xon-xoff",
+                            label: t("connection.flowXonXoff"),
+                            disabled:
+                              !serialSupport.flowControl.includes("xon-xoff"),
                           },
                         ]}
                       />
@@ -563,6 +608,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   render={({ field }) => (
                     <ConnectionField label={t("connection.timeout")}>
                       <Select
+                        aria-label={t("connection.timeout")}
                         style={{ width: "100%" }}
                         showSearch
                         value={field.value}
@@ -595,10 +641,10 @@ export function ConnectionSettingsModal(): React.ReactNode {
                 />
               </Col>
             </Row>
-          </>
-        ) : null}
-        {protocol === "tcp" ? (
-          <>
+          </section>
+        </ConfigProvider>
+        <ConfigProvider componentDisabled={!supportsTcp || protocol !== "tcp"}>
+          <section aria-label={t("connection.protocolTcp")}>
             <Divider
               titlePlacement="left"
               plain
@@ -614,6 +660,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   render={({ field }) => (
                     <ConnectionField label={t("connection.host")}>
                       <Input
+                        aria-label={t("connection.host")}
                         placeholder="192.168.1.10"
                         value={field.value}
                         onChange={(e) => field.onChange(e.target.value)}
@@ -629,6 +676,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   render={({ field }) => (
                     <ConnectionField label={t("connection.portTcp")}>
                       <InputNumber
+                        aria-label={t("connection.portTcp")}
                         style={{ width: "100%" }}
                         min={1}
                         max={65535}
@@ -649,6 +697,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                       hint={t("connection.unitIdHint")}
                     >
                       <InputNumber
+                        aria-label={t("connection.unitId")}
                         style={{ width: "100%" }}
                         min={0}
                         max={255}
@@ -666,6 +715,7 @@ export function ConnectionSettingsModal(): React.ReactNode {
                   render={({ field }) => (
                     <ConnectionField label={t("connection.timeout")}>
                       <InputNumber
+                        aria-label={t("connection.timeout")}
                         style={{ width: "100%" }}
                         min={50}
                         max={60000}
@@ -712,7 +762,15 @@ export function ConnectionSettingsModal(): React.ReactNode {
                 />
               </Col>
             </Row>
-          </>
+          </section>
+        </ConfigProvider>
+        {supportError !== null ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={t(supportError.userMessageKey)}
+            description={supportError.technicalMessage}
+          />
         ) : null}
         {connectionState !== "disconnected" && connectionState !== "failed" ? (
           <div style={{ marginTop: 8 }}>

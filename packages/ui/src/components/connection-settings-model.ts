@@ -28,9 +28,8 @@ export const RTU_TIMEOUT_OPTIONS = [
   1000,
 ];
 
-/** 连接设置表单（RTU 与 TCP 字段共存；UI 按 protocol 互斥展示）。
- * host 为默认空串、经 superRefine 仅 TCP 协议下要求非空——避免 RTU 提交被空的
- * host 卡住校验。 */
+/** Keep both protocols visible; disable fields outside the selected protocol.
+ * Require a nonempty host only for TCP. Platform support is checked separately. */
 export const settingsSchema = z
   .object({
     protocol: z.enum(["rtu", "tcp"]),
@@ -39,7 +38,7 @@ export const settingsSchema = z
     dataBits: z.union([z.literal(7), z.literal(8)]),
     stopBits: z.union([z.literal(1), z.literal(2)]),
     parity: z.enum(["none", "even", "odd"]),
-    flowControl: z.enum(["off", "rts-cts"]),
+    flowControl: z.enum(["off", "rts-cts", "xon-xoff"]),
     // RTU 超时：数值区间 5–1000ms（由 5–100 放宽，与 RTU_TIMEOUT_OPTIONS 上限对齐）。
     rtuTimeout: z.number().int().min(5).max(1000),
     retry: z.number().int().min(0).max(10),
@@ -70,7 +69,7 @@ export const rtuPersistedSettingsSchema = z.object({
   dataBits: z.union([z.literal(7), z.literal(8)]),
   stopBits: z.union([z.literal(1), z.literal(2)]),
   parity: z.enum(["none", "even", "odd"]),
-  flowControl: z.enum(["off", "rts-cts"]),
+  flowControl: z.enum(["off", "rts-cts", "xon-xoff"]),
   requestTimeoutMs: z.number().int().min(5).max(1000),
   retryCount: z.number().int().min(0).max(10),
 });
@@ -153,8 +152,7 @@ export function profileToValues(
     dataBits: profile.dataBits,
     stopBits: profile.stopBits,
     parity: profile.parity,
-    flowControl:
-      profile.flowControl === "xon-xoff" ? "off" : profile.flowControl,
+    flowControl: profile.flowControl,
     rtuTimeout: profile.requestTimeoutMs,
     retry: profile.retryCount,
     host: "",

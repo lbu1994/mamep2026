@@ -13,6 +13,8 @@ import type {
 } from "@mamep2026/domain";
 import type { SerialDeviceHandle } from "@mamep2026/platform-api";
 import type { CommunicationHost, HostIdentity } from "./host";
+import { fail } from "@mamep2026/domain";
+import { getConnectionSupportError } from "./connection-support";
 
 /** 串口能力被阻断（无 Web Serial + 非 enumerated + 非 mock）：不能直连，应回退弹窗。 */
 export function isSerialBlocked(
@@ -33,6 +35,7 @@ export function canDirectConnect(
   profile: RtuConnectionProfile | TcpConnectionProfile,
   selectedSerialHandle: SerialDeviceHandle | null,
 ): boolean {
+  if (getConnectionSupportError(host, profile) !== null) return false;
   if (profile.protocol === "tcp") {
     if (!host.capabilities.modbusTcp) return false;
     return profile.host.trim().length > 0;
@@ -50,7 +53,7 @@ export function canDirectConnect(
  * @param opts.handle 会话内已选串口句柄（RTU 用；mock 或 TCP 忽略）
  */
 export async function runConnect(
-  host: CommunicationHost,
+  host: CommunicationHost & HostIdentity,
   opts: {
     protocol: "rtu" | "tcp";
     profile: RtuConnectionProfile | TcpConnectionProfile;
@@ -59,6 +62,8 @@ export async function runConnect(
     isMock: boolean;
   },
 ): Promise<Result<void>> {
+  const supportError = getConnectionSupportError(host, opts.profile);
+  if (supportError !== null) return fail(supportError);
   if (opts.protocol === "tcp") {
     return host.connectTcp(opts.profile as TcpConnectionProfile);
   }

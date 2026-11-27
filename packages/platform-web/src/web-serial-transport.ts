@@ -11,6 +11,7 @@ import type {
 import { createMamepError } from "@mamep2026/domain";
 import { fail, ok } from "@mamep2026/domain";
 import type { TransportPort } from "@mamep2026/communication";
+import { validatePlatformSerialParameters } from "@mamep2026/platform-api";
 import type { SerialPort } from "./web-serial";
 
 export class WebSerialTransport implements TransportPort {
@@ -44,6 +45,20 @@ export class WebSerialTransport implements TransportPort {
   }
 
   async open(): Promise<Result<void>> {
+    const validation = validatePlatformSerialParameters(
+      this.profile,
+      "browser",
+    );
+    if (!validation.ok) {
+      return fail(
+        createMamepError({
+          code: "SERIAL_PARAMETER_UNSUPPORTED",
+          category: "connection",
+          userMessageKey: "errors.serialParameterUnsupported",
+          technicalMessage: validation.reason,
+        }),
+      );
+    }
     try {
       await this.port.open({
         baudRate: this.profile.baudRate,

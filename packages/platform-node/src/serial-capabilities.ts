@@ -3,6 +3,7 @@
  * 只用于 UI 展示与配置校验，不得绕过真实打开结果：即使声明支持某参数，
  * 具体设备或驱动仍可能拒绝，连接流程必须处理实际失败。
  */
+import { serialParameterSupport } from "@mamep2026/platform-api";
 import type { FlowControl, Parity } from "@mamep2026/domain";
 
 export interface NodeSerialCapabilities {
@@ -35,10 +36,10 @@ export function describeNodeSerialCapabilities(
 ): NodeSerialCapabilities {
   return {
     enumeration: true,
-    dataBits: Object.freeze([7, 8]),
-    stopBits: Object.freeze([1, 2]),
-    parity: Object.freeze(["none", "even", "odd"]),
-    flowControl: Object.freeze(["off", "rts-cts", "xon-xoff"]),
+    dataBits: serialParameterSupport.vscode.dataBits,
+    stopBits: serialParameterSupport.vscode.stopBits,
+    parity: serialParameterSupport.vscode.parity,
+    flowControl: serialParameterSupport.vscode.flowControl,
     unplugDetection: true,
     usbMetadata: true,
     customBaudRates: true,

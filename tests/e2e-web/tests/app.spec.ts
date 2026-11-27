@@ -78,8 +78,11 @@ test("non-mock startup opens Connection Settings modal with RTU defaults", async
   await expect(modal).not.toContainText("Address Adjust");
   // Rx Delay 已移除：Connection Settings 不再有该选项。
   await expect(modal).not.toContainText("Rx Delay");
-  // No Modbus TCP entry in the browser.
-  await expect(modal).not.toContainText("Modbus TCP");
+  // Browser TCP stays visible, but cannot be selected or edited.
+  await expect(modal.getByRole("radio", { name: "Modbus TCP" })).toBeDisabled();
+  await expect(
+    modal.getByRole("textbox", { name: "Host / IP" }),
+  ).toBeDisabled();
   await closeModal(page);
 });
 

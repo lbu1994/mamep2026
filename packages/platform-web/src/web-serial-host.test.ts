@@ -21,6 +21,42 @@ function createFakePort(
 }
 
 describe("BrowserPlatformHost", () => {
+  it("rejects XON/XOFF before opening the port and preserves the profile", async () => {
+    const port = createFakePort();
+    const host = new BrowserPlatformHost();
+    const profile = {
+      ...createDefaultRtuProfile(),
+      flowControl: "xon-xoff" as const,
+    };
+    const result = await host.openSerialTransport(
+      { id: "USB", label: "USB", port } as WebSerialHandle,
+      profile,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const opened = await result.value.open();
+    expect(opened).toMatchObject({
+      ok: false,
+      error: { code: "SERIAL_PARAMETER_UNSUPPORTED" },
+    });
+    expect(port.openCalls).toEqual([]);
+    expect(result.value.isOpen()).toBe(false);
+    expect(profile.flowControl).toBe("xon-xoff");
+  });
+
+  it("passes RTS/CTS to Web Serial as hardware flow control", async () => {
+    const port = createFakePort();
+    const host = new BrowserPlatformHost();
+    const result = await host.openSerialTransport(
+      { id: "USB", label: "USB", port } as WebSerialHandle,
+      { ...createDefaultRtuProfile(), flowControl: "rts-cts" },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect((await result.value.open()).ok).toBe(true);
+    expect(port.openCalls[0]?.flowControl).toBe("hardware");
+  });
+
   it("keeps the SerialPort object inside the selected-device handle", async () => {
     const fakePort = createFakePort();
     const serial: Serial = {

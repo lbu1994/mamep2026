@@ -13,6 +13,56 @@ import { makeHost } from "./test/make-app-host";
 
 const handle = { id: "COM4" } as SerialDeviceHandle;
 
+describe("platform connection gates", () => {
+  it.each(["browser", "electron", "vscode", "android"] as const)(
+    "checks XON/XOFF before connecting on %s",
+    async (platform) => {
+      const { host } = makeHost({}, { platform });
+      const profile = {
+        ...createDefaultRtuProfile(),
+        flowControl: "xon-xoff" as const,
+      };
+      const supported = platform === "vscode" || platform === "android";
+      expect(canDirectConnect(host, profile, handle)).toBe(supported);
+      const result = await runConnect(host, {
+        protocol: "rtu",
+        profile,
+        sheetProtocol: "rtu",
+        handle,
+        isMock: false,
+      });
+      expect(result.ok).toBe(supported);
+      expect(host.connect).toHaveBeenCalledTimes(supported ? 1 : 0);
+      expect(profile.flowControl).toBe("xon-xoff");
+    },
+  );
+
+  it("blocks unsupported TCP and RTU before calling the host", async () => {
+    const { host, connectTcp } = makeHost({
+      modbusRtu: false,
+      modbusTcp: false,
+    });
+    for (const profile of [
+      createDefaultRtuProfile(),
+      createDefaultTcpProfile(),
+    ]) {
+      const result = await runConnect(host, {
+        protocol: profile.protocol,
+        profile,
+        sheetProtocol: "rtu",
+        handle,
+        isMock: false,
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "CONNECTION_PROTOCOL_UNSUPPORTED" },
+      });
+    }
+    expect(host.connect).not.toHaveBeenCalled();
+    expect(connectTcp).not.toHaveBeenCalled();
+  });
+});
+
 describe("canDirectConnect（关键字段已就绪判定）", () => {
   it("RTU + 已选串口（非串口阻断）→ 可直连", () => {
     const { host } = makeHost();

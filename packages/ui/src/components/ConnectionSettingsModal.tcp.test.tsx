@@ -1,9 +1,3 @@
-/**
- * ConnectionSettingsModal TCP 分组测试（两端 TCP 接线）：
- * - 能力门控：modbusTcp=true 显示 TCP 协议选项；false（浏览器）不显示 TCP 入口；
- * - TCP 表单：切换协议后展示 host/port/unitId/超时/重试 + autoReconnect 开关（启用）；
- * - CONNECT 路由：TCP 走 host.connectTcp（携带 TCP profile，含 autoReconnect），空 host 校验阻止提交。
- */
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import {
   cleanup,
@@ -11,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
@@ -162,6 +157,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     initI18n();
     useAppStore.setState({
       host: null,
+      workspace: { ...createEmptyWorkspace(), connectionProfiles: [] },
       connectionModalOpen: false,
       pluginsReady: true,
     });
@@ -181,46 +177,68 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
       expect(screen.getByPlaceholderText("192.168.1.10")).toBeTruthy();
     });
     // TCP 模式下 InputNumber 控件：port / unitId / timeout / retry。
-    expect(screen.getAllByRole("spinbutton")).toHaveLength(4);
+    expect(
+      within(screen.getByRole("region", { name: "Modbus TCP" })).getAllByRole(
+        "spinbutton",
+      ),
+    ).toHaveLength(4);
     // autoReconnect 开关可用（落地，PRD §8.3 P1）。
     const switchEl = screen.getByRole("switch");
     expect(switchEl).toBeTruthy();
     expect(switchEl.getAttribute("aria-checked")).toBe("false");
   });
 
-  it("TCP 能力关闭（浏览器）：隐藏整个「协议」分组（避免单选项冗余），RTU 表单仍显示", () => {
+  it("keeps unsupported TCP visible and disables its controls", () => {
     const { host } = makeHost({ modbusTcp: false });
     renderModal(host);
-    // 协议分组（label + Segmented）完全隐藏：无 Protocol 标签 / 无 Modbus RTU / 无 Modbus TCP。
-    expect(screen.queryByText("Protocol")).toBeNull();
-    expect(screen.queryByText("Modbus RTU")).toBeNull();
-    expect(screen.queryByText("Modbus TCP")).toBeNull();
-    // RTU 通信表单仍展示（分组标题出现）。
-    expect(screen.getByText("Communication")).toBeTruthy();
+    expect(screen.getByText("Protocol")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Modbus TCP" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    const tcp = within(screen.getByRole("region", { name: "Modbus TCP" }));
+    expect(tcp.getByRole("textbox")).toHaveProperty("disabled", true);
+    for (const input of tcp.getAllByRole("spinbutton"))
+      expect(input).toHaveProperty("disabled", true);
+    expect(tcp.getByRole("switch")).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByText("Modbus TCP"));
+    expect(screen.getByRole("radio", { name: "Modbus RTU" })).toHaveProperty(
+      "checked",
+      true,
+    );
+    expect(host.connectTcp).not.toHaveBeenCalled();
   });
 
-  it("仅 TCP 能力（Android Phase 1）：隐藏协议分组但表单直接落在 TCP，且不误报缺串口", async () => {
-    // Android ：modbusRtu=false / serialPorts=unsupported（能力矩阵如实声明）。
+  it("keeps RTU visible but disabled on a TCP-only host", () => {
     const { host } = makeHost({
       modbusRtu: false,
       modbusTcp: true,
       serialPorts: "unsupported",
     });
     renderModal(host);
-
-    // 单一可用协议 → 协议分组隐藏。
-    expect(screen.queryByText("Protocol")).toBeNull();
-    expect(screen.queryByText("Modbus TCP")).toBeNull();
-    // 默认协议必须是 TCP（否则隐藏字段会把连接推到未实现的串口）。
-    await waitFor(() => {
-      expect(screen.getByText("Host / IP")).toBeTruthy();
-      expect(screen.getByText("TCP Port")).toBeTruthy();
-    });
-    expect(screen.queryByText("Communication")).toBeNull();
-    // 串口缺失只影响 RTU：不得因缺串口提示 Web Serial 或禁用 CONNECT。
-    expect(screen.queryByText(/Web Serial/i)).toBeNull();
-    const connectButton = screen.getByText("CONNECT").closest("button");
-    expect(connectButton?.disabled).toBe(false);
+    expect(screen.getByRole("radio", { name: "Modbus RTU" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(screen.getByRole("radio", { name: "Modbus TCP" })).toHaveProperty(
+      "checked",
+      true,
+    );
+    const rtu = within(screen.getByRole("region", { name: "Modbus RTU" }));
+    for (const input of rtu.getAllByRole("combobox"))
+      expect(input).toHaveProperty("disabled", true);
+    expect(
+      rtu.getByRole("button", { name: /Select serial port/ }),
+    ).toHaveProperty("disabled", true);
+    expect(screen.getByPlaceholderText("192.168.1.10")).toHaveProperty(
+      "disabled",
+      false,
+    );
+    expect(screen.getByText("CONNECT").closest("button")).toHaveProperty(
+      "disabled",
+      false,
+    );
+    expect(host.selectSerialPort).not.toHaveBeenCalled();
   });
 
   it("仅 TCP 能力：CONNECT 直接走 host.connectTcp（不要求先选串口）", async () => {
@@ -260,7 +278,9 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     fireEvent.change(screen.getByPlaceholderText("192.168.1.10"), {
       target: { value: "192.168.1.10" },
     });
-    const spinbuttons = screen.getAllByRole("spinbutton");
+    const spinbuttons = within(
+      screen.getByRole("region", { name: "Modbus TCP" }),
+    ).getAllByRole("spinbutton");
     fireEvent.change(spinbuttons[0] ?? document.body, {
       target: { value: "502" },
     });

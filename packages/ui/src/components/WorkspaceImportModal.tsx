@@ -7,17 +7,27 @@
 import { useEffect, useRef, useState } from "react";
 import { App as AntApp } from "antd";
 import Descriptions from "antd/es/descriptions";
+import Alert from "antd/es/alert";
 import Modal from "antd/es/modal";
 import Space from "antd/es/space";
 import Typography from "antd/es/typography";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../app-store";
 import { cancelWorkspaceImportPreparation } from "../workspace-transfer";
+import { getConnectionSupportError } from "../connection-support";
 
 export function WorkspaceImportModal(): React.ReactNode {
   const { t } = useTranslation();
   const { message } = AntApp.useApp();
   const draft = useAppStore((s) => s.workspaceImportDraft);
+  const host = useAppStore((s) => s.host);
+  const unsupportedProfiles =
+    host == null
+      ? []
+      : (draft?.workspace.connectionProfiles ?? []).flatMap((profile) => {
+          const error = getConnectionSupportError(host, profile);
+          return error === null ? [] : [{ profile, error }];
+        });
   const setWorkspaceImportDraft = useAppStore((s) => s.setWorkspaceImportDraft);
   const applyWorkspaceImport = useAppStore((s) => s.applyWorkspaceImport);
   const [committing, setCommitting] = useState(false);
@@ -95,6 +105,23 @@ export function WorkspaceImportModal(): React.ReactNode {
           <Typography.Paragraph type="warning">
             {t("workspace.importConfirmContent")}
           </Typography.Paragraph>
+          {unsupportedProfiles.length > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              title={t("workspace.importUnsupportedConnections")}
+              description={
+                <ul>
+                  {unsupportedProfiles.map(({ profile, error }) => (
+                    <li key={profile.id}>
+                      {profile.name}: {t(error.userMessageKey)} (
+                      {error.technicalMessage})
+                    </li>
+                  ))}
+                </ul>
+              }
+            />
+          ) : null}
         </Space>
       ) : null}
     </Modal>

@@ -9,6 +9,7 @@ import {
   RTU_TIMEOUT_OPTIONS,
   rtuPersistedSettingsSchema,
   settingsSchema,
+  toProfile,
   type ConnectionSettingsValues,
 } from "./connection-settings-model";
 
@@ -92,6 +93,20 @@ describe("connection-settings-model persistence mapping", () => {
       autoReconnect: true,
     });
   });
+});
+
+it("preserves XON/XOFF through form validation, persistence and profile conversion", () => {
+  const profile = {
+    ...createDefaultRtuProfile(),
+    flowControl: "xon-xoff" as const,
+  };
+  const values = settingsSchema.parse(profileToValues(profile));
+  expect(values.flowControl).toBe("xon-xoff");
+  expect(extractPersistedSettings(values).protocol).toBe("rtu");
+  expect(extractPersistedSettings(values)).toMatchObject({
+    flowControl: "xon-xoff",
+  });
+  expect(toProfile(values, profile)).toEqual(profile);
 });
 
 describe("settingsSchema（表单校验：host 非空仅 TCP 生效，2026-08-23 回归修复）", () => {

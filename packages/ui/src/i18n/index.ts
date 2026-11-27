@@ -60,6 +60,14 @@ export const en = {
     flowOff: "OFF",
     flowRtsCts: "RTS/CTS",
     flowXonXoff: "XON/XOFF",
+    protocolUnsupported:
+      "Unavailable protocols stay visible but cannot be selected or edited on this platform.",
+    stopBitsUnsupported:
+      "1.5 stop bits are not supported by the current connection format.",
+    flowControlUnsupported:
+      "Web Serial does not support XON/XOFF. RTS/CTS still requires device and driver support.",
+    driverParametersHint:
+      "The selected device and driver must support these parameters. Open failures are reported without changing them.",
     parityNone: "None",
     parityEven: "Even",
     parityOdd: "Odd",
@@ -508,6 +516,8 @@ export const en = {
     previewSheets: "Sheets",
     previewRows: "Rows",
     previewConnections: "Connections",
+    importUnsupportedConnections:
+      "Some connections cannot be used on this platform. Import keeps their original values. Change the unsupported settings before connecting.",
     previewSchemaVersion: "Format version",
   },
   save: {
@@ -727,6 +737,12 @@ export const zh: TranslationResources = {
     flowOff: "OFF",
     flowRtsCts: "RTS/CTS",
     flowXonXoff: "XON/XOFF",
+    protocolUnsupported: "当前平台不支持的协议仍显示，但不可选择或填写。",
+    stopBitsUnsupported: "当前连接格式不支持 1.5 停止位。",
+    flowControlUnsupported:
+      "Web Serial 不支持 XON/XOFF。RTS/CTS 还需设备和驱动支持。",
+    driverParametersHint:
+      "参数还需所选设备和驱动支持。打开失败时会报告错误，不自动修改参数。",
     parityNone: "无",
     parityEven: "偶校验",
     parityOdd: "奇校验",
@@ -1155,6 +1171,8 @@ export const zh: TranslationResources = {
     previewSheets: "表",
     previewRows: "行",
     previewConnections: "连接",
+    importUnsupportedConnections:
+      "部分连接不受当前平台支持。导入会保留原始参数；连接前须修改不支持的设置。",
     previewSchemaVersion: "格式版本",
   },
   save: {
