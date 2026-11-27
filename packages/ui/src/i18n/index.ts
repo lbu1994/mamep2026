@@ -373,6 +373,15 @@ export const en = {
     installUnsupported:
       "Plugin installation is not supported in this environment.",
     confirmPermissions: "Review permissions",
+    reloadHost: "Reload on host",
+    hostStage: {
+      loading: "Host: loading",
+      activating: "Host: activating",
+      active: "Host: active",
+      failed: "Host: failed",
+      disabled: "Host: disabled",
+      unsupported: "Host: no execution",
+    },
     installConfirmTitle: "Install this plugin?",
     installConfirmWarning:
       "You are about to install an untrusted third-party plugin. It may access the device or file capabilities declared in its manifest. Only continue if you trust its source.",
@@ -1013,6 +1022,15 @@ export const zh: TranslationResources = {
     install: "安装插件",
     installUnsupported: "当前环境不支持安装插件。",
     confirmPermissions: "确认权限",
+    reloadHost: "重新加载宿主插件",
+    hostStage: {
+      loading: "宿主：加载中",
+      activating: "宿主：激活中",
+      active: "宿主：已激活",
+      failed: "宿主：失败",
+      disabled: "宿主：已禁用",
+      unsupported: "宿主：无执行面",
+    },
     installConfirmTitle: "安装此插件？",
     installConfirmWarning:
       "你将安装一个未受信任的第三方插件。它可能访问清单中声明的设备或文件能力。请仅在信任其来源时继续。",

@@ -1,3 +1,4 @@
+import { pluginPermissionDenied } from "@mamep2026/plugin-api";
 /**
  * Electron Renderer Host（docs/TECH_DESIGN.md §5.1.6、§6.2）。
  * 实现共享 UI 的 AppHost 契约。串口使用下拉框选择：
@@ -230,6 +231,9 @@ export class ElectronAppHost
   /** 主进程 TCP 会话事件分发：更新本地镜像并通知订阅者（payload 形状由 kind 契约保证）。 */
   private handleSessionEvent(event: MamepHostEvent): void {
     switch (event.kind) {
+      case "plugin-host-state":
+        this.pluginRegistry.applyHostSnapshot(event.payload);
+        break;
       case "connection-state": {
         const { state } = event.payload as { state: ConnectionState };
         this.tcpConnectionState = state;
@@ -444,7 +448,10 @@ export class ElectronAppHost
   ): Promise<Result<void>> {
     const result = await this.inner.connect(profile, handle, options);
     // RTU 路径恒为 rtu（codec 协议如 MEMOBUS 亦走 RTU 串口传输，activeProtocol 仅 rtu/tcp 判别）。
-    if (result.ok) this.activeProtocol = "rtu";
+    if (result.ok) {
+      this.activeProtocol = "rtu";
+      this.pluginRegistry.configureHostContributions(false);
+    }
     return result;
   }
 
@@ -462,6 +469,7 @@ export class ElectronAppHost
         this.portLabel = `${profile.host}:${profile.port}`;
         this.tcpConnectionState = "connected";
         this.activeProtocol = "tcp";
+        this.pluginRegistry.configureHostContributions(true);
         return { ok: true, value: undefined } as const;
       });
     return result;
@@ -473,6 +481,7 @@ export class ElectronAppHost
       if (result.ok) {
         this.tcpConnectionState = "disconnected";
         this.activeProtocol = null;
+        this.pluginRegistry.configureHostContributions(false);
         return ok(undefined);
       }
       return result;
@@ -495,6 +504,7 @@ export class ElectronAppHost
     await this.cancelPendingPicker();
     await this.inner.dispose();
     this.activeProtocol = null;
+    this.pluginRegistry.configureHostContributions(false);
     this.tcpProfile = null;
     this.tcpConnectionState = "disconnected";
   }
@@ -506,8 +516,27 @@ export class ElectronAppHost
   }
 
   /** 启动插件系统：委托 inner（加载已安装插件并装配执行面）。 */
-  startPlugins(): Promise<void> {
-    return this.inner.startPlugins();
+  async startPlugins(): Promise<void> {
+    await this.inner.startPlugins();
+    const result = await this.bridge.hostPluginState?.();
+    if (result?.ok) this.pluginRegistry.applyHostSnapshot(result.value);
+    else if (result !== undefined)
+      this.pluginRegistry.reportHostQueryError(result.error);
+  }
+
+  /** Retry host execution without changing installed content or saved consent. */
+  async reloadHostPlugin(pluginId: string): Promise<Result<void>> {
+    const saved = await this.inner.flushPlugins();
+    if (!saved.ok) return saved;
+    const result = await this.bridge.reloadHostPlugin?.(pluginId);
+    if (result === undefined)
+      return fail(pluginPermissionDenied("host plugin reload unavailable"));
+    if (!result.ok) {
+      this.pluginRegistry.reportHostQueryError(result.error);
+      return result;
+    }
+    this.pluginRegistry.applyHostSnapshot(result.value);
+    return ok(undefined);
   }
 
   /** 预览可执行插件 entry。 */
@@ -520,15 +549,26 @@ export class ElectronAppHost
   }
 
   /** 安装可执行插件：委托 inner（注册 + 持久化）。 */
-  setPluginEnabled(pluginId: string, enabled: boolean): Promise<Result<void>> {
-    return this.inner.setPluginEnabled(pluginId, enabled);
+  async setPluginEnabled(
+    pluginId: string,
+    enabled: boolean,
+  ): Promise<Result<void>> {
+    const result = await this.inner.setPluginEnabled(pluginId, enabled);
+    if (!result.ok) return result;
+    return this.inner.flushPlugins();
   }
 
-  installPluginEntry(
+  async installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
   ): Promise<Result<PluginManifest>> {
-    return this.inner.installPluginEntry(entrySource, executionMode);
+    const result = await this.inner.installPluginEntry(
+      entrySource,
+      executionMode,
+    );
+    if (!result.ok) return result;
+    const saved = await this.inner.flushPlugins();
+    return saved.ok ? result : saved;
   }
 
   /** 当前会话：RTU 本地路径返回内部会话；TCP 在主进程 → null。 */

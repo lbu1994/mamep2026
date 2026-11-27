@@ -1,3 +1,4 @@
+import type { HostPluginSnapshot } from "@mamep2026/plugin-api";
 /**
  * ElectronAppHost 单测（扩展为下拉框枚举）：
  * 能力翻转（RTU 支持 / serialPorts enumerated）、enumerated 串口选择（requestPort 直接
@@ -826,5 +827,94 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
     const result = await host.connectTcp(createDefaultTcpProfile());
     expect(result.ok).toBe(false);
     expect(host.getConnectionState()).toBe("disconnected");
+  });
+});
+
+describe("host plugin state bridge", () => {
+  it("keeps a newer event when the startup query arrives late and applies retry results", async () => {
+    const { bridge, emit } = createFakeBridge();
+    const active: HostPluginSnapshot = {
+      schemaVersion: 1,
+      revision: 1,
+      error: null,
+      plugins: [
+        {
+          pluginId: "bridge-vendor",
+          contentDigest: null,
+          generation: 1,
+          stage: "active",
+          contributions: {
+            protocolIds: ["vendor-protocol"],
+            dataTypeIds: [],
+            addressTransformIds: [],
+          },
+          errors: [],
+        },
+      ],
+    };
+    let respond: (result: Result<HostPluginSnapshot>) => void = () => {};
+    bridge.hostPluginState = vi.fn(
+      () =>
+        new Promise<Result<HostPluginSnapshot>>((resolve) => {
+          respond = resolve;
+        }),
+    );
+    bridge.reloadHostPlugin = vi.fn(async () => ({
+      ok: true as const,
+      value: { ...active, revision: 3 },
+    }));
+    const { serial } = createFakeWebSerial(new ScriptedModbusRtuDevice());
+    const host = new ElectronAppHost(bridge, {
+      serial,
+      repository: new InMemoryWorkspaceRepository(),
+    });
+    const starting = host.startPlugins();
+    await vi.waitFor(() =>
+      expect(bridge.hostPluginState).toHaveBeenCalledOnce(),
+    );
+    host.pluginRegistry.register(
+      {
+        id: "bridge-vendor",
+        name: "Bridge vendor",
+        version: "1.0.0",
+        apiVersion: "2.0",
+        description: "Bridge regression",
+        platform: { web: true, node: true },
+        permissions: [],
+        contributes: {
+          protocolExtension: {
+            protocolId: "vendor-protocol",
+            titleKey: "Vendor",
+          },
+        },
+      },
+      { source: "installed" },
+    );
+    emit({
+      kind: "plugin-host-state",
+      payload: {
+        ...active,
+        revision: 2,
+        plugins: active.plugins.map((plugin) => ({
+          ...plugin,
+          stage: "failed",
+        })),
+      },
+    });
+    respond({ ok: true, value: active });
+    await starting;
+    await vi.waitFor(() =>
+      expect(host.pluginRegistry.getHostState("bridge-vendor")?.stage).toBe(
+        "failed",
+      ),
+    );
+    expect(host.capabilities.protocolExtensions).toContain("vendor-protocol");
+    expect((await host.reloadHostPlugin("bridge-vendor")).ok).toBe(true);
+    expect(host.pluginRegistry.getHostState("bridge-vendor")?.stage).toBe(
+      "active",
+    );
+    expect(bridge.reloadHostPlugin).toHaveBeenCalledWith("bridge-vendor");
+    expect(host.capabilities.protocolExtensions).toContain("vendor-protocol");
+    await host.dispose();
   });
 });

@@ -1,3 +1,4 @@
+import { parseHostPluginResult } from "./host-message";
 /**
  * VSCode Webview 侧消息桥（docs/TECH_DESIGN.md §6.3、§22.2、docs/AGENTS.md §23）。
  * 在 Webview 中设置 window.mamepHost（VscodeHostApi）：经注入的 VsCodeApi.postMessage
@@ -251,6 +252,12 @@ export function createVscodeBridge(
     // 经 plugin-store-load/save 转发。----
     pluginStoreLoad: () =>
       postRequest<PluginStoreDataResponse>("plugin-store-load", {}),
+    hostPluginState: () =>
+      postRequest<unknown>("plugin-host-state", {}).then(parseHostPluginResult),
+    reloadHostPlugin: (pluginId: string) =>
+      postRequest<unknown>("plugin-host-reload", { pluginId }).then(
+        parseHostPluginResult,
+      ),
     pluginStoreSave: (data: PluginStoreDataPayload) =>
       postRequest<null>("plugin-store-save", { data }),
     // ---- 插件运行时桥： 宿主返回能力错误，契约就位。----

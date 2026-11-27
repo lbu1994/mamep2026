@@ -19,6 +19,8 @@ import {
   type PluginStoreData,
   type PluginStorePort,
   type StoredPlugin,
+  type HostPluginSnapshot,
+  PLUGIN_RUNTIME_LIMITS,
 } from "@mamep2026/plugin-api";
 
 import {
@@ -155,6 +157,231 @@ function activations(): string[] {
   scope.__hostActivations = [];
   return scope.__hostActivations;
 }
+
+describe("host execution snapshots", () => {
+  it("does not report core or another plugin's codec as an effective contribution", async () => {
+    const codecs = createCodecRegistry();
+    registerBasicTablesCodecs(codecs);
+    const coreIds = codecs.list();
+    expect(coreIds.length).toBeGreaterThan(0);
+    const store = new MemoryPluginStore();
+    store.setPlugins([
+      storedPlugin({
+        pluginId: "codec-owner",
+        source: entrySource({
+          pluginId: "codec-owner",
+          protocolId: "owned-codec",
+        }),
+      }),
+      storedPlugin({
+        pluginId: "codec-conflict",
+        source: entrySource({
+          pluginId: "codec-conflict",
+          protocolId: "owned-codec",
+        }),
+      }),
+    ]);
+    const runtime = createHostPluginRuntime({ store, codecRegistry: codecs });
+    try {
+      await runtime.sync();
+      expect(
+        runtime.getSnapshot().plugins[0]?.contributions.protocolIds,
+      ).toEqual(["owned-codec"]);
+      expect(
+        runtime.getSnapshot().plugins[1]?.contributions.protocolIds,
+      ).toEqual([]);
+      for (const id of coreIds) expect(codecs.get(id)).toBeDefined();
+      expect(codecs.get("owned-codec")).toBeDefined();
+    } finally {
+      runtime.dispose();
+    }
+  });
+  it("re-evaluates a failed module when the user retries after recovery", async () => {
+    vi.stubGlobal("__hostImportRecovered", false);
+    const source =
+      "if (!globalThis.__hostImportRecovered) throw new Error('host import unavailable');\n" +
+      entrySource({ pluginId: "retry-import" });
+    const store = new MemoryPluginStore();
+    store.setPlugins([storedPlugin({ pluginId: "retry-import", source })]);
+    const runtime = createHostPluginRuntime({ store });
+    try {
+      await runtime.sync();
+      expect(runtime.getSnapshot().plugins[0]?.stage).toBe("failed");
+      expect(runtime.getSnapshot().plugins[0]?.errors[0]?.code).toBe(
+        "PLUGIN_LOAD_FAILED",
+      );
+      vi.stubGlobal("__hostImportRecovered", true);
+      await runtime.reload("retry-import");
+      expect(runtime.getSnapshot().plugins[0]?.stage).toBe("active");
+    } finally {
+      runtime.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+  it("waits for activation and publishes only registered contributions", async () => {
+    let release = () => {};
+    vi.stubGlobal(
+      "__hostStateGate",
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const source = entrySource({
+      pluginId: "delayed-state",
+      protocolId: "delayed-codec",
+      transformId: "delayed-transform",
+    }).replace(
+      "export function activate(ctx) {",
+      "export async function activate(ctx) { await globalThis.__hostStateGate;",
+    );
+    const store = new MemoryPluginStore();
+    store.setPlugins([storedPlugin({ pluginId: "delayed-state", source })]);
+    const snapshots: HostPluginSnapshot[] = [];
+    const runtime = createHostPluginRuntime({
+      store,
+      onState: (snapshot) => snapshots.push(snapshot),
+    });
+    try {
+      let done = false;
+      const syncing = runtime.sync().then(() => {
+        done = true;
+      });
+      await vi.waitFor(() =>
+        expect(runtime.getSnapshot().plugins[0]?.stage).toBe("activating"),
+      );
+      expect(done).toBe(false);
+      expect(
+        runtime.getSnapshot().plugins[0]?.contributions.protocolIds,
+      ).toEqual([]);
+      release();
+      await syncing;
+      expect(runtime.getSnapshot().plugins[0]).toMatchObject({
+        stage: "active",
+        contributions: {
+          protocolIds: ["delayed-codec"],
+          addressTransformIds: ["delayed-transform"],
+        },
+      });
+      expect(
+        snapshots.every(
+          (snapshot, index) =>
+            index === 0 ||
+            snapshot.revision > (snapshots[index - 1]?.revision ?? 0),
+        ),
+      ).toBe(true);
+      const detached = runtime.getSnapshot();
+      detached.plugins.length = 0;
+      expect(runtime.getSnapshot().plugins).toHaveLength(1);
+    } finally {
+      release();
+      runtime.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("removes partial contributions after failure and retries only the failed plugin", async () => {
+    const log = activations();
+    vi.stubGlobal("__hostStateFail", true);
+    const source = entrySource({
+      pluginId: "retry-state",
+      protocolId: "retry-codec",
+      transformId: "retry-transform",
+    }).replace(
+      "\n}\n",
+      "\nif (globalThis.__hostStateFail) throw new Error('host activation rejected');\n}\n",
+    );
+    const store = new MemoryPluginStore();
+    store.setPlugins([
+      storedPlugin({ pluginId: "retry-state", source }),
+      storedPlugin({ pluginId: "healthy-state" }),
+    ]);
+    const runtime = createHostPluginRuntime({ store });
+    try {
+      await runtime.sync();
+      const failed = runtime
+        .getSnapshot()
+        .plugins.find((plugin) => plugin.pluginId === "retry-state");
+      expect(failed).toMatchObject({
+        stage: "failed",
+        contributions: { protocolIds: [], addressTransformIds: [] },
+        errors: [
+          {
+            code: "PLUGIN_HOOK_FAILED",
+            technicalMessage: "host activation rejected",
+          },
+        ],
+      });
+      expect(runtime.getCodecRegistry().get("retry-codec")).toBeUndefined();
+      expect(runtime.resolveAddressTransform("retry-transform")).toBeNull();
+      expect(runtime.resolveAddressTransform("healthy-state.t")).not.toBeNull();
+      vi.stubGlobal("__hostStateFail", false);
+      await runtime.reload("retry-state");
+      const recovered = runtime
+        .getSnapshot()
+        .plugins.find((plugin) => plugin.pluginId === "retry-state");
+      expect(recovered?.stage).toBe("active");
+      expect(recovered?.errors).toEqual([]);
+      expect(recovered?.generation).toBeGreaterThan(failed?.generation ?? 0);
+      expect(log.filter((id) => id === "healthy-state")).toHaveLength(1);
+      expect(runtime.resolveAddressTransform("retry-transform")).not.toBeNull();
+    } finally {
+      runtime.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports activation timeout and ignores completion after disposal", async () => {
+    vi.useFakeTimers();
+    let release = () => {};
+    vi.stubGlobal(
+      "__hostTimeoutGate",
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const source = entrySource({
+      pluginId: "timeout-state",
+      protocolId: "timeout-codec",
+    }).replace(
+      "export function activate(ctx) {",
+      "export async function activate(ctx) { await globalThis.__hostTimeoutGate;",
+    );
+    const store = new MemoryPluginStore();
+    store.setPlugins([storedPlugin({ pluginId: "timeout-state", source })]);
+    const onState = vi.fn();
+    const runtime = createHostPluginRuntime({ store, onState });
+    try {
+      const syncing = runtime.sync();
+      await vi.waitFor(() =>
+        expect(runtime.getSnapshot().plugins[0]?.stage).toBe("activating"),
+      );
+      await vi.advanceTimersByTimeAsync(
+        PLUGIN_RUNTIME_LIMITS.activateTimeoutMs,
+      );
+      await syncing;
+      expect(runtime.getSnapshot().plugins[0]).toMatchObject({
+        stage: "failed",
+        errors: [
+          {
+            code: "PLUGIN_HOOK_FAILED",
+            technicalMessage: "plugin activation timed out",
+          },
+        ],
+      });
+      runtime.dispose();
+      const published = onState.mock.calls.length;
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(onState).toHaveBeenCalledTimes(published);
+      expect(runtime.getCodecRegistry().get("timeout-codec")).toBeUndefined();
+    } finally {
+      release();
+      runtime.dispose();
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 it("rejects same-process source whose approved manifest requires isolation before import", async () => {
   const record = storedPlugin({ pluginId: "declared-isolated" });

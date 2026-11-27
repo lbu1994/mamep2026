@@ -1,3 +1,4 @@
+import { pluginPermissionDenied } from "@mamep2026/plugin-api";
 /**
  * VSCode Webview Renderer Host（docs/TECH_DESIGN.md §5.1.6、§6.3、§22.2）。
  * 实现共享 UI 的 AppHost 契约。VSCode RTU 接线：通信在 Extension Host 执行
@@ -204,6 +205,7 @@ export class VscodeAppHost
       resolveAddressTransform: options.resolveAddressTransform,
     });
     this.pluginRegistry = this.inner.pluginRegistry;
+    this.pluginRegistry.configureHostContributions(true);
     this.cssVarSource = options.cssVarSource ??
       // 惰性委托：构造时不触碰 DOM（测试 node 环境安全），读取时才访问 document。
       {
@@ -224,6 +226,9 @@ export class VscodeAppHost
   /** 宿主事件分发：会话事件 → 本地缓存 + 订阅者（payload 形状由 kind 契约保证，Zod 已校验）。 */
   private handleHostEvent(event: MamepHostEvent): void {
     switch (event.kind) {
+      case "plugin-host-state":
+        this.pluginRegistry.applyHostSnapshot(event.payload);
+        break;
       case "color-theme-changed": {
         const { theme } = event.payload as { theme: ColorThemeKind };
         useAppStore.getState().setTheme(theme);
@@ -453,8 +458,27 @@ export class VscodeAppHost
   }
 
   /** 启动插件系统：委托 inner（加载已安装插件并装配执行面）。 */
-  startPlugins(): Promise<void> {
-    return this.inner.startPlugins();
+  async startPlugins(): Promise<void> {
+    await this.inner.startPlugins();
+    const result = await this.bridge.hostPluginState?.();
+    if (result?.ok) this.pluginRegistry.applyHostSnapshot(result.value);
+    else if (result !== undefined)
+      this.pluginRegistry.reportHostQueryError(result.error);
+  }
+
+  /** Retry host execution without changing installed content or saved consent. */
+  async reloadHostPlugin(pluginId: string): Promise<Result<void>> {
+    const saved = await this.inner.flushPlugins();
+    if (!saved.ok) return saved;
+    const result = await this.bridge.reloadHostPlugin?.(pluginId);
+    if (result === undefined)
+      return fail(pluginPermissionDenied("host plugin reload unavailable"));
+    if (!result.ok) {
+      this.pluginRegistry.reportHostQueryError(result.error);
+      return result;
+    }
+    this.pluginRegistry.applyHostSnapshot(result.value);
+    return ok(undefined);
   }
 
   /** 预览可执行插件 entry。 */
@@ -467,15 +491,26 @@ export class VscodeAppHost
   }
 
   /** 安装可执行插件：委托 inner（注册 + 持久化）。 */
-  setPluginEnabled(pluginId: string, enabled: boolean): Promise<Result<void>> {
-    return this.inner.setPluginEnabled(pluginId, enabled);
+  async setPluginEnabled(
+    pluginId: string,
+    enabled: boolean,
+  ): Promise<Result<void>> {
+    const result = await this.inner.setPluginEnabled(pluginId, enabled);
+    if (!result.ok) return result;
+    return this.inner.flushPlugins();
   }
 
-  installPluginEntry(
+  async installPluginEntry(
     entrySource: string,
     executionMode: PluginExecutionMode,
   ): Promise<Result<PluginManifest>> {
-    return this.inner.installPluginEntry(entrySource, executionMode);
+    const result = await this.inner.installPluginEntry(
+      entrySource,
+      executionMode,
+    );
+    if (!result.ok) return result;
+    const saved = await this.inner.flushPlugins();
+    return saved.ok ? result : saved;
   }
 
   /** 当前会话：VSCode 会话在 Extension Host，无本地会话 → null。 */

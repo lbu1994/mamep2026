@@ -1,3 +1,4 @@
+import type { HostPluginSnapshot } from "@mamep2026/plugin-api";
 /**
  * VSCode 扩展宿主 RPC 处理核心（可测纯函数，docs/TECH_DESIGN.md §22.2、§22.4、docs/AGENTS.md §23）。
  * 与 vscode 运行时解耦：外部能力经 IpcDeps 注入，便于单测校验/分发/拒绝路径
@@ -172,7 +173,9 @@ export interface IpcDeps {
    * Extension Host 重新加载「已启用 + same-process」插件，使插件贡献的同步能力
    * （codec / addressTransform）在宿主会话中生效。同步不阻塞保存响应。
    */
-  onPluginStoreSaved?: (() => void) | undefined;
+  onPluginStoreSaved?: (() => void | Promise<void>) | undefined;
+  hostPluginState?: () => Promise<HostPluginSnapshot>;
+  reloadHostPlugin?: (pluginId: string) => Promise<HostPluginSnapshot>;
 }
 
 /** 尽力从无法解析的原始消息中提取 messageId（诊断用；解析失败时为空串）。 */
@@ -465,12 +468,33 @@ export async function handleVscodeRequest(
       return sessionResult(message, () => deps.pluginStore.load());
     case "plugin-store-save": {
       // 插件存储：载荷为结构化插件存储数据，宿主校验后写入 globalState。
-      const saved = await sessionResult(message, () =>
-        deps.pluginStore.save(message.payload.data),
-      );
-      // 保存成功 → 同步宿主侧插件执行面：插件加载失败不影响保存结果。
-      if (saved.type === "response") deps.onPluginStoreSaved?.();
-      return saved;
+      return sessionResult(message, async () => {
+        const saved = await deps.pluginStore.save(message.payload.data);
+        if (saved.ok) await deps.onPluginStoreSaved?.();
+        return saved;
+      });
+    }
+    case "plugin-host-state":
+    case "plugin-host-reload": {
+      const reload = deps.reloadHostPlugin;
+      const operation =
+        message.kind === "plugin-host-state"
+          ? deps.hostPluginState
+          : reload === undefined
+            ? undefined
+            : () => reload(message.payload.pluginId);
+      if (operation === undefined)
+        return errorEnvelope(
+          message.messageId,
+          PLUGIN_RUNTIME_NOT_AVAILABLE,
+          "host plugin state is unavailable",
+          "plugin",
+          "errors.pluginRuntimeNotAvailable",
+        );
+      return sessionResult(message, async () => ({
+        ok: true as const,
+        value: await operation(),
+      }));
     }
     case "plugin-runtime-load":
     case "plugin-runtime-unload":

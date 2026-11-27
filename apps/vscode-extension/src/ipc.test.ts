@@ -948,3 +948,48 @@ describe("okResponse 序列化归一化（2026-08-23 连接卡死根因修复）
     if (parsed.ok) expect(parsed.value.payload).toBeNull();
   });
 });
+
+describe("host plugin synchronization", () => {
+  it("does not acknowledge a save before host synchronization finishes", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const onPluginStoreSaved = vi.fn(() => gate);
+    let done = false;
+    const response = handleVscodeInvoke(
+      request("plugin-store-save", { data: { schemaVersion: 6, plugins: [] } }),
+      makeDeps({ onPluginStoreSaved }),
+    ).then((result) => {
+      done = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(onPluginStoreSaved).toHaveBeenCalledOnce());
+    expect(done).toBe(false);
+    release();
+    expect((await response).type).toBe("response");
+  });
+
+  it("returns snapshots and passes only the requested plugin ID to reload", async () => {
+    const snapshot = {
+      schemaVersion: 1 as const,
+      revision: 4,
+      plugins: [],
+      error: null,
+    };
+    const hostPluginState = vi.fn(async () => snapshot);
+    const reloadHostPlugin = vi.fn(async () => ({ ...snapshot, revision: 5 }));
+    const deps = makeDeps({ hostPluginState, reloadHostPlugin });
+    const state = await handleVscodeInvoke(request("plugin-host-state"), deps);
+    expect(state).toMatchObject({ type: "response", payload: snapshot });
+    const reloaded = await handleVscodeInvoke(
+      request("plugin-host-reload", { pluginId: "broken-plugin" }),
+      deps,
+    );
+    expect(reloadHostPlugin).toHaveBeenCalledWith("broken-plugin");
+    expect(reloaded).toMatchObject({
+      type: "response",
+      payload: { revision: 5 },
+    });
+  });
+});

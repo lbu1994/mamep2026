@@ -241,6 +241,8 @@ export interface FileHost {
 
 /** 插件注册、安装和宿主运行时桥。 */
 export interface PluginHost {
+  /** Retry failed host execution using the saved, approved plugin content. */
+  reloadHostPlugin?(pluginId: string): Promise<Result<void>>;
   readonly pluginRegistry: PluginRegistry;
   /**
    * 启动插件系统：加载已安装插件、装配执行面并启动持久化订阅。

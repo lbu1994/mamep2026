@@ -114,9 +114,16 @@ function ensureHostPlugins(): HostPluginRuntime {
   if (hostPlugins === null) {
     hostPlugins = createHostPluginRuntime({
       store: ensurePluginStore(),
+      onState: (snapshot) =>
+        postSessionEvent({
+          protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+          type: "event",
+          messageId: `host-plugins-${snapshot.revision}`,
+          kind: "plugin-host-state",
+          payload: snapshot,
+        }),
       onIssue: (issue) => {
-        // 宿主插件问题不阻断启动：记录到主进程日志（渲染端能力矩阵不感知，
-        // 表现为该协议连接失败，见）。
+        // Publish structured state separately; retain host diagnostics.
         console.warn(
           `[mamep] host plugin issue (${issue.code}${issue.pluginId ? `, ${issue.pluginId}` : ""}): ${issue.technicalMessage}`,
         );
@@ -284,8 +291,16 @@ const ipcDeps: IpcDeps = {
   pluginStore: ensurePluginStore(),
   // 保存成功即同步宿主侧插件执行面：新增/卸载/启停插件后，
   // 主进程会话内的插件同步能力（codec / addressTransform）随之更新。
-  onPluginStoreSaved: () => {
-    void ensureHostPlugins().sync();
+  onPluginStoreSaved: () => ensureHostPlugins().sync(),
+  hostPluginState: async () => {
+    const runtime = ensureHostPlugins();
+    await runtime.sync();
+    return runtime.getSnapshot();
+  },
+  reloadHostPlugin: async (pluginId) => {
+    const runtime = ensureHostPlugins();
+    await runtime.reload(pluginId);
+    return runtime.getSnapshot();
   },
 };
 

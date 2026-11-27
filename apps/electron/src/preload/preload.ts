@@ -1,3 +1,4 @@
+import { parseHostPluginResult } from "@mamep2026/platform-api";
 /**
  * Electron Preload（docs/TECH_DESIGN.md §6.2、§22.1）。
  * 只暴露最小化、类型化的白名单 API（MamepHostApi）；不暴露通用 ipcRenderer、
@@ -152,6 +153,14 @@ const api: MamepHostApi = {
     return invoke<PluginStoreDataResponse>("plugin-store-load", {});
   },
   /** 保存插件存储（plugin-store-save）。 */
+  hostPluginState() {
+    return invoke<unknown>("plugin-host-state", {}).then(parseHostPluginResult);
+  },
+  reloadHostPlugin(pluginId: string) {
+    return invoke<unknown>("plugin-host-reload", { pluginId }).then(
+      parseHostPluginResult,
+    );
+  },
   pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>> {
     return invoke<null>("plugin-store-save", { data });
   },

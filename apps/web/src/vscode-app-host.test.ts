@@ -1,3 +1,4 @@
+import type { HostPluginSnapshot } from "@mamep2026/plugin-api";
 /**
  * VscodeAppHost 单测（VSCode 端骨架）：能力矩阵如实声明（RTU/TCP/串口/文件
  * 均未支持）、主题初始化与 color-theme-changed 事件映射共享 store、剪贴板透传 VSCode 桥、
@@ -835,5 +836,92 @@ describe("VscodeAppHost 生命周期（dispose / StrictMode 双挂载回归，20
     await host.dispose();
     emit({ kind: "connection-state", payload: { state: "interrupted" } });
     expect(states).toEqual([]);
+  });
+});
+
+describe("host plugin state bridge", () => {
+  it("keeps a newer event when the startup query arrives late and applies retry results", async () => {
+    const { bridge, emit } = createFakeBridge();
+    const active: HostPluginSnapshot = {
+      schemaVersion: 1,
+      revision: 1,
+      error: null,
+      plugins: [
+        {
+          pluginId: "bridge-vendor",
+          contentDigest: null,
+          generation: 1,
+          stage: "active",
+          contributions: {
+            protocolIds: ["vendor-protocol"],
+            dataTypeIds: [],
+            addressTransformIds: [],
+          },
+          errors: [],
+        },
+      ],
+    };
+    let respond: (result: Result<HostPluginSnapshot>) => void = () => {};
+    bridge.hostPluginState = vi.fn(
+      () =>
+        new Promise<Result<HostPluginSnapshot>>((resolve) => {
+          respond = resolve;
+        }),
+    );
+    bridge.reloadHostPlugin = vi.fn(async () => ({
+      ok: true as const,
+      value: { ...active, revision: 3 },
+    }));
+    const host = makeHost(bridge);
+    const starting = host.startPlugins();
+    await vi.waitFor(() =>
+      expect(bridge.hostPluginState).toHaveBeenCalledOnce(),
+    );
+    host.pluginRegistry.register(
+      {
+        id: "bridge-vendor",
+        name: "Bridge vendor",
+        version: "1.0.0",
+        apiVersion: "2.0",
+        description: "Bridge regression",
+        platform: { web: true, node: true },
+        permissions: [],
+        contributes: {
+          protocolExtension: {
+            protocolId: "vendor-protocol",
+            titleKey: "Vendor",
+          },
+        },
+      },
+      { source: "installed" },
+    );
+    emit({
+      kind: "plugin-host-state",
+      payload: {
+        ...active,
+        revision: 2,
+        plugins: active.plugins.map((plugin) => ({
+          ...plugin,
+          stage: "failed",
+        })),
+      },
+    });
+    respond({ ok: true, value: active });
+    await starting;
+    await vi.waitFor(() =>
+      expect(host.pluginRegistry.getHostState("bridge-vendor")?.stage).toBe(
+        "failed",
+      ),
+    );
+    expect(host.capabilities.protocolExtensions).not.toContain(
+      "vendor-protocol",
+    );
+    expect((await host.reloadHostPlugin("bridge-vendor")).ok).toBe(true);
+    expect(host.pluginRegistry.getHostState("bridge-vendor")?.stage).toBe(
+      "active",
+    );
+    expect(bridge.reloadHostPlugin).toHaveBeenCalledWith("bridge-vendor");
+    expect(host.capabilities.protocolExtensions).toContain("vendor-protocol");
+    await host.dispose();
   });
 });

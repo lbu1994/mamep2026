@@ -21,8 +21,8 @@ import { createHash } from "node:crypto";
  * - `ctx.registries` 由宿主提供：codec（宿主会话 codec 注册表）、dataType（Node 侧
  *   `createDataTypeResolver()`，纯 TS 可在宿主运行）、addressTransform（宿主注册表）。
  * - 错误隔离：加载 / activate 失败只影响该插件（记录错误），不影响宿主会话与其它插件。
- * - **不做跨进程能力回传**：宿主加载失败时渲染端仍会显示该协议，
- *   表现为连接失败（见开发指南）。
+ * - Publish versioned execution results to the renderer after loading and activation.
+ *   A failed plugin has no effective host contributions and can be retried separately.
  */
 import {
   createDataTypeResolver,
@@ -46,6 +46,8 @@ import {
   type PluginManifest,
   type PluginStorePort,
   type PluginHostSyncRegistries,
+  type HostPluginSnapshot,
+  type HostPluginState,
 } from "@mamep2026/plugin-api";
 
 import { loadNodePluginEntry } from "./plugin-local-runtime";
@@ -64,6 +66,7 @@ export interface HostPluginRuntimeDeps {
   codecRegistry?: CodecRegistry;
   /** 问题上报（宿主日志 / 应用消息）。 */
   onIssue?: (issue: HostPluginIssue) => void;
+  onState?: (snapshot: HostPluginSnapshot) => void;
 }
 
 /** 安全提取清单 id（清单可能坏到不是对象，上报时不能抛错）。 */
@@ -97,11 +100,38 @@ export class HostPluginRuntime {
   /** 已加载插件（id → { entrySource }）与集合签名（均只含已启用 same-process 插件）。 */
   private loaded = new Map<string, { entrySource: string }>();
   private signature: string | null = null;
-  /** 已上报的 registry 加载错误条数（避免重建时重复上报历史错误）。 */
-  private reportedErrors = 0;
   private syncPending = false;
   private syncPromise: Promise<void> | null = null;
   private disposed = false;
+  private revision = 0;
+  private generation = 0;
+  private states = new Map<string, HostPluginState>();
+  private storeError: HostPluginSnapshot["error"] = null;
+  private readonly transforms = new Map<string, AddressTransformRegistry>();
+  private readonly retryIds = new Set<string>();
+
+  /** Return a detached snapshot; callers cannot change runtime state. */
+  getSnapshot(): HostPluginSnapshot {
+    return structuredClone({
+      schemaVersion: 1,
+      revision: this.revision,
+      plugins: [...this.states.values()],
+      error: this.storeError,
+    });
+  }
+
+  private publish(): void {
+    if (this.disposed || this.syncPending) return;
+    this.revision += 1;
+    this.deps.onState?.(this.getSnapshot());
+  }
+
+  /** Retry one failed plugin using its current saved approval. */
+  async reload(pluginId: string): Promise<void> {
+    if (this.states.get(pluginId)?.stage !== "failed" || this.disposed) return;
+    this.retryIds.add(pluginId);
+    await this.sync();
+  }
 
   constructor(deps: HostPluginRuntimeDeps) {
     this.deps = deps;
@@ -138,7 +168,16 @@ export class HostPluginRuntime {
    * 该闭包可长期持有（宿主会话构造时注入一次），重建后自动指向新注册表。
    */
   resolveAddressTransform = (transformId: string): AddressTransform | null => {
-    return this.addressTransformRegistry.get(transformId) ?? null;
+    for (const [pluginId, registry] of this.transforms) {
+      if (
+        this.states.get(pluginId)?.stage === "active" &&
+        this.registry.isEnabled(pluginId)
+      ) {
+        const transform = registry.get(transformId);
+        if (transform !== undefined) return transform;
+      }
+    }
+    return null;
   };
 
   /** 已由宿主加载的插件 id（诊断 / 测试用）。 */
@@ -176,9 +215,17 @@ export class HostPluginRuntime {
     const stored = await this.deps.store.load();
     if (this.disposed) return;
     if (!stored.ok) {
+      this.storeError = {
+        code: stored.error.code,
+        technicalMessage: stored.error.technicalMessage,
+      };
       this.report("", stored.error.code, stored.error.technicalMessage);
+      this.publish();
       return;
     }
+    this.storeError = null;
+    const previousStates = this.states;
+    this.states = new Map();
     const desired = new Map<
       string,
       {
@@ -188,9 +235,40 @@ export class HostPluginRuntime {
       }
     >();
     for (const entry of stored.value.plugins) {
-      if (entry.executionMode !== "same-process") continue;
-      if (entry.enabled !== true) continue;
-      if (entry.entrySource === undefined) continue;
+      const pluginId = manifestIdOf(entry.manifest);
+      if (!pluginId) continue;
+      const prior = previousStates.get(pluginId);
+      const contentDigest = entry.approval?.contentDigest ?? null;
+      const state: HostPluginState =
+        prior?.contentDigest === contentDigest
+          ? structuredClone(prior)
+          : {
+              pluginId,
+              generation: this.generation,
+              contentDigest,
+              stage: "loading",
+              contributions: {
+                protocolIds: [],
+                dataTypeIds: [],
+                addressTransformIds: [],
+              },
+              errors: [],
+            };
+      this.states.set(pluginId, state);
+      if (
+        !entry.enabled ||
+        entry.executionMode !== "same-process" ||
+        entry.entrySource === undefined
+      ) {
+        state.stage = !entry.enabled ? "disabled" : "unsupported";
+        state.contributions = {
+          protocolIds: [],
+          dataTypeIds: [],
+          addressTransformIds: [],
+        };
+        state.errors = [];
+        continue;
+      }
       const parsed = pluginManifestSchema.safeParse(entry.manifest);
       if (!parsed.success) {
         this.report(
@@ -222,9 +300,24 @@ export class HostPluginRuntime {
     }
 
     const nextSignature = setSignature(desired);
-    if (nextSignature === this.signature) return;
+    if (nextSignature === this.signature) {
+      for (const pluginId of this.retryIds) {
+        const next = desired.get(pluginId);
+        if (next !== undefined) {
+          this.registry.unregister(pluginId);
+          this.loaded.delete(pluginId);
+          this.transforms.delete(pluginId);
+          await this.loadPlugin(pluginId, next, true);
+        }
+      }
+      this.retryIds.clear();
+      this.publish();
+      return;
+    }
+    this.retryIds.clear();
     await this.rebuild(desired);
     if (!this.disposed) this.signature = nextSignature;
+    this.publish();
   }
 
   /** 释放全部宿主插件（注销 + 清空注册表）；宿主退出时调用。 */
@@ -232,8 +325,9 @@ export class HostPluginRuntime {
     this.disposed = true;
     void this.registry.dispose();
     this.loaded.clear();
+    this.transforms.clear();
+    this.states.clear();
     this.signature = null;
-    this.reportedErrors = 0;
     this.dataTypeResolver = createDataTypeResolver();
     this.addressTransformRegistry = createAddressTransformRegistry();
   }
@@ -256,56 +350,160 @@ export class HostPluginRuntime {
     this.dataTypeResolver = createDataTypeResolver();
     this.addressTransformRegistry = createAddressTransformRegistry();
 
+    this.transforms.clear();
+    for (const pluginId of desired.keys()) {
+      const state = this.states.get(pluginId);
+      if (state !== undefined) {
+        state.stage = "loading";
+        state.contributions = {
+          protocolIds: [],
+          dataTypeIds: [],
+          addressTransformIds: [],
+        };
+      }
+    }
+    this.publish();
     for (const [pluginId, next] of desired) {
-      const entryResult = await loadNodePluginEntry(next.entrySource);
       if (this.disposed) return;
-      if (!entryResult.ok) {
-        this.report(
-          pluginId,
-          entryResult.error.code,
-          entryResult.error.technicalMessage,
-        );
-        continue;
-      }
-      const parsed = pluginManifestSchema.safeParse(entryResult.value.manifest);
-      if (
-        !parsed.success ||
-        pluginApprovalContent(parsed.data, next.entrySource, "same-process") !==
-          pluginApprovalContent(next.manifest, next.entrySource, "same-process")
-      ) {
-        this.report(
-          pluginId,
-          "PLUGIN_PERMISSION_DENIED",
-          "plugin manifest changed during restore",
-        );
-        continue;
-      }
-      const registered = this.registry.register(parsed.data, {
-        approval: next.approval,
-        approvedPermissions: next.approval.permissions,
-        source: "installed",
-        runtime: runtimeFromLocalEntry(entryResult.value),
-        entrySource: next.entrySource,
-        executionMode: "same-process",
-      });
-      if (!registered.ok) {
-        this.report(
-          pluginId,
-          registered.error.code,
-          registered.error.technicalMessage,
-        );
-        continue;
-      }
-      this.loaded.set(pluginId, { entrySource: next.entrySource });
+      await this.loadPlugin(pluginId, next);
     }
+  }
 
-    // 加载 / 兼容性 / 贡献点问题上报（便于诊断；不重复上报历史错误）。
-    const errors = this.registry.getLoadErrors();
-    if (errors.length < this.reportedErrors) this.reportedErrors = 0;
-    for (const error of errors.slice(this.reportedErrors)) {
-      this.report(error.pluginId ?? "", error.errorCode, error.message);
+  private async loadPlugin(
+    pluginId: string,
+    next: {
+      manifest: PluginManifest;
+      entrySource: string;
+      approval: PluginApproval;
+    },
+    fresh = false,
+  ): Promise<void> {
+    const state = this.states.get(pluginId);
+    if (state === undefined) return;
+    state.generation = ++this.generation;
+    state.stage = "loading";
+    state.errors = [];
+    state.contributions = {
+      protocolIds: [],
+      dataTypeIds: [],
+      addressTransformIds: [],
+    };
+    this.publish();
+    const entryResult = await loadNodePluginEntry(next.entrySource, { fresh });
+    if (this.disposed) return;
+    if (!entryResult.ok) {
+      this.report(
+        pluginId,
+        entryResult.error.code,
+        entryResult.error.technicalMessage,
+      );
+      this.publish();
+      return;
     }
-    this.reportedErrors = errors.length;
+    const parsed = pluginManifestSchema.safeParse(entryResult.value.manifest);
+    if (
+      !parsed.success ||
+      pluginApprovalContent(parsed.data, next.entrySource, "same-process") !==
+        pluginApprovalContent(next.manifest, next.entrySource, "same-process")
+    ) {
+      this.report(
+        pluginId,
+        "PLUGIN_PERMISSION_DENIED",
+        "plugin manifest changed during restore",
+      );
+      this.publish();
+      return;
+    }
+    state.stage = "activating";
+    this.publish();
+    const dataTypes = createDataTypeResolver();
+    const transforms = createAddressTransformRegistry();
+    const runtime = runtimeFromLocalEntry(entryResult.value);
+    const codecIds = new Set<string>();
+    const errorStart = this.registry.getLoadErrors().length;
+    const registered = this.registry.register(parsed.data, {
+      approval: next.approval,
+      approvedPermissions: next.approval.permissions,
+      source: "installed",
+      runtime: {
+        ...runtime,
+        activate: async (ctx) => {
+          await runtime.activate({
+            ...ctx,
+            registries: {
+              codec: {
+                list: () => ctx.registries.codec.list(),
+                register: (codec) => {
+                  const result = ctx.registries.codec.register(codec);
+                  if (result.ok) codecIds.add(codec.protocolId);
+                  return result;
+                },
+              },
+              dataType: {
+                register: (id, handlers) =>
+                  this.dataTypeResolver.get(id) === undefined
+                    ? dataTypes.register(id, handlers)
+                    : this.dataTypeResolver.register(id, handlers),
+                get: (id) => dataTypes.get(id) ?? this.dataTypeResolver.get(id),
+                list: () => [
+                  ...this.dataTypeResolver.list(),
+                  ...dataTypes.list(),
+                ],
+              },
+              addressTransform: {
+                register: (transform) =>
+                  this.addressTransformRegistry.get(transform.id) === undefined
+                    ? transforms.register(transform)
+                    : this.addressTransformRegistry.register(transform),
+                get: (id) =>
+                  transforms.get(id) ?? this.addressTransformRegistry.get(id),
+                list: () => [
+                  ...this.addressTransformRegistry.list(),
+                  ...transforms.list(),
+                ],
+              },
+            },
+          });
+        },
+      },
+      entrySource: next.entrySource,
+      executionMode: "same-process",
+    });
+    if (!registered.ok) {
+      this.report(
+        pluginId,
+        registered.error.code,
+        registered.error.technicalMessage,
+      );
+      this.publish();
+      return;
+    }
+    this.loaded.set(pluginId, { entrySource: next.entrySource });
+    await this.registry.waitForActivation(pluginId);
+    if (this.disposed) return;
+    for (const issue of this.registry.getLoadErrors().slice(errorStart)) {
+      if (issue.pluginId === pluginId)
+        this.report(pluginId, issue.errorCode, issue.message);
+    }
+    if (!this.registry.isEnabled(pluginId)) {
+      state.stage = "failed";
+    } else {
+      state.stage = "active";
+      for (const id of dataTypes.list()) {
+        const handlers = dataTypes.get(id);
+        if (handlers !== undefined)
+          this.dataTypeResolver.register(id, handlers);
+      }
+      for (const transform of transforms.list())
+        this.addressTransformRegistry.register(transform);
+      state.contributions = {
+        protocolIds: [...codecIds],
+        dataTypeIds: dataTypes.list(),
+        addressTransformIds: transforms.list().map((item) => item.id),
+      };
+      this.transforms.set(pluginId, transforms);
+    }
+    this.publish();
   }
 
   private report(
@@ -313,6 +511,25 @@ export class HostPluginRuntime {
     code: string,
     technicalMessage: string,
   ): void {
+    const state = this.states.get(pluginId);
+    if (state !== undefined) {
+      if (
+        !state.errors.some(
+          (error) =>
+            error.code === code && error.technicalMessage === technicalMessage,
+        )
+      ) {
+        state.errors.push({ code, technicalMessage });
+      }
+      if (code !== "PLUGIN_VERSION_WARNING") {
+        state.stage = "failed";
+        state.contributions = {
+          protocolIds: [],
+          dataTypeIds: [],
+          addressTransformIds: [],
+        };
+      }
+    }
     this.deps.onIssue?.({ pluginId, code, technicalMessage });
   }
 }

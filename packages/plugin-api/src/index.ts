@@ -15,3 +15,4 @@ export * from "./plugin-worker-message";
 export * from "./plugin-approval";
 export * from "./runtime-limits";
 export * from "./remote-runtime";
+export * from "./host-plugin-state";

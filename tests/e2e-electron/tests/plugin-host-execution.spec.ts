@@ -49,6 +49,80 @@ let app: ElectronApplication;
 let page: Page;
 const consoleErrors: string[] = [];
 
+test("reports host-only activation failure and recovers through the production bridge", async () => {
+  if (await page.locator(".settings-drawer.ant-drawer-open").isVisible())
+    await closeSettings();
+  const entryPath = path.join(userDataDir, "host-result-fixture.mjs");
+  await writeFile(
+    entryPath,
+    `
+export const manifest = {
+  id: "host-result-fixture", name: "Host result fixture", version: "1.0.0", apiVersion: "2.0",
+  description: "Host result regression", platform: { web: true, node: true }, permissions: [], contributes: {},
+  executionRequirements: { version: 1, requiredExecution: "same-process", reason: "Host result regression" },
+};
+export async function activate() {
+  if (typeof process !== "undefined" && process.versions?.node && !globalThis.__hostResultRecovered) {
+    throw new Error("Host result fixture unavailable");
+  }
+}
+`,
+    "utf8",
+  );
+  await app.evaluate(async ({ dialog }, sourcePath) => {
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [sourcePath],
+    });
+  }, entryPath);
+  const section = await openPluginsSection();
+  await section.getByRole("button", { name: "Install Plugin" }).click();
+  const confirm = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Install this plugin?" });
+  await confirm
+    .getByRole("button", {
+      name: "Authorize same-process execution and install",
+      exact: true,
+    })
+    .click();
+  await expect(confirm).toBeHidden();
+  const state = section.getByTestId("host-plugin-state-host-result-fixture");
+  await expect(state).toContainText("Host: failed");
+  await expect(state).toContainText("Host result fixture unavailable");
+  const before = await readFile(path.join(userDataDir, "plugins.json"), "utf8");
+  await app.evaluate(() => {
+    Reflect.set(globalThis, "__hostResultRecovered", true);
+  });
+  await section
+    .getByRole("button", { name: "Reload on host", exact: true })
+    .click();
+  await expect(state).toContainText("Host: active");
+  await expect(state).not.toContainText("Host result fixture unavailable");
+  expect(await readFile(path.join(userDataDir, "plugins.json"), "utf8")).toBe(
+    before,
+  );
+  const row = section
+    .locator(".ant-listy-item")
+    .filter({ hasText: "Host result fixture" });
+  await row.getByRole("button", { name: "Uninstall", exact: true }).click();
+  const uninstall = page
+    .locator(".ant-modal-container")
+    .filter({ hasText: "Uninstall this plugin?" });
+  await uninstall
+    .getByRole("button", { name: "Uninstall", exact: true })
+    .click();
+  await expect(row).toHaveCount(0);
+  await app.evaluate(async ({ dialog }, sourcePath) => {
+    Reflect.deleteProperty(globalThis, "__hostResultRecovered");
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [sourcePath],
+    });
+  }, PLUGIN_ENTRY_PATH);
+  await closeSettings();
+});
+
 async function launch(userDataDirPath: string): Promise<void> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {

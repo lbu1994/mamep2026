@@ -25,6 +25,68 @@ function renderSection(): ReturnType<typeof render> {
   );
 }
 
+it("updates host errors reactively and reloads without reinstalling", async () => {
+  await initI18n("en-US");
+  const registry = new PluginRegistry();
+  registry.register(manifestJson, { source: "installed" });
+  const reloadHostPlugin = vi.fn(async () => {
+    registry.applyHostSnapshot({
+      schemaVersion: 1,
+      revision: 2,
+      error: null,
+      plugins: [
+        {
+          pluginId: manifestJson.id,
+          generation: 2,
+          contentDigest: null,
+          stage: "active",
+          contributions: {
+            protocolIds: [],
+            dataTypeIds: [],
+            addressTransformIds: [],
+          },
+          errors: [],
+        },
+      ],
+    });
+    return { ok: true as const, value: undefined };
+  });
+  setHostWithPlugin(registry, { reloadHostPlugin });
+  renderSection();
+  act(() =>
+    registry.applyHostSnapshot({
+      schemaVersion: 1,
+      revision: 1,
+      error: null,
+      plugins: [
+        {
+          pluginId: manifestJson.id,
+          generation: 1,
+          contentDigest: null,
+          stage: "failed",
+          contributions: {
+            protocolIds: [],
+            dataTypeIds: [],
+            addressTransformIds: [],
+          },
+          errors: [
+            {
+              code: "PLUGIN_LOAD_FAILED",
+              technicalMessage: "Host dependency unavailable",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  expect(screen.getByText(/Host dependency unavailable/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Reload on host" }));
+  await waitFor(() => expect(screen.getByText("Host: active")).toBeTruthy());
+  expect(reloadHostPlugin).toHaveBeenCalledWith(manifestJson.id);
+  expect(screen.queryByText(/Host dependency unavailable/)).toBeNull();
+  expect(registry.isEnabled(manifestJson.id)).toBe(true);
+});
+
 const manifestJson: PluginManifest = {
   id: "installed-a",
   name: "Installed A",

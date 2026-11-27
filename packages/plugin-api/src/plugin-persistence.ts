@@ -7,8 +7,8 @@
  * 插件一律由用户手动安装，不再有「随包自动安装」与 seeded 装配状态；
  * 执行面（同进程 / 隔离）由 StoredPlugin.executionMode 记录，重启后由装配方按此重建。
  */
-import type { Result } from "@mamep2026/domain";
-import type { PluginStorePort } from "./plugin-store";
+import { ok, type Result } from "@mamep2026/domain";
+import type { PluginStorePort, PluginStoreSnapshot } from "./plugin-store";
 import type { PluginRegistry } from "./registry";
 
 export interface PluginPersistenceDeps {
@@ -21,6 +21,8 @@ export class PluginPersistenceCoordinator {
   private readonly store: PluginStorePort;
   private readonly deps: PluginPersistenceDeps;
   private unsubscribe: (() => void) | null = null;
+  private pendingSnapshot: PluginStoreSnapshot | null = null;
+  private saving: Promise<Result<void>> | null = null;
 
   constructor(
     registry: PluginRegistry,
@@ -39,7 +41,9 @@ export class PluginPersistenceCoordinator {
    */
   start(): void {
     if (this.unsubscribe !== null) return;
-    this.unsubscribe = this.registry.subscribe(() => {
+    this.unsubscribe = this.registry.subscribe((event) => {
+      if (event.type === "host-state-changed") return;
+      this.registry.markHostPluginPending(event.pluginId);
       void this.persist();
     });
   }
@@ -54,8 +58,30 @@ export class PluginPersistenceCoordinator {
     this.unsubscribe = null;
   }
 
-  private async persist(): Promise<Result<void>> {
-    const snapshot = this.registry.snapshot();
+  private persist(): Promise<Result<void>> {
+    // Capture before waiting; host disposal later clears the live registry.
+    this.pendingSnapshot = this.registry.snapshot();
+    if (this.saving !== null) return this.saving;
+    this.saving = Promise.resolve().then(async () => {
+      let result: Result<void> = ok(undefined);
+      try {
+        while (this.pendingSnapshot !== null) {
+          const snapshot = this.pendingSnapshot;
+          this.pendingSnapshot = null;
+          result = await this.saveSnapshot(snapshot);
+        }
+        if (result.ok) this.registry.completeHostPluginSync();
+        return result;
+      } finally {
+        this.saving = null;
+      }
+    });
+    return this.saving;
+  }
+
+  private async saveSnapshot(
+    snapshot: PluginStoreSnapshot,
+  ): Promise<Result<void>> {
     const result = await this.store.save({
       schemaVersion: snapshot.schemaVersion,
       plugins: snapshot.plugins,

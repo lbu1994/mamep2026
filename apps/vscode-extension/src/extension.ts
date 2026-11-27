@@ -245,8 +245,14 @@ function createDeps(
     pluginStore,
     // 保存成功即同步宿主侧插件执行面：插件安装/卸载/启停后，
     // 宿主会话内的插件同步能力（codec / addressTransform）随之更新。
-    onPluginStoreSaved: () => {
-      void hostPlugins.sync();
+    onPluginStoreSaved: () => hostPlugins.sync(),
+    hostPluginState: async () => {
+      await hostPlugins.sync();
+      return hostPlugins.getSnapshot();
+    },
+    reloadHostPlugin: async (pluginId) => {
+      await hostPlugins.reload(pluginId);
+      return hostPlugins.getSnapshot();
     },
   };
 }
@@ -283,9 +289,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const hostPlugins = createHostPluginRuntime({
     store: pluginStore,
     codecRegistry: createCodecRegistry(),
+    onState: (snapshot) =>
+      postEvent(hostEventMessage("plugin-host-state", snapshot)),
     onIssue: (issue) => {
-      // 宿主插件问题不阻断扩展激活：记录到扩展宿主日志（渲染端能力矩阵不感知，
-      // 表现为该协议连接失败，见）。
+      // Publish structured state separately; retain host diagnostics.
       console.warn(
         `[mamep2026] host plugin issue (${issue.code}${issue.pluginId ? `, ${issue.pluginId}` : ""}): ${issue.technicalMessage}`,
       );

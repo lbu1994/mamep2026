@@ -394,6 +394,11 @@ export class BrowserAppHost
    *    纯清单插件直接注册（无执行面）；执行面加载失败 → 跳过该插件并记录错误（错误隔离）；
    * 3. 启动持久化协调器（订阅后续注册/启停/卸载事件）。
    */
+  /** Wait until the latest plugin snapshot has been saved and synchronized by the host. */
+  async flushPlugins(): Promise<Result<void>> {
+    return this.pluginPersistence?.flush() ?? ok(undefined);
+  }
+
   async startPlugins(): Promise<void> {
     if (this.pluginStore === null || this.hostDisposed) return;
     const loaded = await this.pluginStore.load();

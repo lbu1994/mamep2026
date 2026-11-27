@@ -1,3 +1,7 @@
+import {
+  hostPluginSnapshotSchema,
+  type HostPluginSnapshot,
+} from "@mamep2026/plugin-api";
 /**
  * 跨边界 Host 消息协议 v2（docs/TECH_DESIGN.md §22.2、docs/AGENTS.md §23）。
  * Electron（及后续 VSCode Webview）的跨边界消息必须使用版本化 Envelope：
@@ -47,6 +51,24 @@ import {
 /** 消息协议版本：与 appVersion / 插件 apiVersion / 工作区 schemaVersion 相互独立。 */
 export const HOST_MESSAGE_PROTOCOL_VERSION = 2 as const;
 
+/** Validate state responses before exposing host results to renderer callers. */
+export function parseHostPluginResult(
+  result: Result<unknown>,
+): Result<HostPluginSnapshot> {
+  if (!result.ok) return result;
+  const parsed = hostPluginSnapshotSchema.safeParse(result.value);
+  return parsed.success
+    ? ok(parsed.data)
+    : fail(
+        createMamepError({
+          code: "HOST_MESSAGE_INVALID",
+          category: "validation",
+          userMessageKey: "errors.pluginRuntimeNotAvailable",
+          technicalMessage: "invalid host plugin snapshot",
+        }),
+      );
+}
+
 /** Electron IPC 频道：invoke（request/response/error）与 event 分开。 */
 export const MAMEP_IPC_INVOKE_CHANNEL = "mamep:invoke";
 export const MAMEP_IPC_EVENT_CHANNEL = "mamep:event";
@@ -94,6 +116,8 @@ export const HOST_REQUEST_KINDS = [
   "workspace-create-backup",
   "workspace-recovery",
   // 插件存储：已安装插件清单 + 启用状态经主进程/扩展宿主持久化。
+  "plugin-host-state",
+  "plugin-host-reload",
   "plugin-store-load",
   "plugin-store-save",
   // 插件运行时桥：Host 插件加载/卸载/通用 RPC/贡献点查询。
@@ -117,6 +141,7 @@ export const HOST_EVENT_KINDS = [
   "app-message",
   // 插件事件订阅转发：宿主 → 渲染（无宿主插件，契约就位）。
   "plugin-event",
+  "plugin-host-state",
 ] as const;
 export type HostEventKind = (typeof HOST_EVENT_KINDS)[number];
 
@@ -539,6 +564,16 @@ export const hostRequestSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     ...requestBase,
+    kind: z.literal("plugin-host-state"),
+    payload: z.object({}),
+  }),
+  z.object({
+    ...requestBase,
+    kind: z.literal("plugin-host-reload"),
+    payload: z.object({ pluginId: z.string().min(1) }),
+  }),
+  z.object({
+    ...requestBase,
     kind: z.literal("plugin-store-load"),
     // 插件存储：返回已安装插件清单 + 启用状态（空 store 返回空数组）。
     payload: z.object({}),
@@ -594,6 +629,13 @@ export const hostErrorSchema = z.object({
 export type HostErrorMessage = z.infer<typeof hostErrorSchema>;
 
 export const hostEventSchema = z.discriminatedUnion("kind", [
+  z.object({
+    protocolVersion: protocolVersionSchema,
+    type: z.literal("event"),
+    messageId: messageIdSchema,
+    kind: z.literal("plugin-host-state"),
+    payload: hostPluginSnapshotSchema,
+  }),
   z.object({
     protocolVersion: protocolVersionSchema,
     type: z.literal("event"),
@@ -774,6 +816,9 @@ export interface MamepHostApi {
    * 主进程/扩展宿主持久化后返回。
    */
   pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>>;
+  /** Optional for older bridges; missing support must not advertise host contributions. */
+  hostPluginState?(): Promise<Result<HostPluginSnapshot>>;
+  reloadHostPlugin?(pluginId: string): Promise<Result<HostPluginSnapshot>>;
 
   /**
    * 插件运行时桥：
@@ -893,6 +938,9 @@ export interface VscodeHostApi extends Omit<
   pluginStoreLoad(): Promise<Result<PluginStoreDataResponse>>;
   /** 保存插件存储（plugin-store-save）：持久化已安装插件清单。 */
   pluginStoreSave(data: PluginStoreDataPayload): Promise<Result<null>>;
+  /** Optional for older bridges; missing support must not advertise host contributions. */
+  hostPluginState?(): Promise<Result<HostPluginSnapshot>>;
+  reloadHostPlugin?(pluginId: string): Promise<Result<HostPluginSnapshot>>;
   /** 单行读（session-read-row）：经 Extension Host 统一调度器 FC03（多寄存器行返回 values[]）。 */
   sessionReadRow(
     row: RegisterRowPayload,

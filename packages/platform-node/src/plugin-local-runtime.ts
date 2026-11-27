@@ -14,6 +14,7 @@
  * 引用，避免把串口原生绑定打进宿主 bundle）。
  */
 import { createMamepError, fail, ok, type Result } from "@mamep2026/domain";
+import { randomUUID } from "node:crypto";
 import {
   assertPluginSourceBudget,
   PLUGIN_RUNTIME_LIMITS,
@@ -35,10 +36,13 @@ function entryError(technicalMessage: string) {
 /** 在宿主同进程中加载插件 entry（entrySource = 单文件 JS 源码，须自包含）。 */
 export async function loadNodePluginEntry(
   entrySource: string,
+  options: { fresh?: boolean } = {},
 ): Promise<Result<PluginLocalEntry>> {
   try {
     assertPluginSourceBudget(entrySource);
-    const dataUrl = `data:text/javascript;base64,${Buffer.from(entrySource, "utf8").toString("base64")}`;
+    // A manual retry must not reuse a rejected ESM evaluation from the module cache.
+    const suffix = options.fresh ? `#${randomUUID()}` : "";
+    const dataUrl = `data:text/javascript;base64,${Buffer.from(entrySource, "utf8").toString("base64")}${suffix}`;
     const module = (await withPluginDeadline(
       () => import(/* @vite-ignore */ dataUrl),
       PLUGIN_RUNTIME_LIMITS.loadTimeoutMs,

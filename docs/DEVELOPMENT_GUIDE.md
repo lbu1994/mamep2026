@@ -36,6 +36,25 @@
 
 > Android 端：`build:android`（web `--mode android` → `cap sync` → `gradlew assembleDebug`，需 JDK ≤24，详见 `apps/android/README.md`）与 `test:e2e:android`（真机 TCP e2e，需 USB 调试 + 解锁屏幕，**不进 `test:all`**）；不提供 `dev:android`。
 
+### 宿主插件状态回传专项
+
+针对性检查入口：
+
+```powershell
+pnpm --filter @mamep2026/platform-node test host-plugin-runtime.test.ts
+pnpm --filter @mamep2026/plugin-api test host-plugin-state.test.ts plugin-persistence.test.ts
+pnpm --filter @mamep2026/platform-api test
+pnpm --filter @mamep2026/electron test ipc.test.ts preload.test.ts
+pnpm --filter @mamep2026/vscode-extension test ipc.test.ts vscode-bridge.test.ts
+pnpm --filter @mamep2026/ui test PluginManagerSection.test.tsx
+pnpm --filter @mamep2026/e2e-electron test plugin-host-execution.spec.ts -g "reports host-only"
+```
+
+单测覆盖异步激活、超时、失败贡献撤销、独立重试、保存等待、并发保存合并、旧快照丢弃
+和界面错误刷新。Electron 专项命令先构建生产产物，再启动实际 Electron；用例通过设置页
+安装仅在宿主激活失败的插件，核对错误回传、恢复重试及保存内容保持一致。
+该用例不连接真实设备，也不能替代 VSCode Extension Host 或 Android 真机结果。
+
 ### 寄存器表格专项性能检查
 
 ```powershell

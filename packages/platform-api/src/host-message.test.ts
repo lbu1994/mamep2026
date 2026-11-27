@@ -10,6 +10,7 @@ import {
   fromResultPayload,
   openTextFileResponseSchema,
   parseHostMessage,
+  parseHostPluginResult,
   saveTextFileResponseSchema,
   toErrorPayload,
   toResultPayload,
@@ -20,6 +21,31 @@ import { pluginContributionQueryResponseSchema } from "./session-payloads";
 import { createMamepError, fail, ok } from "@mamep2026/domain";
 
 describe("host-message protocol v2", () => {
+  it("validates host plugin snapshot events and response payloads", () => {
+    const snapshot = {
+      schemaVersion: 1,
+      revision: 2,
+      plugins: [],
+      error: null,
+    };
+    const event = {
+      protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,
+      type: "event",
+      messageId: "state-2",
+      kind: "plugin-host-state",
+      payload: snapshot,
+    };
+    expect(parseHostMessage(event).ok).toBe(true);
+    expect(
+      parseHostMessage({ ...event, payload: { ...snapshot, schemaVersion: 2 } })
+        .ok,
+    ).toBe(false);
+    expect(parseHostPluginResult(ok(snapshot))).toEqual(ok(snapshot));
+    expect(parseHostPluginResult(ok({ ...snapshot, revision: "2" })).ok).toBe(
+      false,
+    );
+    expect(parseHostPluginResult(ok(null)).ok).toBe(false);
+  });
   it("accepts a valid get-capabilities request", () => {
     const result = parseHostMessage({
       protocolVersion: HOST_MESSAGE_PROTOCOL_VERSION,

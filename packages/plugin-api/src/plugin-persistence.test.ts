@@ -37,6 +37,72 @@ function makeStore(initial: PluginStoreData | null = null) {
 }
 
 describe("PluginPersistenceCoordinator（2026-08-30，ADR-038）", () => {
+  it("retains the queued snapshot when the host disposes its live registry", async () => {
+    const registry = new PluginRegistry();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const saved: PluginStoreData[] = [];
+    const store: PluginStorePort = {
+      load: async () => ok(createEmptyPluginStoreData()),
+      save: async (data) => {
+        saved.push(data);
+        if (saved.length === 1) await gate;
+        return ok(undefined);
+      },
+    };
+    const coordinator = new PluginPersistenceCoordinator(registry, store);
+    coordinator.start();
+    registry.register(manifest(), { source: "installed" });
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+    registry.setEnabled("installed-a", false);
+    const flushed = coordinator.flush();
+    coordinator.dispose();
+    await registry.dispose();
+    release();
+    await flushed;
+    expect(saved).toHaveLength(2);
+    expect(saved[1]?.plugins).toHaveLength(1);
+    expect(saved[1]?.plugins[0]?.enabled).toBe(false);
+  });
+  it("serializes saves and waits for the latest snapshot without persisting host events", async () => {
+    const registry = new PluginRegistry();
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const saved: PluginStoreData[] = [];
+    const store: PluginStorePort = {
+      load: async () => ok(createEmptyPluginStoreData()),
+      save: vi.fn(async (data) => {
+        saved.push(data);
+        if (saved.length === 1) await pending;
+        return ok(undefined);
+      }),
+    };
+    const coordinator = new PluginPersistenceCoordinator(registry, store);
+    coordinator.start();
+    registry.register(manifest(), { source: "installed" });
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+    registry.setEnabled("installed-a", false);
+    const flushed = coordinator.flush();
+    await Promise.resolve();
+    expect(saved).toHaveLength(1);
+    release();
+    await flushed;
+    expect(saved).toHaveLength(2);
+    expect(saved[1]?.plugins[0]?.enabled).toBe(false);
+    registry.applyHostSnapshot({
+      schemaVersion: 1,
+      revision: 1,
+      plugins: [],
+      error: null,
+    });
+    await Promise.resolve();
+    expect(saved).toHaveLength(2);
+    coordinator.dispose();
+  });
   it("start 不自行加载/hydrate（ADR-054：加载与注册由装配方承担）", () => {
     const registry = new PluginRegistry();
     const { store } = makeStore({

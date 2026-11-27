@@ -494,6 +494,9 @@ importers:
       '@mamep2026/logging':
         specifier: workspace:*
         version: link:../logging
+      '@mamep2026/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
       zod:
         specifier: 'catalog:'
         version: 4.4.3

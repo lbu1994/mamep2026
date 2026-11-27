@@ -6,7 +6,7 @@
  * （manifest JSON 或单文件 JS）、启用/禁用、卸载（仅 installed）、加载错误展示；
  * 安装/卸载确认继续用 `App.useApp().modal.confirm`（渲染到 body portal，不受 Drawer 影响）。
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { App as AntApp } from "antd";
 import Button from "antd/es/button";
@@ -46,6 +46,11 @@ export function PluginManagerSection({
   const { message, modal } = AntApp.useApp();
   const host = useAppStore((s) => s.host);
   const registry = host?.pluginRegistry ?? null;
+  useSyncExternalStore(
+    (listener) => registry?.subscribe(listener) ?? (() => {}),
+    () => registry?.getVersion() ?? 0,
+  );
+  const [reloading, setReloading] = useState<string | null>(null);
   const [, forceRender] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeHostRef = useRef<typeof host>(null);
@@ -68,6 +73,7 @@ export function PluginManagerSection({
 
   const plugins = registry?.list() ?? [];
   const loadErrors = registry?.getLoadErrors() ?? [];
+  const hostError = registry?.getHostError();
 
   /**
    * 单文件 JS 插件安装：entry 含 manifest + activate。
@@ -413,6 +419,22 @@ export function PluginManagerSection({
                   <Typography.Text type="secondary">
                     {plugin.description}
                   </Typography.Text>
+                  {registry?.getHostState(plugin.id) !== undefined ? (
+                    <div data-testid={`host-plugin-state-${plugin.id}`}>
+                      <Tag>
+                        {t(
+                          `plugins.hostStage.${registry.getHostState(plugin.id)?.stage}`,
+                        )}
+                      </Tag>
+                      {registry
+                        .getHostState(plugin.id)
+                        ?.errors.map((error, index) => (
+                          <Typography.Paragraph key={index} type="danger">
+                            [{error.code}] {error.technicalMessage}
+                          </Typography.Paragraph>
+                        ))}
+                    </div>
+                  ) : null}
                   <Space size={[8, 4]} wrap style={{ marginTop: 4 }}>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       {t("plugins.author")}: {plugin.author ?? "—"}
@@ -445,6 +467,30 @@ export function PluginManagerSection({
                   </Space>
                 </div>
                 <Flex align="center" gap={4}>
+                  {registry?.getHostState(plugin.id)?.stage === "failed" &&
+                  host?.reloadHostPlugin !== undefined ? (
+                    <Button
+                      size="small"
+                      loading={reloading === plugin.id}
+                      disabled={
+                        reloading !== null || !registry.isEnabled(plugin.id)
+                      }
+                      onClick={async () => {
+                        setReloading(plugin.id);
+                        try {
+                          const result = await host.reloadHostPlugin?.(
+                            plugin.id,
+                          );
+                          if (result !== undefined && !result.ok)
+                            message.error(t(result.error.userMessageKey));
+                        } finally {
+                          setReloading(null);
+                        }
+                      }}
+                    >
+                      {t("plugins.reloadHost")}
+                    </Button>
+                  ) : null}
                   {registry?.getSource(plugin.id) === "installed" ? (
                     <Tooltip title={t("plugins.uninstall")}>
                       <Button
@@ -486,6 +532,11 @@ export function PluginManagerSection({
             )}
           />
         )}
+        {hostError ? (
+          <Typography.Paragraph type="danger">
+            [{hostError.code}] {hostError.technicalMessage}
+          </Typography.Paragraph>
+        ) : null}
         {loadErrors.length > 0 ? (
           <div>
             <Typography.Text strong>{t("plugins.loadErrors")}</Typography.Text>

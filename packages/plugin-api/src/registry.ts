@@ -15,6 +15,11 @@ import {
 } from "./authorization";
 import { PLUGIN_RUNTIME_LIMITS, withPluginDeadline } from "./runtime-limits";
 import type { PluginApproval } from "./plugin-approval";
+import {
+  hostPluginSnapshotSchema,
+  type HostPluginSnapshot,
+  type HostPluginState,
+} from "./host-plugin-state";
 import { pluginManifestSchema, type PluginManifest } from "./manifest";
 import {
   checkCompatibility,
@@ -57,6 +62,7 @@ export interface PluginLoadError {
 }
 
 export type PluginRegistryEvent =
+  | { type: "host-state-changed" }
   | { type: "registered"; pluginId: string }
   | { type: "enabled-changed"; pluginId: string; enabled: boolean }
   | { type: "lifecycle-changed"; pluginId: string; state: PluginLifecycleState }
@@ -135,6 +141,7 @@ interface RegisteredPlugin {
   revokeListeners: Set<() => void>;
   stopping?: Promise<void>;
   disposing?: Promise<void>;
+  activation?: Promise<void>;
 }
 
 export class PluginRegistry {
@@ -155,6 +162,10 @@ export class PluginRegistry {
   /** 变更版本号（注册/启停/生命周期变化时自增）：UI 消费方响应式订阅用。 */
   private version = 0;
   private disposed = false;
+  private hostSnapshot: HostPluginSnapshot | null = null;
+  private hostQueryError: HostPluginSnapshot["error"] = null;
+  private requireHostContributions = false;
+  private readonly pendingHostPlugins = new Set<string>();
   private readonly cleanupTasks = new Set<Promise<void>>();
 
   constructor(options: PluginRegistryOptions = {}) {
@@ -562,7 +573,116 @@ export class PluginRegistry {
   getContributions<TSchema>(
     pointId: ContributionPointId,
   ): Contribution<TSchema>[] {
-    return this.contributionRegistry?.getContributions<TSchema>(pointId) ?? [];
+    const contributions =
+      this.contributionRegistry?.getContributions<TSchema>(pointId) ?? [];
+    if (
+      !this.requireHostContributions ||
+      !["protocolExtension", "tableType", "addressTransform"].includes(pointId)
+    )
+      return contributions;
+    return contributions.filter((contribution) => {
+      if (this.pendingHostPlugins.has(contribution.pluginId)) return false;
+      const state = this.getHostState(contribution.pluginId);
+      if (this.getHostError() || state?.stage !== "active") return false;
+      const payload: unknown = contribution.payload;
+      if (typeof payload !== "object" || payload === null) return false;
+      if (pointId === "addressTransform") {
+        return (
+          "id" in payload &&
+          typeof payload.id === "string" &&
+          state.contributions.addressTransformIds.includes(payload.id)
+        );
+      }
+      return (
+        "protocolId" in payload &&
+        typeof payload.protocolId === "string" &&
+        state.contributions.protocolIds.includes(payload.protocolId)
+      );
+    });
+  }
+
+  /** Use host results only for contributions consumed by the remote communication path. */
+  configureHostContributions(required: boolean): void {
+    this.requireHostContributions = required;
+    this.emit({ type: "host-state-changed" });
+  }
+
+  /** Hide a changed plugin's remote contributions until its latest save completes. */
+  markHostPluginPending(pluginId: string): void {
+    if (this.hostSnapshot === null && !this.requireHostContributions) return;
+    if (!this.plugins.has(pluginId)) {
+      this.pendingHostPlugins.delete(pluginId);
+      return;
+    }
+    if (this.pendingHostPlugins.has(pluginId)) return;
+    this.pendingHostPlugins.add(pluginId);
+    this.emit({ type: "host-state-changed" });
+  }
+
+  /** Release pending projections only after all queued saves and host synchronization finish. */
+  completeHostPluginSync(): void {
+    if (this.pendingHostPlugins.size === 0) return;
+    this.pendingHostPlugins.clear();
+    this.emit({ type: "host-state-changed" });
+  }
+
+  /** Validate snapshots and reject responses older than an already received event. */
+  applyHostSnapshot(input: unknown): void {
+    if (this.disposed) return;
+    const parsed = hostPluginSnapshotSchema.safeParse(input);
+    if (
+      !parsed.success ||
+      (this.hostSnapshot !== null &&
+        parsed.data.revision <= this.hostSnapshot.revision)
+    )
+      return;
+    this.hostSnapshot = parsed.data;
+    this.hostQueryError = null;
+    this.emit({ type: "host-state-changed" });
+  }
+
+  /** Match the approved content so a replaced plugin cannot inherit an older result. */
+  getHostState(pluginId: string): HostPluginState | undefined {
+    const plugin = this.plugins.get(pluginId);
+    const state = this.hostSnapshot?.plugins.find(
+      (state) =>
+        state.pluginId === pluginId &&
+        state.contentDigest === (plugin?.approval?.contentDigest ?? null),
+    );
+    if (state === undefined || !this.pendingHostPlugins.has(pluginId))
+      return state;
+    return {
+      ...state,
+      stage: "loading",
+      contributions: {
+        protocolIds: [],
+        dataTypeIds: [],
+        addressTransformIds: [],
+      },
+      errors: [],
+    };
+  }
+
+  getHostError(): HostPluginSnapshot["error"] {
+    return this.hostQueryError ?? this.hostSnapshot?.error ?? null;
+  }
+
+  /** Report bridge failures without changing the user's saved plugin enablement. */
+  reportHostQueryError(error: {
+    code: string;
+    technicalMessage: string;
+  }): void {
+    if (this.disposed) return;
+    this.hostQueryError = {
+      code: error.code,
+      technicalMessage: error.technicalMessage,
+    };
+    this.emit({ type: "host-state-changed" });
+  }
+
+  /** Wait for this registration's activation, including a rejected or timed-out hook. */
+  async waitForActivation(pluginId: string): Promise<void> {
+    await this.plugins.get(pluginId)?.activation;
   }
 
   /**
@@ -650,7 +770,7 @@ export class PluginRegistry {
         result !== undefined &&
         typeof (result as Promise<void>).catch === "function"
       ) {
-        withPluginDeadline(
+        plugin.activation = withPluginDeadline(
           () => result,
           PLUGIN_RUNTIME_LIMITS.activateTimeoutMs,
           "activation",
