@@ -269,7 +269,7 @@ export async function handleRequest(
       );
     // ---- RTU 会话 kind：Electron RTU 运行在 Renderer（Web Serial），
     // 不发给主进程；此处返回能力错误并满足穷尽守卫。
-    // 表级 Address Adjust：Electron RTU 会话在 Renderer；TCP 无地址变换。----
+    // TCP table transforms travel in each request route; this legacy setter is RTU-only.
     case "serial-enumerate":
     case "session-connect":
     case "session-set-slave-address":

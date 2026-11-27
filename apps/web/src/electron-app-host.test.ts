@@ -40,6 +40,39 @@ import {
 import { RegisterTableService } from "@mamep2026/register-table";
 import { ElectronAppHost } from "./electron-app-host";
 
+it("passes TCP codec and mapping snapshots through the Electron facade", async () => {
+  const { bridge } = createFakeBridge();
+  const host = new ElectronAppHost(bridge, {
+    repository: new InMemoryWorkspaceRepository(),
+  });
+  const profile = {
+    ...createDefaultTcpProfile(),
+    codecId: "vendor-tcp",
+    unitId: 7,
+  };
+  await host.connectTcp(profile);
+  const parameters = { offset: 5 };
+  host.setAddressTransform({
+    transformId: "offset",
+    enabled: true,
+    parameters,
+  });
+  parameters.offset = 9;
+  const row = RegisterTableService.createRow();
+  await host.readRow(row);
+  expect(bridge.sessionTcpConnect).toHaveBeenCalledWith({ profile });
+  expect(bridge.sessionReadRow).toHaveBeenCalledWith(expect.any(Object), {
+    unitAddress: 7,
+    protocol: "vendor-tcp",
+    addressTransform: {
+      transformId: "offset",
+      enabled: true,
+      parameters: { offset: 5 },
+    },
+  });
+  await host.dispose();
+});
+
 function createFakeBridge(): {
   bridge: MamepHostApi;
   emit: (event: MamepHostEvent) => void;
@@ -663,6 +696,7 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
       {
         unitAddress: 0,
         protocol: "tcp",
+        addressTransform: null,
       },
       undefined,
     );
@@ -702,7 +736,7 @@ describe("ElectronAppHost TCP 远程会话代理（2026-08-23 两端 TCP 接线�
         addressValue: { value: 0x0002 },
       }),
       { mode: "immediate", delayMs: null },
-      { unitAddress: 0, protocol: "tcp" },
+      { unitAddress: 0, protocol: "tcp", addressTransform: null },
     );
   });
 

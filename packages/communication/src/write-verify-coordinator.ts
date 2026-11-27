@@ -13,6 +13,7 @@
  */
 import {
   ok,
+  snapshotRequestRoute,
   type ReadVerifySettings,
   type RequestRoute,
   type Result,
@@ -62,12 +63,14 @@ export class WriteVerifyCoordinator {
     settings: ReadVerifySettings,
     meta: WriteVerifyMeta = {},
   ): Promise<Result<WriteOutcome>> {
-    const resolvedRoute = meta.route
-      ? { ...meta.route }
-      : this.session.getCurrentRoute();
+    const resolvedRoute = snapshotRequestRoute(
+      meta.route ?? this.session.getCurrentRoute(),
+    );
+    const beforeSend = this.session.captureAddressTransformGuard(resolvedRoute);
     // 阶段 1：写入（FC0x10，多值）。
     const writeResult = await this.session.writeRegisters(sentAddress, values, {
       source: "manual-write",
+      beforeSend,
       ...(meta.userAddress !== undefined
         ? { userAddress: meta.userAddress }
         : {}),
@@ -96,6 +99,7 @@ export class WriteVerifyCoordinator {
         cancelToken,
         meta,
         resolvedRoute,
+        beforeSend,
       );
     } finally {
       unsubscribeExternal?.();
@@ -110,6 +114,7 @@ export class WriteVerifyCoordinator {
     cancelToken: CancellationToken,
     meta: WriteVerifyMeta,
     route: RequestRoute,
+    beforeSend: () => Result<void>,
   ): Promise<Result<WriteOutcome>> {
     // 阶段 2：可选延迟（可取消时钟）。
     if (
@@ -132,6 +137,7 @@ export class WriteVerifyCoordinator {
       values.length,
       {
         source: "write-verify",
+        beforeSend,
         ...(meta.userAddress !== undefined
           ? { userAddress: meta.userAddress }
           : {}),

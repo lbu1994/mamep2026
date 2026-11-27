@@ -9,6 +9,7 @@ import type {
   RequestRoute,
   Result,
 } from "@mamep2026/domain";
+import { snapshotRequestRoute } from "@mamep2026/domain";
 import type { Clock, TimeoutHandle } from "./clock";
 import type { CommunicationSession } from "./session";
 
@@ -79,15 +80,16 @@ export class PollingCoordinator {
 
   setTargets(targets: PollingTarget[]): void {
     const nextTargets = targets.map((target): ActivePollingTarget => {
-      const route = target.route
-        ? { ...target.route }
-        : this.session.getCurrentRoute();
+      const route = snapshotRequestRoute(
+        target.route ?? this.session.getCurrentRoute(),
+      );
       const fingerprint = JSON.stringify([
         target.sheetId,
         target.address,
         target.quantity ?? 1,
         route.unitAddress,
         route.protocol,
+        route.addressTransform,
       ]);
       const previous = this.targetFingerprints.get(target.key);
       const requestGeneration =

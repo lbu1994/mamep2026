@@ -145,6 +145,7 @@ function ensureSessionHost(): ElectronSessionHost {
   if (electronSessionHost === null) {
     electronSessionHost = new ElectronSessionHost({
       platform: new NodeTcpPlatformHost(),
+      codecRegistry: ensureHostPlugins().getCodecRegistry(),
       // 地址变换解析（宿主侧插件运行时）：
       // 读当前插件注册表（安装/禁用/卸载后自动跟随，无需重启）。
       resolveAddressTransform: (transformId) =>

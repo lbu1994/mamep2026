@@ -92,7 +92,9 @@ export class RegisterTableService {
     }
     const sent = applyAddressTransform(
       address,
-      this.deps.getAddressTransform(),
+      route?.addressTransform !== undefined
+        ? null
+        : this.deps.getAddressTransform(),
     );
     if (!sent.ok) return sent;
     if (row.registerCount > 1) {
@@ -140,7 +142,9 @@ export class RegisterTableService {
     if (address === undefined) return fail(addressEmptyError());
     const sent = applyAddressTransform(
       address,
-      this.deps.getAddressTransform(),
+      route?.addressTransform !== undefined
+        ? null
+        : this.deps.getAddressTransform(),
     );
     if (!sent.ok) return sent;
     const writeVerify = options.writeVerify;

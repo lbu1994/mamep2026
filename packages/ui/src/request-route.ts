@@ -35,11 +35,26 @@ function requestProtocolForSheetType(
 /** 从表自身配置解析设备请求路由；地址使用表配置，协议使用当前连接快照。 */
 export function requestRouteForSheet(
   host: RequestRouteHost,
-  sheet: Pick<RegisterSheet, "type" | "slaveAddress">,
+  sheet: Pick<RegisterSheet, "type" | "slaveAddress"> &
+    Partial<Pick<RegisterSheet, "addressTransform">>,
 ): RequestRoute {
   return {
     unitAddress: sheet.slaveAddress,
     protocol: requestProtocolForSheetType(host, sheet.type),
+    ...(host.platform === "electron" &&
+    host.getCommProperties().protocol === "tcp"
+      ? {
+          addressTransform:
+            sheet.addressTransform == null
+              ? null
+              : {
+                  ...sheet.addressTransform,
+                  ...(sheet.addressTransform.parameters
+                    ? { parameters: { ...sheet.addressTransform.parameters } }
+                    : {}),
+                },
+        }
+      : {}),
   };
 }
 

@@ -4,6 +4,7 @@
  */
 import {
   ok,
+  snapshotRequestRoute,
   type PollResultContext,
   type RequestRoute,
   type Result,
@@ -64,7 +65,9 @@ export class BatchReadCoordinator {
     // 显式 batchId 用于远程路径（渲染端生成随请求传入），保证汇总 batchId
     // 与请求关联一致；本地路径缺省时内部自增生成。
     const resolvedBatchId = batchId ?? `batch-${++this.seq}`;
-    const resolvedRoute = route ? { ...route } : this.session.getCurrentRoute();
+    const resolvedRoute = snapshotRequestRoute(
+      route ?? this.session.getCurrentRoute(),
+    );
     const cancelToken = createCancellationToken();
     const eligible = rows.filter((row) => row.address !== null);
     const skippedCount = rows.length - eligible.length;

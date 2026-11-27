@@ -13,7 +13,11 @@ import type {
 } from "@mamep2026/domain";
 import type { SerialDeviceHandle } from "@mamep2026/platform-api";
 import type { CommunicationHost, HostIdentity } from "./host";
-import { fail } from "@mamep2026/domain";
+import {
+  fail,
+  basicTablesProtocolId,
+  CORE_TABLE_TYPES,
+} from "@mamep2026/domain";
 import { getConnectionSupportError } from "./connection-support";
 
 /** 串口能力被阻断（无 Web Serial + 非 enumerated + 非 mock）：不能直连，应回退弹窗。 */
@@ -65,7 +69,21 @@ export async function runConnect(
   const supportError = getConnectionSupportError(host, opts.profile);
   if (supportError !== null) return fail(supportError);
   if (opts.protocol === "tcp") {
-    return host.connectTcp(opts.profile as TcpConnectionProfile);
+    const profile = opts.profile as TcpConnectionProfile;
+    if (host.platform !== "electron") return host.connectTcp(profile);
+    const tcp = { ...profile };
+    delete tcp.codecId;
+    return host.connectTcp(
+      opts.sheetProtocol === "rtu" ||
+        opts.sheetProtocol === "tcp" ||
+        CORE_TABLE_TYPES.some(
+          (table) =>
+            table.id !== "holding-register" &&
+            basicTablesProtocolId(table.id) === opts.sheetProtocol,
+        )
+        ? tcp
+        : { ...tcp, codecId: opts.sheetProtocol },
+    );
   }
   return host.connect(
     opts.profile as RtuConnectionProfile,

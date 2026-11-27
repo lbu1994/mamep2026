@@ -18,6 +18,26 @@ const TCP_PROPERTIES: CommProperties = {
 };
 
 describe("requestRouteForSheet", () => {
+  it("copies Electron TCP transform parameters without sharing the sheet object", () => {
+    const { host } = makeHost({}, { platform: "electron" });
+    vi.mocked(host.getCommProperties).mockReturnValue(TCP_PROPERTIES);
+    const parameters = { offset: 10 };
+    const route = requestRouteForSheet(host, {
+      type: "holding-register",
+      slaveAddress: 7,
+      addressTransform: { transformId: "offset", enabled: true, parameters },
+    });
+    parameters.offset = 20;
+    expect(route).toEqual({
+      unitAddress: 7,
+      protocol: "tcp",
+      addressTransform: {
+        transformId: "offset",
+        enabled: true,
+        parameters: { offset: 10 },
+      },
+    });
+  });
   it("captures the owning sheet address and resolved codec protocol", () => {
     const { host } = makeHost({
       protocolExtensions: ["modbus-basic-tables:coil"],

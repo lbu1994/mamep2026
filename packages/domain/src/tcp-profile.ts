@@ -13,6 +13,8 @@ export interface TcpConnectionProfile {
   id: ConnectionProfileId;
   name: string;
   protocol: "tcp";
+  /** Optional TCP codec ID. Omission selects the built-in Modbus TCP codec. */
+  codecId?: string | undefined;
   host: string;
   port: number;
   /** MBAP 单元标识：0~255，默认 0（0=广播，不实现广播写入）。 */
@@ -71,6 +73,7 @@ export function createTcpConnectionProfile(
     requestTimeoutMs?: unknown;
     retryCount?: unknown;
     autoReconnect?: unknown;
+    codecId?: unknown;
   };
 
   if (
@@ -117,6 +120,19 @@ export function createTcpConnectionProfile(
   }
 
   const defaults = defaultConfig.tcp;
+  if (
+    candidate.codecId !== undefined &&
+    (typeof candidate.codecId !== "string" ||
+      candidate.codecId.trim().length === 0)
+  ) {
+    return fail(
+      invalid(
+        "CODEC_NOT_FOUND",
+        "errors.requestRouteProtocolMismatch",
+        "codecId must be a non-empty string",
+      ),
+    );
+  }
   return ok({
     id: (typeof candidate.id === "string" && candidate.id.length > 0
       ? candidate.id
@@ -126,6 +142,9 @@ export function createTcpConnectionProfile(
         ? candidate.name
         : "TCP",
     protocol: "tcp",
+    ...(typeof candidate.codecId === "string"
+      ? { codecId: candidate.codecId }
+      : {}),
     host: candidate.host,
     port: candidate.port,
     unitId: candidate.unitId,

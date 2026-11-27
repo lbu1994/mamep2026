@@ -453,7 +453,7 @@ export class HostPluginRuntime {
               addressTransform: {
                 register: (transform) =>
                   this.addressTransformRegistry.get(transform.id) === undefined
-                    ? transforms.register(transform)
+                    ? transforms.register({ ...transform, pluginId })
                     : this.addressTransformRegistry.register(transform),
                 get: (id) =>
                   transforms.get(id) ?? this.addressTransformRegistry.get(id),

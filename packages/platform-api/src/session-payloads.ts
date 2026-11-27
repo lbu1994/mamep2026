@@ -80,6 +80,7 @@ export const tcpConnectionProfilePayloadSchema = z.object({
   id: z.string(),
   name: z.string(),
   protocol: z.literal("tcp"),
+  codecId: z.string().min(1).optional(),
   host: z.string(),
   port: z.number(),
   unitId: z.number(),
@@ -116,6 +117,19 @@ export type SessionTcpConnectPayload = z.infer<
 export const requestRoutePayloadSchema = z.object({
   unitAddress: z.number().int().min(0).max(255),
   protocol: z.string().min(1),
+  addressTransform: z
+    .object({
+      transformId: z.string().min(1),
+      enabled: z.boolean(),
+      parameters: z
+        .record(
+          z.string(),
+          z.union([z.string(), z.number().finite(), z.boolean()]),
+        )
+        .optional(),
+    })
+    .nullable()
+    .optional(),
 });
 export type RequestRoutePayload = z.infer<typeof requestRoutePayloadSchema>;
 

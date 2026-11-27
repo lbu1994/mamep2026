@@ -2296,7 +2296,9 @@ export const useAppStore = create<AppStoreState>()((set, get) => ({
         sample.address !== binding.address ||
         sample.quantity !== binding.quantity ||
         sample.route.protocol !== binding.route.protocol ||
-        sample.route.unitAddress !== binding.route.unitAddress
+        sample.route.unitAddress !== binding.route.unitAddress ||
+        JSON.stringify(sample.route.addressTransform) !==
+          JSON.stringify(binding.route.addressTransform)
       )
         return state;
       current.buffer.push(
@@ -2494,7 +2496,9 @@ useAppStore.subscribe((state, previous) => {
       row.registerCount !== binding.quantity ||
       row.dataType !== binding.dataType ||
       route?.protocol !== binding.route.protocol ||
-      route.unitAddress !== binding.route.unitAddress
+      route.unitAddress !== binding.route.unitAddress ||
+      JSON.stringify(route.addressTransform) !==
+        JSON.stringify(binding.route.addressTransform)
     ) {
       previous.host?.traceStop(rowId);
       state.invalidateTrace(rowId);

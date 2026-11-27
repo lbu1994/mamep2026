@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createEmptyWorkspace,
+  createDefaultTcpProfile,
   createRegisterSheet,
   type RtuConnectionProfile,
   type Workspace,
@@ -13,6 +14,31 @@ import {
   workspaceSchema,
 } from "./schema";
 import { hydrateWorkspaceData } from "./hydrate-workspace";
+
+it("round-trips optional TCP codec and transform parameters without changing legacy defaults", () => {
+  const workspace = createEmptyWorkspace();
+  const profile = {
+    ...createDefaultTcpProfile(),
+    host: "127.0.0.1",
+    codecId: "vendor-tcp",
+  };
+  workspace.connectionProfiles.push(profile);
+  const sheet = workspace.sheets[0];
+  if (sheet === undefined) throw new Error("missing default sheet");
+  sheet.addressTransform = {
+    transformId: "offset",
+    enabled: true,
+    parameters: { offset: 5, bank: "A", active: true },
+  };
+  const result = parseWorkspace(JSON.parse(serializeWorkspace(workspace)));
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.value.connectionProfiles.at(-1)).toEqual(profile);
+    expect(result.value.sheets[0]?.addressTransform).toEqual(
+      sheet.addressTransform,
+    );
+  }
+});
 
 function mutate(w: Workspace, patch: (mutable: Workspace) => void): Workspace {
   patch(w);

@@ -820,6 +820,76 @@ describe("RegisterTable 工具栏写后回读配置（2026-08-26）", () => {
 });
 
 describe("RegisterTable 工具栏表级 Address Adjust（2026-09-01，ADR-042）", () => {
+  it("offers Electron TCP transforms and persists edited parameters per table", async () => {
+    const base = makeHostWithAdjust();
+    base.pluginRegistry.register(
+      {
+        id: "tcp-offset",
+        name: "TCP offset",
+        version: "1.0.0",
+        apiVersion: "2.0",
+        description: "TCP mapping fixture",
+        platform: { web: true, node: true },
+        permissions: [],
+        contributes: {
+          addressTransform: {
+            id: "tcp.offset",
+            protocol: "tcp",
+            defaultConfig: { enabled: false, parameters: { offset: 4 } },
+          },
+        },
+      },
+      { source: "installed" },
+    );
+    useAppStore.setState({
+      host: {
+        ...base,
+        platform: "electron",
+        getCommProperties: () => ({
+          ...base.getCommProperties(),
+          protocol: "tcp",
+        }),
+      },
+    });
+    const sid = sheetId();
+    render(<RegisterTable sheetId={sid} />);
+    await openTableSettings();
+    fireEvent.mouseDown(
+      await screen.findByRole(
+        "combobox",
+        { name: "Address Adjust" },
+        { timeout: 5000 },
+      ),
+    );
+    await screen.findByRole("option", { name: "tcp.offset" });
+    const tcpOption = Array.from(
+      document.querySelectorAll(".ant-select-item-option-content"),
+    ).find((element) => element.textContent === "tcp.offset");
+    if (tcpOption === undefined)
+      throw new Error("missing TCP transform option");
+    fireEvent.click(tcpOption);
+    const offsetInput = await screen.findByRole(
+      "spinbutton",
+      { name: "offset" },
+      { timeout: 5000 },
+    );
+    expect((offsetInput as HTMLInputElement).value).toBe("4");
+    fireEvent.change(offsetInput, {
+      target: { value: "9" },
+    });
+    expect(
+      useAppStore
+        .getState()
+        .workspace.sheets.find((sheet) => sheet.sheetId === sid)
+        ?.addressTransform,
+    ).toEqual({
+      transformId: "tcp.offset",
+      enabled: true,
+      parameters: { offset: 9 },
+    });
+    expect(screen.queryByRole("radio", { name: "ON" })).toBeNull();
+  });
+
   function makeHostWithAdjust(): AppHost {
     const contributionRegistry = new ContributionPointRegistry();
     contributionRegistry.registerPoint({

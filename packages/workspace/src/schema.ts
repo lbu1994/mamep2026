@@ -114,6 +114,12 @@ const sheetSchema = z.object({
     .object({
       transformId: z.string().min(1),
       enabled: z.boolean(),
+      parameters: z
+        .record(
+          z.string(),
+          z.union([z.string(), z.number().finite(), z.boolean()]),
+        )
+        .optional(),
     })
     .nullable()
     .default(null),
@@ -159,6 +165,7 @@ const tcpProfileSchema = z.object({
   id: z.string(),
   name: z.string(),
   protocol: z.literal("tcp"),
+  codecId: z.string().min(1).optional(),
   host: z.string().min(1),
   port: z.number().int().min(1).max(65535),
   unitId: z.number().int().min(0).max(255).default(defaultConfig.tcp.unitId),

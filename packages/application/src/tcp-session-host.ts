@@ -4,7 +4,7 @@
  * 协议专用薄封装：构建 protocol="tcp" 的 CommunicationSession（unitId 连接时由
  * profile 确定，连接后可经 setUnitId 动态修改），其余会话编排
  * （轮询/追踪/批量读取/设备拔出策略）委托共享 SessionHostCore（session-host-core.ts），
- * 与 RtuSessionHost 共用，避免复制核心会话逻辑（AGENTS.md §32 ㉑）。TCP 无 Address Adjust（恒 off）。
+ * 与 RtuSessionHost 共用，避免复制核心会话逻辑（AGENTS.md §32 ㉑）。TCP requests carry table transforms in their route snapshots.
  *
  * 本类不感知平台细节：传输由调用方打开后注入（connect 的 transport 参数），
  * 不依赖 platform-api / platform-node。
@@ -14,6 +14,7 @@ import type {
   BatchReadHandle,
   BatchReadRow,
   Clock,
+  CodecRegistry,
   CommunicationLogEvent,
   ConnectionState,
   TransportPort,
@@ -28,7 +29,7 @@ import type {
   AddressTransform,
   RequestRoute,
 } from "@mamep2026/domain";
-import { createMamepError, fail } from "@mamep2026/domain";
+import { createMamepError, fail, ok } from "@mamep2026/domain";
 import type { SessionHostEvents } from "./session-host-core";
 import { SessionHostCore } from "./session-host-core";
 import { ReconnectCoordinator } from "./reconnect-coordinator";
@@ -45,6 +46,7 @@ export interface TcpConnectInput {
 
 export interface TcpSessionHostOptions {
   clock: Clock;
+  codecRegistry?: CodecRegistry;
   events: SessionHostEvents;
   /** 地址变换解析（插件外部化：宿主注入随包插件 resolver，缺省不调整）。 */
   resolveAddressTransform?: (transformId: string) => AddressTransform | null;
@@ -63,7 +65,10 @@ export class TcpSessionHost {
   private currentProfile: TcpConnectionProfile | null = null;
   private currentPortLabel: string | null = null;
 
+  private readonly options: TcpSessionHostOptions;
+
   constructor(options: TcpSessionHostOptions) {
+    this.options = options;
     this.core = new SessionHostCore({
       clock: options.clock,
       events: options.events,
@@ -86,9 +91,14 @@ export class TcpSessionHost {
 
   /** 打开并连接 TCP 会话：替换旧会话，恢复轮询/追踪配置。 */
   async connect(input: TcpConnectInput): Promise<Result<void>> {
+    const valid = this.validateProfile(input.profile);
+    if (!valid.ok) {
+      await input.transport.close();
+      return valid;
+    }
     // 用户主动发起新连接：取消挂起的自动重连。
     this.coordinator?.disarm();
-    this.currentProfile = input.profile;
+    this.currentProfile = { ...input.profile };
     this.currentPortLabel = input.portLabel;
     const result = await this.core.connect(
       this.buildSession(input.profile, input.transport),
@@ -114,6 +124,11 @@ export class TcpSessionHost {
         }),
       );
     }
+    const valid = this.validateProfile(profile);
+    if (!valid.ok) {
+      await transport.close();
+      return valid;
+    }
     const result = await this.core.connect(
       this.buildSession(profile, transport),
       this.currentPortLabel,
@@ -133,8 +148,14 @@ export class TcpSessionHost {
     return new CommunicationSession({
       transport,
       clock: this.core.clock,
-      config: profile,
-      protocol: "tcp",
+      config: { ...profile },
+      protocol: profile.codecId ?? "tcp",
+      ...(this.options.codecRegistry
+        ? { codecRegistry: this.options.codecRegistry }
+        : {}),
+      ...(this.options.resolveAddressTransform
+        ? { resolveAddressTransform: this.options.resolveAddressTransform }
+        : {}),
       unitId: profile.unitId,
       onLog: (event: CommunicationLogEvent) => this.core.emitLog(event),
       onStateChange: (state: ConnectionState) => {
@@ -142,6 +163,26 @@ export class TcpSessionHost {
         this.coordinator?.onSessionState(state);
       },
     });
+  }
+
+  /** Reject unknown and RTU codecs before the host opens a TCP connection. */
+  validateProfile(profile: TcpConnectionProfile): Result<void> {
+    if (profile.codecId === undefined || profile.codecId === "tcp")
+      return ok(undefined);
+    const codec = this.options.codecRegistry?.get(profile.codecId);
+    if (codec?.transport === "tcp") return ok(undefined);
+    return fail(
+      createMamepError({
+        code:
+          codec === undefined
+            ? "CODEC_NOT_FOUND"
+            : "REQUEST_ROUTE_PROTOCOL_MISMATCH",
+        category: "capability",
+        retryable: false,
+        userMessageKey: "errors.requestRouteProtocolMismatch",
+        technicalMessage: `TCP codec unavailable or incompatible: ${profile.codecId}`,
+      }),
+    );
   }
 
   async disconnect(): Promise<Result<void>> {

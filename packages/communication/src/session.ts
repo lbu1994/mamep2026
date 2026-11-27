@@ -7,7 +7,9 @@
  */
 import {
   createMamepError,
+  snapshotRequestRoute,
   type MamepError,
+  type AddressTransform,
   type RequestRoute,
   type Result,
   type RtuConnectionProfile,
@@ -383,6 +385,8 @@ export interface SessionOptions {
   protocol?: SessionProtocol | string;
   /** codec 注册表：protocol 为 codecId 时用于解析 codec。 */
   codecRegistry?: CodecRegistry;
+  /** Resolve TCP table transforms in the process that owns the transport. */
+  resolveAddressTransform?: (id: string) => AddressTransform | null;
   /** 初始从站地址（RTU，默认 1）；连接后可经 setSlaveAddress 动态更新。 */
   slaveAddress?: number;
   /** TCP Unit ID（MBAP 单元标识，默认 0）：连接时由 profile 确定，连接后可经 setUnitId 动态更新。 */
@@ -407,7 +411,7 @@ export class CommunicationSession {
     meta: ReadRegistersMeta,
     identity: { sheetId: string; rowId: string },
   ): { context: ReadRequestContext; result: Promise<Result<number[]>> } {
-    const route = Object.freeze({ ...(meta.route ?? this.getCurrentRoute()) });
+    const route = snapshotRequestRoute(meta.route ?? this.getCurrentRoute());
     const context = Object.freeze({
       requestId: `${this.connectionId}-read-${++this.nextReadRequestId}`,
       connectionId: this.connectionId,
@@ -430,6 +434,7 @@ export class CommunicationSession {
   private readonly protocol: string;
   /** 自定义协议 codec（protocol 为 codecId 时非空；内置 rtu/tcp 为 null，走内置路径）。 */
   private readonly codec: ProtocolCodec | null;
+  private readonly codecPluginId: string | null;
   /** Captured registration identity; a replacement requires a new session. */
   private readonly isCodecCurrent: () => boolean;
   /** TCP Unit ID（MBAP 单元标识，默认 0）：连接后可经 setUnitId 动态更新。 */
@@ -449,10 +454,24 @@ export class CommunicationSession {
       if (!lease) {
         throw codecNotFoundError(this.protocol);
       }
+      if (
+        options.config.protocol === "tcp" &&
+        lease.codec.transport !== "tcp"
+      ) {
+        throw requestRouteProtocolMismatchError(this.protocol, "tcp");
+      }
+      if (
+        options.config.protocol === "rtu" &&
+        lease.codec.transport === "tcp"
+      ) {
+        throw requestRouteProtocolMismatchError(this.protocol, "rtu");
+      }
+      this.codecPluginId = lease.pluginId;
       this.codec = lease.codec;
       this.isCodecCurrent = lease.isCurrent;
     } else {
       this.codec = null;
+      this.codecPluginId = null;
       this.isCodecCurrent = () => true;
     }
     this.unitId = options.unitId ?? 0;
@@ -604,15 +623,33 @@ export class CommunicationSession {
       return fail(requestRouteProtocolMismatchError(protocol, this.protocol));
     }
     return ok(
-      Object.freeze({
+      snapshotRequestRoute({
         unitAddress,
         protocol,
+        ...(route?.addressTransform !== undefined
+          ? { addressTransform: route.addressTransform }
+          : {}),
       }),
     );
   }
 
   getConfig(): RtuConnectionProfile | TcpConnectionProfile {
     return this.options.config;
+  }
+
+  /** Keep delayed write verification bound to the transform used for the write. */
+  captureAddressTransformGuard(route: RequestRoute): () => Result<void> {
+    const config = route.addressTransform;
+    if (this.options.config.protocol !== "tcp" || !config?.enabled)
+      return () => ok(undefined);
+    const transform = this.options.resolveAddressTransform?.(
+      config.transformId,
+    );
+    return () =>
+      transform != null &&
+      this.options.resolveAddressTransform?.(config.transformId) === transform
+        ? ok(undefined)
+        : fail(cancelledError("address-transform-revoked"));
   }
 
   async connect(): Promise<Result<void>> {
@@ -691,26 +728,41 @@ export class CommunicationSession {
     } else if (
       !Number.isInteger(quantity) ||
       quantity < 1 ||
-      quantity > MAX_READ_QUANTITY
+      quantity > (this.codec?.maxRead ?? MAX_READ_QUANTITY)
     ) {
       return Promise.resolve(fail(quantityOutOfRangeError("read", quantity)));
     }
+    const prepared = this.prepareTcpAddresses(
+      this.requestAddresses(sentAddress, quantity),
+      meta,
+      route.value,
+    );
+    if (!prepared.ok) return Promise.resolve(prepared);
+    const request = prepared.value;
     const run =
       this.codec !== null
         ? () =>
-            this.executeCodecRead(
-              contiguousAddresses(sentAddress, quantity),
-              meta,
+            this.executeCodecRead(request.addresses, request.meta, route.value)
+        : () =>
+            this.executeRead(
+              this.options.config.protocol === "tcp"
+                ? (request.addresses[0] ?? sentAddress)
+                : sentAddress,
+              quantity,
+              request.meta,
               route.value,
-            )
-        : () => this.executeRead(sentAddress, quantity, meta, route.value);
+            );
     return this.scheduler
       .enqueue(run, {
         priority: meta.priority ?? "manual-read",
         group: meta.group,
         cancelToken: meta.cancelToken,
       })
-      .then((result) => this.codecResult(result));
+      .then((result) =>
+        request.isCurrent()
+          ? this.codecResult(result)
+          : fail(cancelledError("address-transform-revoked")),
+      );
   }
 
   /**
@@ -776,29 +828,52 @@ export class CommunicationSession {
     if (basicCodec !== undefined) {
       const valid = basicCodec.validateWrite(sentAddress, values);
       if (!valid.ok) return Promise.resolve(valid);
-    } else if (values.length < 1 || values.length > MAX_WRITE_QUANTITY) {
+    } else if (
+      values.length < 1 ||
+      values.length > (this.codec?.maxWrite ?? MAX_WRITE_QUANTITY)
+    ) {
       return Promise.resolve(
         fail(quantityOutOfRangeError("write", values.length)),
       );
     }
+    const prepared = this.prepareTcpAddresses(
+      this.requestAddresses(sentAddress, values.length),
+      meta,
+      route.value,
+    );
+    if (!prepared.ok) return Promise.resolve(prepared);
+    const request = prepared.value;
+    const writeValues = [...values];
     const run =
       this.codec !== null
         ? () =>
             this.executeCodecWrite(
-              values.map((value, index) => ({
-                address: (sentAddress + index) & 0xffff,
+              writeValues.map((value, index) => ({
+                address: request.addresses[index] ?? sentAddress,
                 value,
               })),
-              meta,
+              request.meta,
               route.value,
             )
-        : () => this.executeWrite(sentAddress, values, meta, route.value);
+        : () =>
+            this.executeWrite(
+              this.options.config.protocol === "tcp"
+                ? (request.addresses[0] ?? sentAddress)
+                : sentAddress,
+              writeValues,
+              request.meta,
+              route.value,
+            );
     return this.scheduler
       .enqueue(run, {
         priority: meta.priority ?? "manual-write",
         cancelToken: meta.cancelToken,
       })
-      .then((result) => this.codecResult(result));
+      .then((result) =>
+        request.isCurrent()
+          ? this.codecResult(result)
+          : fail(cancelledError("address-transform-revoked")),
+      );
   }
 
   /**
@@ -834,6 +909,102 @@ export class CommunicationSession {
       .then((result) => this.codecResult(result));
   }
 
+  /** Preserve TCP range overflow for validation instead of wrapping to address zero. */
+  private requestAddresses(start: number, quantity: number): number[] {
+    return this.options.config.protocol === "tcp"
+      ? Array.from({ length: quantity }, (_, index) => start + index)
+      : contiguousAddresses(start, quantity);
+  }
+
+  /** Capture TCP address mapping and reject a missing or replaced transform. */
+  private prepareTcpAddresses<T extends ReadRegistersMeta | WriteRegistersMeta>(
+    addresses: number[],
+    meta: T,
+    route: ResolvedRequestRoute,
+  ): Result<{ addresses: number[]; meta: T; isCurrent: () => boolean }> {
+    const config = route.addressTransform;
+    if (this.options.config.protocol !== "tcp") {
+      return ok({ addresses, meta, isCurrent: () => true });
+    }
+    const invalid = (detail: string) =>
+      fail(
+        createMamepError({
+          code: "ADDRESS_TRANSFORM_INVALID",
+          category: "validation",
+          retryable: false,
+          userMessageKey: "errors.addressTransformInvalid",
+          technicalMessage: detail,
+        }),
+      );
+    if (
+      addresses.some(
+        (address) =>
+          !Number.isInteger(address) || address < 0 || address > 65535,
+      )
+    ) {
+      return invalid("TCP address range must stay within 0..65535");
+    }
+    if (!config?.enabled) return ok({ addresses, meta, isCurrent: () => true });
+    const transform = this.options.resolveAddressTransform?.(
+      config.transformId,
+    );
+    if (
+      transform == null ||
+      (transform.protocol !== "tcp" && transform.protocol !== route.protocol)
+    ) {
+      return invalid(
+        `TCP address transform unavailable: ${config.transformId}`,
+      );
+    }
+    const parameters = config.parameters;
+    const mapped: number[] = [];
+    try {
+      for (const address of addresses) {
+        const validated = transform.validate?.(address, parameters);
+        if (validated !== undefined && !validated.ok) return validated;
+        const result = transform.apply(address, parameters);
+        if (!result.ok) return result;
+        if (
+          !Number.isInteger(result.value) ||
+          result.value < 0 ||
+          result.value > 65535
+        ) {
+          return invalid(`transformed address out of range: ${result.value}`);
+        }
+        if (
+          this.codec === null &&
+          mapped.length > 0 &&
+          result.value !== (mapped[0] ?? 0) + mapped.length
+        ) {
+          return invalid(
+            "built-in TCP codecs require contiguous transformed addresses",
+          );
+        }
+        mapped.push(result.value);
+      }
+    } catch (error: unknown) {
+      return invalid(
+        error instanceof Error ? error.message : "address transform threw",
+      );
+    }
+    const isCurrent = () =>
+      this.options.resolveAddressTransform?.(config.transformId) === transform;
+    return ok({
+      addresses: mapped,
+      isCurrent,
+      meta: {
+        ...meta,
+        userAddress: meta.userAddress ?? addresses[0],
+        pluginId:
+          meta.pluginId ?? this.codecPluginId ?? transform.pluginId ?? null,
+        beforeSend: () =>
+          isCurrent()
+            ? (meta.beforeSend?.() ?? ok(undefined))
+            : fail(cancelledError("address-transform-revoked")),
+      },
+    });
+  }
+
   /** Recheck after the scheduler resolves, before exposing a result to callers. */
   private codecResult<T>(result: Result<T>): Result<T> {
     return this.isCodecCurrent()
@@ -858,7 +1029,7 @@ export class CommunicationSession {
           getBasicTablesTcpCodec(route.protocol)?.readFunction ??
           FUNCTION_READ_HOLDING,
         quantity,
-        pluginId: meta.pluginId ?? null,
+        pluginId: meta.pluginId ?? this.codecPluginId,
         beforeSend: meta.beforeSend,
       },
     );
@@ -903,7 +1074,7 @@ export class CommunicationSession {
           getBasicTablesTcpCodec(route.protocol)?.writeFunction ??
           FUNCTION_WRITE_MULTIPLE,
         quantity: values.length,
-        pluginId: meta.pluginId ?? null,
+        pluginId: meta.pluginId ?? this.codecPluginId,
         beforeSend: meta.beforeSend,
       },
     );
@@ -947,7 +1118,7 @@ export class CommunicationSession {
         sentAddress: addresses[0] ?? null,
         functionCode: null,
         quantity: addresses.length,
-        pluginId: meta.pluginId ?? null,
+        pluginId: meta.pluginId ?? this.codecPluginId,
         beforeSend: meta.beforeSend,
       },
     );
@@ -979,7 +1150,7 @@ export class CommunicationSession {
         sentAddress: entries[0]?.address ?? null,
         functionCode: null,
         quantity: entries.length,
-        pluginId: meta.pluginId ?? null,
+        pluginId: meta.pluginId ?? this.codecPluginId,
         beforeSend: meta.beforeSend,
       },
     );
@@ -1306,7 +1477,9 @@ export class CommunicationSession {
 
   /** 日志字段 slaveAddressOrUnitId：RTU 为当前从站地址，TCP 为 Unit ID。 */
   private logUnitAddress(): number {
-    return this.protocol === "tcp" ? this.unitId : this.slaveAddress;
+    return this.protocol === "tcp" || this.codec?.transport === "tcp"
+      ? this.unitId
+      : this.slaveAddress;
   }
 
   private startExchange(parser: SessionFrameParser): PendingExchange {

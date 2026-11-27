@@ -614,6 +614,8 @@ export const en = {
     requestTimeout: "No response from the device within the timeout.",
     requestRouteInvalid:
       "The request contains an invalid Slave Address or Unit ID.",
+    addressTransformInvalid:
+      "The selected address transform is unavailable or invalid.",
     requestRouteProtocolMismatch:
       "The request protocol does not match the active connection protocol.",
     writeVerifyMismatch: "Write succeeded but the read-back value differs.",
@@ -1258,6 +1260,7 @@ export const zh: TranslationResources = {
     notConnected: "未连接设备。",
     requestTimeout: "设备在超时时间内未响应。",
     requestRouteInvalid: "请求中的从站地址或单元 ID 无效。",
+    addressTransformInvalid: "所选地址变换不可用或无效。",
     requestRouteProtocolMismatch: "请求协议与当前连接协议不匹配。",
     writeVerifyMismatch: "写入成功但回读值不一致。",
     modbusException: "设备返回 Modbus 异常。",

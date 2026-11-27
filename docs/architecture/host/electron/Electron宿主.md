@@ -59,7 +59,15 @@ Main、Preload、Renderer 都不得把当前协议判断散落到业务组件。
 
 宿主插件运行时不能依赖 serialport 等 Electron 专用能力。Renderer 仍只能通过版本化 HostMessage 调用 Main，不取得 Node.js、文件系统或插件执行对象。
 
-当前 Electron RTU 会话位于 Renderer，TCP 路径也未消费宿主地址变换或插件 codec。因此宿主执行面已经装配并可验证加载、卸载和释放，但尚不一定形成用户可见的协议扩展路径。新增 TCP 插件 codec 路由或 TCP 地址变换时必须复用现有宿主注册表，不得恢复静态插件 import。
+**Base behavior**：TCP 路径没有消费宿主地址变换或插件 codec，宿主加载贡献后没有对应的请求入口。
+
+**Current behavior**：[Main 装配](../../../../apps/electron/src/main/main.ts)将宿主 codec
+注册表及地址变换解析器注入 [ElectronSessionHost](../../../../apps/electron/src/main/session-host.ts)。
+Renderer 通过 TCP profile 的可选 `codecId` 选择协议，通过请求路由携带表级变换及参数。
+Main 统一执行变换、调度和编解码。插件停用、卸载或替换后，旧注册实例失效；
+宿主状态仍经既有快照回传。完整契约见
+[TCP 插件路由](../../application/communication/会话与连接.md#5-electron-tcp-插件路由与表级地址变换)。
+RTU 会话仍位于 Renderer。插件继续通过用户安装和宿主运行时加载，不使用静态插件 import。
 
 ### preload
 

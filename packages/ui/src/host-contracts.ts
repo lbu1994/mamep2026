@@ -144,6 +144,8 @@ export interface CommunicationHost {
     config: {
       transformId: string;
       enabled: boolean;
+      parameters?:
+        Readonly<Record<string, string | number | boolean>> | undefined;
     } | null,
   ): void;
   subscribeConnectionState(

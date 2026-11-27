@@ -84,6 +84,8 @@ export const BUILTIN_ADDRESS_ADJUST_TRANSFORM_ID = "builtin.address-adjust";
 export interface AddressTransformConfig {
   transformId: string;
   enabled: boolean;
+  /** Immutable request copies contain only scalar JSON parameter values. */
+  parameters?: Readonly<Record<string, string | number | boolean>> | undefined;
 }
 
 /**
@@ -92,11 +94,23 @@ export interface AddressTransformConfig {
  */
 export interface AddressTransform {
   id: string;
+  /** Host-assigned owner for communication logs. */
+  pluginId?: string;
   protocol: string;
   titleKey?: string;
-  defaultConfig?: { enabled: boolean };
-  apply(userAddress: number): Result<number>;
-  validate?(userAddress: number): Result<null>;
+  defaultConfig?: {
+    enabled: boolean;
+    parameters?:
+      Readonly<Record<string, string | number | boolean>> | undefined;
+  };
+  apply(
+    userAddress: number,
+    parameters?: Readonly<Record<string, string | number | boolean>>,
+  ): Result<number>;
+  validate?(
+    userAddress: number,
+    parameters?: Readonly<Record<string, string | number | boolean>>,
+  ): Result<null>;
 }
 
 /** RTU 连接配置（docs/TECH_DESIGN.md §18.4 字段）。 */

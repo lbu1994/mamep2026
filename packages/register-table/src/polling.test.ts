@@ -91,6 +91,44 @@ const resolveBuiltin: (id: string) => AddressTransform | null = (id) =>
     : null;
 
 describe("buildPollingTargets", () => {
+  it("leaves TCP mapping to the host and rejects results after parameters change", () => {
+    const row = makeRow(10);
+    row.pollingEnabled = true;
+    const sheet = makeSheet("tcp", [row], {
+      addressTransform: {
+        transformId: "tcp.offset",
+        enabled: true,
+        parameters: { offset: 5 },
+      },
+    });
+    const targets = buildPollingTargets([sheet], {
+      resolveRoute: () => ({
+        unitAddress: 1,
+        protocol: "tcp",
+        addressTransform: {
+          transformId: "tcp.offset",
+          enabled: true,
+          parameters: { offset: 5 },
+        },
+      }),
+      resolveAddressTransform: () => {
+        throw new Error("Renderer must not resolve TCP transforms");
+      },
+    });
+    const target = targets[0];
+    expect(target?.address).toBe(10);
+    if (target === undefined) throw new Error("Missing polling target");
+    expect(applyPollResult([sheet], target, 42)?.cellText).toBe("002A");
+    sheet.addressTransform = {
+      transformId: "tcp.offset",
+      enabled: true,
+      parameters: { offset: 7 },
+    };
+    expect(applyPollResult([sheet], target, 42)).toBeNull();
+    sheet.addressTransform = null;
+    expect(applyPollResult([sheet], target, 42)).toBeNull();
+  });
+
   it("includes only polling-enabled rows with an address", () => {
     const on = makeRow(0x0001);
     on.pollingEnabled = true;

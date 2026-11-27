@@ -16,6 +16,7 @@ import type {
   BatchReadHandle,
   BatchReadRow,
   ConnectionState,
+  CodecRegistry,
   WriteOutcome,
 } from "@mamep2026/communication";
 import { NodeTcpPlatformHost } from "@mamep2026/platform-node/tcp";
@@ -30,6 +31,7 @@ import type {
 
 export interface ElectronSessionHostOptions {
   platform: NodeTcpPlatformHost;
+  codecRegistry?: CodecRegistry;
   /** 会话事件（由 main.ts 转换为 HostMessage v2 event 推送 Renderer）。 */
   events: SessionHostEvents;
   /**
@@ -47,6 +49,9 @@ export class ElectronSessionHost {
     this.platform = options.platform;
     this.tcp = new TcpSessionHost({
       clock: options.platform.clock,
+      ...(options.codecRegistry
+        ? { codecRegistry: options.codecRegistry }
+        : {}),
       events: options.events,
       // 自动重连：重连时由协调器重新打开 TCP 传输。
       openTransport: (profile) => this.platform.openTcpTransport(profile),
@@ -58,6 +63,8 @@ export class ElectronSessionHost {
 
   /** 打开并连接 TCP 会话（session-tcp-connect；profile 即连接参数，无串口句柄）。 */
   async connectTcp(profile: TcpConnectionProfile): Promise<Result<void>> {
+    const valid = this.tcp.validateProfile(profile);
+    if (!valid.ok) return valid;
     const openResult = await this.platform.openTcpTransport(profile);
     if (!openResult.ok) return openResult;
     return this.tcp.connect({

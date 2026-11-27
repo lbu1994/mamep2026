@@ -66,7 +66,17 @@ export const ADDRESS_TRANSFORM_CONTRIBUTION_SCHEMA = z.object({
   protocol: z.string().min(1),
   titleKey: z.string().optional(),
   /** 默认启用状态（表级配置缺省时采用；核心内置默认 OFF）。 */
-  defaultConfig: z.object({ enabled: z.boolean() }).optional(),
+  defaultConfig: z
+    .object({
+      enabled: z.boolean(),
+      parameters: z
+        .record(
+          z.string(),
+          z.union([z.string(), z.number().finite(), z.boolean()]),
+        )
+        .optional(),
+    })
+    .optional(),
 });
 
 /** theme 色板预设：单条可选主题色（支持一个或多个；

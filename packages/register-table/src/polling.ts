@@ -14,7 +14,11 @@ import type {
   RegisterSheet,
   RequestRoute,
 } from "@mamep2026/domain";
-import { formatRawValue, isFloatType, isValidRegisterCount } from "@mamep2026/data-conversion";
+import {
+  formatRawValue,
+  isFloatType,
+  isValidRegisterCount,
+} from "@mamep2026/data-conversion";
 import { applyAddressTransform, resolveSheetAddressTransform } from "./address";
 import { applyReadValueToRow, applyReadValuesToRow } from "./row-operations";
 
@@ -43,16 +47,25 @@ export function buildPollingTargets(
   options?: {
     resolveAddressTransform?: (id: string) => AddressTransform | null;
     resolveProtocol?: (sheetType: string) => string;
+    resolveRoute?: (sheet: RegisterSheet) => RequestRoute;
   },
 ): PollingTarget[] {
   const resolve = options?.resolveAddressTransform;
   const resolveProtocol = options?.resolveProtocol ?? (() => "rtu");
   const targets: PollingTarget[] = [];
   for (const sheet of sheets) {
-    const transform = sheetTransform(sheet, resolve);
+    const route = options?.resolveRoute?.(sheet);
+    const transform =
+      route?.addressTransform !== undefined
+        ? null
+        : sheetTransform(sheet, resolve);
     for (const row of sheet.rows) {
       if (!row.pollingEnabled) continue;
-      if (isFloatType(row.dataType) && !isValidRegisterCount(row.dataType, row.registerCount)) continue;
+      if (
+        isFloatType(row.dataType) &&
+        !isValidRegisterCount(row.dataType, row.registerCount)
+      )
+        continue;
       const address = row.addressValue?.value;
       if (address === undefined) continue;
       const sent = applyAddressTransform(address, transform);
@@ -63,7 +76,7 @@ export function buildPollingTargets(
         address: sent.value,
         // 多寄存器行：一次 FC03 轮询全部连续寄存器。
         quantity: row.registerCount,
-        route: {
+        route: route ?? {
           unitAddress: sheet.slaveAddress,
           protocol: resolveProtocol(sheet.type),
         },
@@ -108,11 +121,19 @@ export function pollResultTargetMatches(
   if (row === undefined) return false;
   if (event.route.unitAddress !== sheet.slaveAddress) return false;
   if (
+    event.route.addressTransform !== undefined &&
+    JSON.stringify(event.route.addressTransform) !==
+      JSON.stringify(sheet.addressTransform)
+  )
+    return false;
+  if (
     options?.resolveProtocol !== undefined &&
     event.route.protocol !== options.resolveProtocol(sheet.type)
   ) {
     return false;
   }
+  if (event.route.addressTransform !== undefined)
+    return row.addressValue?.value === event.address;
   return pollResultAddressMatches(
     row,
     sheet,

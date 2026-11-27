@@ -35,6 +35,7 @@ import type {
   Workspace,
   WorkspaceRecoveryInfo,
   AddressTransform,
+  AddressTransformConfig,
 } from "@mamep2026/domain";
 import type { ApplicationMessage } from "@mamep2026/logging";
 import {
@@ -158,6 +159,7 @@ export class ElectronAppHost
   private activeProtocol: "rtu" | "tcp" | null = null;
   /** TCP 连接配置本地镜像（通信属性摘要用）。 */
   private tcpProfile: TcpConnectionProfile | null = null;
+  private tcpAddressTransform: AddressTransformConfig | null = null;
   private currentTcpUnitId = 0;
   /** TCP 连接状态本地镜像（connection-state 事件刷新）。 */
   private tcpConnectionState: ConnectionState = "disconnected";
@@ -464,7 +466,7 @@ export class ElectronAppHost
       .sessionTcpConnect({ profile: toTcpConnectionProfilePayload(profile) })
       .then((r) => {
         if (!r.ok) return r;
-        this.tcpProfile = profile;
+        this.tcpProfile = { ...profile };
         this.currentTcpUnitId = profile.unitId;
         this.portLabel = `${profile.host}:${profile.port}`;
         this.tcpConnectionState = "connected";
@@ -618,7 +620,11 @@ export class ElectronAppHost
 
   private fallbackRoute(): RequestRoute {
     if (this.activeProtocol === "tcp") {
-      return { unitAddress: this.currentTcpUnitId, protocol: "tcp" };
+      return {
+        unitAddress: this.currentTcpUnitId,
+        protocol: this.tcpProfile?.codecId ?? "tcp",
+        addressTransform: this.tcpAddressTransform,
+      };
     }
     return (
       this.inner.getSession()?.getCurrentRoute() ?? {
@@ -628,13 +634,24 @@ export class ElectronAppHost
     );
   }
 
-  /** 更新活动表地址变换配置：Electron RTU 会话本地（inner）；TCP 无地址变换（恒不调整）。 */
+  /** Cache the active TCP table mapping for fallback requests; RTU remains local. */
   setAddressTransform(
     config: {
       transformId: string;
       enabled: boolean;
+      parameters?:
+        Readonly<Record<string, string | number | boolean>> | undefined;
     } | null,
   ): void {
+    this.tcpAddressTransform =
+      config === null
+        ? null
+        : {
+            ...config,
+            ...(config.parameters
+              ? { parameters: { ...config.parameters } }
+              : {}),
+          };
     if (this.activeProtocol !== "tcp") {
       this.inner.setAddressTransform(config);
     }

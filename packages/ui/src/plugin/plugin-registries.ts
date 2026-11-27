@@ -55,7 +55,11 @@ export interface AddressTransformContribution {
   id: string;
   protocol: string;
   titleKey?: string;
-  defaultConfig?: { enabled: boolean };
+  defaultConfig?: {
+    enabled: boolean;
+    parameters?:
+      Readonly<Record<string, string | number | boolean>> | undefined;
+  };
 }
 
 /**

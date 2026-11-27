@@ -36,6 +36,22 @@
 
 > Android 端：`build:android`（web `--mode android` → `cap sync` → `gradlew assembleDebug`，需 JDK ≤24，详见 `apps/android/README.md`）与 `test:e2e:android`（真机 TCP e2e，需 USB 调试 + 解锁屏幕，**不进 `test:all`**）；不提供 `dev:android`。
 
+### Electron TCP 插件消费专项
+
+```powershell
+pnpm --filter @mamep2026/application test tcp-plugin-routing.test.ts tcp-session-host.test.ts
+pnpm --filter @mamep2026/platform-api test session-payloads.test.ts
+pnpm --filter @mamep2026/ui test request-route.test.ts connection-actions.test.ts RegisterTable.test.tsx
+pnpm --filter @mamep2026/e2e-electron test tcp-plugin-routing.spec.ts
+```
+
+最后一条命令先构建生产 Electron，再通过真实 Renderer/Preload/Main 和本机 TCP socket
+执行专用 MBAP 测试插件。用例从设置页安装并授权插件，创建插件表，连接后验证地址变换、
+参数编辑、读写、日志及停用后拒绝新请求；附件 `tcp-plugin-evidence.json` 保存报文和日志。
+测试插件位于 `tests/e2e-electron/fixtures/`，不会随应用自动安装。
+该检查使用模拟设备，不代表厂商设备验证；会话层使用 Fake Transport 和 Virtual Clock
+覆盖批量读取、轮询、Trace、超时重试、取消、撤销及迟到响应。
+
 ### 宿主插件状态回传专项
 
 针对性检查入口：

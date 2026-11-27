@@ -3,6 +3,7 @@
  * 采样走统一调度器；缓冲与历史数据由调用方（register-table / UI）管理。
  */
 import type { RequestRoute } from "@mamep2026/domain";
+import { snapshotRequestRoute } from "@mamep2026/domain";
 import type { Clock, TimeoutHandle } from "./clock";
 import type { CommunicationSession, ReadRequestContext } from "./session";
 import {
@@ -86,7 +87,7 @@ export class TraceCoordinator {
       address,
       speedMs,
       quantity,
-      route: Object.freeze({ ...(route ?? this.session.getCurrentRoute()) }),
+      route: snapshotRequestRoute(route ?? this.session.getCurrentRoute()),
       timer: null,
       inFlight: false,
       sequence: 0,

@@ -4,6 +4,7 @@ import type { CompatibilityEnv } from "@mamep2026/platform-web";
 import { buildPollingTargets } from "@mamep2026/register-table";
 import {
   requestProtocolResolver,
+  requestRouteForSheet,
   useAppStore,
   type AppHost,
   type FieldPerformanceSettings,
@@ -229,6 +230,7 @@ export default function App(): React.ReactNode {
           buildPollingTargets(state.workspace.sheets, {
             resolveAddressTransform: resolveTransformRef.current,
             resolveProtocol: requestProtocolResolver(host),
+            resolveRoute: (sheet) => requestRouteForSheet(host, sheet),
           }),
         );
       });

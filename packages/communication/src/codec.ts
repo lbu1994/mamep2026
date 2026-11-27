@@ -57,6 +57,8 @@ export interface FrameParser {
 export interface ProtocolCodec {
   /** 协议唯一 ID（如 "yaskawa-memobus"），即会话 protocol 的 codecId。 */
   protocolId: string;
+  /** TCP codecs must opt in. Existing codecs retain their RTU transport contract. */
+  transport?: "rtu" | "tcp";
   /** 单次读上限（缺省 125，对齐 FC03 语义）。 */
   maxRead?: number;
   /** 单次写上限（缺省 123，对齐 FC0x10 语义）。 */
@@ -86,6 +88,7 @@ export interface CodecRegistrationScope {
 /** A session retains this registration; replacement never revives an old lease. */
 export interface CodecLease {
   readonly codec: ProtocolCodec;
+  readonly pluginId: string | null;
   isCurrent(): boolean;
 }
 
@@ -104,7 +107,7 @@ export interface CodecRegistry {
 export function createCodecRegistry(): CodecRegistry {
   const codecs = new Map<
     string,
-    { codec: ProtocolCodec; owner: object | null }
+    { codec: ProtocolCodec; owner: { pluginId: string } | null }
   >();
   const list = () => Array.from(codecs.keys());
   return {
@@ -121,6 +124,7 @@ export function createCodecRegistry(): CodecRegistry {
         ? undefined
         : {
             codec: entry.codec,
+            pluginId: entry.owner?.pluginId ?? null,
             isCurrent: () => codecs.get(id) === entry,
           };
     },

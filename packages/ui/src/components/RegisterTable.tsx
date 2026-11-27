@@ -154,6 +154,7 @@ type DeferredSelectComponent = <
 const Select = lazy(
   () => import("antd/es/select"),
 ) as unknown as DeferredSelectComponent;
+const TransformNumberInput = lazy(() => import("antd/es/input-number"));
 const MobileNativeSelectContext = createContext(false);
 
 const SLAVE_ADDRESS_OPTIONS = Array.from({ length: 256 }, (_, value) => ({
@@ -2831,6 +2832,17 @@ const RegisterTableContent = memo(function RegisterTableContent({
     host !== null && host !== undefined && connectionState === "connected"
       ? host.getCommProperties().protocol
       : "rtu";
+  const tcpTransforms = addressTransformContributions.filter(({ payload }) => {
+    const sheet = useAppStore
+      .getState()
+      .workspace.sheets.find((entry) => entry.sheetId === sheetId);
+    return (
+      payload.protocol === "tcp" ||
+      (sheet !== undefined &&
+        host != null &&
+        payload.protocol === requestRouteForSheet(host, sheet).protocol)
+    );
+  });
 
   const handleReadAll = async (): Promise<void> => {
     if (
@@ -4078,6 +4090,113 @@ const RegisterTableContent = memo(function RegisterTableContent({
             </span>
           </Tooltip>
         </div>
+        {activeProtocol === "tcp" &&
+        host?.platform === "electron" &&
+        (tcpTransforms.length > 0 || sheetAddressTransform?.enabled) ? (
+          <span className="table-toolbar__adjust">
+            <span className="table-toolbar__adjust-label">
+              {t("table.addressAdjust")}
+            </span>
+            <DeferredSelect
+              aria-label={t("table.addressAdjust")}
+              style={{ minWidth: 140 }}
+              value={
+                sheetAddressTransform?.enabled
+                  ? sheetAddressTransform.transformId
+                  : ""
+              }
+              options={[
+                { value: "", label: t("table.addressAdjustOff") },
+                ...tcpTransforms.map(({ payload }) => ({
+                  value: payload.id,
+                  label: payload.titleKey ? t(payload.titleKey) : payload.id,
+                })),
+              ]}
+              onChange={(id) => {
+                const transform = tcpTransforms.find(
+                  ({ payload }) => payload.id === id,
+                )?.payload;
+                setSheetAddressTransform(
+                  sheetId,
+                  transform === undefined
+                    ? null
+                    : {
+                        transformId: transform.id,
+                        enabled: true,
+                        ...(transform.defaultConfig?.parameters
+                          ? {
+                              parameters: {
+                                ...transform.defaultConfig.parameters,
+                              },
+                            }
+                          : {}),
+                      },
+                );
+              }}
+            />
+            {sheetAddressTransform?.enabled
+              ? Object.entries(sheetAddressTransform.parameters ?? {}).map(
+                  ([name, value]) => (
+                    <label key={name}>
+                      {name}
+                      {typeof value === "boolean" ? (
+                        <Checkbox
+                          aria-label={name}
+                          checked={value}
+                          onChange={(event) => {
+                            setSheetAddressTransform(sheetId, {
+                              ...sheetAddressTransform,
+                              parameters: {
+                                ...sheetAddressTransform.parameters,
+                                [name]: event.target.checked,
+                              },
+                            });
+                          }}
+                        />
+                      ) : typeof value === "number" ? (
+                        <Suspense fallback={<span aria-hidden="true" />}>
+                          <TransformNumberInput
+                            aria-label={name}
+                            value={value}
+                            style={{ width: 96 }}
+                            onChange={(next) => {
+                              if (
+                                typeof next !== "number" ||
+                                !Number.isFinite(next)
+                              )
+                                return;
+                              setSheetAddressTransform(sheetId, {
+                                ...sheetAddressTransform,
+                                parameters: {
+                                  ...sheetAddressTransform.parameters,
+                                  [name]: next,
+                                },
+                              });
+                            }}
+                          />
+                        </Suspense>
+                      ) : (
+                        <Input
+                          aria-label={name}
+                          value={value}
+                          style={{ width: 96 }}
+                          onChange={(event) => {
+                            setSheetAddressTransform(sheetId, {
+                              ...sheetAddressTransform,
+                              parameters: {
+                                ...sheetAddressTransform.parameters,
+                                [name]: event.target.value,
+                              },
+                            });
+                          }}
+                        />
+                      )}
+                    </label>
+                  ),
+                )
+              : null}
+          </span>
+        ) : null}
         {/* 表级 Address Adjust：每表独立 OFF/ON；
             选项来自 addressTransform 贡献（内置恒在），仅 RTU 显示。 */}
         {activeProtocol === "rtu" &&

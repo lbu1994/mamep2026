@@ -6,6 +6,8 @@
 import { describe, expect, it } from "vitest";
 import {
   commLogEventFromPayload,
+  requestRoutePayloadSchema,
+  sessionTcpConnectPayloadSchema,
   traceSamplePayloadSchema,
   readVerifySettingsFromPayload,
   registerRowFromPayload,
@@ -19,6 +21,52 @@ import {
   toTcpConnectionProfilePayload,
   toWriteOutcomePayload,
 } from "./session-payloads";
+
+describe("TCP plugin request snapshots", () => {
+  it("retains scalar transform parameters and rejects nested or non-finite values", () => {
+    const route = {
+      unitAddress: 7,
+      protocol: "vendor-tcp",
+      addressTransform: {
+        transformId: "offset",
+        enabled: true,
+        parameters: { offset: 10, bank: "A", active: true },
+      },
+    };
+    expect(
+      requestRoutePayloadSchema.parse(JSON.parse(JSON.stringify(route))),
+    ).toEqual(route);
+    for (const offset of [Infinity, { value: 10 }, [10]]) {
+      expect(
+        requestRoutePayloadSchema.safeParse({
+          ...route,
+          addressTransform: {
+            ...route.addressTransform,
+            parameters: { offset },
+          },
+        }).success,
+      ).toBe(false);
+    }
+  });
+  it("retains a codec ID in the versioned TCP connect payload", () => {
+    const payload = {
+      profile: {
+        id: "tcp",
+        name: "TCP",
+        protocol: "tcp",
+        codecId: "vendor-tcp",
+        host: "127.0.0.1",
+        port: 502,
+        unitId: 7,
+        connectTimeoutMs: 100,
+        requestTimeoutMs: 100,
+        retryCount: 0,
+        autoReconnect: false,
+      },
+    };
+    expect(sessionTcpConnectPayloadSchema.parse(payload)).toEqual(payload);
+  });
+});
 
 describe("Trace sample identity", () => {
   it("retains request identity, route, generation, and timestamp across JSON", () => {

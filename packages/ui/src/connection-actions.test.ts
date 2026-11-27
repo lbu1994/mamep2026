@@ -115,6 +115,28 @@ describe("canDirectConnect（关键字段已就绪判定）", () => {
 });
 
 describe("runConnect（与连接设置弹窗同源）", () => {
+  it("passes an Electron TCP codec separately from the transport and clears it for core tables", async () => {
+    const { host, connectTcp } = makeHost({}, { platform: "electron" });
+    const profile = { ...createDefaultTcpProfile(), codecId: "previous" };
+    const options = {
+      protocol: "tcp" as const,
+      profile,
+      sheetProtocol: "vendor-tcp",
+      handle: null,
+      isMock: false,
+    };
+    await runConnect(host, options);
+    expect(connectTcp).toHaveBeenLastCalledWith({
+      ...profile,
+      codecId: "vendor-tcp",
+    });
+    await runConnect(host, {
+      ...options,
+      sheetProtocol: "modbus-basic-tables:coil",
+    });
+    expect(connectTcp.mock.calls.at(-1)?.[0]).not.toHaveProperty("codecId");
+    expect(profile.codecId).toBe("previous");
+  });
   it("TCP → 调 host.connectTcp（携带 profile）", async () => {
     const { host, connectTcp } = makeHost();
     const profile = createDefaultTcpProfile();
