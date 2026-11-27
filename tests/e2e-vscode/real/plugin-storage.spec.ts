@@ -9,6 +9,8 @@ import {
 } from "@playwright/test";
 import { downloadAndUnzipVSCode } from "@vscode/test-electron";
 import { createHash } from "node:crypto";
+import { createServer, type Socket } from "node:net";
+import { pathToFileURL } from "node:url";
 import {
   cp,
   mkdir,
@@ -43,7 +45,7 @@ interface Plugin {
     executionRequirements?: { version: 1; requiredExecution: Mode };
     platform: { web: boolean; node: boolean };
     permissions: string[];
-    contributes: Record<string, never>;
+    contributes: Record<string, unknown>;
   };
   enabled: boolean;
   entrySource: string;
@@ -57,6 +59,17 @@ interface Store {
 type Result<T> =
   { ok: true; value: T } | { ok: false; error: { code: string } };
 interface StorageBridge {
+  hostPluginState(): Promise<
+    Result<{
+      revision: number;
+      plugins: {
+        pluginId: string;
+        generation: number;
+        stage: string;
+        contributions: { protocolIds: string[] };
+      }[];
+    }>
+  >;
   pluginStoreLoad(): Promise<Result<Store>>;
   pluginStoreSave(data: Store): Promise<Result<null>>;
   getDebugState(): Promise<Result<unknown>>;
@@ -504,6 +517,301 @@ function unapproved(id: string, name: string, source: string): Plugin {
     executionMode: "isolated",
   };
 }
+
+storageTest(
+  "vendor host failure, retry and lifecycle reach the production Webview",
+  async ({ run }, info) => {
+    const id = "yaskawa-memobus-67h-010dh-010eh";
+    const artifact = path.join(ROOT, "release/plugins", id);
+    const marker = path.join(run.directory, "vendor-ready");
+    const record = unapproved(id, "Yaskawa MEMOBUS", "");
+    record.manifest = JSON.parse(
+      await readFile(path.join(artifact, "manifest.json"), "utf8"),
+    );
+    record.executionMode = "same-process";
+    record.entrySource = await readFile(
+      path.join(artifact, `${id}.mjs`),
+      "utf8",
+    );
+    // Only the Extension Host fails. Preview and Webview activation still execute the vendor entry.
+    record.entrySource += `\nif (globalThis.process?.versions?.node) {
+    const fs = await import("node:fs");
+    if (!fs.existsSync(${JSON.stringify(marker)})) throw new Error("Vendor dependency unavailable");
+  }`;
+    let frame = await run.launch();
+    await saveStore(frame, { schemaVersion: 6, plugins: [record] });
+    await run.close();
+    frame = await run.launch();
+    await approve(frame, record.manifest.name, "same-process");
+    const state = frame.getByTestId(`host-plugin-state-${id}`);
+    const table = frame.getByRole("button", {
+      name: "Read/write via 67H 010DH/010EH",
+      exact: true,
+    });
+    const snapshot = () =>
+      frame.evaluate(() =>
+        (
+          window as unknown as { mamepHost: StorageBridge }
+        ).mamepHost.hostPluginState(),
+      );
+    await expect(state).toContainText("Host: failed");
+    await expect(state).toContainText("Vendor dependency unavailable");
+    await expect(table).toHaveCount(0);
+    const failed = await snapshot();
+    expect(failed).toMatchObject({
+      ok: true,
+      value: {
+        plugins: [{ stage: "failed", contributions: { protocolIds: [] } }],
+      },
+    });
+    const saved = await loadStore(frame);
+    expectApproval(saved.plugins[0] ?? record);
+
+    // Recover the fixture dependency without changing source or approval, then use the real retry button.
+    await writeFile(marker, "ready");
+    await pluginRow(frame, record.manifest.name)
+      .getByRole("button", { name: "Reload on host", exact: true })
+      .click();
+    await expect(state).toContainText("Host: active");
+    await expect(state).not.toContainText("Vendor dependency unavailable");
+    const recovered = await snapshot();
+    expect(recovered).toMatchObject({
+      ok: true,
+      value: {
+        plugins: [{ stage: "active", contributions: { protocolIds: [id] } }],
+      },
+    });
+    expect(await loadStore(frame)).toEqual(saved);
+    await frame.locator(".settings-drawer .ant-drawer-close").click();
+    await expect(table).toBeVisible();
+    await frame.getByRole("button", { name: "Settings", exact: true }).click();
+    await frame
+      .locator(".settings-drawer")
+      .getByRole("tab", { name: "Plugins" })
+      .click();
+    const toggle = pluginRow(frame, record.manifest.name).getByRole("switch");
+    await toggle.click();
+    await expect(state).toContainText("Host: disabled");
+    await expect(table).toHaveCount(0);
+    await toggle.click();
+    await expect(state).toContainText("Host: active");
+    await run.close();
+    expect(run.diskStore()).toEqual(saved);
+    frame = await run.launch();
+    await expect(frame.getByTestId(`host-plugin-state-${id}`)).toContainText(
+      "Host: active",
+    );
+    await pluginRow(frame, record.manifest.name)
+      .getByRole("button", { name: "Uninstall", exact: true })
+      .click();
+    const dialog = frame
+      .locator(".ant-modal-container")
+      .filter({ hasText: "Uninstall this plugin?" });
+    await dialog
+      .getByRole("button", { name: "Uninstall", exact: true })
+      .click();
+    await expect(pluginRow(frame, record.manifest.name)).toHaveCount(0);
+    await expect
+      .poll(snapshot)
+      .toMatchObject({ ok: true, value: { plugins: [] } });
+    await expect(
+      frame.getByRole("button", {
+        name: "Read/write via 67H 010DH/010EH",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await info.attach("vendor-host-states", {
+      body: JSON.stringify({ failed, recovered }, null, 2),
+      contentType: "application/json",
+    });
+  },
+);
+
+storageTest(
+  "TCP plugin codec and revocation cross the production Webview bridge",
+  async ({ run }, info) => {
+    // Reuse the same explicit TCP codec as the Electron production routing test.
+    const entryPath = path.join(
+      ROOT,
+      "tests/e2e-electron/fixtures/tcp-plugin.mjs",
+    );
+    const entry: { manifest: Plugin["manifest"] } = await import(
+      pathToFileURL(entryPath).href
+    );
+    const record = unapproved(
+      entry.manifest.id,
+      entry.manifest.name,
+      await readFile(entryPath, "utf8"),
+    );
+    record.manifest = entry.manifest;
+    record.executionMode = "same-process";
+    const received: number[][] = [];
+    const sockets = new Set<Socket>();
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      let pending = Buffer.alloc(0);
+      socket.on("data", (chunk) => {
+        pending = Buffer.concat([pending, chunk]);
+        while (pending.length >= 7) {
+          const length = pending.readUInt16BE(4) + 6;
+          if (pending.length < length) return;
+          const request = pending.subarray(0, length);
+          pending = pending.subarray(length);
+          received.push([...request]);
+          // One register with a fixed independent value; preserve the request transaction and unit.
+          socket.write(
+            Buffer.from([
+              request[0] ?? 0,
+              request[1] ?? 0,
+              0,
+              0,
+              0,
+              5,
+              request[6] ?? 0,
+              65,
+              2,
+              0x12,
+              0x34,
+            ]),
+          );
+        }
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const endpoint = server.address();
+    if (endpoint === null || typeof endpoint === "string")
+      throw new Error("Missing TCP fixture endpoint");
+    let frame: Frame | undefined;
+    try {
+      frame = await run.launch();
+      await saveStore(frame, { schemaVersion: 6, plugins: [record] });
+      await run.close();
+      frame = await run.launch();
+      await approve(frame, record.manifest.name, "same-process");
+      await expect(
+        frame.getByTestId(`host-plugin-state-${record.manifest.id}`),
+      ).toContainText("Host: active");
+      const connected = await frame.evaluate(async (port) => {
+        const profile = {
+          id: "tcp-plugin",
+          name: "TCP plugin",
+          protocol: "tcp" as const,
+          codecId: "fixture-tcp",
+          host: "127.0.0.1",
+          port,
+          unitId: 1,
+          connectTimeoutMs: 1000,
+          requestTimeoutMs: 1000,
+          retryCount: 0,
+          autoReconnect: false,
+        };
+        const bridge = (
+          window as unknown as {
+            mamepHost: {
+              sessionTcpConnect(payload: {
+                profile: typeof profile;
+              }): Promise<Result<null>>;
+            };
+          }
+        ).mamepHost;
+        return bridge.sessionTcpConnect({ profile });
+      }, endpoint.port);
+      expect(connected).toEqual({ ok: true, value: null });
+      const read = (target: Frame) =>
+        target.evaluate(async () => {
+          const rows = [
+            { key: "vendor-row", sheetId: "vendor-sheet", address: 10 },
+          ];
+          const route = {
+            unitAddress: 1,
+            protocol: "fixture-tcp",
+            addressTransform: {
+              transformId: "fixture.offset",
+              enabled: true,
+              parameters: { offset: 5 },
+            },
+          };
+          const bridge = (
+            window as unknown as {
+              mamepHost: {
+                onEvent(
+                  listener: (event: { kind: string; payload: unknown }) => void,
+                ): () => void;
+                sessionBatchRead(
+                  id: string,
+                  requestRows: typeof rows,
+                  requestRoute: typeof route,
+                ): Promise<
+                  Result<{
+                    summary: { successCount: number; cancelledCount: number };
+                  }>
+                >;
+              };
+            }
+          ).mamepHost;
+          const events: unknown[] = [];
+          const unsubscribe = bridge.onEvent((event) => {
+            if (event.kind === "poll-result") events.push(event.payload);
+          });
+          try {
+            const response = await bridge.sessionBatchRead(
+              "vendor-tcp-read",
+              rows,
+              route,
+            );
+            return { response, events };
+          } finally {
+            unsubscribe();
+          }
+        });
+      const result = await read(frame);
+      expect(result).toMatchObject({
+        response: { ok: true, value: { summary: { successCount: 1 } } },
+      });
+      expect(result.events).toContainEqual(
+        expect.objectContaining({
+          key: "vendor-row",
+          address: 10,
+          result: { ok: true, value: 0x1234 },
+        }),
+      );
+      expect(received).toHaveLength(1);
+      expect(received[0]?.slice(2)).toEqual([0, 0, 0, 6, 1, 65, 0, 15, 0, 1]);
+      await pluginRow(frame, record.manifest.name).getByRole("switch").click();
+      await expect(
+        frame.getByTestId(`host-plugin-state-${record.manifest.id}`),
+      ).toContainText("Host: disabled");
+      const revoked = await read(frame);
+      expect(revoked).toMatchObject({
+        response: { ok: true, value: { summary: { cancelledCount: 1 } } },
+      });
+      expect(received).toHaveLength(1);
+      await info.attach("tcp-plugin-requests", {
+        body: JSON.stringify({ received, result, revoked }, null, 2),
+        contentType: "application/json",
+      });
+    } finally {
+      try {
+        if (frame !== undefined && !frame.isDetached())
+          await frame.evaluate(() =>
+            (
+              window as unknown as {
+                mamepHost: { sessionDisconnect(): Promise<Result<null>> };
+              }
+            ).mamepHost.sessionDisconnect(),
+          );
+      } finally {
+        for (const socket of sockets) socket.destroy();
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+    }
+  },
+);
 
 storageTest(
   "production Webview storage isolation, forged messages and disabled restart",

@@ -219,6 +219,55 @@ Android 的 `tests/e2e-android/tests/plugin-runtime.spec.ts` 包含同一攻击�
 该套件会安装 APK 并清空测试应用数据，必须使用已准备的测试设备；桌面浏览器结果不能
 作为 Android 真机结果。
 
+## 厂商协议插件跨宿主专项
+
+本专项使用可安装的 MEMOBUS 插件源码，保留用户确认的 `same-process` 授权流程。
+插件内部测试通过内存存储、Fake Transport 和 Virtual Clock 检查启停、卸载、源码替换、
+失败隔离、能力快照、迟到响应及旧会话撤销；这些是离线证据，不替代设备通信结果。
+MEMOBUS 仅支持 RTU。TCP 正向链路使用显式声明 `transport: "tcp"` 的独立测试插件，
+不能将其结果描述为 MEMOBUS 支持 TCP。浏览器不开放直连 TCP。
+
+在仓库根执行：
+
+```powershell
+pnpm --filter @mamep2026/yaskawa-memobus-67h-010dh-010eh test
+pnpm --filter @mamep2026/platform-node exec vitest run src/host-plugin-runtime.test.ts src/plugin-local-runtime.test.ts
+pnpm --filter @mamep2026/vscode-extension exec vitest run src/session-host.test.ts src/ipc.test.ts
+pnpm build:plugins
+pnpm build
+$env:NO_PROXY = "localhost,127.0.0.1,::1"
+pnpm --filter @mamep2026/e2e-web exec playwright test -c playwright.plugin-production.config.ts vendor-plugin.spec.ts --trace on
+pnpm build:electron
+pnpm --filter @mamep2026/e2e-electron exec playwright test tests/plugin-host-execution.spec.ts tests/tcp-plugin-routing.spec.ts --trace on
+pnpm build:vscode
+$env:MAMEP_VSCODE_EXECUTABLE = "C:/Program Files/Microsoft VS Code/Code.exe"
+pnpm --filter @mamep2026/e2e-vscode exec playwright test -c playwright.storage.config.ts -g "vendor host failure|TCP plugin codec"
+```
+
+浏览器验收生产 CSP 下的安装、禁用、重载、重新启用和卸载。Electron 同时检查 Renderer
+贡献与 Main 状态；TCP 场景使用回环端口。VSCode 使用独立用户目录安装生产扩展，通过
+真实 Webview 确认宿主错误、贡献隐藏、单插件重试、禁用后重新启用、重启与卸载；恢复
+测试只改变临时依赖文件，不改源码或批准。TCP 场景经实际 RPC、Extension Host 和本机
+回环端口收发报文，按固定响应检查数据，并核对表级地址变换后的实际发送地址；禁用后旧
+会话不得继续发送。所有测试进程与临时用户目录均由夹具清理。
+
+Web/Electron trace 与状态附件位于各自的 `test-results/`；VSCode JSON 报告位于
+`tests/e2e-vscode/test-results/plugin-storage.json`，trace、状态、请求和清理附件位于同级
+`plugin-storage/`。`pnpm test:e2e:vscode:storage` 会先构建插件与生产扩展，再运行包括
+存储隔离在内的全部该配置用例。
+
+Android 的 `tests/e2e-android/tests/plugin-runtime.spec.ts` 包含 MEMOBUS 授权、启停、重载
+和卸载用例。准备已授权真机与 SDK 后，按下方 Android 前置说明执行：
+
+```powershell
+pnpm build:plugins
+pnpm build:android
+pnpm --filter @mamep2026/e2e-android exec playwright test tests/plugin-runtime.spec.ts -g "vendor MEMOBUS"
+```
+
+Android 真机未执行时必须保留待办，不能用浏览器或 Node 测试替代。生产窗口测试中的
+模拟传输、回环 TCP 和界面贡献也不证明物理串口、厂商设备或 Android 原生桥已验收。
+
 ## Data、后台轮询与 VSCode 生命周期专项
 
 在仓库根执行局部回归：

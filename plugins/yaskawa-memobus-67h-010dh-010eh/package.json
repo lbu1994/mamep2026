@@ -17,8 +17,10 @@
     "@mamep2026/plugin-api": "workspace:*"
   },
   "devDependencies": {
+    "@mamep2026/platform-node": "workspace:*",
     "@mamep2026/test-kit": "workspace:*",
     "@mamep2026/typescript-config": "workspace:*",
+    "esbuild": "^0.25.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

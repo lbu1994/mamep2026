@@ -366,6 +366,55 @@ test("same-process 可执行插件贡献在真机生效（表列表出现插件�
   expect(await storedPlugin(CUSTOM_FC_PLUGIN)).toBeUndefined();
 });
 
+test("vendor MEMOBUS approval, disable, reload and uninstall remove stale contributions", async () => {
+  const page = session.page;
+  const id = "yaskawa-memobus-67h-010dh-010eh";
+  const name = "Yaskawa MEMOBUS";
+  const contribution = page
+    .locator(".sheet-sidebar__group-title")
+    .filter({ hasText: "Yaskawa MEMOBUS" });
+  try {
+    await openPluginsSection();
+    await installPluginByFile({
+      filePath: pluginArtifact(id, `${id}.mjs`),
+      sameProcess: true,
+    });
+    expect((await storedPlugin(id))?.executionMode).toBe("same-process");
+    await closeSettings();
+    await openTableList();
+    await expect(contribution).toBeVisible();
+    await closeTableList();
+    const manager = await openPluginsSection();
+    const toggle = manager
+      .locator(".ant-listy-item")
+      .filter({ hasText: name })
+      .getByRole("switch");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect
+      .poll(async () => (await storedPlugin(id))?.enabled)
+      .toBe(false);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForAppReady();
+    await openTableList();
+    await expect(contribution).toHaveCount(0);
+    await closeTableList();
+    await openPluginsSection();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await closeSettings();
+    await openTableList();
+    await expect(contribution).toBeVisible();
+    await closeTableList();
+  } finally {
+    if (await storedPlugin(id)) await uninstallPlugin(name);
+  }
+  await openTableList();
+  await expect(contribution).toHaveCount(0);
+  await closeTableList();
+  expect(await storedPlugin(id)).toBeUndefined();
+});
+
 test("isolated plugin cannot access workspace, backup or consent, including after reload", async () => {
   const page = session.page;
   const section = await openPluginsSection();

@@ -307,7 +307,7 @@ export class HostPluginRuntime {
           this.registry.unregister(pluginId);
           this.loaded.delete(pluginId);
           this.transforms.delete(pluginId);
-          await this.loadPlugin(pluginId, next, true);
+          await this.loadPlugin(pluginId, next);
         }
       }
       this.retryIds.clear();
@@ -376,7 +376,6 @@ export class HostPluginRuntime {
       entrySource: string;
       approval: PluginApproval;
     },
-    fresh = false,
   ): Promise<void> {
     const state = this.states.get(pluginId);
     if (state === undefined) return;
@@ -389,7 +388,10 @@ export class HostPluginRuntime {
       addressTransformIds: [],
     };
     this.publish();
-    const entryResult = await loadNodePluginEntry(next.entrySource, { fresh });
+    // Every new generation must avoid cached import failures, including re-enable after recovery.
+    const entryResult = await loadNodePluginEntry(next.entrySource, {
+      fresh: true,
+    });
     if (this.disposed) return;
     if (!entryResult.ok) {
       this.report(

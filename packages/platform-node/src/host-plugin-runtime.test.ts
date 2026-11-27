@@ -202,7 +202,8 @@ describe("host execution snapshots", () => {
       "if (!globalThis.__hostImportRecovered) throw new Error('host import unavailable');\n" +
       entrySource({ pluginId: "retry-import" });
     const store = new MemoryPluginStore();
-    store.setPlugins([storedPlugin({ pluginId: "retry-import", source })]);
+    const record = storedPlugin({ pluginId: "retry-import", source });
+    store.setPlugins([record]);
     const runtime = createHostPluginRuntime({ store });
     try {
       await runtime.sync();
@@ -212,6 +213,13 @@ describe("host execution snapshots", () => {
       );
       vi.stubGlobal("__hostImportRecovered", true);
       await runtime.reload("retry-import");
+      expect(runtime.getSnapshot().plugins[0]?.stage).toBe("active");
+      // A later rebuild must not reuse the original rejected ESM evaluation.
+      store.setPlugins([{ ...record, enabled: false }]);
+      await runtime.sync();
+      expect(runtime.getSnapshot().plugins[0]?.stage).toBe("disabled");
+      store.setPlugins([record]);
+      await runtime.sync();
       expect(runtime.getSnapshot().plugins[0]?.stage).toBe("active");
     } finally {
       runtime.dispose();

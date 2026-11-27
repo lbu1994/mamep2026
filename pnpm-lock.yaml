@@ -959,12 +959,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/plugin-api
     devDependencies:
+      '@mamep2026/platform-node':
+        specifier: workspace:*
+        version: link:../../packages/platform-node
       '@mamep2026/test-kit':
         specifier: workspace:*
         version: link:../../packages/test-kit
       '@mamep2026/typescript-config':
         specifier: workspace:*
         version: link:../../tooling/typescript-config
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

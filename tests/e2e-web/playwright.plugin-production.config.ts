@@ -4,7 +4,7 @@ import development from "./playwright.config";
 /** Exercise the published CSP and emitted sandbox loader without hardware. */
 export default defineConfig({
   ...development,
-  testMatch: "plugin-authorization.spec.ts",
+  testMatch: ["plugin-authorization.spec.ts", "vendor-plugin.spec.ts"],
   use: { ...development.use, baseURL: "http://localhost:18474" },
   webServer: {
     command:

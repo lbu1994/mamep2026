@@ -12,10 +12,8 @@
  * - 卸载 → plugins.json 清空（宿主执行面随之注销）；
  * - 全程无 console 错误。
  *
- * 说明（已知限制）：Electron 的 RTU 会话在 Renderer、TCP 不应用地址变换
- * 宿主插件变换当前在 Electron 无用户可见路径；本 spec 验证**执行面装配与
- * 生命周期**（加载/持久化/重启/卸载），宿主插件**生效路径**的端到端证据由 VSCode
- * （`tests/e2e-vscode` runPluginHostLoop，RTU 会话在 Extension Host）提供。
+ * RTU sessions run in Renderer. The separate tcp-plugin-routing.spec.ts covers
+ * Main-process TCP codecs and table transforms through the production bridge.
  */
 import {
   _electron,
@@ -197,6 +195,73 @@ async function closeSettings(): Promise<void> {
     page.locator(".settings-drawer .ant-drawer-content-wrapper"),
   ).toBeHidden();
 }
+
+test("vendor RTU contributions and host state follow enable, disable and uninstall", async () => {
+  const id = "yaskawa-memobus-67h-010dh-010eh";
+  if (await page.locator(".settings-drawer.ant-drawer-open").isVisible())
+    await closeSettings();
+  await app.evaluate(
+    ({ dialog }, sourcePath) => {
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [sourcePath],
+      });
+    },
+    path.join(REPO_ROOT, "release/plugins", id, `${id}.mjs`),
+  );
+  try {
+    const manager = await openPluginsSection();
+    await manager.getByRole("button", { name: "Install Plugin" }).click();
+    const confirm = page
+      .locator(".ant-modal-container")
+      .filter({ hasText: "Install this plugin?" });
+    await confirm
+      .getByRole("button", {
+        name: "Authorize same-process execution and install",
+        exact: true,
+      })
+      .click();
+    await expect(confirm).toBeHidden();
+    const state = manager.getByTestId(`host-plugin-state-${id}`);
+    const row = manager
+      .locator(".ant-listy-item")
+      .filter({ hasText: "Yaskawa MEMOBUS" });
+    await expect(state).toContainText("Host: active");
+    await closeSettings();
+    const table = page.getByRole("button", {
+      name: "Read/write via 67H 010DH/010EH",
+      exact: true,
+    });
+    await expect(table).toBeVisible();
+    await openPluginsSection();
+    await row.getByRole("switch").click();
+    await expect(state).toContainText("Host: disabled");
+    await expect(table).toHaveCount(0);
+    await row.getByRole("switch").click();
+    await expect(state).toContainText("Host: active");
+    await closeSettings();
+    await expect(table).toBeVisible();
+    await openPluginsSection();
+    await row.getByRole("button", { name: "Uninstall", exact: true }).click();
+    const uninstall = page
+      .locator(".ant-modal-container")
+      .filter({ hasText: "Uninstall this plugin?" });
+    await uninstall
+      .getByRole("button", { name: "Uninstall", exact: true })
+      .click();
+    await expect(row).toHaveCount(0);
+    await expect(table).toHaveCount(0);
+    await closeSettings();
+    await expect(page.locator(".ant-layout-header")).toContainText("Offline");
+  } finally {
+    await app.evaluate(({ dialog }, sourcePath) => {
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [sourcePath],
+      });
+    }, PLUGIN_ENTRY_PATH);
+  }
+});
 
 test("安装同进程可执行插件 → 主进程 plugins.json 落盘（含 executionMode/entrySource）", async () => {
   const section = await openPluginsSection();

@@ -5,7 +5,11 @@ import {
   RegisterAddress,
   ok,
 } from "@mamep2026/domain";
-import type { TransportPort } from "@mamep2026/communication";
+import {
+  createCodecRegistry,
+  type CodecRegistry,
+  type TransportPort,
+} from "@mamep2026/communication";
 import { NodePlatformHost } from "@mamep2026/platform-node";
 import { VscodeSessionHost } from "./session-host";
 
@@ -13,7 +17,7 @@ async function flush(): Promise<void> {
   for (let step = 0; step < 20; step++) await Promise.resolve();
 }
 
-function harness() {
+function harness(codecRegistry?: CodecRegistry) {
   const listeners = new Set<(bytes: Uint8Array) => void>();
   const sent: Uint8Array[] = [];
   const transport: TransportPort = {
@@ -40,6 +44,7 @@ function harness() {
   vi.spyOn(platform, "openTcpTransport").mockResolvedValue(ok(transport));
   const host = new VscodeSessionHost({
     platform,
+    ...(codecRegistry === undefined ? {} : { codecRegistry }),
     events: {
       onLog: vi.fn(),
       onStateChange: vi.fn(),
@@ -79,6 +84,40 @@ function row() {
 }
 
 describe("VscodeSessionHost core TCP table wiring", () => {
+  it("connects an injected TCP plugin and rejects reads after its scope is revoked", async () => {
+    const registry = createCodecRegistry();
+    const scope = registry.createScope("vendor-test");
+    expect(
+      scope.register({
+        protocolId: "vendor-test-tcp",
+        transport: "tcp",
+        encodeRead: () => Uint8Array.of(65),
+        encodeWrite: () => Uint8Array.of(66),
+        expectedLength: () => ({ normal: 1, exception: 1 }),
+        decodeResponse: () => ok({ kind: "read", values: [0] }),
+        parserFactory: () => ({ push: () => ({ done: false }) }),
+      }).ok,
+    ).toBe(true);
+    const h = harness(registry);
+    try {
+      expect(
+        await h.host.connectTcp({
+          ...createDefaultTcpProfile(),
+          codecId: "vendor-test-tcp",
+        }),
+      ).toEqual(ok(undefined));
+      scope.dispose();
+      expect(
+        await h.host.readRow(row(), {
+          unitAddress: 1,
+          protocol: "vendor-test-tcp",
+        }),
+      ).toMatchObject({ ok: false, error: { code: "CANCELLED" } });
+      expect(h.sent).toHaveLength(0);
+    } finally {
+      await h.host.dispose();
+    }
+  });
   it.each([
     ["coil", 1, [1, 1, 1], 1],
     ["discrete-input", 2, [2, 1, 1], 1],
