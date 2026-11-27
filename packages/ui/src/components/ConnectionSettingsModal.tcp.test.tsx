@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { App as AntApp } from "antd";
+import userEvent from "@testing-library/user-event";
 import type { PlatformCapabilities, Result } from "@mamep2026/domain";
 import { browserCapabilities, createEmptyWorkspace } from "@mamep2026/domain";
 import { PluginRegistry } from "@mamep2026/plugin-api";
@@ -168,6 +169,8 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     renderModal(host);
     // 协议 Segmented 含 RTU 与 TCP 选项。
     expect(screen.getByText("Modbus TCP")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Modbus RTU" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Modbus TCP" })).toBeNull();
     // 切换到 TCP。
     fireEvent.click(screen.getByText("Modbus TCP"));
     await waitFor(() => {
@@ -175,6 +178,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
       expect(screen.getByText("TCP Port")).toBeTruthy();
       expect(screen.getByText("Unit ID")).toBeTruthy();
       expect(screen.getByPlaceholderText("192.168.1.10")).toBeTruthy();
+      expect(screen.queryByRole("region", { name: "Modbus RTU" })).toBeNull();
     });
     // TCP 模式下 InputNumber 控件：port / unitId / timeout / retry。
     expect(
@@ -188,7 +192,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     expect(switchEl.getAttribute("aria-checked")).toBe("false");
   });
 
-  it("keeps unsupported TCP visible and disables its controls", () => {
+  it("keeps the unsupported TCP option disabled without rendering its parameters", () => {
     const { host } = makeHost({ modbusTcp: false });
     renderModal(host);
     expect(screen.getByText("Protocol")).toBeTruthy();
@@ -196,11 +200,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
       "disabled",
       true,
     );
-    const tcp = within(screen.getByRole("region", { name: "Modbus TCP" }));
-    expect(tcp.getByRole("textbox")).toHaveProperty("disabled", true);
-    for (const input of tcp.getAllByRole("spinbutton"))
-      expect(input).toHaveProperty("disabled", true);
-    expect(tcp.getByRole("switch")).toHaveProperty("disabled", true);
+    expect(screen.queryByRole("region", { name: "Modbus TCP" })).toBeNull();
     fireEvent.click(screen.getByText("Modbus TCP"));
     expect(screen.getByRole("radio", { name: "Modbus RTU" })).toHaveProperty(
       "checked",
@@ -209,7 +209,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     expect(host.connectTcp).not.toHaveBeenCalled();
   });
 
-  it("keeps RTU visible but disabled on a TCP-only host", () => {
+  it("keeps the RTU option disabled and shows only TCP parameters on a TCP-only host", () => {
     const { host } = makeHost({
       modbusRtu: false,
       modbusTcp: true,
@@ -224,12 +224,7 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
       "checked",
       true,
     );
-    const rtu = within(screen.getByRole("region", { name: "Modbus RTU" }));
-    for (const input of rtu.getAllByRole("combobox"))
-      expect(input).toHaveProperty("disabled", true);
-    expect(
-      rtu.getByRole("button", { name: /Select serial port/ }),
-    ).toHaveProperty("disabled", true);
+    expect(screen.queryByRole("region", { name: "Modbus RTU" })).toBeNull();
     expect(screen.getByPlaceholderText("192.168.1.10")).toHaveProperty(
       "disabled",
       false,
@@ -240,6 +235,128 @@ describe("ConnectionSettingsModal TCP（2026-08-23）", () => {
     );
     expect(host.selectSerialPort).not.toHaveBeenCalled();
   });
+
+  it.each(["rtu", "tcp"] as const)(
+    "preserves edited values and serial selection across switches before connecting with %s",
+    async (targetProtocol) => {
+      const user = userEvent.setup();
+      const { host } = makeHost({});
+      const handle = { id: "USB", label: "USB" };
+      useAppStore.setState({
+        connectionState: "disconnected",
+        selectedSerialHandle: handle,
+        selectedSerialPortId: "USB",
+        connectError: null,
+      });
+      renderModal(host);
+      await user.click(screen.getByRole("combobox", { name: "Speed" }));
+      await user.click(
+        await screen.findByText("19200", {
+          selector: ".ant-select-item-option-content",
+        }),
+      );
+      await user.click(screen.getByRole("combobox", { name: "Timeout (ms)" }));
+      await user.type(
+        screen.getByRole("combobox", { name: "Timeout (ms)" }),
+        "80",
+      );
+      await user.click(
+        await screen.findByText("80 ms", {
+          selector: ".ant-select-item-option-content",
+        }),
+      );
+      fireEvent.change(screen.getByRole("spinbutton"), {
+        target: { value: "3" },
+      });
+
+      await user.click(screen.getByText("Modbus TCP"));
+      expect(screen.queryByRole("region", { name: "Modbus RTU" })).toBeNull();
+      fireEvent.change(screen.getByRole("textbox", { name: "Host / IP" }), {
+        target: { value: "192.168.1.42" },
+      });
+      fireEvent.change(screen.getByRole("spinbutton", { name: "TCP Port" }), {
+        target: { value: "1502" },
+      });
+      fireEvent.change(screen.getByRole("spinbutton", { name: "Unit ID" }), {
+        target: { value: "7" },
+      });
+      fireEvent.change(
+        screen.getByRole("spinbutton", { name: "Timeout (ms)" }),
+        {
+          target: { value: "1500" },
+        },
+      );
+      expect(screen.getByRole("spinbutton", { name: "" })).toHaveProperty(
+        "value",
+        "3",
+      );
+      fireEvent.change(screen.getByRole("spinbutton", { name: "" }), {
+        target: { value: "4" },
+      });
+      await user.click(screen.getByRole("switch"));
+
+      await user.click(screen.getByText("Modbus RTU"));
+      expect(screen.queryByRole("region", { name: "Modbus TCP" })).toBeNull();
+      expect(screen.getByText("19200")).toBeTruthy();
+      expect(screen.getByText("80 ms")).toBeTruthy();
+      expect(screen.getByRole("spinbutton")).toHaveProperty("value", "4");
+      expect(useAppStore.getState().selectedSerialHandle).toEqual(handle);
+      expect(useAppStore.getState().selectedSerialPortId).toBe("USB");
+      expect(host.selectSerialPort).not.toHaveBeenCalled();
+      expect(host.connect).not.toHaveBeenCalled();
+      expect(host.connectTcp).not.toHaveBeenCalled();
+
+      if (targetProtocol === "tcp") {
+        await user.click(screen.getByText("Modbus TCP"));
+        expect(
+          screen.getByRole("textbox", { name: "Host / IP" }),
+        ).toHaveProperty("value", "192.168.1.42");
+        expect(
+          screen.getByRole("spinbutton", { name: "TCP Port" }),
+        ).toHaveProperty("value", "1502");
+        expect(
+          screen.getByRole("spinbutton", { name: "Unit ID" }),
+        ).toHaveProperty("value", "7");
+        expect(
+          screen.getByRole("spinbutton", { name: "Timeout (ms)" }),
+        ).toHaveProperty("value", "1500");
+        expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
+          "true",
+        );
+      }
+      await user.click(screen.getByRole("button", { name: /CONNECT$/ }));
+      if (targetProtocol === "tcp") {
+        await waitFor(() =>
+          expect(host.connectTcp).toHaveBeenCalledWith(
+            expect.objectContaining({
+              protocol: "tcp",
+              host: "192.168.1.42",
+              port: 1502,
+              unitId: 7,
+              requestTimeoutMs: 1500,
+              retryCount: 4,
+              autoReconnect: true,
+            }),
+          ),
+        );
+        expect(host.connect).not.toHaveBeenCalled();
+      } else {
+        await waitFor(() =>
+          expect(host.connect).toHaveBeenCalledWith(
+            expect.objectContaining({
+              protocol: "rtu",
+              baudRate: 19200,
+              requestTimeoutMs: 80,
+              retryCount: 4,
+            }),
+            handle,
+            { protocol: "rtu" },
+          ),
+        );
+        expect(host.connectTcp).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it("仅 TCP 能力：CONNECT 直接走 host.connectTcp（不要求先选串口）", async () => {
     const { host, connectTcp } = makeHost({

@@ -130,6 +130,7 @@ describe("serial parameter controls", () => {
     useAppStore.setState({ host, workspace });
     renderModal();
     const input = screen.getByRole("textbox", { name: "Host / IP" });
+    expect(screen.queryByRole("region", { name: "Modbus RTU" })).toBeNull();
     expect(input).toHaveProperty("disabled", true);
     await user.type(input, "bad-host");
     expect(input).toHaveProperty("value", "192.168.1.42");

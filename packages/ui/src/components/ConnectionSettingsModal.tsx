@@ -291,7 +291,12 @@ export function ConnectionSettingsModal(): React.ReactNode {
       open={open}
       width={640}
       styles={{
-        body: { maxHeight: "calc(100dvh - 240px)", overflowY: "auto" },
+        body: {
+          maxHeight: "calc(100dvh - 240px)",
+          // Clip Row gutter margins without adding a horizontal scrollbar.
+          overflowX: "hidden",
+          overflowY: "auto",
+        },
       }}
       onCancel={() => setOpen(false)}
       afterOpenChange={(nextOpen) => {
@@ -393,377 +398,389 @@ export function ConnectionSettingsModal(): React.ReactNode {
             {t("connection.protocolUnsupported")}
           </Typography.Paragraph>
         ) : null}
-        <ConfigProvider
-          componentDisabled={
-            !supportsRtu || protocol !== "rtu" || serialBlocked
-          }
-        >
-          <section aria-label={t("connection.protocolRtu")}>
-            <Divider
-              titlePlacement="left"
-              plain
-              style={{ marginTop: 0, marginBottom: 8 }}
-            >
-              {t("connection.groupCommunication")}
-            </Divider>
-            <Row gutter={16}>
-              <Col span={12}>
-                <ConnectionField label={t("connection.port")}>
-                  {isMock ? (
-                    <Tag>{t("connection.portMock")}</Tag>
-                  ) : isEnumerated ? (
-                    <Flex gap={8} align="center">
-                      <Select
-                        style={{ flex: 1 }}
-                        placeholder={t("connection.portSelectPlaceholder")}
-                        loading={enumerating}
-                        value={selectedPortId ?? undefined}
-                        // 用户点开下拉框即枚举（用户手势，满足 requestPort 的权限要求）。
-                        // 注：antd v6 用 onOpenChange（onDropdownVisibleChange 已弃用）。
-                        onOpenChange={(open) => {
-                          if (open) void enumeratePorts();
-                        }}
-                        notFoundContent={
-                          <Flex
-                            vertical
-                            align="center"
-                            gap={4}
-                            style={{ padding: "8px 0" }}
-                          >
-                            <Typography.Text type="secondary">
-                              {t("connection.portEmpty")}
-                            </Typography.Text>
-                            <Button
-                              size="small"
-                              icon={<ReloadOutlined />}
-                              onClick={() => void enumeratePorts()}
+        {protocol === "rtu" ? (
+          <ConfigProvider
+            componentDisabled={
+              !supportsRtu || protocol !== "rtu" || serialBlocked
+            }
+          >
+            <section aria-label={t("connection.protocolRtu")}>
+              <Divider
+                titlePlacement="left"
+                plain
+                style={{ marginTop: 0, marginBottom: 8 }}
+              >
+                {t("connection.groupCommunication")}
+              </Divider>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <ConnectionField label={t("connection.port")}>
+                    {isMock ? (
+                      <Tag>{t("connection.portMock")}</Tag>
+                    ) : isEnumerated ? (
+                      <Flex gap={8} align="center">
+                        <Select
+                          style={{ flex: 1 }}
+                          placeholder={t("connection.portSelectPlaceholder")}
+                          loading={enumerating}
+                          value={selectedPortId ?? undefined}
+                          // 用户点开下拉框即枚举（用户手势，满足 requestPort 的权限要求）。
+                          // 注：antd v6 用 onOpenChange（onDropdownVisibleChange 已弃用）。
+                          onOpenChange={(open) => {
+                            if (open) void enumeratePorts();
+                          }}
+                          notFoundContent={
+                            <Flex
+                              vertical
+                              align="center"
+                              gap={4}
+                              style={{ padding: "8px 0" }}
                             >
-                              {t("connection.portRefresh")}
-                            </Button>
-                          </Flex>
-                        }
-                        options={portOptions.map((p) => ({
-                          value: p.portId,
-                          label: p.label,
-                        }))}
-                        onChange={(portId) => void selectPort(portId)}
-                      />
-                      <Button
-                        icon={<ReloadOutlined />}
-                        onClick={() => void enumeratePorts()}
-                        title={t("connection.portRefresh")}
-                      />
-                    </Flex>
-                  ) : (
-                    <Flex gap={8} align="center">
-                      <Button
-                        icon={<UsbOutlined />}
-                        onClick={() => void selectPort()}
+                              <Typography.Text type="secondary">
+                                {t("connection.portEmpty")}
+                              </Typography.Text>
+                              <Button
+                                size="small"
+                                icon={<ReloadOutlined />}
+                                onClick={() => void enumeratePorts()}
+                              >
+                                {t("connection.portRefresh")}
+                              </Button>
+                            </Flex>
+                          }
+                          options={portOptions.map((p) => ({
+                            value: p.portId,
+                            label: p.label,
+                          }))}
+                          onChange={(portId) => void selectPort(portId)}
+                        />
+                        <Button
+                          icon={<ReloadOutlined />}
+                          onClick={() => void enumeratePorts()}
+                          title={t("connection.portRefresh")}
+                        />
+                      </Flex>
+                    ) : (
+                      <Flex gap={8} align="center">
+                        <Button
+                          icon={<UsbOutlined />}
+                          onClick={() => void selectPort()}
+                        >
+                          {t("connection.portSelect")}
+                        </Button>
+                        {selectedHandle !== null ? (
+                          <Tag style={{ marginInlineEnd: 0 }}>
+                            {selectedHandle.label}
+                          </Tag>
+                        ) : null}
+                      </Flex>
+                    )}
+                  </ConnectionField>
+                  <Controller
+                    name="baudRate"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.baudRate")}>
+                        <Select
+                          aria-label={t("connection.baudRate")}
+                          style={{ width: "100%" }}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
+                          options={Array.from(
+                            new Set([...serialSupport.baudRates, field.value]),
+                          ).map((v) => ({
+                            value: v,
+                            label: String(v),
+                            disabled:
+                              !serialSupport.customBaudRates &&
+                              !serialSupport.baudRates.includes(v),
+                          }))}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                  <Controller
+                    name="dataBits"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.dataBits")}>
+                        <Select
+                          aria-label={t("connection.dataBits")}
+                          style={{ width: "100%" }}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
+                          options={[7, 8].map((v) => ({
+                            disabled: !serialSupport.dataBits.includes(v),
+                            value: v,
+                            label: `${v} BIT`,
+                          }))}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Controller
+                    name="stopBits"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField
+                        label={t("connection.stopBits")}
+                        hint={t("connection.stopBitsUnsupported")}
                       >
-                        {t("connection.portSelect")}
-                      </Button>
-                      {selectedHandle !== null ? (
-                        <Tag style={{ marginInlineEnd: 0 }}>
-                          {selectedHandle.label}
-                        </Tag>
-                      ) : null}
-                    </Flex>
-                  )}
-                </ConnectionField>
-                <Controller
-                  name="baudRate"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.baudRate")}>
-                      <Select
-                        aria-label={t("connection.baudRate")}
-                        style={{ width: "100%" }}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v)}
-                        options={Array.from(
-                          new Set([...serialSupport.baudRates, field.value]),
-                        ).map((v) => ({
-                          value: v,
-                          label: String(v),
-                          disabled:
-                            !serialSupport.customBaudRates &&
-                            !serialSupport.baudRates.includes(v),
-                        }))}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-                <Controller
-                  name="dataBits"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.dataBits")}>
-                      <Select
-                        aria-label={t("connection.dataBits")}
-                        style={{ width: "100%" }}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v)}
-                        options={[7, 8].map((v) => ({
-                          disabled: !serialSupport.dataBits.includes(v),
-                          value: v,
-                          label: `${v} BIT`,
-                        }))}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-              <Col span={12}>
-                <Controller
-                  name="stopBits"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField
-                      label={t("connection.stopBits")}
-                      hint={t("connection.stopBitsUnsupported")}
-                    >
-                      <Select
-                        aria-label={t("connection.stopBits")}
-                        style={{ width: "100%" }}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v)}
-                        options={[1, 1.5, 2].map((v) => ({
-                          disabled: !serialSupport.stopBits.includes(v),
-                          value: v,
-                          label: `${v} BIT`,
-                        }))}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-                <Controller
-                  name="parity"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.parity")}>
-                      <Select
-                        aria-label={t("connection.parity")}
-                        style={{ width: "100%" }}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v)}
-                        options={[
-                          { value: "none", label: t("connection.parityNone") },
-                          { value: "even", label: t("connection.parityEven") },
-                          { value: "odd", label: t("connection.parityOdd") },
-                        ]}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-                <Controller
-                  name="flowControl"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField
-                      label={t("connection.flowControl")}
-                      hint={t(
-                        serialSupport.flowControl.includes("xon-xoff")
-                          ? "connection.driverParametersHint"
-                          : "connection.flowControlUnsupported",
-                      )}
-                    >
-                      <Select
-                        aria-label={t("connection.flowControl")}
-                        style={{ width: "100%" }}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v)}
-                        options={[
-                          { value: "off", label: t("connection.flowOff") },
-                          {
-                            value: "rts-cts",
-                            label: t("connection.flowRtsCts"),
-                            disabled:
-                              !serialSupport.flowControl.includes("rts-cts"),
-                          },
-                          {
-                            value: "xon-xoff",
-                            label: t("connection.flowXonXoff"),
-                            disabled:
-                              !serialSupport.flowControl.includes("xon-xoff"),
-                          },
-                        ]}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-            </Row>
-            <Divider
-              titlePlacement="left"
-              plain
-              style={{ marginTop: 16, marginBottom: 8 }}
-            >
-              {t("connection.groupOption")}
-            </Divider>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Controller
-                  name="rtuTimeout"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.timeout")}>
-                      <Select
-                        aria-label={t("connection.timeout")}
-                        style={{ width: "100%" }}
-                        showSearch
-                        value={field.value}
-                        onChange={(v) => field.onChange(v)}
-                        optionFilterProp="label"
-                        options={RTU_TIMEOUT_OPTIONS.map((v) => ({
-                          value: v,
-                          label: `${v} ms`,
-                        }))}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-              <Col span={12}>
-                <Controller
-                  name="retry"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.retry")}>
-                      <InputNumber
-                        style={{ width: "100%" }}
-                        min={0}
-                        max={10}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v ?? 1)}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-            </Row>
-          </section>
-        </ConfigProvider>
-        <ConfigProvider componentDisabled={!supportsTcp || protocol !== "tcp"}>
-          <section aria-label={t("connection.protocolTcp")}>
-            <Divider
-              titlePlacement="left"
-              plain
-              style={{ marginTop: 16, marginBottom: 8 }}
-            >
-              {t("connection.groupTcp")}
-            </Divider>
-            <Row gutter={16}>
-              <Col span={24}>
-                <Controller
-                  name="host"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.host")}>
-                      <Input
-                        aria-label={t("connection.host")}
-                        placeholder="192.168.1.10"
-                        value={field.value}
-                        onChange={(e) => field.onChange(e.target.value)}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-              <Col span={12}>
-                <Controller
-                  name="port"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.portTcp")}>
-                      <InputNumber
-                        aria-label={t("connection.portTcp")}
-                        style={{ width: "100%" }}
-                        min={1}
-                        max={65535}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v ?? 502)}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-              <Col span={12}>
-                <Controller
-                  name="unitId"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField
-                      label={t("connection.unitId")}
-                      hint={t("connection.unitIdHint")}
-                    >
-                      <InputNumber
-                        aria-label={t("connection.unitId")}
-                        style={{ width: "100%" }}
-                        min={0}
-                        max={255}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v ?? 0)}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-              <Col span={12}>
-                <Controller
-                  name="tcpTimeout"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.timeout")}>
-                      <InputNumber
-                        aria-label={t("connection.timeout")}
-                        style={{ width: "100%" }}
-                        min={50}
-                        max={60000}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v ?? 50)}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-              <Col span={12}>
-                <Controller
-                  name="retry"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField label={t("connection.retry")}>
-                      <InputNumber
-                        style={{ width: "100%" }}
-                        min={0}
-                        max={10}
-                        value={field.value}
-                        onChange={(v) => field.onChange(v ?? 1)}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-              <Col span={24}>
-                <Controller
-                  name="autoReconnect"
-                  control={control}
-                  render={({ field }) => (
-                    <ConnectionField
-                      label={t("connection.autoReconnect")}
-                      hint={t("connection.autoReconnectHint")}
-                    >
-                      {/* 自动重连：PRD §8.3 P1（落地，有限次数 + 指数退避）。 */}
-                      <Switch
-                        checked={field.value}
-                        onChange={(checked) => field.onChange(checked)}
-                      />
-                    </ConnectionField>
-                  )}
-                />
-              </Col>
-            </Row>
-          </section>
-        </ConfigProvider>
+                        <Select
+                          aria-label={t("connection.stopBits")}
+                          style={{ width: "100%" }}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
+                          options={[1, 1.5, 2].map((v) => ({
+                            disabled: !serialSupport.stopBits.includes(v),
+                            value: v,
+                            label: `${v} BIT`,
+                          }))}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                  <Controller
+                    name="parity"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.parity")}>
+                        <Select
+                          aria-label={t("connection.parity")}
+                          style={{ width: "100%" }}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
+                          options={[
+                            {
+                              value: "none",
+                              label: t("connection.parityNone"),
+                            },
+                            {
+                              value: "even",
+                              label: t("connection.parityEven"),
+                            },
+                            { value: "odd", label: t("connection.parityOdd") },
+                          ]}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                  <Controller
+                    name="flowControl"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField
+                        label={t("connection.flowControl")}
+                        hint={t(
+                          serialSupport.flowControl.includes("xon-xoff")
+                            ? "connection.driverParametersHint"
+                            : "connection.flowControlUnsupported",
+                        )}
+                      >
+                        <Select
+                          aria-label={t("connection.flowControl")}
+                          style={{ width: "100%" }}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
+                          options={[
+                            { value: "off", label: t("connection.flowOff") },
+                            {
+                              value: "rts-cts",
+                              label: t("connection.flowRtsCts"),
+                              disabled:
+                                !serialSupport.flowControl.includes("rts-cts"),
+                            },
+                            {
+                              value: "xon-xoff",
+                              label: t("connection.flowXonXoff"),
+                              disabled:
+                                !serialSupport.flowControl.includes("xon-xoff"),
+                            },
+                          ]}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+              </Row>
+              <Divider
+                titlePlacement="left"
+                plain
+                style={{ marginTop: 16, marginBottom: 8 }}
+              >
+                {t("connection.groupOption")}
+              </Divider>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Controller
+                    name="rtuTimeout"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.timeout")}>
+                        <Select
+                          aria-label={t("connection.timeout")}
+                          style={{ width: "100%" }}
+                          showSearch
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
+                          optionFilterProp="label"
+                          options={RTU_TIMEOUT_OPTIONS.map((v) => ({
+                            value: v,
+                            label: `${v} ms`,
+                          }))}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Controller
+                    name="retry"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.retry")}>
+                        <InputNumber
+                          style={{ width: "100%" }}
+                          min={0}
+                          max={10}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v ?? 1)}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+              </Row>
+            </section>
+          </ConfigProvider>
+        ) : null}
+        {protocol === "tcp" ? (
+          <ConfigProvider
+            componentDisabled={!supportsTcp || protocol !== "tcp"}
+          >
+            <section aria-label={t("connection.protocolTcp")}>
+              <Divider
+                titlePlacement="left"
+                plain
+                style={{ marginTop: 16, marginBottom: 8 }}
+              >
+                {t("connection.groupTcp")}
+              </Divider>
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Controller
+                    name="host"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.host")}>
+                        <Input
+                          aria-label={t("connection.host")}
+                          placeholder="192.168.1.10"
+                          value={field.value}
+                          onChange={(e) => field.onChange(e.target.value)}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Controller
+                    name="port"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.portTcp")}>
+                        <InputNumber
+                          aria-label={t("connection.portTcp")}
+                          style={{ width: "100%" }}
+                          min={1}
+                          max={65535}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v ?? 502)}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Controller
+                    name="unitId"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField
+                        label={t("connection.unitId")}
+                        hint={t("connection.unitIdHint")}
+                      >
+                        <InputNumber
+                          aria-label={t("connection.unitId")}
+                          style={{ width: "100%" }}
+                          min={0}
+                          max={255}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v ?? 0)}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Controller
+                    name="tcpTimeout"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.timeout")}>
+                        <InputNumber
+                          aria-label={t("connection.timeout")}
+                          style={{ width: "100%" }}
+                          min={50}
+                          max={60000}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v ?? 50)}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Controller
+                    name="retry"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField label={t("connection.retry")}>
+                        <InputNumber
+                          style={{ width: "100%" }}
+                          min={0}
+                          max={10}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v ?? 1)}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+                <Col span={24}>
+                  <Controller
+                    name="autoReconnect"
+                    control={control}
+                    render={({ field }) => (
+                      <ConnectionField
+                        label={t("connection.autoReconnect")}
+                        hint={t("connection.autoReconnectHint")}
+                      >
+                        {/* 自动重连：PRD §8.3 P1（落地，有限次数 + 指数退避）。 */}
+                        <Switch
+                          checked={field.value}
+                          onChange={(checked) => field.onChange(checked)}
+                        />
+                      </ConnectionField>
+                    )}
+                  />
+                </Col>
+              </Row>
+            </section>
+          </ConfigProvider>
+        ) : null}
         {supportError !== null ? (
           <Alert
             type="warning"

@@ -28,7 +28,7 @@ export const RTU_TIMEOUT_OPTIONS = [
   1000,
 ];
 
-/** Keep both protocols visible; disable fields outside the selected protocol.
+/** Retain both protocols' form values while showing only the selected protocol.
  * Require a nonempty host only for TCP. Platform support is checked separately. */
 export const settingsSchema = z
   .object({
