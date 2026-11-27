@@ -4,7 +4,7 @@
  * 覆盖手机竖屏（< 1024px 断点）下的可观察结果：
  * - 侧栏 / 底部面板由顶栏按钮打开的抽屉呈现；
  * - 低频表格配置（进制 / 从站地址 / 写后回读 / Address Adjust / 恢复列布局）收进 Table settings，
- *   主操作（撤销/重做、新建行、Read All）仍在工具栏；
+ *   离线通信门控下工具栏显示 Connect device，Read All 仅在通信可用后出现；
  * - 硬件返回键（`@capacitor/app`）：有覆盖层时关抽屉且不离开应用，无覆盖层时最小化到后台。
  *
  * **为何不用 `document.visibilityState` 判定后台**（真机实测）：Playwright 经 CDP
@@ -75,9 +75,11 @@ test("移动布局：侧栏/底部面板改为抽屉，低频配置进 Table set
     timeout: 10_000,
   });
 
-  // 工具栏：主操作直接可达，低频配置收进 Table settings。
+  // 工具栏：离线门控下提供连接入口，低频配置收进 Table settings。
   const toolbar = page.locator(".table-toolbar");
-  await expect(toolbar.getByRole("button", { name: "Read All" })).toBeVisible();
+  await expect(
+    toolbar.getByRole("button", { name: "Connect device" }),
+  ).toBeVisible();
   await expect(toolbar.locator(".table-toolbar__radix")).toHaveCount(0);
 
   await toolbar
@@ -89,16 +91,18 @@ test("移动布局：侧栏/底部面板改为抽屉，低频配置进 Table set
   await expect(panel.locator(".table-toolbar__slave")).toBeVisible();
   await expect(panel.locator(".table-toolbar__verify")).toBeVisible();
 
-  // 移动表格：横向可滚动 + 行高 44（触摸目标）。
+  // 移动表格：固定最小横向宽度 + 行高 44（触摸目标）。
   const sheet = page.locator(".register-table-tabs .ant-tabs-content-active");
-  const scroller = sheet.locator(".ant-table-content, .ant-table-body").first();
-  expect(
-    await scroller.evaluate(
-      (element) => element.scrollWidth > element.clientWidth,
-    ),
-  ).toBe(true);
+  const table = sheet.locator(".ant-table-header table").first();
+  const metrics = await table.evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+  }));
+  // MOBILE_SCROLL_X 为 960：在窄视口下保持表格最小宽度，避免列被挤压换行。
+  expect(metrics.scrollWidth).toBeGreaterThanOrEqual(960);
   await expect(
-    sheet.locator(".ant-table-tbody > tr.ant-table-row > td").first(),
+    sheet
+      .locator(".ant-table-tbody-virtual-holder .ant-table-row .ant-table-cell")
+      .first(),
   ).toHaveCSS("height", "44px");
 
   expect(session.consoleErrors).toEqual([]);
@@ -106,6 +110,9 @@ test("移动布局：侧栏/底部面板改为抽屉，低频配置进 Table set
 
 test("硬件返回键：先关抽屉（不离开应用），无覆盖层时才最小化到后台", async () => {
   const { page } = session;
+
+  // Playwright 在前一条失败后会重建 worker 并重新启动应用；此时连接弹窗会再次出现。
+  await dismissConnectionSettings(page);
 
   // 息屏会让焦点落在 keyguard、使前台断言失真，故交互前先唤醒。
   ensureScreenAwake();

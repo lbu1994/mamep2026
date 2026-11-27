@@ -8,7 +8,7 @@
  * 1. **探针证据**：页面上下文直接跑一次「Blob Worker → Worker 内 import(blob entry)」；
  * 2. **安装入口**：`pluginInstall: "upload"` → Settings → Plugins 渲染隐藏文件输入（能力结构性证据）；
  * 3. **纯清单插件安装**：`setInputFiles(.json)` → 安全确认 → Installed → 存储落盘；
- * 4. **可执行插件安装**：`setInputFiles(.mjs)` → 安全确认（隔离执行）→ Installed → 存储带执行面；
+ * 4. **可执行插件安装**：内联最小隔离插件 → 安全确认 → Installed → 存储带执行面；
  * 5. **执行面真机可用**：reload 后启动路径（`startPlugins` → Blob Worker 加载）仍成功 → 卸载回收；
  * 6. **同进程执行 + 同步贡献**：以 same-process 安装 → reload 后表列表出现插件分组 → 卸载回收；
  * 7. 全程无 console 错误。
@@ -39,6 +39,20 @@ import {
 const CUSTOM_FC_PLUGIN = "custom-function-code";
 /** 纯清单插件（无执行面，仅贡献主题色）。 */
 const THEME_PLUGIN = "example-theme";
+/** 最小可执行插件：无同步贡献，Manifest 未声明执行需求，因此默认隔离执行。 */
+const ISOLATED_PLUGIN_ENTRY = `
+export const manifest = {
+  id: "isolated-reload-regression",
+  name: "Isolated reload regression",
+  version: "1.0.0",
+  apiVersion: "2.0",
+  description: "Verifies isolated executable plugin restoration",
+  platform: { web: true, node: true },
+  permissions: [],
+  contributes: {},
+};
+export function activate() {}
+`;
 
 let session: AppSession;
 
@@ -138,14 +152,22 @@ function pluginContribution(page: AppSession["page"]) {
 
 /** 经隐藏文件输入投递插件文件（绕过系统文件选择器）并在安全确认框中确认。 */
 async function installPluginByFile(options: {
-  filePath: string;
+  filePath?: string;
+  /** 内联插件源码；用于无外部产物的最小隔离执行插件。 */
+  source?: {
+    name: string;
+    mimeType: string;
+    buffer: Buffer;
+  };
   /** `.mjs` 可执行插件：是否预期插件声明同进程执行需求。 */
   sameProcess?: boolean;
 }): Promise<void> {
   const page = session.page;
+  const file = options.source ?? options.filePath;
+  if (file === undefined) throw new Error("插件文件来源不能为空");
   const input = page.locator('input[data-testid="plugin-manifest-file-input"]');
   await expect(input).toBeAttached();
-  await input.setInputFiles(options.filePath);
+  await input.setInputFiles(file);
 
   const confirm = page
     .locator(".ant-modal-container")
@@ -306,14 +328,18 @@ test("可执行插件安装闭环（.mjs，隔离执行）：安全确认 → In
   const section = await openPluginsSection();
 
   await installPluginByFile({
-    filePath: pluginArtifact(CUSTOM_FC_PLUGIN, `${CUSTOM_FC_PLUGIN}.mjs`),
+    source: {
+      name: "isolated-reload-regression.mjs",
+      mimeType: "text/javascript",
+      buffer: Buffer.from(ISOLATED_PLUGIN_ENTRY),
+    },
   });
 
   await expect(
-    section.getByText("Custom Function Code", { exact: true }),
+    section.getByText("Isolated reload regression", { exact: true }),
   ).toBeVisible();
   // 持久化：entrySource + executionMode 落盘（重启后据此重建执行面）。
-  const stored = await storedPlugin(CUSTOM_FC_PLUGIN);
+  const stored = await storedPlugin("isolated-reload-regression");
   expect(stored?.executionMode).toBe("isolated");
   expect((stored?.entrySource ?? "").length).toBeGreaterThan(0);
 
@@ -329,15 +355,15 @@ test("reload 后 isolated 可执行插件仍被真机加载（Blob Worker 路径
   // 列表仍显示（entry 加载失败会被跳过并记录错误，插件不会出现在列表里）。
   const section = await openPluginsSection();
   await expect(
-    section.getByText("Custom Function Code", { exact: true }),
+    section.getByText("Isolated reload regression", { exact: true }),
   ).toBeVisible();
   await expect(
     section.getByText("Example Theme", { exact: true }),
   ).toBeVisible();
   await closeSettings();
 
-  await uninstallPlugin("Custom Function Code");
-  expect(await storedPlugin(CUSTOM_FC_PLUGIN)).toBeUndefined();
+  await uninstallPlugin("Isolated reload regression");
+  expect(await storedPlugin("isolated-reload-regression")).toBeUndefined();
 });
 
 test("same-process 可执行插件贡献在真机生效（表列表出现插件分组），卸载后回收", async () => {
@@ -372,7 +398,8 @@ test("vendor MEMOBUS approval, disable, reload and uninstall remove stale contri
   const name = "Yaskawa MEMOBUS";
   const contribution = page
     .locator(".sheet-sidebar__group-title")
-    .filter({ hasText: "Yaskawa MEMOBUS" });
+    // 表列表分组来自 tableType.titleKey，而不是插件显示名。
+    .filter({ hasText: "Read/write via 67H 010DH/010EH" });
   try {
     await openPluginsSection();
     await installPluginByFile({
@@ -407,6 +434,9 @@ test("vendor MEMOBUS approval, disable, reload and uninstall remove stale contri
     await expect(contribution).toBeVisible();
     await closeTableList();
   } finally {
+    // try 内任一断言失败时，表列表可能仍处于打开状态；先收起遮罩，
+    // 避免 finally 的卸载清理覆盖原始失败原因。
+    await closeTableList();
     if (await storedPlugin(id)) await uninstallPlugin(name);
   }
   await openTableList();

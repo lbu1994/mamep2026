@@ -10,7 +10,6 @@ import {
   clearAppData,
   forceStopApp,
   forwardDevtools,
-  installApk,
   launchApp,
   removeAllForwards,
   removeAllReverses,
@@ -32,7 +31,6 @@ export interface AppSession {
  */
 export async function openAppSession(): Promise<AppSession> {
   requireDevice();
-  installApk();
   // 清空应用数据 → 干净工作区（避免跨运行残留的 profile/插件状态污染断言）。
   clearAppData();
   forceStopApp();
@@ -111,7 +109,7 @@ export async function setRowAddress(
 /** 首行点击 Read。 */
 export async function readRow(page: Page): Promise<void> {
   await page
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row \d+\b/ })
     .first()
     .evaluate((element) => (element as HTMLElement).click());
 }
@@ -127,7 +125,7 @@ export async function writeRow(page: Page, valueHex: string): Promise<void> {
   await expect(input).toHaveValue(valueHex);
   await input.press("Enter");
   await page
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row \d+\b/ })
     .first()
     .evaluate((element) => (element as HTMLElement).click());
 }
@@ -148,15 +146,13 @@ export async function setWriteVerify(
   await expect(settingsPanel).toBeVisible({ timeout: 5000 });
 
   const verify = settingsPanel.locator(".table-toolbar__verify");
-  await verify.getByLabel("Write verification").click();
-  await page
-    .locator(".ant-select-dropdown:visible .ant-select-item-option")
-    .filter({ hasText: new RegExp(`^${optionText}$`) })
-    .first()
-    .click();
+  // Android 移动布局使用原生 <select>（MobileNativeSelect），
+  // 不渲染 antd Select 下拉；按可见 label 选择即可触发 React onChange。
+  await verify
+    .getByLabel("Write verification")
+    .selectOption({ label: optionText });
   await expect(verify).toContainText(optionText, { timeout: 5000 });
 
-  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
   await expect(settingsPanel).toBeVisible();
   await settingsButton.click();
   await expect(settingsPanel).toBeHidden({ timeout: 5000 });

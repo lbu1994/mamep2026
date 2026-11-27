@@ -5,7 +5,7 @@
  * - 本机部分设备 `adb logcat` 无输出 → 断言与诊断一律走 CDP，不依赖 logcat；
  * - WebView devtools socket 名随应用重启变化 → 每次启动后重新解析并重建 forward。
  */
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -156,13 +156,125 @@ export function ensureScreenAwake(): void {
   }
 }
 
-/** 安装（或覆盖安装）debug APK。
- *
- * 部分 OEM（如 vivo）在锁屏 / 未授权「通过 USB 安装」时会弹确认框，未确认即
- * `INSTALL_FAILED_ABORTED: User rejected permissions`。这里先唤醒屏幕再安装，
- * 并把失败原因翻译成人可执行的指引（不静默跳过，也不代替用户点确认）。
+/** 异步执行 adb 命令（安装期间并发轮询用；失败时把 stdout/stderr 一并抛出）。 */
+function adbAsync(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      adbBinary(),
+      args,
+      { encoding: "utf8" },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(
+            Object.assign(
+              new Error(`${stderr || stdout || error.message}`.trim()),
+              { cause: error },
+            ),
+          );
+        } else {
+          resolve(`${stdout}${stderr}`.trim());
+        }
+      },
+    );
+  });
+}
+
+/** 从 uiautomator dump 的 XML 里解析「继续安装」按钮的中心坐标。 */
+function installConfirmCenter(xml: string): { x: number; y: number } | null {
+  const labels = ["继续安装", "仍要安装", "Install anyway", "Continue install"];
+  for (const label of labels) {
+    const contentDesc = xml.indexOf(`content-desc="${label}"`);
+    const text = xml.indexOf(`text="${label}"`);
+    const at = contentDesc === -1 ? text : contentDesc;
+    if (at === -1) continue;
+    const bounds = /bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/.exec(xml.slice(at));
+    if (bounds === null) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    return {
+      x: Math.round((x1 + x2) / 2),
+      y: Math.round((y1 + y2) / 2),
+    };
+  }
+  return null;
+}
+
+/** 前台为系统安装确认框时，自动点击「继续安装」（幂等、可重入，失败不阻断）。 */
+async function tapInstallConfirmationIfPresent(): Promise<void> {
+  const windows = await adbAsync(["shell", "dumpsys", "window"]).catch(() => "");
+  if (!windows.includes("com.android.packageinstaller")) return;
+
+  const xml = await adbAsync([
+    "exec-out",
+    "uiautomator",
+    "dump",
+    "/dev/tty",
+  ]).catch(() => "");
+  const center = installConfirmCenter(xml);
+  if (center === null) return;
+  try {
+    await adbAsync([
+      "shell",
+      "input",
+      "tap",
+      String(center.x),
+      String(center.y),
+    ]);
+  } catch {
+    // 点击失败不阻塞：下一轮继续尝试。
+  }
+}
+
+/**
+ * 启动 `adb install` 子进程，并在其运行期间轮询点击安装确认框。
+ * 返回子进程退出码与合并输出（不在此判断成败，交由调用方处理）。
  */
-export function installApk(apkPath: string = APK_PATH): void {
+function runInstallWithAutoConfirm(
+  args: string[],
+): Promise<{ code: number | null; output: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(adbBinary(), args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    let closed = false;
+    child.stdout.on("data", (d) => {
+      output += String(d);
+    });
+    child.stderr.on("data", (d) => {
+      output += String(d);
+    });
+    child.on("error", (error) => {
+      closed = true;
+      reject(error);
+    });
+    child.on("close", (code) => {
+      closed = true;
+      resolve({ code, output });
+    });
+
+    void (async () => {
+      while (!closed) {
+        try {
+          await tapInstallConfirmationIfPresent();
+        } catch {
+          // 单次轮询失败忽略，继续到安装进程退出为止。
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 800));
+      }
+    })();
+  });
+}
+
+/** 安装（或覆盖安装）debug APK，并在安装确认框出现时自动点击「继续安装」。
+ *
+ * 部分 OEM（如 vivo）每次 `adb install` 都会弹「未知来源安装」确认框；若未确认会
+ * `INSTALL_FAILED_ABORTED: User rejected permissions`。这里先唤醒屏幕再启动安装，
+ * 并发轮询前台窗口，出现确认框即自动点击（不再需要人工点继续安装）。
+ */
+export async function installApk(apkPath: string = APK_PATH): Promise<void> {
   if (!existsSync(apkPath)) {
     throw new Error(
       `APK 不存在：${apkPath}\n请先执行 pnpm build:android（或让 pretest 自动构建）。`,
@@ -184,7 +296,12 @@ export function installApk(apkPath: string = APK_PATH): void {
   let lastError: unknown = null;
   for (const args of attempts) {
     try {
-      adb(args);
+      const { code, output } = await runInstallWithAutoConfirm(args);
+      if (code !== 0) {
+        throw new Error(
+          `adb ${args.join(" ")} 失败（exit ${String(code)}）：\n${output}`,
+        );
+      }
       return;
     } catch (cause) {
       lastError = cause;
@@ -199,7 +316,7 @@ export function installApk(apkPath: string = APK_PATH): void {
         "设备拒绝了 APK 安装（INSTALL_FAILED_ABORTED: User rejected permissions）。",
         "已尝试非流式与流式两种通道。处理（任选，需在手机上操作）：",
         "  1) 开发者选项 → 打开「USB 安装」/「通过 USB 安装应用」（vivo/iQOO 常见，关闭时无弹窗直接拒绝）；",
-        "  2) 保持屏幕解锁后重试，并在手机上点击确认「允许/继续安装」；",
+        "  2) 保持屏幕解锁后重试，并确认自动点击「继续安装」已生效；",
         "  3) 备选：`adb push <apk> /data/local/tmp/` 后手动用文件管理器安装。",
         `原始错误：${message}`,
       ].join("\n"),

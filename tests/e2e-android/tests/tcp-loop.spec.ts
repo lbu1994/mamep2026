@@ -23,7 +23,6 @@ import {
   clearAppData,
   forceStopApp,
   forwardDevtools,
-  installApk,
   launchApp,
   removeAllForwards,
   removeAllReverses,
@@ -72,7 +71,7 @@ async function setRowAddress(target: Page, address: string): Promise<void> {
 /** 首行点击 Read。 */
 async function readRow(target: Page): Promise<void> {
   await target
-    .getByRole("button", { name: "Read", exact: true })
+    .getByRole("button", { name: /^Read row 1\b/ })
     .first()
     .evaluate((element) => (element as HTMLElement).click());
 }
@@ -88,7 +87,7 @@ async function writeRow(target: Page, valueHex: string): Promise<void> {
   await expect(input).toHaveValue(valueHex);
   await input.press("Enter");
   await target
-    .getByRole("button", { name: "Write", exact: true })
+    .getByRole("button", { name: /^Write row 1\b/ })
     .first()
     .evaluate((element) => (element as HTMLElement).click());
 }
@@ -185,7 +184,6 @@ test.beforeAll(async () => {
   requireDevice();
   slave = await createFakeSlave();
 
-  installApk();
   // 清空应用数据 → 干净工作区（避免跨运行残留的 profile/插件状态污染断言）。
   clearAppData();
   forceStopApp();
@@ -260,8 +258,14 @@ test("真机 WebView + 原生插件：TCP 连接 → FC03 读 → FC10 写（写
     .getByRole("button", { name: "Online · Disconnect" });
   await expect(disconnectButton).toBeVisible({ timeout: 20_000 });
 
-  // 新表默认 OFF；本用例显式 ON，以覆盖写后回读一致性。
-  await expect(page.locator(".table-toolbar__verify")).toContainText("OFF");
+  // 新表默认 OFF；低频配置收进 Table settings，先打开面板再核验默认值。
+  await page
+    .getByRole("button", { name: "Table settings", exact: true })
+    .click();
+  await expect(page.locator(".table-toolbar__settings")).toBeVisible();
+  await expect(
+    page.locator(".table-toolbar__settings .table-toolbar__verify"),
+  ).toContainText("OFF");
   await setWriteVerify(page, "ON");
 
   // 首行填地址 0（默认表行地址为空），并在宿主侧预置寄存器 0 = 0x00AB。

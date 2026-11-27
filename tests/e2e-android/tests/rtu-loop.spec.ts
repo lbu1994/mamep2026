@@ -50,7 +50,7 @@ test.afterAll(async () => {
 test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）→ 断开", async () => {
   const { page } = session;
 
-  // 切到 RTU 并选择端口（枚举下拉的第一项 = 手机上唯一的 USB 串口）。
+  // 切到 RTU 并选择第一个枚举串口；不绑定具体驱动标签、VID/PID 或芯片型号。
   await selectRtuProtocol(page);
   const dropdown = await openSerialPortDropdown(page);
   const options = dropdown.locator(".ant-select-item-option");
@@ -67,13 +67,14 @@ test("USB-RS485：枚举 → 连接 → FC03 读 → FC10 写（写后回读）�
     .getByRole("button", { name: "Online · Disconnect" });
   await expect(disconnectButton).toBeVisible({ timeout: 30_000 });
 
-  // 通信属性面板应显示所选串口标签（本 Host 记录的 portLabel）。
+  // 新表默认 OFF；低频配置收进 Table settings，先打开面板再核验默认值。
+  await page
+    .getByRole("button", { name: "Table settings", exact: true })
+    .click();
+  await expect(page.locator(".table-toolbar__settings")).toBeVisible();
   await expect(
-    page.locator(".ant-layout-footer, .bottom-panel").first(),
-  ).toBeVisible();
-
-  // 新表默认 OFF；本用例显式 ON，以覆盖写后回读一致性。
-  await expect(page.locator(".table-toolbar__verify")).toContainText("OFF");
+    page.locator(".table-toolbar__settings .table-toolbar__verify"),
+  ).toContainText("OFF");
   await setWriteVerify(page, "ON");
 
   // FC03：首行读回 4 位 HEX（真实从站返回值）。

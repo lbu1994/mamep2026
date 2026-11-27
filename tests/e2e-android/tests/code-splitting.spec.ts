@@ -217,9 +217,9 @@ test("② 懒加载覆盖层按需加载（Help / Settings / Trace Window；Impo
   await expect(page.locator(".ant-modal-container:visible")).toHaveCount(0);
   await closeDrawer(settingsDrawer);
 
-  // —— Trace Window（行 TM 勾选即打开；用原生 click 规避移动端横向滚动/视口问题）——
+  // —— Trace Window（行 Trace 勾选即打开；用原生 click 规避移动端横向滚动/视口问题）——
   await page
-    .locator('input[aria-label="TM"]')
+    .getByRole("checkbox", { name: /^Trace row 1\b/ })
     .first()
     .evaluate((element) => (element as HTMLElement).click());
   await waitForChunk(page, "TraceWindow-");

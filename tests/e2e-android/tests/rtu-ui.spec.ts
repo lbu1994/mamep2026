@@ -45,7 +45,8 @@ test("USB 串口能力已声明：协议分组出现、RTU 表单完整、串口
 
   await selectRtuProtocol(page);
 
-  // RTU 表单字段（与 Electron/VSCode 同源的表单；文案按实际渲染值断言）。
+  // RTU 表单字段（ConnectionField 自定义 label 不是 antd Form.Item label，
+  // 故按字段容器内容定位，避免依赖内部实现细节）。
   for (const label of [
     "Port",
     "Speed",
@@ -56,7 +57,7 @@ test("USB 串口能力已声明：协议分组出现、RTU 表单完整、串口
   ]) {
     await expect(
       connectionModal(page)
-        .locator(".ant-form-item-label")
+        .locator(".ant-form-item")
         .filter({ hasText: label })
         .first(),
     ).toBeVisible();

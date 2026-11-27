@@ -12,6 +12,9 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  // 整个套件只安装一次 APK（见 global-setup.ts）。避免每个 spec 的 beforeAll 各自
+  // 重装触发多次「未知来源安装」确认框（vivo/iQOO 每次 `adb install` 都会弹一次）。
+  globalSetup: "./global-setup",
   timeout: 180_000,
   fullyParallel: false,
   workers: 1,
